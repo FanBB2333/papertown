@@ -23,6 +23,7 @@ export interface RoomActions {
 
 interface Props extends RoomActions {
   id: string;
+  motion: 'enter' | 'leave' | 'swap';
   focus: string | null;
   placements: Placement[];
   lines: Line[];
@@ -44,7 +45,7 @@ export function Interior(p: Props) {
 
   if (!room) {
     return (
-      <div className="interior in-sheet" role="dialog" aria-modal="true">
+      <div className={`interior in-sheet m-${p.motion}`} role="dialog" aria-modal="true">
         <Sheet id={p.id} tick={p.tick} placements={p.placements} onClose={p.onClose} onOpen={p.onOpen}
           onAsk={p.onAsk} onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} />
       </div>
@@ -56,7 +57,7 @@ export function Interior(p: Props) {
       : <AgentRoom {...p} role={type === 'press' ? 'writer' : 'coder'} />;
 
   return (
-    <div className={`interior in-${type}`} role="dialog" aria-modal="true" style={{ ['--accent' as string]: pl?.accent ?? BUILDINGS[type]?.accent }}>
+    <div className={`interior in-${type} m-${p.motion}`} role="dialog" aria-modal="true" style={{ ['--accent' as string]: pl?.accent ?? BUILDINGS[type]?.accent }}>
       <header className="in-head">
         <button className="in-back" onClick={p.onClose}><span aria-hidden>←</span> 回到小镇 <kbd>Esc</kbd></button>
         <div className="in-title">

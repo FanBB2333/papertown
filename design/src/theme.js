@@ -34,6 +34,33 @@ export const THEMES = {
     },
   },
 
+  sketch: {
+    key: 'sketch', name: '手绘', en: 'Ink & wash', tag: '应用',
+    pitch: '墨线加水彩：线条带一点手的起伏，颜色像刷上去的，纸纹从底下透出来。配合 pen 的手绘模式使用。',
+    keywords: ['墨线', '水彩', '纸纹', '手写字'],
+    pros: ['有温度，长时间看不累', '颜色淡、对比靠墨线，信息层次清楚', '和纸艺同一家族，世界观不变'],
+    cons: ['线条有起伏，小图标要控制细节', '需要手写字体，首次加载多几个字体分片'],
+    ui: {
+      bg: '#f4eee2', panel: '#fcf8f0', panel2: '#f3ecdf', ink: '#2f261d', muted: '#857560', line: 'rgba(84,62,40,.2)',
+      brand: '#c2663f', brandInk: '#fffaf2', ok: '#6b9160', warn: '#c38b2e', bad: '#b9543f',
+      font: '"LXGW WenKai Screen","PingFang SC","Hiragino Sans GB",system-ui,sans-serif',
+      head: '"LXGW WenKai Screen","Songti SC","STSong",serif',
+      radius: '14px', border: '1px solid transparent', shadow: '0 12px 28px -18px rgba(80,55,30,.45)', headCase: 'none',
+    },
+    stroke: ['fixed', 'rgba(52,36,22,.6)'], strokeW: 0.9, shade: [20, 15],
+    ink: 'rgba(46,31,18,.74)', inkW: 1.05,
+    text: '#3a2c1e', smoke: '#fffaf2', hl: 'rgba(255,255,255,.5)', beam: 'rgba(255,236,170,.45)',
+    mats: {
+      wall: ['mix', 13, '#f6efe2'], roof: ['mix', 78, '#6b4b33'], acc: ['acc'], acc2: ['fixed', '#c9644c'],
+      base: ['fixed', '#e0d0ae'], win: ['fixed', '#6f5b45'], glass: ['mix', 16, '#d9e9e5'], metal: ['fixed', '#aaa498'],
+      wood: ['fixed', '#c7a072'], white: ['fixed', '#fcf8ee'], dark: ['fixed', '#5e4734'], sign: ['fixed', '#fdf7e6'],
+      egg: ['fixed', '#f8efda'], leaf: ['fixed', '#a2bc7c'], leaf2: ['fixed', '#89a868'], trunk: ['fixed', '#8f6c48'],
+      grass: ['fixed', '#dce4bd'], grass2: ['fixed', '#dce4bd'], road: ['fixed', '#ebdfc7'], plaza: ['fixed', '#f0e7d4'],
+      water: ['fixed', '#c0dcd7'], sand: ['fixed', '#eddfbb'], crop: ['fixed', '#aec877'], crop2: ['fixed', '#e7ca7b'],
+      soil: ['fixed', '#c8a479'], edge: ['fixed', '#c3a67e'],
+    },
+  },
+
   day: {
     key: 'day', name: '白昼', en: 'Daylight flat',
     pitch: '明亮干净的扁平色块，像一款休闲经营游戏，第一眼最友好。',
@@ -136,10 +163,14 @@ export function themeCSS(t) {
   for (const [m, spec] of Object.entries(t.mats)) css += `${s} .m-${m}{--c:${specCSS(spec)}}`;
   css += `${s} .f-l{fill:var(--c)}${s} .f-t{fill:color-mix(in srgb,var(--c),white ${t.shade[0]}%)}` +
     `${s} .f-r{fill:color-mix(in srgb,var(--c),black ${t.shade[1]}%)}`;
-  const shapes = ':is(polygon,path,ellipse,circle,rect):not(.ln):not(.ln2):not(.hl):not(.smoke):not(.beam):not(.shadow):not(.nost)';
+  // hand-drawn sprites: the wash carries no stroke, the separate ink line does
+  const shapes = `:is(polygon,path,ellipse,circle,rect):not(.ln):not(.ln2):not(.hl):not(.smoke):not(.beam):not(.shadow):not(.nost):not(.ink)${t.ink ? ':not(.wash)' : ''}`;
   css += t.stroke
     ? `${s} .sp ${shapes}{stroke:${specCSS(t.stroke)};stroke-width:${t.strokeW};stroke-linejoin:round}`
     : `${s} .sp ${shapes}{stroke:none}`;
+  css += t.ink
+    ? `${s} .sp .ink{fill:none;stroke:${t.ink};stroke-width:${t.inkW};stroke-linecap:round;stroke-linejoin:round}${s} .sp .ink-s{stroke-width:${t.inkW * 0.7};opacity:.7}${s} .sp .wash{stroke:none}`
+    : `${s} .sp .ink{display:none}`;
   css += `${s} .sp .t-sign{fill:${t.text}}${s} .sp .smoke{fill:${t.smoke}}${s} .sp .hl{fill:${t.hl}}${s} .sp .beam{fill:${t.beam}}`;
   return css;
 }

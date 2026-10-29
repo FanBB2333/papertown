@@ -9,6 +9,7 @@ declare module '@design/sprites.js' {
   export const DISTRICTS: Record<string, { name: string; en: string; dir: string; color: string }>;
   export const BUILDINGS: Record<string, { name: string; rep: string; tech: string; district: string; accent: string; w: number; d: number; h: number; later?: boolean }>;
   export function iso(x: number, y: number, z?: number): [number, number];
+  export function handDrawn(on?: boolean): void;
   export const ITEMS: Record<string, { name: string }>;
   export const WORKERS: Record<string, { name: string }>;
   export function spriteSVG(type: string, o?: { label?: string | null; accent?: string | null }): { html: string };

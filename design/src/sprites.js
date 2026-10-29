@@ -8,6 +8,58 @@ export const iso = (x, y, z = 0) => [(x - y) * HW, (x + y) * HH - z * ZU];
 const r1 = n => Math.round(n * 10) / 10;
 const pt = p => `${r1(p[0])},${r1(p[1])}`;
 
+// Hand-drawn mode: every polygon comes out as a slightly wobbly wash of colour plus a
+// separate ink line drawn over it, a little off register and overshooting the corners,
+// like a sketch coloured in afterwards. The wobble is seeded by the coordinates, so the
+// same shape always draws the same way and shared edges get the same stroke.
+let HAND = false;
+export function handDrawn(on = true) { HAND = on; }
+export const isHand = () => HAND;
+
+function noise(a, b, c) {
+  let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(c, 982451653)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return (((h ^ (h >>> 16)) >>> 0) / 4294967296) * 2 - 1;
+}
+const q4 = v => Math.round(v * 4);
+const jit = (p, k, amp) => [p[0] + noise(q4(p[0]), q4(p[1]), k) * amp, p[1] + noise(q4(p[1]), q4(p[0]), k + 7) * amp];
+
+function bowed(a, b, k, amount) {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  const off = noise(q4(mx), q4(my), k) * Math.min(amount, len * 0.03);
+  return [mx - (b[1] - a[1]) / len * off, my + (b[0] - a[0]) / len * off];
+}
+
+function washPath(P) {
+  const Q = P.map(p => jit(p, 1, 0.55));
+  let d = `M${pt(Q[0])}`;
+  for (let i = 0; i < Q.length; i++) {
+    const a = Q[i], b = Q[(i + 1) % Q.length];
+    d += Math.hypot(b[0] - a[0], b[1] - a[1]) < 6 ? `L${pt(b)}` : `Q${pt(bowed(a, b, 3, 1.1))} ${pt(b)}`;
+  }
+  return d + 'Z';
+}
+
+// the same two strokes for shapes drawn outside a Pen (screen points)
+export function handPath(P) { return { wash: washPath(P), ink: inkPath(P) }; }
+
+function inkPath(P) {
+  let d = '';
+  for (let i = 0; i < P.length; i++) {
+    // draw each edge in one canonical direction so a shared edge is the same stroke
+    let a = P[i], b = P[(i + 1) % P.length];
+    if (a[0] > b[0] || (a[0] === b[0] && a[1] > b[1])) [a, b] = [b, a];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 2.5) continue;
+    const ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len, over = Math.min(1.8, len * 0.1);
+    const o1 = over * (0.5 + 0.5 * noise(q4(a[0]), q4(a[1]), 11)), o2 = over * (0.5 + 0.5 * noise(q4(b[0]), q4(b[1]), 12));
+    const A = jit([a[0] - ux * o1, a[1] - uy * o1], 5, 0.45), B = jit([b[0] + ux * o2, b[1] + uy * o2], 6, 0.45);
+    d += `M${pt(A)}Q${pt(bowed(A, B, 9, 0.9))} ${pt(B)}`;
+  }
+  return d;
+}
+
 export class Pen {
   constructor() { this.o = []; this.bb = [1e9, 1e9, -1e9, -1e9]; }
   grow(x, y) {
@@ -17,11 +69,19 @@ export class Pen {
   P(x, y, z = 0) { const p = iso(x, y, z); this.grow(p[0], p[1]); return p; }
   raw(s) { this.o.push(s); return this; }
   poly(pts, cls) {
-    this.o.push(`<polygon class="${cls}" points="${pts.map(q => pt(this.P(q[0], q[1], q[2]))).join(' ')}"/>`);
+    const P = pts.map(q => this.P(q[0], q[1], q[2]));
+    if (!HAND) {
+      this.o.push(`<polygon class="${cls}" points="${P.map(pt).join(' ')}"/>`);
+      return this;
+    }
+    const w = Math.max(...P.map(p => p[0])) - Math.min(...P.map(p => p[0])), h = Math.max(...P.map(p => p[1])) - Math.min(...P.map(p => p[1]));
+    this.o.push(`<path class="${cls} wash" d="${washPath(P)}"/><path class="ink${w * h < 90 ? ' ink-s' : ''}" d="${inkPath(P)}"/>`);
     return this;
   }
   line(pts, cls) {
-    this.o.push(`<path class="${cls}" d="M${pts.map(q => pt(this.P(q[0], q[1], q[2]))).join('L')}"/>`);
+    const P = pts.map(q => this.P(q[0], q[1], q[2]));
+    const d = HAND ? `M${pt(jit(P[0], 2, 0.5))}` + P.slice(1).map((p, i) => `Q${pt(bowed(P[i], p, 4, 0.8))} ${pt(jit(p, 2, 0.5))}`).join('') : `M${P.map(pt).join('L')}`;
+    this.o.push(`<path class="${cls}" d="${d}"/>`);
     return this;
   }
   path(d, cls, box = []) { box.forEach(([x, y]) => this.grow(x, y)); this.o.push(`<path class="${cls}" d="${d}"/>`); return this; }

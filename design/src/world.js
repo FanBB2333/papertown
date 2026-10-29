@@ -1,7 +1,7 @@
 // The Papertown map: placements on a 24×24 isometric grid, ground tiles, props,
 // logistics flows and labels. renderMap() returns one <svg> string.
 
-import { Pen, iso, BUILDINGS, PROPS, DISTRICTS } from './sprites.js';
+import { Pen, iso, isHand, handPath, BUILDINGS, PROPS, DISTRICTS } from './sprites.js';
 import { SAMPLE_REPOS } from './sample.js';
 
 export const N = 24;
@@ -87,7 +87,11 @@ function textWidth(s, size) {
 
 function pill(x, y, text, cls, size = 12, style = '') {
   const w = textWidth(text, size) + 16, h = size + 9;
-  return `<g class="${cls}"${style ? ` style="${style}"` : ''} transform="translate(${f1(x)},${f1(y)})"><rect x="${f1(-w / 2)}" y="${-h}" width="${f1(w)}" height="${h}" rx="${h / 2}"/>` +
+  // hand-drawn: a wobbly tag with an ink outline instead of a perfect capsule
+  const shape = isHand()
+    ? (() => { const P = [[-w / 2, -h], [w / 2, -h], [w / 2 + 2, -h / 2], [w / 2, 0], [-w / 2, 0], [-w / 2 - 2, -h / 2]]; const d = handPath(P); return `<path class="tag" d="${d.wash}"/><path class="tag-ink" d="${d.ink}"/>`; })()
+    : `<rect x="${f1(-w / 2)}" y="${-h}" width="${f1(w)}" height="${h}" rx="${h / 2}"/>`;
+  return `<g class="${cls}"${style ? ` style="${style}"` : ''} transform="translate(${f1(x)},${f1(y)})">${shape}` +
     `<text x="0" y="${f1(-h / 2 + size * 0.36)}" font-size="${size}" text-anchor="middle">${text}</text></g>`;
 }
 
@@ -98,8 +102,9 @@ export function placementName(pl) { return pl.name || BUILDINGS[pl.type].name; }
 // `core` puts a pad under it and dims everything that is not core.
 // notes: placement id -> text appended to its label.
 // decor: 'full' trees, lamps and boats; 'light' a few trees kept clear of core buildings; 'none'.
+// dashes: centre lines on the roads.
 export function renderMap(o = {}) {
-  const opt = { labels: 'key', anim: true, objects: true, flows: true, districts: true, decor: 'full', highlight: null, note: '', notes: {}, vb: '-790 -150 1580 950', ...o };
+  const opt = { labels: 'key', anim: true, objects: true, flows: true, districts: true, decor: 'full', dashes: true, highlight: null, note: '', notes: {}, vb: '-790 -150 1580 950', ...o };
   const places = opt.placements || PLACEMENTS;
   const hasCore = places.some(p => p.core);
   const accent = pl => pl.accent || BUILDINGS[pl.type].accent;
@@ -129,7 +134,7 @@ export function renderMap(o = {}) {
       waves.push(`M${f1(cx - 9)},${f1(cy)}q4.5,-4 9,0t9,0`);
     }
   }
-  out.push(`<g class="sp"><path class="ln m-white roaddash" d="${dash.join('')}"/><path class="ln m-white wave" d="${waves.join('')}"/></g>`);
+  out.push(`<g class="sp">${opt.dashes ? `<path class="ln m-white roaddash" d="${dash.join('')}"/>` : ''}<path class="ln m-white wave" d="${waves.join('')}"/></g>`);
 
   // focus ring under the highlighted building
   const hl = opt.highlight && places.find(p => p.id === opt.highlight);
@@ -143,7 +148,12 @@ export function renderMap(o = {}) {
     for (const pl of places.filter(p => p.core)) {
       const f = footprint(pl), m = 0.35;
       const pts = [[f.x - m, f.y - m], [f.x + f.w + m, f.y - m], [f.x + f.w + m, f.y + f.d + m], [f.x - m, f.y + f.d + m]];
-      out.push(`<path class="core-pad" style="--accent:${accent(pl)}" d="M${pts.map(([x, y]) => sp(x, y, 0.02)).join('L')}Z"/>`);
+      if (isHand()) {
+        const d = handPath(pts.map(([x, y]) => iso(x, y, 0.02)));
+        out.push(`<g class="core-pad-g" style="--accent:${accent(pl)}"><path class="core-pad" d="${d.wash}"/><path class="core-pad-ink" d="${d.ink}"/></g>`);
+      } else {
+        out.push(`<path class="core-pad" style="--accent:${accent(pl)}" d="M${pts.map(([x, y]) => sp(x, y, 0.02)).join('L')}Z"/>`);
+      }
     }
   }
 
@@ -198,7 +208,7 @@ export function renderMap(o = {}) {
         b.draw(p, pl);
         const [tx, ty] = iso(pl.x, pl.y);
         const cls = `${pl.id === opt.highlight ? ' is-hl' : ''}${pl.status === 'busy' ? ' is-busy' : ''}${pl.core ? ' is-core' : hasCore ? ' is-dim' : ''}`;
-        out.push(`<g class="sp bld${cls}" data-b="${pl.type}" data-id="${pl.id}" style="--accent:${accent(pl)}" transform="translate(${f1(tx)},${f1(ty)})">${p.o.join('')}</g>`);
+        out.push(`<g class="sp bld${cls}" data-b="${pl.type}" data-id="${pl.id}" style="--accent:${accent(pl)}" transform="translate(${f1(tx)},${f1(ty)})"><g class="bld-in">${p.o.join('')}</g></g>`);
       } else {
         const p = new Pen();
         PROPS[ob.prop].draw(p);

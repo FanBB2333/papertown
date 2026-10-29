@@ -514,6 +514,33 @@ export const THEMES = {
     },
   },
 
+  sketch: {
+    key: 'sketch', name: '手绘', en: 'Ink & wash', tag: '应用',
+    pitch: '墨线加水彩：线条带一点手的起伏，颜色像刷上去的，纸纹从底下透出来。配合 pen 的手绘模式使用。',
+    keywords: ['墨线', '水彩', '纸纹', '手写字'],
+    pros: ['有温度，长时间看不累', '颜色淡、对比靠墨线，信息层次清楚', '和纸艺同一家族，世界观不变'],
+    cons: ['线条有起伏，小图标要控制细节', '需要手写字体，首次加载多几个字体分片'],
+    ui: {
+      bg: '#f4eee2', panel: '#fcf8f0', panel2: '#f3ecdf', ink: '#2f261d', muted: '#857560', line: 'rgba(84,62,40,.2)',
+      brand: '#c2663f', brandInk: '#fffaf2', ok: '#6b9160', warn: '#c38b2e', bad: '#b9543f',
+      font: '"LXGW WenKai Screen","PingFang SC","Hiragino Sans GB",system-ui,sans-serif',
+      head: '"LXGW WenKai Screen","Songti SC","STSong",serif',
+      radius: '14px', border: '1px solid transparent', shadow: '0 12px 28px -18px rgba(80,55,30,.45)', headCase: 'none',
+    },
+    stroke: ['fixed', 'rgba(52,36,22,.6)'], strokeW: 0.9, shade: [20, 15],
+    ink: 'rgba(46,31,18,.74)', inkW: 1.05,
+    text: '#3a2c1e', smoke: '#fffaf2', hl: 'rgba(255,255,255,.5)', beam: 'rgba(255,236,170,.45)',
+    mats: {
+      wall: ['mix', 13, '#f6efe2'], roof: ['mix', 78, '#6b4b33'], acc: ['acc'], acc2: ['fixed', '#c9644c'],
+      base: ['fixed', '#e0d0ae'], win: ['fixed', '#6f5b45'], glass: ['mix', 16, '#d9e9e5'], metal: ['fixed', '#aaa498'],
+      wood: ['fixed', '#c7a072'], white: ['fixed', '#fcf8ee'], dark: ['fixed', '#5e4734'], sign: ['fixed', '#fdf7e6'],
+      egg: ['fixed', '#f8efda'], leaf: ['fixed', '#a2bc7c'], leaf2: ['fixed', '#89a868'], trunk: ['fixed', '#8f6c48'],
+      grass: ['fixed', '#dce4bd'], grass2: ['fixed', '#dce4bd'], road: ['fixed', '#ebdfc7'], plaza: ['fixed', '#f0e7d4'],
+      water: ['fixed', '#c0dcd7'], sand: ['fixed', '#eddfbb'], crop: ['fixed', '#aec877'], crop2: ['fixed', '#e7ca7b'],
+      soil: ['fixed', '#c8a479'], edge: ['fixed', '#c3a67e'],
+    },
+  },
+
   day: {
     key: 'day', name: '白昼', en: 'Daylight flat',
     pitch: '明亮干净的扁平色块，像一款休闲经营游戏，第一眼最友好。',
@@ -616,10 +643,14 @@ export function themeCSS(t) {
   for (const [m, spec] of Object.entries(t.mats)) css += `${s} .m-${m}{--c:${specCSS(spec)}}`;
   css += `${s} .f-l{fill:var(--c)}${s} .f-t{fill:color-mix(in srgb,var(--c),white ${t.shade[0]}%)}` +
     `${s} .f-r{fill:color-mix(in srgb,var(--c),black ${t.shade[1]}%)}`;
-  const shapes = ':is(polygon,path,ellipse,circle,rect):not(.ln):not(.ln2):not(.hl):not(.smoke):not(.beam):not(.shadow):not(.nost)';
+  // hand-drawn sprites: the wash carries no stroke, the separate ink line does
+  const shapes = `:is(polygon,path,ellipse,circle,rect):not(.ln):not(.ln2):not(.hl):not(.smoke):not(.beam):not(.shadow):not(.nost):not(.ink)${t.ink ? ':not(.wash)' : ''}`;
   css += t.stroke
     ? `${s} .sp ${shapes}{stroke:${specCSS(t.stroke)};stroke-width:${t.strokeW};stroke-linejoin:round}`
     : `${s} .sp ${shapes}{stroke:none}`;
+  css += t.ink
+    ? `${s} .sp .ink{fill:none;stroke:${t.ink};stroke-width:${t.inkW};stroke-linecap:round;stroke-linejoin:round}${s} .sp .ink-s{stroke-width:${t.inkW * 0.7};opacity:.7}${s} .sp .wash{stroke:none}`
+    : `${s} .sp .ink{display:none}`;
   css += `${s} .sp .t-sign{fill:${t.text}}${s} .sp .smoke{fill:${t.smoke}}${s} .sp .hl{fill:${t.hl}}${s} .sp .beam{fill:${t.beam}}`;
   return css;
 }
@@ -701,6 +732,58 @@ export const iso = (x, y, z = 0) => [(x - y) * HW, (x + y) * HH - z * ZU];
 const r1 = n => Math.round(n * 10) / 10;
 const pt = p => `${r1(p[0])},${r1(p[1])}`;
 
+// Hand-drawn mode: every polygon comes out as a slightly wobbly wash of colour plus a
+// separate ink line drawn over it, a little off register and overshooting the corners,
+// like a sketch coloured in afterwards. The wobble is seeded by the coordinates, so the
+// same shape always draws the same way and shared edges get the same stroke.
+let HAND = false;
+export function handDrawn(on = true) { HAND = on; }
+export const isHand = () => HAND;
+
+function noise(a, b, c) {
+  let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263) + Math.imul(c, 982451653)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return (((h ^ (h >>> 16)) >>> 0) / 4294967296) * 2 - 1;
+}
+const q4 = v => Math.round(v * 4);
+const jit = (p, k, amp) => [p[0] + noise(q4(p[0]), q4(p[1]), k) * amp, p[1] + noise(q4(p[1]), q4(p[0]), k + 7) * amp];
+
+function bowed(a, b, k, amount) {
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  const off = noise(q4(mx), q4(my), k) * Math.min(amount, len * 0.03);
+  return [mx - (b[1] - a[1]) / len * off, my + (b[0] - a[0]) / len * off];
+}
+
+function washPath(P) {
+  const Q = P.map(p => jit(p, 1, 0.55));
+  let d = `M${pt(Q[0])}`;
+  for (let i = 0; i < Q.length; i++) {
+    const a = Q[i], b = Q[(i + 1) % Q.length];
+    d += Math.hypot(b[0] - a[0], b[1] - a[1]) < 6 ? `L${pt(b)}` : `Q${pt(bowed(a, b, 3, 1.1))} ${pt(b)}`;
+  }
+  return d + 'Z';
+}
+
+// the same two strokes for shapes drawn outside a Pen (screen points)
+export function handPath(P) { return { wash: washPath(P), ink: inkPath(P) }; }
+
+function inkPath(P) {
+  let d = '';
+  for (let i = 0; i < P.length; i++) {
+    // draw each edge in one canonical direction so a shared edge is the same stroke
+    let a = P[i], b = P[(i + 1) % P.length];
+    if (a[0] > b[0] || (a[0] === b[0] && a[1] > b[1])) [a, b] = [b, a];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 2.5) continue;
+    const ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len, over = Math.min(1.8, len * 0.1);
+    const o1 = over * (0.5 + 0.5 * noise(q4(a[0]), q4(a[1]), 11)), o2 = over * (0.5 + 0.5 * noise(q4(b[0]), q4(b[1]), 12));
+    const A = jit([a[0] - ux * o1, a[1] - uy * o1], 5, 0.45), B = jit([b[0] + ux * o2, b[1] + uy * o2], 6, 0.45);
+    d += `M${pt(A)}Q${pt(bowed(A, B, 9, 0.9))} ${pt(B)}`;
+  }
+  return d;
+}
+
 export class Pen {
   constructor() { this.o = []; this.bb = [1e9, 1e9, -1e9, -1e9]; }
   grow(x, y) {
@@ -710,11 +793,19 @@ export class Pen {
   P(x, y, z = 0) { const p = iso(x, y, z); this.grow(p[0], p[1]); return p; }
   raw(s) { this.o.push(s); return this; }
   poly(pts, cls) {
-    this.o.push(`<polygon class="${cls}" points="${pts.map(q => pt(this.P(q[0], q[1], q[2]))).join(' ')}"/>`);
+    const P = pts.map(q => this.P(q[0], q[1], q[2]));
+    if (!HAND) {
+      this.o.push(`<polygon class="${cls}" points="${P.map(pt).join(' ')}"/>`);
+      return this;
+    }
+    const w = Math.max(...P.map(p => p[0])) - Math.min(...P.map(p => p[0])), h = Math.max(...P.map(p => p[1])) - Math.min(...P.map(p => p[1]));
+    this.o.push(`<path class="${cls} wash" d="${washPath(P)}"/><path class="ink${w * h < 90 ? ' ink-s' : ''}" d="${inkPath(P)}"/>`);
     return this;
   }
   line(pts, cls) {
-    this.o.push(`<path class="${cls}" d="M${pts.map(q => pt(this.P(q[0], q[1], q[2]))).join('L')}"/>`);
+    const P = pts.map(q => this.P(q[0], q[1], q[2]));
+    const d = HAND ? `M${pt(jit(P[0], 2, 0.5))}` + P.slice(1).map((p, i) => `Q${pt(bowed(P[i], p, 4, 0.8))} ${pt(jit(p, 2, 0.5))}`).join('') : `M${P.map(pt).join('L')}`;
+    this.o.push(`<path class="${cls}" d="${d}"/>`);
     return this;
   }
   path(d, cls, box = []) { box.forEach(([x, y]) => this.grow(x, y)); this.o.push(`<path class="${cls}" d="${d}"/>`); return this; }
@@ -1477,7 +1568,11 @@ function textWidth(s, size) {
 
 function pill(x, y, text, cls, size = 12, style = '') {
   const w = textWidth(text, size) + 16, h = size + 9;
-  return `<g class="${cls}"${style ? ` style="${style}"` : ''} transform="translate(${f1(x)},${f1(y)})"><rect x="${f1(-w / 2)}" y="${-h}" width="${f1(w)}" height="${h}" rx="${h / 2}"/>` +
+  // hand-drawn: a wobbly tag with an ink outline instead of a perfect capsule
+  const shape = isHand()
+    ? (() => { const P = [[-w / 2, -h], [w / 2, -h], [w / 2 + 2, -h / 2], [w / 2, 0], [-w / 2, 0], [-w / 2 - 2, -h / 2]]; const d = handPath(P); return `<path class="tag" d="${d.wash}"/><path class="tag-ink" d="${d.ink}"/>`; })()
+    : `<rect x="${f1(-w / 2)}" y="${-h}" width="${f1(w)}" height="${h}" rx="${h / 2}"/>`;
+  return `<g class="${cls}"${style ? ` style="${style}"` : ''} transform="translate(${f1(x)},${f1(y)})">${shape}` +
     `<text x="0" y="${f1(-h / 2 + size * 0.36)}" font-size="${size}" text-anchor="middle">${text}</text></g>`;
 }
 
@@ -1488,8 +1583,9 @@ export function placementName(pl) { return pl.name || BUILDINGS[pl.type].name; }
 // `core` puts a pad under it and dims everything that is not core.
 // notes: placement id -> text appended to its label.
 // decor: 'full' trees, lamps and boats; 'light' a few trees kept clear of core buildings; 'none'.
+// dashes: centre lines on the roads.
 export function renderMap(o = {}) {
-  const opt = { labels: 'key', anim: true, objects: true, flows: true, districts: true, decor: 'full', highlight: null, note: '', notes: {}, vb: '-790 -150 1580 950', ...o };
+  const opt = { labels: 'key', anim: true, objects: true, flows: true, districts: true, decor: 'full', dashes: true, highlight: null, note: '', notes: {}, vb: '-790 -150 1580 950', ...o };
   const places = opt.placements || PLACEMENTS;
   const hasCore = places.some(p => p.core);
   const accent = pl => pl.accent || BUILDINGS[pl.type].accent;
@@ -1519,7 +1615,7 @@ export function renderMap(o = {}) {
       waves.push(`M${f1(cx - 9)},${f1(cy)}q4.5,-4 9,0t9,0`);
     }
   }
-  out.push(`<g class="sp"><path class="ln m-white roaddash" d="${dash.join('')}"/><path class="ln m-white wave" d="${waves.join('')}"/></g>`);
+  out.push(`<g class="sp">${opt.dashes ? `<path class="ln m-white roaddash" d="${dash.join('')}"/>` : ''}<path class="ln m-white wave" d="${waves.join('')}"/></g>`);
 
   // focus ring under the highlighted building
   const hl = opt.highlight && places.find(p => p.id === opt.highlight);
@@ -1533,7 +1629,12 @@ export function renderMap(o = {}) {
     for (const pl of places.filter(p => p.core)) {
       const f = footprint(pl), m = 0.35;
       const pts = [[f.x - m, f.y - m], [f.x + f.w + m, f.y - m], [f.x + f.w + m, f.y + f.d + m], [f.x - m, f.y + f.d + m]];
-      out.push(`<path class="core-pad" style="--accent:${accent(pl)}" d="M${pts.map(([x, y]) => sp(x, y, 0.02)).join('L')}Z"/>`);
+      if (isHand()) {
+        const d = handPath(pts.map(([x, y]) => iso(x, y, 0.02)));
+        out.push(`<g class="core-pad-g" style="--accent:${accent(pl)}"><path class="core-pad" d="${d.wash}"/><path class="core-pad-ink" d="${d.ink}"/></g>`);
+      } else {
+        out.push(`<path class="core-pad" style="--accent:${accent(pl)}" d="M${pts.map(([x, y]) => sp(x, y, 0.02)).join('L')}Z"/>`);
+      }
     }
   }
 
@@ -1588,7 +1689,7 @@ export function renderMap(o = {}) {
         b.draw(p, pl);
         const [tx, ty] = iso(pl.x, pl.y);
         const cls = `${pl.id === opt.highlight ? ' is-hl' : ''}${pl.status === 'busy' ? ' is-busy' : ''}${pl.core ? ' is-core' : hasCore ? ' is-dim' : ''}`;
-        out.push(`<g class="sp bld${cls}" data-b="${pl.type}" data-id="${pl.id}" style="--accent:${accent(pl)}" transform="translate(${f1(tx)},${f1(ty)})">${p.o.join('')}</g>`);
+        out.push(`<g class="sp bld${cls}" data-b="${pl.type}" data-id="${pl.id}" style="--accent:${accent(pl)}" transform="translate(${f1(tx)},${f1(ty)})"><g class="bld-in">${p.o.join('')}</g></g>`);
       } else {
         const p = new Pen();
         PROPS[ob.prop].draw(p);

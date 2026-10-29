@@ -8,16 +8,16 @@
 .avatar .av-scarf { fill: #f2cf63; }
 .avatar .av-head { fill: #f3d6b4; stroke: rgba(60, 35, 15, .4); stroke-width: .7; }
 .avatar .av-hair { fill: #4a3426; }
-.avatar .av-fig { transform-box: fill-box; transform-origin: 50% 100%; transition: transform .25s cubic-bezier(.3, 1.4, .5, 1); }
-.avatar.face-left .av-fig { transform: scaleX(-1); }
-.avatar.walking .av-fig { animation: av-bob .36s ease-in-out infinite alternate; }
-.avatar.walking.face-left .av-fig { animation-name: av-bob-l; }
-.avatar.walking .av-leg { transform-box: fill-box; transform-origin: 50% 0; animation: av-step .36s ease-in-out infinite alternate; }
+.avatar .av-fig { transform-box: fill-box; transform-origin: 50% 100%; transform: scaleX(var(--face, 1)); }
+.avatar.face-left { --face: -1; }
+.avatar:not(.walking) .av-fig { animation: av-breathe 3.6s var(--in-out, ease-in-out) infinite; }
+.avatar.walking .av-fig { animation: av-bob .34s var(--in-out, ease-in-out) infinite alternate; }
+.avatar.walking .av-leg { transform-box: fill-box; transform-origin: 50% 0; animation: av-step .34s var(--in-out, ease-in-out) infinite alternate; }
 .avatar.walking .av-leg.r { animation-direction: alternate-reverse; }
-@keyframes av-bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
-@keyframes av-bob-l { from { transform: scaleX(-1) translateY(0); } to { transform: scaleX(-1) translateY(-2px); } }
+@keyframes av-breathe { 50% { transform: scaleX(var(--face, 1)) scaleY(1.03); } }
+@keyframes av-bob { to { transform: scaleX(var(--face, 1)) translateY(-2.4px); } }
 @keyframes av-step { from { transform: rotate(-16deg); } to { transform: rotate(16deg); } }
-.avatar .av-hint { opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .35s cubic-bezier(.3, 1.5, .5, 1); }
+.avatar .av-hint { opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .35s var(--spring); }
 .avatar.has-hint .av-hint { opacity: 1; transform: none; }
 .avatar .av-hint rect { fill: var(--ink); }
 .avatar .av-hint text { fill: var(--panel); font: 600 11.5px var(--font); }
@@ -26,7 +26,7 @@
 /* ---------- interior shell ---------- */
 .interior {
   position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column;
-  background: var(--bg); animation: in-open .38s cubic-bezier(.2, .9, .25, 1);
+  background: var(--bg); animation: in-open .38s var(--out);
 }
 @keyframes in-open { from { opacity: 0; transform: scale(.985); } }
 .in-head { display: flex; align-items: center; gap: 18px; padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--panel); }
@@ -61,8 +61,8 @@
 .proj, .mon {
   display: block; width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer;
   border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 12px 14px;
-  transition: transform .3s cubic-bezier(.3, 1.4, .5, 1), box-shadow .2s, border-color .2s;
-  animation: rise-in .45s cubic-bezier(.2, .9, .25, 1) both; animation-delay: calc(var(--i, 0) * 35ms);
+  transition: transform .3s var(--spring), box-shadow .2s, border-color .2s;
+  animation: rise-in .45s var(--out) both; animation-delay: calc(var(--i, 0) * 35ms);
 }
 @keyframes rise-in { from { opacity: 0; transform: translateY(8px); } }
 .proj:hover, .mon:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(80, 55, 25, .10); }
@@ -118,7 +118,7 @@
 .job {
   display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(80px, 1fr) 60px 80px; align-items: center; gap: 12px;
   width: 100%; text-align: left; font: inherit; color: var(--ink); cursor: pointer; margin-bottom: 6px;
-  padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); transition: border-color .2s, transform .3s cubic-bezier(.3, 1.4, .5, 1);
+  padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); transition: border-color .2s, transform .3s var(--spring);
 }
 .job:hover { transform: translateX(2px); }
 .job.on { border-color: var(--brand); }
@@ -131,12 +131,12 @@
 .job.s-failed .bar > i, .job.s-cancelled .bar > i { background: var(--bad); }
 .job.s-failed .job-st { color: var(--bad); }
 .job.mini { grid-template-columns: minmax(0, 1fr) 70px; padding: 8px 10px; }
-.bar > i { transition: width .6s cubic-bezier(.2, .9, .25, 1); }
+.bar > i { transition: width .6s var(--out); }
 .bar.big { height: 10px; margin: 10px 0 4px; }
 .job-detail {
   position: absolute; top: 0; right: 0; bottom: 0; width: min(520px, 92vw); z-index: 2; overflow-y: auto;
   background: var(--panel); border-left: 1px solid var(--line); box-shadow: -18px 0 40px rgba(60, 40, 20, .12);
-  padding: 18px 20px; animation: slide-in .35s cubic-bezier(.2, .9, .25, 1);
+  padding: 18px 20px; animation: slide-in .35s var(--out);
 }
 .room-farm { position: relative; }
 @keyframes slide-in { from { transform: translateX(30px); opacity: 0; } }
@@ -152,7 +152,7 @@
 .chat-who { display: flex; align-items: center; gap: 10px; }
 .chat-who > div { display: flex; flex-direction: column; }
 .transcript { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
-.msg-u, .msg-a { max-width: min(760px, 86%); padding: 10px 14px; border-radius: 14px; line-height: 1.6; font-size: 14px; animation: rise-in .35s cubic-bezier(.2, .9, .25, 1) both; }
+.msg-u, .msg-a { max-width: min(760px, 86%); padding: 10px 14px; border-radius: 14px; line-height: 1.6; font-size: 14px; animation: rise-in .35s var(--out) both; }
 .msg-u { align-self: flex-end; background: color-mix(in srgb, var(--brand) 13%, var(--panel)); border-bottom-right-radius: 4px; }
 .msg-a { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .msg-a.err { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }

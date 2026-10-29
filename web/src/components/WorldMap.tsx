@@ -1,6 +1,6 @@
 // The world map (layout A): the shared isometric SVG renderer, with drag to pan, wheel
-// to zoom, a hover card per building, and a minimap that jumps on click. Kept quiet on
-// purpose: no goods flows, few trees, and the core buildings highlighted. You walk it as
+// to zoom and a hover card per building. Kept quiet on purpose: no goods flows, no
+// district signs, few trees, and the core buildings highlighted. You walk it as
 // a small figure (useAvatar); a click on a building goes straight inside.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -17,24 +17,18 @@ interface Props {
   highlight: string | null;
   notes: Record<string, string>;
   active: boolean;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, at: { x: number; y: number }) => void;
 }
 
 export function WorldMap({ placements, highlight, notes, active, onOpen }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const mini = useRef<HTMLDivElement>(null);
   const vb = useRef({ ...BASE });
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; id: number; moved: boolean } | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; pl: Placement } | null>(null);
 
   const markup = useMemo(
-    () => renderMap({ placements, labels: 'key', highlight, notes, anim: true, flows: false, decor: 'light', vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
+    () => renderMap({ placements, labels: 'key', highlight, notes, anim: true, flows: false, decor: 'light', districts: false, dashes: false, vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
     [placements, highlight, notes],
-  );
-  const miniMarkup = useMemo(
-    () => renderMap({ placements, objects: false, flows: false, districts: false, anim: false, labels: 'none' })
-      .replace('</svg>', '<rect class="mm-rect"/></svg>'),
-    [placements],
   );
   const byId = useMemo(() => new Map(placements.map(p => [p.id, p])), [placements]);
 
@@ -55,8 +49,6 @@ export function WorldMap({ placements, highlight, notes, active, onOpen }: Props
     const ncx = Math.min(BASE.x + BASE.w, Math.max(BASE.x, cx)), ncy = Math.min(BASE.y + BASE.h, Math.max(BASE.y, cy));
     v.x = ncx - v.w / 2; v.y = ncy - v.h / 2;
     s.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
-    const r = mini.current?.querySelector('.mm-rect');
-    if (r) for (const [k, val] of Object.entries({ x: v.x, y: v.y, width: v.w, height: v.h })) r.setAttribute(k, String(val));
   }
 
   function fit() {
@@ -91,7 +83,7 @@ export function WorldMap({ placements, highlight, notes, active, onOpen }: Props
   }
 
   // a new map markup replaces the <svg>: carry the current view over
-  useLayoutEffect(apply, [markup, miniMarkup]);
+  useLayoutEffect(apply, [markup]);
 
   // keep the walking figure inside the middle of the view
   function follow(sx: number, sy: number, k: number) {
@@ -105,7 +97,12 @@ export function WorldMap({ placements, highlight, notes, active, onOpen }: Props
     apply();
   }
 
-  const avatar = useAvatar({ host, placements, markup, active, onEnter: onOpen, follow });
+  // where a building sits on screen, so the room can open from its door
+  function screenOf(id: string) {
+    const r = svg()?.querySelector(`.bld[data-id="${id}"]`)?.getBoundingClientRect();
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height * 0.62 } : { x: innerWidth / 2, y: innerHeight / 2 };
+  }
+  const avatar = useAvatar({ host, placements, markup, active, onEnter: id => onOpen(id, screenOf(id)), follow });
   useEffect(() => {
     const s = svg();
     s?.querySelectorAll('.bld.is-near').forEach(g => g.classList.remove('is-near'));
@@ -153,7 +150,7 @@ export function WorldMap({ placements, highlight, notes, active, onOpen }: Props
     if (g && !drag.current?.moved) {
       const id = g.getAttribute('data-id')!;
       avatar.goTo(id);
-      onOpen(id);
+      onOpen(id, { x: e.clientX, y: e.clientY });
     }
   }
 
@@ -164,26 +161,15 @@ export function WorldMap({ placements, highlight, notes, active, onOpen }: Props
     setTip(pl ? { x: Math.min(e.clientX + 16, innerWidth - 300), y: Math.min(e.clientY + 16, innerHeight - 150), pl } : null);
   }
 
-  function onMini(e: React.MouseEvent) {
-    const s = mini.current?.querySelector('svg');
-    if (!s) return;
-    const p = toSvg(s, e.clientX, e.clientY);
-    vb.current.x = p.x - vb.current.w / 2; vb.current.y = p.y - vb.current.h / 2;
-    apply();
-  }
-
   const b = tip && BUILDINGS[tip.pl.type];
   return (
     <>
       <section className="p-world map-bg w-only" ref={host} onClick={onClick} onMouseMove={onMove} onMouseLeave={() => setTip(null)}
         dangerouslySetInnerHTML={{ __html: markup }} />
-      <div className="minimap pnl w-only">
-        <div ref={mini} onClick={onMini} style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: miniMarkup }} />
-        <div className="mm-zoom">
-          <button title="放大" onClick={() => zoomCenter(0.7)}>＋</button>
-          <button title="缩小" onClick={() => zoomCenter(1.4)}>－</button>
-          <button title="复位" onClick={fit}>⟲</button>
-        </div>
+      <div className="zoom-ctl w-only">
+        <button title="放大" onClick={() => zoomCenter(0.7)}>＋</button>
+        <button title="缩小" onClick={() => zoomCenter(1.4)}>－</button>
+        <button title="看全图" onClick={fit}>⟲</button>
       </div>
       {tip && b && (
         <div className="ptip pnl" style={{ left: tip.x, top: tip.y }}>

@@ -5,9 +5,8 @@
 //   #view=status   #open=farm   #open=depot&line=line_1   #chat   — open a state directly
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
-import { Item, Logo, Sprite } from './art';
+import { Item, Logo } from './art';
 import { Drawer, type Composer, type Tab } from './components/Drawer';
 import { Interior } from './components/Interior';
 import { StatusView } from './components/StatusView';
@@ -39,7 +38,6 @@ export function App() {
   const [focusKey, setFocusKey] = useState(0);
   const [sheet, setSheetId] = useState<string | null>(hp.get('open'));
   const [focus, setFocus] = useState<string | null>(hp.get('line'));
-  const [legend, setLegend] = useState(false);
   const [tick, setTick] = useState(0);
   const [online, setOnline] = useState(true);
   const [asking, setAsking] = useState(false);
@@ -126,106 +124,113 @@ export function App() {
     }
   }
 
+  // going inside: the room opens like ink spreading from the door you came through, and
+  // folds back into it when you leave; room to room is a plain cross-fade
+  const [door, setDoor] = useState<{ x: number; y: number } | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const [swap, setSwap] = useState(0);
+  const leaveTimer = useRef<number>();
+  const openRoom = useCallback((id: string, lineId?: string | null, at?: { x: number; y: number }) => {
+    clearTimeout(leaveTimer.current);
+    setLeaving(false);
+    if (sheetRef.current) setSwap(n => n + 1);
+    else setDoor(at ?? { x: innerWidth / 2, y: innerHeight / 2 });
+    setSheet(id, lineId);
+  }, [setSheet]);
+  const sheetRef = useRef(sheet);
+  sheetRef.current = sheet;
+  const leaveRoom = useCallback(() => {
+    setLeaving(true);
+    clearTimeout(leaveTimer.current);
+    leaveTimer.current = window.setTimeout(() => { setSheet(null); setLeaving(false); setSwap(0); }, 460);
+  }, [setSheet]);
+
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (sheet) setSheet(null);
-      else if (chatOpen) setChatOpen(false);
+      if (chatOpen) setChatOpen(false);
+      else if (sheet) leaveRoom();
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
-  }, [sheet, chatOpen]);
+  }, [sheet, chatOpen, leaveRoom]);
 
   // anything with data-open opens that building (stations, goods, list rows); data-line picks the project
   function onRootClick(e: React.MouseEvent) {
     const t = e.target as Element;
     const el = t.closest('[data-open]');
-    if (el && !t.closest('.p-world')) setSheet(el.getAttribute('data-open'), el.getAttribute('data-line'));
+    if (!el || t.closest('.p-world')) return;
+    const r = el.getBoundingClientRect();
+    openRoom(el.getAttribute('data-open')!, el.getAttribute('data-line'), { x: r.left + r.width / 2, y: r.top + r.height / 2 });
   }
+
+  // the walking hint fades once you have moved or after a while
+  const [hint, setHint] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setHint(false), 9000);
+    const k = (e: KeyboardEvent) => { if (/^(Arrow|Key[WASD])/.test(e.code)) setHint(false); };
+    addEventListener('keydown', k);
+    return () => { clearTimeout(t); removeEventListener('keydown', k); };
+  }, []);
 
   const hud = world?.hud;
   const busy = asking || lines.some(l => l.status === 'hatching');
-  const stats: [string, React.ReactNode][] = !hud ? [] : view === 'world' ? [
-    ['世界时间', <>第 {hud.day} 天 · {new Date().toTimeString().slice(0, 5)}</>],
-    ['银行', <>${hud.bank.week.toFixed(2)} <em>/ ${hud.bank.budget}</em></>],
-    ['流水线', <>{hud.lines.running} <em>条运行中</em></>],
-    [hud.plant.name, <>{hud.plant.load}% <em>负荷</em></>],
-  ] : [
-    ['日期', <>{new Date().getMonth() + 1} 月 {new Date().getDate()} 日</>],
-    ['本周花费', <>${hud.bank.week.toFixed(2)} <em>/ ${hud.bank.budget}</em></>],
-    ['项目', <>{hud.lines.running} <em>个运行中</em></>],
-    ['GPU（模拟）', <>{hud.plant.load}% <em>占用</em></>],
-  ];
-  const ticker = messages.filter(m => m.role !== 'user').slice(-4).reverse().map(m => m.body?.text).filter(Boolean).join(' · ');
+  const running = world?.running ?? [];
 
   return (
-    <div className={`proto la glow theme-paper${chatOpen ? ' chat-open' : ''}`} data-mode={view} onClick={onRootClick}>
+    <div className={`proto la theme-sketch${chatOpen ? ' chat-open' : ''}${sheet && !leaving ? ' in-room' : ''}`} data-mode={view} onClick={onRootClick}
+      style={door ? { ['--ox' as string]: `${door.x}px`, ['--oy' as string]: `${door.y}px` } : undefined}>
       {world && <WorldMap placements={world.placements} highlight={null} notes={notes} active={!sheet && view === 'world' && !chatOpen}
-        onOpen={id => setSheet(id)} />}
+        onOpen={(id, at) => openRoom(id, null, at)} />}
       <StatusView tick={tick} active={view === 'status'} />
 
-      <header className="hud pnl">
+      <header className="hud">
         <div className="brand"><Logo /><b>Papertown</b></div>
         <div className="seg" role="tablist">
-          <button className={view === 'world' ? 'on' : ''} onClick={() => setView('world')}>世界</button>
+          <button className={view === 'world' ? 'on' : ''} onClick={() => setView('world')}>小镇</button>
           <button className={view === 'status' ? 'on' : ''} onClick={() => setView('status')}>运行状态</button>
         </div>
-        <div className="hud-stats">{stats.map(([k, v]) => <div key={k}><i>{k}</i><b>{v}</b></div>)}</div>
+        {hud && <div className="hud-quiet">
+          <span><b>{hud.lines.running}</b> 个项目在跑</span>
+          <span>本周 <b>${hud.bank.week.toFixed(2)}</b></span>
+        </div>}
         <div className="hud-r">
-          {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? '没有配置模型 key，员工按 skill 的步骤调用真实工具，文字部分用模板' : hud.model}>
+          {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? '没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板；仓库和印刷厂的 pi 用 pi 自己的设置' : hud.model}>
             {!online ? '连接断开' : hud.offline ? '离线模式' : hud.provider}</span>}
           <button className="btn" onClick={() => chatOpen ? setChatOpen(false) : openChat()}>对话</button>
-          <span className="me">你</span>
         </div>
       </header>
 
-      <div className="lg-bar w-only">
-        <button className="btn" onClick={() => setLegend(l => !l)}>图例</button>
-        <span className="p-hint pnl">点建筑看流水线 · 拖动平移 · 滚轮缩放</span>
-      </div>
-      {legend && (
-        <aside className="legend pnl w-only">
-          <h4>区域</h4>
-          {Object.values(DISTRICTS).map(d => <div key={d.name} className="lg-row"><i style={{ background: d.color }} />{d.name}<em>{d.dir}</em></div>)}
-          <h4>核心建筑</h4>
-          {world?.placements.filter(p => p.core).map(p => (
-            <div key={p.id} className="lg-row lg-core" data-open={p.id}><i style={{ background: p.accent ?? BUILDINGS[p.type].accent }} />{p.name}</div>
+      {running.length > 0 && (
+        <aside className="running w-only">
+          {running.map((r, i) => (
+            <div key={r.id} className="rn" style={{ ['--i' as string]: i }} data-open={r.mill_id ?? r.building} data-line={r.id}>
+              <div>
+                <b>#{r.seq} {r.title}</b>
+                <div className="rn-row">{r.status === 'waiting' ? '等你决定' : r.status === 'paused' ? '已暂停' : r.stage}<div className="bar"><i style={{ width: `${r.pct}%` }} /></div></div>
+              </div>
+            </div>
           ))}
         </aside>
       )}
 
-      <aside className="running pnl w-only">
-        <h4>进行中</h4>
-        {!world?.running.length && <p className="muted small rn-empty">还没有项目。点左下角放入一颗 idea。</p>}
-        {world?.running.map(r => (
-          <div key={r.id} className="rn" data-open={r.mill_id ?? r.building} data-line={r.id}>
-            <Sprite type={world.placements.find(p => p.id === (r.mill_id ?? r.building))?.type ?? 'hatchery'} />
-            <div>
-              <b>#{r.seq} · {r.title}</b>
-              <div className="rn-row">{r.status === 'waiting' ? '等你决定' : r.status === 'paused' ? '已暂停' : r.stage}<div className="bar"><i style={{ width: `${r.pct}%` }} /></div></div>
-            </div>
-          </div>
-        ))}
-      </aside>
-
       <button className="newidea btn pri w-only" onClick={() => openChat({ kind: 'idea' }, true)}><Item k="egg" />放入一颗新 idea</button>
-      <div className="ticker pnl w-only" onClick={() => setView('status')} title="打开运行状态">
-        <b>世界日报</b><span>{ticker || `图书馆馆藏 ${hud?.library ?? 0} 篇 · 写下一个 idea，孵化员会去查重`}</span>
-      </div>
+      <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走动 · 到门口按 <kbd>E</kbd> 进去 · 也可以直接点建筑</div>
 
       <Drawer open={chatOpen} tab={tab} onTab={setTab} onClose={() => setChatOpen(false)} messages={messages} trace={trace}
         lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer} focusKey={focusKey}
-        busy={busy} onSend={onSend} onOpen={setSheet}
+        busy={busy} onSend={onSend} onOpen={id => openRoom(id)}
         onHatch={id => act(() => api.hatch(id))} />
 
       {sheet && (
-        <Interior id={sheet} focus={focus} tick={tick} placements={world?.placements ?? []} lines={lines} onClose={() => setSheet(null)}
-          onOpen={(id, lineId) => setSheet(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
+        <Interior key={`${sheet}:${swap}`} id={sheet} focus={focus} tick={tick} placements={world?.placements ?? []} lines={lines}
+          motion={leaving ? 'leave' : swap ? 'swap' : 'enter'} onClose={leaveRoom}
+          onOpen={(id, lineId) => openRoom(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
           onAsk={(id, name) => openChat({ kind: 'ask', building: id, name }, true)}
           onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
           onAdjust={id => openChat({ kind: 'adjust', lineId: id }, true)} toast={push} />
       )}
-      <div className="toasts">{toasts.map(t => <div key={t.id} className="toast pnl">{t.text}</div>)}</div>
+      <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>
     </div>
   );
 }
