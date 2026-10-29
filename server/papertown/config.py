@@ -82,6 +82,9 @@ class Settings:
     url: str = field(default_factory=lambda: _env("PAPERTOWN_URL", "http://127.0.0.1:8000"))
     # offline demo: put the sample papers on the lines the first time the town starts empty
     samples: bool = field(default_factory=lambda: _env("PAPERTOWN_SAMPLES", "1") != "0")
+    # nvidb's GPU queue, read only: the cards on your machines and their jobs ("0" turns it off)
+    nvidb: bool = field(default_factory=lambda: _env("PAPERTOWN_NVIDB", "1") != "0")
+    nvidb_bin: str = field(default_factory=lambda: _env("PAPERTOWN_NVIDB_BIN"))
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 # What each building actually runs on today, where that differs from the design label.
 TECH = {
     "mill": "Skills + agent 编队", "farm": "Skill · 电厂接口", "press": "Skill · latexmk", "market": "组织编译 · ROI 升降级",
-    "power": "GPU 任务队列（未接入）", "power_sim": "模拟 GPU 后端", "dock_arxiv": "MCP · arXiv", "library": "RAG · BM25 + 覆盖率",
+    "power": "nvidb · GPU 队列（只读）", "power_sim": "模拟 GPU 后端", "dock_arxiv": "MCP · arXiv", "library": "RAG · BM25 + 覆盖率",
     "genealogy": "知识图谱 · 相近 / 引用", "depot": "RAG · 仓库文档",
 }
 # The four buildings the main map is about; they are labelled and highlighted, the rest recede.
@@ -27,7 +27,7 @@ CORE = {"mill", "farm", "press", "depot"}
 
 # Buildings backed by working code. The rest are scenery for now and say so.
 LIVE = {"dock_arxiv", "customs", "hatchery", "mill", "farm", "press", "qa", "depot", "library", "genealogy",
-        "market", "cityhall", "bank", "newspaper", "power_sim"}
+        "market", "cityhall", "bank", "newspaper", "power_sim", "power"}
 
 
 def st(name: str, out: str, *team: str) -> dict:
@@ -101,7 +101,7 @@ CATALOG: dict[str, dict] = {
                   "real": "「运行状态」页就是这份报纸：项目进度、新入馆论文、员工升降级和各类调用次数。"},
     "power": {"stations": [st("接单", "energy"), st("分卡", "energy"), st("发电", "energy"), st("抄表", "energy")],
               "skills": [], "tools": [], "from": [], "to": [["farm", "energy"]],
-              "real": "计划接真实 GPU 服务器的任务队列，实现和模拟电厂相同的 status / submit / wait 三个接口即可替换。"},
+              "real": "读 nvidb 的队列数据库（nvidb queue status --json --no-tick，不会主动连节点）：每台机器每张卡的显存、利用率、温度和上面跑的进程，以及队列里的任务。只读，提交和取消仍然用 nvidb 命令。"},
     "power_sim": {"stations": [st("接单", "energy"), st("排队", "energy"), st("模拟训练", "energy"), st("出表", "table")],
                   "skills": [], "tools": ["power.status", "power.submit", "power.wait"], "from": [], "to": [["farm", "energy"]],
                   "real": "没有 GPU 时的备用电源：按方法草案生成带固定种子的模拟结果表，所有数字都标着「模拟」，保证 demo 能跑完。"},
@@ -236,6 +236,12 @@ class World:
             return f"本周 ${s['week']:.2f} / ${s['budget']:.0f}"
         if t == "power_sim":
             return town.plant.status()["summary"]
+        if t == "power":
+            nv = town.nvidb.status()
+            sm = nv.get("summary")
+            if not nv["ok"] or not sm:
+                return f"nvidb 未连接：{nv['note']}"
+            return f"{sm['up']} 台机器 · {sm['gpus']} 张卡 · {sm['idle']} 张空闲 · {(nv.get('counts') or {}).get('running', 0)} 个任务在跑"
         if t == "depot":
             n = self.db.val("select count(*) from agents where role = 'coder' and status in ('idle', 'working', 'starting')") or 0
             return f"{n} 个代码员工在线"

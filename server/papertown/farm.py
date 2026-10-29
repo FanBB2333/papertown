@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 BACKENDS = {
     "local": {"name": "本地执行器", "ready": True, "note": "在项目的代码目录里直接运行命令"},
     "sim": {"name": "模拟电厂", "ready": True, "note": "离线流水线用的模拟 GPU，结果都标着「模拟」"},
-    "nvidb": {"name": "nvidb", "ready": False, "note": "统一的 GPU 任务队列，以后在这里接入提交和管理"},
+    "nvidb": {"name": "nvidb", "ready": False, "note": "你自己机器上的 GPU 队列（只读）：显卡和任务显示在这里，提交用 nvidb job submit"},
 }
 PROGRESS = re.compile(r"^\s*PROGRESS\s+(\d{1,3})\b")
 RESULT = re.compile(r"^\s*RESULT\s+(\{.*\})\s*$")
@@ -81,7 +81,16 @@ class Farm:
 
     def backends(self) -> list[dict]:
         counts = {r["backend"]: r["n"] for r in self.db.q("select backend, count(*) n from jobs where status in ('queued', 'running') group by backend")}
-        return [{"id": k, **v, "active": counts.get(k, 0)} for k, v in BACKENDS.items()]
+        out = [{"id": k, **v, "active": counts.get(k, 0)} for k, v in BACKENDS.items()]
+        nv = self.town.nvidb.status()
+        for b in out:
+            if b["id"] == "nvidb":
+                sm = nv.get("summary")
+                b["ready"] = nv["ok"]
+                b["active"] = (nv.get("counts") or {}).get("running", 0)
+                b["note"] = (f"{sm['up']}/{sm['nodes']} 台机器在线 · {sm['gpus']} 张卡 · {sm['idle']} 张空闲，{sm['room']} 张还放得下任务"
+                             f"（只读：提交用 nvidb job submit）") if nv["ok"] and sm else nv["note"]
+        return out
 
     # ---------- submitting ----------
 
@@ -89,6 +98,8 @@ class Farm:
                cwd: str | None = None) -> dict:
         if backend not in BACKENDS:
             raise FarmError(f"没有这个后端：{backend}")
+        if backend == "nvidb":
+            raise FarmError("nvidb 只读接入：在这里看显卡和任务，提交请在终端里用 nvidb job submit")
         if not BACKENDS[backend]["ready"]:
             raise FarmError(f"{BACKENDS[backend]['name']} 还没接入，先用 local")
         if backend == "sim":

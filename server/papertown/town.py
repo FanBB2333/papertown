@@ -20,6 +20,7 @@ from .library import Embedder, Library
 from .llm import make_provider
 from .market import Market
 from .mcp_hub import McpHub
+from .nvidb import Nvidb
 from .pipeline import Pipeline
 from .press import Press
 from .skills import SkillRegistry
@@ -43,6 +44,7 @@ class Town:
         self.bank = Bank(self.db, self.bus, self.s.weekly_budget)
         self.market = Market(self.db, self.bus)
         self.plant = SimulatedPlant(self.s.sim_gpu_seconds, on_change=self._job_changed)
+        self.nvidb = Nvidb(self.s)
         self.press = Press(self.s.press_dir, self.library, self.s.compile_tex)
         self.world = World(self)
         self.farm = Farm(self)

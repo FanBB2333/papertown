@@ -250,6 +250,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def jobs(line_id: str | None = None):
         return {"jobs": town.farm.list(line_id), "backends": town.farm.backends(), "plant": town.plant.status()}
 
+    @app.get("/api/gpus")
+    def gpus(fresh: bool = False):
+        return town.nvidb.status(fresh)
+
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str, tail: int = 200):
         j = town.farm.get(job_id, tail=tail)
