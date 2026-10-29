@@ -1,0 +1,53 @@
+/* Additions to design/src/style.css for the live app. */
+
+.proto .small { font-size: 12px; }
+.proto a { color: inherit; }
+.proto .sim a { text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proto .sim a:hover { text-decoration: underline; }
+.k-script { background: #8a6d3b; } .k-tool { background: #7f8a99; }
+.warn-t { color: var(--warn); }
+
+/* buildings at work glow softly */
+.p-world .bld.is-busy { animation: busy 1.6s ease-in-out infinite; }
+@keyframes busy { 50% { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--brand) 70%, transparent)); } }
+
+.rn-empty { margin: 4px; }
+.running { max-height: calc(100% - 330px); overflow-y: auto; }
+
+/* drawer */
+.msg.bot.err { border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.msg .sugg { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.msg .btns a.btn { text-decoration: none; }
+.mode { display: flex; align-items: center; gap: 6px; padding: 8px 14px 0; border-top: var(--pborder); }
+.mode + .composer { border-top: 0; }
+.mode .bench-x { margin-left: 0; padding: 0 4px; font-size: 18px; }
+.composer .budget { padding: 7px 6px; border: var(--pborder); border-radius: calc(var(--radius) * .8); background: var(--bg); color: var(--ink); font: 12.5px var(--font); }
+.composer .btn[disabled] { opacity: .6; cursor: default; }
+.line-pick { width: 100%; margin-bottom: 10px; padding: 6px 8px; border: var(--pborder); border-radius: 8px; background: var(--bg); font: 13px var(--font); color: var(--ink); }
+.trace-rows .tr { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+
+/* sheet */
+.p-sheet .w { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }
+.out-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: -4px 0 10px; }
+.out-tabs a { font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+.out-tabs a.on { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
+.lc .detail .pnl { overflow: auto; max-height: 360px; }
+.doc p, .doc ul { margin: 2px 0 4px; font-size: 12.5px; }
+.doc ul { padding-left: 18px; }
+.doc-t { font-family: var(--head); font-size: 14px; margin: 0 0 4px; }
+.rtab { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0; }
+.rtab th, .rtab td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: right; }
+.rtab th:first-child, .rtab td:first-child { text-align: left; }
+.rtab th { color: var(--muted); font-weight: 600; }
+.rtab tr.ours td { font-weight: 700; }
+.rv { font-size: 12.5px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
+.log { max-height: 120px; overflow: auto; font: 11px ui-monospace, Menlo, monospace; background: var(--bg); padding: 8px; border-radius: 6px; white-space: pre-wrap; }
+.p-sheet .btns a.btn { text-decoration: none; }
+
+/* status view */
+.p-status .news a { text-decoration: none; }
+.p-status .news a:hover { text-decoration: underline; }
+.p-status .lead .news { max-height: 200px; overflow: auto; }
+
+.toasts { position: absolute; left: 50%; top: 86px; transform: translateX(-50%); z-index: 30; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.toast { padding: 8px 16px; font-size: 13px; animation: rise .2s ease-out; }

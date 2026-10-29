@@ -1,0 +1,57 @@
+import pytest
+
+from papertown.pipeline import LineError
+
+from .conftest import wait_for
+
+IDEA = "让 VLA 模型用结构化的场景图做长程规划，减少多步任务里的误差累积"
+
+
+def test_idea_to_paper_offline(town):
+    line = town.pipeline.submit_idea(IDEA, budget=1.0)
+    ln = wait_for(town, line["id"], {"waiting", "failed"})
+    assert ln["status"] == "waiting" and ln["verdict"] in {"可孵化", "需调整", "已被做过"}
+    report = town.pipeline.item(line["id"], "hatch")
+    assert report["similar"] and report["sources"]["library"] > 0
+    assert all(0 <= s["similarity"] <= 1 for s in report["similar"])
+
+    snap = town.pipeline.hatch(line["id"])
+    assert snap["mill_id"] == "mill_1"
+    mill = town.world.get("mill_1")
+    assert (mill["x"], mill["y"]) == (1, 17)
+    ln = wait_for(town, line["id"], {"done", "failed"})
+    assert ln["status"] == "done", ln["note"]
+
+    snap = town.pipeline.snapshot(line["id"])
+    assert [s["status"] for s in snap["stages"]] == ["done"] * 8
+    outputs = {r["stage"] for r in town.db.q("select stage from items where line_id = ?", line["id"])}
+    assert {"idea", "hatch", "team", "method", "exp", "write", "review", "ship"} <= outputs
+    table = town.pipeline.item(line["id"], "exp")
+    assert table["simulated"] is True and table["rows"][-1]["method"] == "Ours"
+    assert "main.tex" in snap["files"] and "refs.bib" in snap["files"]
+    assert "Anonymous Authors" in town.press.read(line["id"])
+
+    kinds = {r["kind"] for r in town.db.q("select distinct kind from trace where line_id = ?", line["id"])}
+    assert {"SKILL", "RAG", "GRAPH", "SCRIPT", "LLM", "TOOL"} <= kinds
+    assert town.db.val("select count(*) from ledger where line_id = ?", line["id"]) > 0
+    assert town.db.val("select sum(runs) from workers") > 0
+
+
+def test_cannot_hatch_twice_or_too_short(town):
+    with pytest.raises(LineError):
+        town.pipeline.submit_idea("短")
+    line = town.pipeline.submit_idea(IDEA)
+    with pytest.raises(LineError):
+        town.pipeline.hatch(line["id"])  # still hatching
+    wait_for(town, line["id"], {"waiting"})
+    town.pipeline.adjust(line["id"], IDEA + "，只在真实机器人上验证")
+    wait_for(town, line["id"], {"waiting"})
+    assert "真实机器人" in town.pipeline.line(line["id"])["idea"]
+
+
+def test_restart_parks_running_lines(town):
+    line = town.pipeline.submit_idea(IDEA)
+    wait_for(town, line["id"], {"waiting"})
+    town.db.update("lines", {"id": line["id"]}, status="running")
+    town.pipeline.recover()
+    assert town.pipeline.line(line["id"])["status"] == "paused"

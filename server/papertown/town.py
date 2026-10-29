@@ -1,0 +1,222 @@
+"""The town: one object wiring the world together. The API, the CLI, the MCP server and
+the tests all start from Town()."""
+
+from __future__ import annotations
+
+import json
+import uuid
+from pathlib import Path
+
+from .bank import Bank
+from .compute import Job, SimulatedPlant
+from .config import Settings
+from .db import DB, now
+from .depots import Depots
+from .events import EventBus
+from .graph import Genealogy
+from .library import Embedder, Library
+from .llm import make_provider
+from .market import Market
+from .mcp_hub import McpHub
+from .pipeline import Pipeline
+from .press import Press
+from .skills import SkillRegistry
+from .tools import Tool, ToolCtx, ToolError, ToolRegistry, arr, n, obj, register_skill_tools, s
+from .world import World
+
+SEED = Path(__file__).parent / "data" / "seed_papers.jsonl"
+
+
+class Town:
+    def __init__(self, settings: Settings | None = None):
+        self.s = settings or Settings()
+        self.db = DB(self.s.db_path)
+        self.bus = EventBus()
+        self.skills = SkillRegistry(self.s.skills_dir)
+        self.provider = make_provider(self.s)
+        embedder = Embedder(self.s.embed_base_url, self.s.embed_api_key, self.s.embed_model) if self.s.embed_model else None
+        self.library = Library(self.db, embedder)
+        self.genealogy = Genealogy(self.db, self.library)
+        self.depots = Depots(self.db)
+        self.bank = Bank(self.db, self.bus, self.s.weekly_budget)
+        self.market = Market(self.db, self.bus)
+        self.plant = SimulatedPlant(self.s.sim_gpu_seconds, on_change=self._job_changed)
+        self.press = Press(self.s.press_dir, self.library, self.s.compile_tex)
+        self.world = World(self)
+        self.tools = ToolRegistry()
+        self.mcp = McpHub(self)
+        self.pipeline = Pipeline(self)
+        self._register_tools()
+        if not self.library.count():
+            self.seed_library()
+
+    def start(self) -> None:
+        self.pipeline.recover()
+        self.mcp.start()
+
+    def stop(self) -> None:
+        self.mcp.stop()
+
+    # ---------- shared helpers ----------
+
+    def trace(self, kind: str, label: str, detail: str = "", ms: int = 0, run_id: str | None = None, line_id: str | None = None) -> None:
+        row = {"ts": now(), "run_id": run_id, "line_id": line_id, "kind": kind, "label": label, "detail": detail, "ms": ms}
+        row["id"] = self.db.insert("trace", row)
+        self.bus.publish("trace", row=row)
+
+    def message(self, line_id: str | None, role: str, worker_id: str | None, kind: str, body: dict) -> dict:
+        row = {"ts": now(), "line_id": line_id, "role": role, "worker_id": worker_id, "kind": kind, "body": body}
+        row["id"] = self.db.insert("messages", row)
+        if worker_id:
+            w = self.market.get(worker_id)
+            row["worker"] = {"id": w["id"], "role": w["role"], "level": w["level"]} if w else None
+        self.bus.publish("message", message=row)
+        return row
+
+    def save_item(self, line_id: str, kind: str, stage: str, building: str, title: str, body: dict) -> dict:
+        row = {"id": f"it_{uuid.uuid4().hex[:10]}", "line_id": line_id, "kind": kind, "stage": stage, "building": building,
+               "title": title, "body": body, "created_at": now()}
+        self.db.insert("items", row)
+        self.bus.publish("item", item={k: v for k, v in row.items() if k != "body"})
+        return row
+
+    def tag_papers(self, papers: list[dict]) -> list[list[str]]:
+        try:
+            out = self.skills.run_script("paper-triage", "tag.py", {"papers": [
+                {"title": p["title"], "abstract": p.get("abstract", ""), "categories": p.get("categories", [])} for p in papers]})
+            return out["tags"]
+        except Exception:
+            return [[] for _ in papers]
+
+    def ingest(self, papers: list[dict], source: str) -> list[dict]:
+        """Customs: dedup, tag, shelve in the library, link into the genealogy."""
+        added = self.library.ingest(papers, source, self.tag_papers)
+        if added:
+            self.genealogy.link_similar(added)
+            self.bus.publish("library", added=len(added), total=self.library.count())
+        return added
+
+    def seed_library(self) -> int:
+        if not SEED.exists():
+            return 0
+        papers = [json.loads(line) for line in SEED.read_text(encoding="utf-8").splitlines() if line.strip()]
+        return len(self.ingest(papers, "seed"))
+
+    def _job_changed(self, job: Job) -> None:
+        self.bus.publish("power", job={"id": job.id, "line_id": job.line_id, "status": job.status, "progress": job.progress},
+                         plant=self.plant.status())
+        if job.line_id:
+            self.db.x("update stages set pct = ? where line_id = ? and key = 'exp' and status = 'run'",
+                      max(10, job.progress), job.line_id)
+            self.bus.publish("line", line=self.pipeline.snapshot(job.line_id))
+
+    # ---------- tools for the agents ----------
+
+    def _register_tools(self) -> None:
+        reg = self.tools
+        register_skill_tools(reg)
+
+        def library_search(ctx: ToolCtx, a: dict):
+            return self.library.search(a["query"], int(a.get("top_k") or 8), a.get("since"))
+
+        reg.add(Tool("library_search", "library.search", "RAG",
+                     "检索图书馆（论文库，英文）。返回标题、摘要片段和与 query 的相似度 similarity（0~1）。",
+                     obj(["query"], query=s("英文关键词或短语"), top_k=n("返回几篇，默认 8"), since=s("只看这个日期之后的，如 2025-01-01")),
+                     library_search, lambda v: f"命中 {len(v['hits'])} 篇（{v['method']}）", arg="query"))
+
+        def paper_get(ctx: ToolCtx, a: dict):
+            return {"papers": [{"paper_id": f"arxiv:{p['arxiv_id']}", "arxiv_id": p["arxiv_id"], "title": p["title"],
+                                "abstract": p["abstract"], "authors": p["authors"], "year": (p["published"] or "")[:4],
+                                "bibkey": self.library.bibkey(p["arxiv_id"])} for p in self.library.get(a.get("ids") or [])]}
+
+        reg.add(Tool("paper_get", "library.get", "RAG", "按 id（如 arxiv:2401.01234）取论文的完整摘要和 bib key。",
+                     obj(["ids"], ids=arr("论文 id 列表")), paper_get, lambda v: f"{len(v['papers'])} 篇", arg="ids"))
+
+        def genealogy_expand(ctx: ToolCtx, a: dict):
+            return self.genealogy.expand(a.get("paper_ids") or [], int(a.get("depth") or 1))
+
+        reg.add(Tool("genealogy_expand", "genealogy.expand", "GRAPH", "在族谱馆里展开论文的邻居（引用或相近关系），depth 1~3。",
+                     obj(["paper_ids"], paper_ids=arr("论文 id，如 arxiv:2401.01234"), depth=n("展开几层，默认 1")),
+                     genealogy_expand, arg="depth"))
+
+        def repo_search(ctx: ToolCtx, a: dict):
+            return self.depots.search(a["query"], a.get("repo"))
+
+        reg.add(Tool("repo_search", "depot.search", "RAG", "检索仓库群里的 README、文档和代码说明，找 baseline 实现、评测脚本和指标定义。",
+                     obj(["query"], query=s("英文关键词"), repo=s("只搜某个仓库，可选")), repo_search,
+                     lambda v: f"命中 {len(v['hits'])} 段", arg="query"))
+
+        reg.add(Tool("gpu_status", "power.status", "TOOL", "查看电厂的 GPU 负荷和排队。", obj(), lambda c, a: self.plant.status()))
+
+        def gpu_submit(ctx: ToolCtx, a: dict):
+            job = self.plant.submit(ctx.line_id, a.get("name") or "main", a.get("config") or {}, int(a.get("gpus") or 1))
+            return {"job_id": job.id, "status": job.status, "plant": self.plant.name, "summary": f"{job.id} 已提交"}
+
+        reg.add(Tool("gpu_submit", "power.submit", "TOOL", "向电厂提交一个实验任务。config: {method, baselines, metrics, seeds}。",
+                     obj(["name", "config"], name=s("任务名"), gpus=n("申请几张卡"),
+                         config=obj(["method", "baselines", "metrics"], method=s("我们的方法名"), baselines=arr("baseline 名字"),
+                                    metrics=arr("指标"), seeds=n("种子数"))),
+                     gpu_submit, arg="name"))
+
+        def gpu_wait(ctx: ToolCtx, a: dict):
+            job = self.plant.wait(a["job_id"])
+            if job.status != "done":
+                raise ToolError("任务还没跑完")
+            return {"job_id": job.id, "status": job.status, "result": job.result,
+                    "summary": "完成（模拟结果）" if job.result.get("simulated") else "完成"}
+
+        reg.add(Tool("gpu_wait", "power.wait", "TOOL", "等待实验任务完成，返回结果表。", obj(["job_id"], job_id=s("任务 id")), gpu_wait, arg="job_id"))
+
+        def press_typeset(ctx: ToolCtx, a: dict):
+            if not ctx.line_id:
+                raise ToolError("没有对应的流水线")
+            table = self.pipeline.item(ctx.line_id, "exp")
+            sections = a.get("sections") or {}
+            info = self.press.typeset(ctx.line_id, a.get("title") or "Untitled", a.get("abstract") or "", sections,
+                                      a.get("cite_ids") or [], table)
+            self.save_item(ctx.line_id, "tex", "write", "press", a.get("title") or "初稿",
+                           {"title": a.get("title"), "abstract": a.get("abstract"), "sections": sections,
+                            "cite_ids": a.get("cite_ids") or [], "typeset": info})
+            return info
+
+        sec = {k: s(f"{k} 一节的 LaTeX 正文") for k in ("introduction", "related_work", "method", "experiments", "conclusion")}
+        reg.add(Tool("press_typeset", "press.typeset", "TOOL",
+                     "排版并编译论文。sections 的每一节是 LaTeX 正文（不含 \\section）；cite_ids 是要进 refs.bib 的论文 id。返回编译结果，失败时带报错。",
+                     obj(["title", "abstract", "sections", "cite_ids"], title=s("英文题目"), abstract=s("摘要"),
+                         sections=obj(list(sec), **sec), cite_ids=arr("论文 id，如 arxiv:2401.01234")),
+                     press_typeset, arg="title"))
+
+        def press_read(ctx: ToolCtx, a: dict):
+            text = self.press.read(ctx.line_id or "", a.get("name") or "main.tex")
+            if not text:
+                raise ToolError("还没有排版好的稿子")
+            return text
+
+        reg.add(Tool("press_read", "press.read", "TOOL", "读取当前论文的 TeX 源码。", obj(name=s("文件名，默认 main.tex")),
+                     press_read, lambda v: f"{len(v)} 字符", arg="name"))
+
+        def line_items(ctx: ToolCtx, a: dict):
+            if not ctx.line_id:
+                return []
+            return [{"stage": r["stage"], "title": r["title"], "kind": r["kind"],
+                     "body": json.dumps(r["body"], ensure_ascii=False)[:1500]}
+                    for r in self.db.q("select * from items where line_id = ? order by created_at", ctx.line_id)]
+
+        reg.add(Tool("line_items", "line.read", "TOOL", "读取当前这篇论文流水线上已有的产出（撞车报告、草案、结果表、审稿意见）。",
+                     obj(), line_items))
+
+        # arXiv dock (MCP): whatever comes ashore goes through customs into the library
+        def arxiv_after(ctx: ToolCtx, a: dict, value):
+            papers = value.get("papers", []) if isinstance(value, dict) else []
+            added = self.ingest(papers, "arxiv")
+            from .library import expand, tokens
+            terms = list(dict.fromkeys(tokens(expand(a.get("query", "")))))
+            hits = []
+            for p in papers:
+                cov, matched = self.library.coverage(terms, f"{p['title']} {p.get('abstract', '')}")
+                hits.append({**self.library.card(p), "similarity": round(cov, 2), "matched": matched})
+            hits.sort(key=lambda h: -h["similarity"])
+            return {"query": a.get("query"), "hits": hits, "ingested": len(added),
+                    "summary": f"{len(papers)} 篇，新入馆 {len(added)} 篇"}
+
+        self.mcp.after["arxiv_search"] = arxiv_after
