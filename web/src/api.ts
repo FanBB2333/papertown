@@ -136,6 +136,7 @@ export const api = {
   timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null } }>('GET', `/api/agents/${id}/timeline`),
   permit: (id: string, requestId: string, allow: boolean) => call<{ ok: boolean }>('POST', `/api/agents/${id}/permit`, { request_id: requestId, allow }),
   llm: () => call<Llm>('GET', '/api/llm'),
+  samples: () => call<{ added: string[]; note: string }>('POST', '/api/samples'),
   setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
   say: (id: string, text: string) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text }),

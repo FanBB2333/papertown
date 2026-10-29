@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { renderMap } from '@design/world.js';
 import type { Placement } from '../api';
+import { useSettings } from '../settings';
 import { useAvatar } from './useAvatar';
 
 const BASE = { x: -790, y: -150, w: 1580, h: 950 };
@@ -37,10 +38,11 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
   const vb = useRef({ ...BASE });
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; id: number; moved: boolean } | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; pl: Placement } | null>(null);
+  const st = useSettings();
 
   const markup = useMemo(
-    () => renderMap({ placements, labels: 'key', highlight, notes, anim: true, flows: false, decor: 'light', districts: false, dashes: false, vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
-    [placements, highlight, notes],
+    () => renderMap({ placements, labels: st.mapLabels, highlight, notes, anim: true, flows: false, decor: 'light', districts: false, dashes: false, vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
+    [placements, highlight, notes, st.mapLabels],
   );
   const byId = useMemo(() => new Map(placements.map(p => [p.id, p])), [placements]);
 

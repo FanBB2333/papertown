@@ -221,7 +221,8 @@
 .llm-btn { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font); color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; cursor: pointer; transition: color .2s, border-color .2s; }
 .llm-btn:hover, .llm-btn.on { color: var(--ink); border-color: var(--brand); }
 .llm-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 14px; animation: rise-in .25s var(--out) both; }
-.llm-pop input { font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.llm-form { display: flex; flex-direction: column; gap: 10px; }
+.llm-form input { font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 
 /* importing a Paseo conversation */
 .import-card { grid-column: 1 / -1; }

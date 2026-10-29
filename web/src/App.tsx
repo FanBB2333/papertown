@@ -10,8 +10,10 @@ import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRo
 import { Item, Logo } from './art';
 import { Drawer, type Composer, type Tab } from './components/Drawer';
 import { Interior } from './components/Interior';
+import { SettingsPanel } from './components/Settings';
 import { StatusView } from './components/StatusView';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
+import { getSettings, useSettings } from './settings';
 
 const Town3D = lazy(() => import('./components/Town3D'));
 
@@ -29,6 +31,15 @@ function useToasts() {
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200);
   }, []);
   return { toasts, push };
+}
+
+function Gear() {
+  return (
+    <svg className="gear" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3.2l1.6 2.1 2.6-.6.6 2.6 2.4 1.2-1 2.5 1 2.5-2.4 1.2-.6 2.6-2.6-.6L12 20.8l-1.6-2.1-2.6.6-.6-2.6-2.4-1.2 1-2.5-1-2.5 2.4-1.2.6-2.6 2.6.6z" />
+      <circle cx="12" cy="12" r="3.2" />
+    </svg>
+  );
 }
 
 export function App() {
@@ -53,7 +64,9 @@ export function App() {
   const [from3d, setFrom3d] = useState<MapView | null>(null);
   const [want3d, setWant3d] = useState(false); // the 3D code has been asked for
   const mapApi = useRef<MapApi | null>(null);
-  const hash3d = useRef(hp.has('3d'));
+  const hash3d = useRef(hp.has('3d') || (getSettings().start === '3d' && !hp.has('open') && hp.get('view') !== 'status'));
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const st = useSettings();
   const setSheet = useCallback((id: string | null, lineId?: string | null) => {
     setSheetId(id);
     setFocus(lineId ?? null);
@@ -158,13 +171,20 @@ export function App() {
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key === ',' && !e.metaKey && !e.ctrlKey && !e.altKey && !(t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))) {
+        e.preventDefault();
+        setSettingsOpen(o => !o);
+        return;
+      }
       if (e.key !== 'Escape') return;
-      if (chatOpen) setChatOpen(false);
+      if (settingsOpen) setSettingsOpen(false);
+      else if (chatOpen) setChatOpen(false);
       else if (sheet) leaveRoom();
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
-  }, [sheet, chatOpen, leaveRoom]);
+  }, [sheet, chatOpen, settingsOpen, leaveRoom]);
 
   // anything with data-open opens that building (stations, goods, list rows); data-line picks the project
   function onRootClick(e: React.MouseEvent) {
@@ -201,17 +221,18 @@ export function App() {
 
   const hud = world?.hud;
   const busy = asking || lines.some(l => l.status === 'hatching');
+  const walking = !sheet && view === 'world' && !chatOpen && !settingsOpen;
   const running = world?.running ?? [];
 
   return (
-    <div ref={root} className={`proto la theme-sketch${chatOpen ? ' chat-open' : ''}${sheet && !leaving ? ' in-room' : ''}${dim !== '2d' ? ' in-3d' : ''}`} data-mode={view} onClick={onRootClick}
-      style={door ? { ['--ox' as string]: `${door.x}px`, ['--oy' as string]: `${door.y}px` } : undefined}>
-      {world && <WorldMap placements={world.placements} highlight={null} notes={notes} active={!sheet && view === 'world' && !chatOpen && dim === '2d'}
+    <div ref={root} className={`proto la theme-sketch${chatOpen ? ' chat-open' : ''}${sheet && !leaving ? ' in-room' : ''}${dim !== '2d' ? ' in-3d' : ''}${st.motion === 'calm' ? ' calm' : ''}`} data-mode={view} onClick={onRootClick}
+      style={{ ['--grain-k' as string]: st.grain, ...(door ? { ['--ox' as string]: `${door.x}px`, ['--oy' as string]: `${door.y}px` } : {}) }}>
+      {world && <WorldMap placements={world.placements} highlight={null} notes={notes} active={walking && dim === '2d'}
         hidden={dim === '3d' || dim === 'to2d'} api={mapApi} onOpen={(id, at) => openRoom(id, null, at)} />}
       {world && want3d && (
         <Suspense fallback={null}>
           <Town3D placements={world.placements} notes={notes} phase={PHASE[dim]} from={from3d}
-            active={!sheet && view === 'world' && !chatOpen && dim === '3d'}
+            active={walking && dim === '3d'}
             onOpen={(id, at) => openRoom(id, null, at)}
             onCovered={() => setDim(d => d === 'to3d' ? '3d' : d)}
             onLeft={v => { mapApi.current?.setView(v); setDim('2d'); }}
@@ -238,6 +259,7 @@ export function App() {
         <div className="hud-r">
           {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? '没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板；仓库和印刷厂的 pi 用 pi 自己的设置' : hud.model}>
             {!online ? '连接断开' : hud.offline ? '离线模式' : hud.provider}</span>}
+          <button className="btn hud-gear" title="设置（,）" aria-label="设置" onClick={() => setSettingsOpen(true)}><Gear />设置</button>
           <button className="btn" onClick={() => chatOpen ? setChatOpen(false) : openChat()}>对话</button>
         </div>
       </header>
@@ -256,7 +278,7 @@ export function App() {
       )}
 
       <button className="newidea btn pri w-only" onClick={() => openChat({ kind: 'idea' }, true)}><Item k="egg" />放入一颗新 idea</button>
-      {dim === '2d' && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走动 · 到门口按 <kbd>E</kbd> 进去 · 也可以直接点建筑</div>}
+      {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走动 · 到门口按 <kbd>E</kbd> 进去 · 也可以直接点建筑</div>}
 
       <Drawer open={chatOpen} tab={tab} onTab={setTab} onClose={() => setChatOpen(false)} messages={messages} trace={trace}
         lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer} focusKey={focusKey}
@@ -271,6 +293,7 @@ export function App() {
           onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
           onAdjust={id => openChat({ kind: 'adjust', lineId: id }, true)} toast={push} />
       )}
+      <SettingsPanel open={settingsOpen} hud={hud ?? null} onClose={() => setSettingsOpen(false)} />
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>
     </div>
   );

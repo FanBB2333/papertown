@@ -25,7 +25,7 @@ body.proto-page { background: #f4eee2; }
 /* the grain sits over everything, multiplied in, like the sheet it is all drawn on */
 .theme-sketch::after {
   content: ''; position: absolute; inset: 0; z-index: 90; pointer-events: none;
-  background: var(--grain); background-size: 240px; mix-blend-mode: multiply; opacity: .5;
+  background: var(--grain); background-size: 240px; mix-blend-mode: multiply; opacity: var(--grain-k, .5);
 }
 .theme-sketch :is(h1, h2, h3, h4, h5, h6, b, strong, th) { font-weight: 400; }
 .theme-sketch b, .theme-sketch strong { color: var(--ink); }
@@ -201,6 +201,11 @@ body.proto-page { background: #f4eee2; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-12px) scale(.96); } }
 .theme-sketch[data-mode=status] .p-status { animation: status-in .6s var(--out) both; }
 @keyframes status-in { from { opacity: 0; transform: translateY(14px); } }
+
+/* calm (settings): nothing loops, and what still moves is quick */
+.theme-sketch.calm *, .theme-sketch.calm *::before, .theme-sketch.calm *::after {
+  animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: .18s !important;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .theme-sketch *, .theme-sketch *::before, .theme-sketch *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

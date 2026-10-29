@@ -136,63 +136,67 @@ function LinePane({ lines, placements, onOpen }: { lines: Line[]; placements: Pl
 }
 
 // which provider and models the town's workers use; switching lasts until the server restarts
+// the town's own model: provider, the strong and the cheap model, effort (in the drawer and in settings)
+export function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => void }) {
+  const [draft, setDraft] = useState({ provider: llm.provider, model_strong: llm.model_strong, model_cheap: llm.model_cheap, effort: llm.effort });
+  const [err, setErr] = useState('');
+  const pv = llm.providers.find(x => x.id === draft.provider);
+  async function apply() {
+    try {
+      const changed = draft.provider !== llm.provider;
+      let out = await api.setLlm(changed ? { provider: draft.provider } : draft);
+      if (changed && (draft.model_strong || draft.model_cheap)) out = await api.setLlm({ model_strong: draft.model_strong, model_cheap: draft.model_cheap, effort: draft.effort });
+      onDone(out);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+  return (
+    <div className="llm-form">
+      <label className="field">供应商
+        <select value={draft.provider} onChange={e => {
+          const id = e.target.value, d = llm.providers.find(x => x.id === id);
+          setDraft(x => ({ ...x, provider: id, model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' }));
+        }}>
+          {llm.providers.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </select>
+      </label>
+      <label className="field">强模型（Lv.3 以上的员工、最终回答）
+        <input list="llm-models" value={draft.model_strong} onChange={e => setDraft(x => ({ ...x, model_strong: e.target.value }))} />
+      </label>
+      <label className="field">便宜模型（其余员工）
+        <input list="llm-models" value={draft.model_cheap} onChange={e => setDraft(x => ({ ...x, model_cheap: e.target.value }))} />
+      </label>
+      <datalist id="llm-models">{pv?.models.map(m => <option key={m} value={m} />)}</datalist>
+      {draft.provider === 'anthropic' && (
+        <label className="field">effort
+          <select value={draft.effort} onChange={e => setDraft(x => ({ ...x, effort: e.target.value }))}>
+            {['low', 'medium', 'high', 'xhigh', 'max'].map(x => <option key={x} value={x}>{x}</option>)}
+          </select>
+        </label>
+      )}
+      <p className="muted small">key 照旧从环境变量读取。切换只在这次运行里有效，重启服务后按环境变量重新决定。{draft.provider === 'openai' ? ` 接口：${llm.openai_base_url}` : ''}</p>
+      {err && <p className="warn-box small">{err}</p>}
+      <div className="btns"><button className="btn pri" onClick={apply}>应用</button><button className="btn" onClick={() => onDone(null)}>取消</button></div>
+    </div>
+  );
+}
+
 function LlmSwitch() {
   const [llm, setLlm] = useState<Llm | null>(null);
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState({ provider: '', model_strong: '', model_cheap: '', effort: '' });
-  const [err, setErr] = useState('');
 
   useEffect(() => { api.llm().then(setLlm).catch(() => {}); }, []);
   useEffect(() => listen(e => { if (e.type === 'llm') setLlm(e.llm); }), []);
   if (!llm) return null;
 
   const name = llm.providers.find(x => x.id === llm.provider)?.name ?? llm.provider;
-  const pv = llm.providers.find(x => x.id === draft.provider);
-  function show() {
-    setDraft({ provider: llm!.provider, model_strong: llm!.model_strong, model_cheap: llm!.model_cheap, effort: llm!.effort });
-    setErr('');
-    setOpen(o => !o);
-  }
-  async function apply() {
-    try {
-      const changed = draft.provider !== llm!.provider;
-      setLlm(await api.setLlm(changed ? { provider: draft.provider } : draft));
-      if (changed && (draft.model_strong || draft.model_cheap)) setLlm(await api.setLlm({ model_strong: draft.model_strong, model_cheap: draft.model_cheap, effort: draft.effort }));
-      setOpen(false);
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  }
   return (
     <div className="llm-switch">
-      <button className={`llm-btn${open ? ' on' : ''}`} onClick={show} title="员工用的模型">{name} · {llm.model_strong}</button>
+      <button className={`llm-btn${open ? ' on' : ''}`} onClick={() => setOpen(o => !o)} title="员工用的模型">{name} · {llm.model_strong}</button>
       {open && (
         <div className="llm-pop pnl">
-          <label className="field">供应商
-            <select value={draft.provider} onChange={e => {
-              const id = e.target.value, d = llm.providers.find(x => x.id === id);
-              setDraft(x => ({ ...x, provider: id, model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' }));
-            }}>
-              {llm.providers.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-          </label>
-          <label className="field">强模型（Lv.3 以上的员工、最终回答）
-            <input list="llm-models" value={draft.model_strong} onChange={e => setDraft(x => ({ ...x, model_strong: e.target.value }))} />
-          </label>
-          <label className="field">便宜模型（其余员工）
-            <input list="llm-models" value={draft.model_cheap} onChange={e => setDraft(x => ({ ...x, model_cheap: e.target.value }))} />
-          </label>
-          <datalist id="llm-models">{pv?.models.map(m => <option key={m} value={m} />)}</datalist>
-          {draft.provider === 'anthropic' && (
-            <label className="field">effort
-              <select value={draft.effort} onChange={e => setDraft(x => ({ ...x, effort: e.target.value }))}>
-                {['low', 'medium', 'high', 'xhigh', 'max'].map(x => <option key={x} value={x}>{x}</option>)}
-              </select>
-            </label>
-          )}
-          <p className="muted small">key 照旧从环境变量读取。切换只在这次运行里有效，重启服务后按环境变量重新决定。{draft.provider === 'openai' ? ` 接口：${llm.openai_base_url}` : ''}</p>
-          {err && <p className="warn-box small">{err}</p>}
-          <div className="btns"><button className="btn pri" onClick={apply}>应用</button><button className="btn" onClick={() => setOpen(false)}>取消</button></div>
+          <LlmForm key={`${llm.provider}:${llm.model_strong}:${llm.model_cheap}`} llm={llm} onDone={l => { if (l) setLlm(l); setOpen(false); }} />
         </div>
       )}
     </div>
