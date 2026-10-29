@@ -2,6 +2,10 @@
 // to zoom and a hover card per building. Kept quiet on purpose: no goods flows, no
 // district signs, few trees, and the core buildings highlighted. You walk it as
 // a small figure (useAvatar); a click on a building goes straight inside.
+//
+// The view glides rather than jumps: zooming eases towards where it is heading, keeping
+// the spot under the pointer in place, and a drag let go of while moving coasts on and
+// slows to a stop.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
@@ -18,6 +22,7 @@ function where(key: string) {
   return d ? (d.dir.includes('↔') ? `${d.name} · ${d.dir}` : d.name) : '';
 }
 const MIN_W = 420, MAX_W = BASE.w * 1.5;
+const ZOOM_RATE = 13, GLIDE_RATE = 5; // how fast the view closes in on where it is heading, per second
 
 // what part of the map is on screen: its centre and width in map (svg) units
 export interface MapView { cx: number; cy: number; w: number }
@@ -35,10 +40,14 @@ interface Props {
 
 export function WorldMap({ placements, highlight, notes, active, hidden, api, onOpen }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const vb = useRef({ ...BASE });
-  const drag = useRef<{ x: number; y: number; vx: number; vy: number; id: number; moved: boolean } | null>(null);
+  const vb = useRef({ ...BASE }); // the view on screen
+  const goal = useRef({ ...BASE }); // the view it is easing towards
+  const anim = useRef({ raf: 0, last: 0, rate: ZOOM_RATE });
+  const drag = useRef<{ x: number; y: number; gx: number; gy: number; id: number; moved: boolean; trail: { t: number; x: number; y: number }[] } | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; pl: Placement } | null>(null);
   const st = useSettings();
+  const opt = useRef(st);
+  opt.current = st;
 
   const markup = useMemo(
     () => renderMap({ placements, labels: st.mapLabels, highlight, notes, anim: true, flows: false, decor: 'light', districts: false, dashes: false, vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
@@ -55,42 +64,81 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
     return r && r.width ? r.height / r.width : BASE.h / BASE.w;
   }
 
-  function apply() {
+  // put the view on screen
+  function write() {
     const v = vb.current, s = svg();
     if (!s) return;
-    const cx = v.x + v.w / 2, cy = v.y + v.h / 2;
-    v.w = Math.min(MAX_W, Math.max(MIN_W, v.w));
     v.h = v.w * aspect();
-    // keep the centre over the board
+    s.setAttribute('viewBox', `${v.x.toFixed(2)} ${v.y.toFixed(2)} ${v.w.toFixed(2)} ${v.h.toFixed(2)}`);
+  }
+
+  // keep where it is heading sensible: not too near or far, its centre over the board
+  function settle() {
+    const g = goal.current;
+    const cx = g.x + g.w / 2, cy = g.y + g.h / 2;
+    g.w = Math.min(MAX_W, Math.max(MIN_W, g.w));
+    g.h = g.w * aspect();
     const ncx = Math.min(BASE.x + BASE.w, Math.max(BASE.x, cx)), ncy = Math.min(BASE.y + BASE.h, Math.max(BASE.y, cy));
-    v.x = ncx - v.w / 2; v.y = ncy - v.h / 2;
-    s.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+    g.x = ncx - g.w / 2; g.y = ncy - g.h / 2;
   }
 
-  function fit() {
-    const a = aspect(), v = vb.current;
-    v.w = Math.max(BASE.w, BASE.h / a) * 0.98;
-    v.h = v.w * a;
-    v.x = BASE.x + BASE.w / 2 - v.w / 2;
-    v.y = BASE.y + BASE.h / 2 - v.h / 2 + 30;
-    apply();
+  // ease the view towards the goal. x, y and w close in at the same exponential rate, so a
+  // point that is under the pointer at both ends stays under it all the way
+  function tick(now: number) {
+    const a = anim.current, v = vb.current, g = goal.current;
+    a.raf = 0;
+    const dt = Math.min(0.05, Math.max(0, (now - a.last) / 1000));
+    a.last = now;
+    const k = 1 - Math.exp(-dt * a.rate);
+    v.x += (g.x - v.x) * k; v.y += (g.y - v.y) * k; v.w += (g.w - v.w) * k;
+    const done = Math.abs(g.x - v.x) + Math.abs(g.y - v.y) + Math.abs(g.w - v.w) < 0.15;
+    if (done) { v.x = g.x; v.y = g.y; v.w = g.w; }
+    write();
+    if (!done) a.raf = requestAnimationFrame(tick);
   }
 
-  function toSvg(el: SVGSVGElement, cx: number, cy: number) {
-    const p = el.createSVGPoint();
-    p.x = cx; p.y = cy;
-    return p.matrixTransform(el.getScreenCTM()!.inverse());
+  function go(rate = ZOOM_RATE) {
+    const a = anim.current;
+    a.rate = rate;
+    if (!opt.current.smoothMap) {
+      cancelAnimationFrame(a.raf);
+      a.raf = 0;
+      Object.assign(vb.current, goal.current);
+      write();
+      return;
+    }
+    if (!a.raf) { a.last = performance.now(); a.raf = requestAnimationFrame(tick); }
   }
 
+  // jump there at once (a resize, the view handed over from the 3D town)
+  function jump() {
+    cancelAnimationFrame(anim.current.raf);
+    anim.current.raf = 0;
+    settle();
+    Object.assign(vb.current, goal.current);
+    write();
+  }
+
+  function fit(smooth = true) {
+    const a = aspect(), g = goal.current;
+    g.w = Math.max(BASE.w, BASE.h / a) * 0.98;
+    g.h = g.w * a;
+    g.x = BASE.x + BASE.w / 2 - g.w / 2;
+    g.y = BASE.y + BASE.h / 2 - g.h / 2 + 30;
+    if (smooth) { settle(); go(); } else jump();
+  }
+
+  // zoom by k about a point on screen: the spot of the map under it stays there
   function zoomAt(k: number, cx: number, cy: number) {
-    const s = svg();
-    if (!s) return;
-    const v = vb.current, before = toSvg(s, cx, cy);
-    const nw = Math.min(MAX_W, Math.max(MIN_W, v.w * k)), f = nw / v.w;
-    v.x = before.x - (before.x - v.x) * f;
-    v.y = before.y - (before.y - v.y) * f;
-    v.w = nw;
-    apply();
+    const r = svg()?.getBoundingClientRect();
+    if (!r?.width) return;
+    const g = goal.current, fx = (cx - r.left) / r.width, fy = (cy - r.top) / r.height;
+    const px = g.x + fx * g.w, py = g.y + fy * g.h;
+    g.w = Math.min(MAX_W, Math.max(MIN_W, g.w * k));
+    g.h = g.w * aspect();
+    g.x = px - fx * g.w; g.y = py - fy * g.h;
+    settle();
+    go(ZOOM_RATE);
   }
 
   function zoomCenter(k: number) {
@@ -99,23 +147,25 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
   }
 
   // a new map markup replaces the <svg>: carry the current view over
-  useLayoutEffect(apply, [markup]);
+  useLayoutEffect(write, [markup]);
 
   if (api) api.current = {
     view: () => { const v = vb.current; return { cx: v.x + v.w / 2, cy: v.y + v.h / 2, w: v.w }; },
-    setView: ({ cx, cy, w }) => { const v = vb.current; v.w = w; v.h = w * aspect(); v.x = cx - w / 2; v.y = cy - v.h / 2; apply(); },
+    setView: ({ cx, cy, w }) => { const g = goal.current; g.w = w; g.h = w * aspect(); g.x = cx - w / 2; g.y = cy - g.h / 2; jump(); },
   };
 
-  // keep the walking figure inside the middle of the view
+  // keep the walking figure inside the middle of the view; the step is already smoothed
+  // by the walk, so the view moves with it at once (and with any zoom still under way)
   function follow(sx: number, sy: number, k: number) {
-    const v = vb.current, mx = v.w * 0.3, my = v.h * 0.3;
-    let tx = v.x, ty = v.y;
-    if (sx < v.x + mx) tx = sx - mx; else if (sx > v.x + v.w - mx) tx = sx - v.w + mx;
-    if (sy < v.y + my) ty = sy - my; else if (sy > v.y + v.h - my) ty = sy - v.h + my;
-    if (tx === v.x && ty === v.y) return;
-    v.x += (tx - v.x) * k;
-    v.y += (ty - v.y) * k;
-    apply();
+    const g = goal.current, v = vb.current, mx = g.w * 0.3, my = g.h * 0.3;
+    let tx = g.x, ty = g.y;
+    if (sx < g.x + mx) tx = sx - mx; else if (sx > g.x + g.w - mx) tx = sx - g.w + mx;
+    if (sy < g.y + my) ty = sy - my; else if (sy > g.y + g.h - my) ty = sy - g.h + my;
+    if (tx === g.x && ty === g.y) return;
+    const dx = (tx - g.x) * k, dy = (ty - g.y) * k;
+    g.x += dx; g.y += dy;
+    settle();
+    if (anim.current.raf) { v.x += dx; v.y += dy; } else { v.x = g.x; v.y = g.y; write(); }
   }
 
   // where a building sits on screen, so the room can open from its door
@@ -131,12 +181,23 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
   }, [avatar.near, markup]);
 
   useEffect(() => {
-    fit();
+    fit(false);
     const el = host.current!;
-    const wheel = (e: WheelEvent) => { e.preventDefault(); zoomAt(Math.exp(e.deltaY * 0.0015), e.clientX, e.clientY); };
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setTip(null);
+      // a trackpad pinch comes as ctrl + wheel in small steps; a mouse notch is ~100px
+      const dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 800 : 1);
+      const k = Math.exp(Math.max(-80, Math.min(80, dy)) * (e.ctrlKey ? 0.011 : 0.0016) * opt.current.zoomSpeed);
+      zoomAt(k, e.clientX, e.clientY);
+    };
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      drag.current = { x: e.clientX, y: e.clientY, vx: vb.current.x, vy: vb.current.y, id: e.pointerId, moved: false };
+      // catch the map where it is if it is still gliding
+      cancelAnimationFrame(anim.current.raf);
+      anim.current.raf = 0;
+      Object.assign(goal.current, vb.current);
+      drag.current = { x: e.clientX, y: e.clientY, gx: vb.current.x, gy: vb.current.y, id: e.pointerId, moved: false, trail: [] };
     };
     const move = (e: PointerEvent) => {
       const d = drag.current;
@@ -144,25 +205,44 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
       const dx = e.clientX - d.x, dy = e.clientY - d.y;
       if (!d.moved && Math.hypot(dx, dy) < 4) return;
       if (!d.moved) { d.moved = true; el.setPointerCapture(d.id); el.closest('.proto')?.classList.add('panning'); setTip(null); }
-      const s = vb.current.w / (svg()?.getBoundingClientRect().width || 1);
-      vb.current.x = d.vx - dx * s; vb.current.y = d.vy - dy * s;
-      apply();
+      const s = vb.current.w / (svg()?.getBoundingClientRect().width || 1), g = goal.current;
+      g.x = d.gx - dx * s; g.y = d.gy - dy * s;
+      settle();
+      vb.current.x = g.x; vb.current.y = g.y; // the map stays under the finger
+      write();
+      const now = performance.now();
+      d.trail.push({ t: now, x: g.x, y: g.y });
+      while (d.trail.length > 2 && now - d.trail[0].t > 90) d.trail.shift();
     };
     const up = () => {
+      const d = drag.current;
       el.closest('.proto')?.classList.remove('panning');
+      // let go while moving: coast on the way it was going and slow to a stop
+      if (d?.moved && opt.current.smoothMap && d.trail.length > 1) {
+        const a = d.trail[0], b = d.trail[d.trail.length - 1], dt = (b.t - a.t) / 1000;
+        if (dt > 0.008 && performance.now() - b.t < 70) {
+          const g = goal.current, sp = Math.hypot(b.x - a.x, b.y - a.y) / dt, cap = Math.min(1, 2400 / (sp || 1));
+          const vx = (b.x - a.x) / dt * cap, vy = (b.y - a.y) / dt * cap;
+          g.x += vx / GLIDE_RATE; g.y += vy / GLIDE_RATE;
+          settle();
+          go(GLIDE_RATE);
+        }
+      }
       setTimeout(() => { drag.current = null; });
     };
+    const resize = () => { Object.assign(goal.current, vb.current); jump(); };
     el.addEventListener('wheel', wheel, { passive: false });
     el.addEventListener('pointerdown', down);
     addEventListener('pointermove', move);
     addEventListener('pointerup', up);
-    addEventListener('resize', apply);
+    addEventListener('resize', resize);
     return () => {
+      cancelAnimationFrame(anim.current.raf);
       el.removeEventListener('wheel', wheel);
       el.removeEventListener('pointerdown', down);
       removeEventListener('pointermove', move);
       removeEventListener('pointerup', up);
-      removeEventListener('resize', apply);
+      removeEventListener('resize', resize);
     };
   }, []);
 
@@ -190,7 +270,7 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
       <div className={`zoom-ctl w-only${hidden ? ' is-hidden' : ''}`}>
         <button title="放大" onClick={() => zoomCenter(0.7)}>＋</button>
         <button title="缩小" onClick={() => zoomCenter(1.4)}>－</button>
-        <button title="看全图" onClick={fit}>⟲</button>
+        <button title="看全图" onClick={() => fit()}>⟲</button>
       </div>
       {tip && b && !hidden && (
         <div className="ptip pnl" style={{ left: tip.x, top: tip.y }}>
