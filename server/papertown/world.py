@@ -1,8 +1,9 @@
 """World state: what stands where, and what each building shows when you open it.
 
-Static placements come from assets/manifest.json (generated from design/src), except
-for the four core buildings: one mill is the base camp for every project, one depot
-holds every project's code, and the farm and the press sit beside the mill.
+Placements come from assets/manifest.json (generated from design/src/world.js): the four
+core buildings each have a corner yard (the mill is the base camp for every project, the
+depot holds every project's code, the farm runs the experiments, the press writes the
+papers), and the small buildings stand between the two yards they serve.
 """
 
 from __future__ import annotations
@@ -15,11 +16,6 @@ from .db import now
 if TYPE_CHECKING:
     from .town import Town
 
-# the core buildings the server places itself (the design has a mill per paper and a depot per repo)
-CANON = [
-    {"id": "mill", "type": "mill", "x": 1, "y": 17, "name": "造纸厂"},
-    {"id": "depot", "type": "depot", "x": 18, "y": 2, "name": "仓库", "label": "code", "accent": "#4f8a3d"},
-]
 # What each building actually runs on today, where that differs from the design label.
 TECH = {
     "mill": "Skills + agent 编队", "farm": "Skill · 电厂接口", "press": "Skill · latexmk", "market": "组织编译 · ROI 升降级",
@@ -79,11 +75,11 @@ CATALOG: dict[str, dict] = {
               "from": [["mill", "draft"], ["dock_github", "crate"]], "to": [["farm", "crate"]],
               "real": "每个项目在这里有一个写代码的 pi：读方法草案、写代码和测试，然后把实验提交到实验农场。另有几个示例仓库的文档进了 RAG，方法设计师在这里找 baseline。"},
     "workshop": {"stations": [st("接单", "crate"), st("修理", "crate", "keeper"), st("跑 CI", "crate"), st("送回仓库", "crate")],
-                 "skills": [], "tools": [], "from": [["depot", "crate"]], "to": [["depot", "crate"]],
-                 "real": "以后做：维护 agent 回 issue、改文档、开 PR，改动先给你确认。"},
+                 "skills": [], "tools": [], "from": [["depot", "crate"]], "to": [["farm", "crate"], ["depot", "crate"]],
+                 "real": "以后做：代码送去实验农场之前先在这里跑 CI；维护 agent 回 issue、改文档、开 PR，改动先给你确认。"},
     "logistics": {"stations": [st("登记线路", "crate"), st("调度", "crate"), st("签收", "crate")],
-                  "skills": [], "tools": [], "from": [["depot", "crate"]], "to": [["farm", "crate"]],
-                  "real": "以后做：repo 之间、repo 和论文之间的依赖图谱。"},
+                  "skills": [], "tools": [], "from": [["depot", "crate"]], "to": [["mill", "crate"]],
+                  "real": "以后做：repo 之间、repo 和论文之间的依赖图谱，造纸厂的方法要用哪些代码从这里查。"},
     "library": {"stations": [st("收书", "notes"), st("切段", "notes"), st("编目", "notes"), st("借阅", "notes")],
                 "skills": [], "tools": ["library.search", "library.get"], "from": [["customs", "notes"]],
                 "to": [["hatchery", "notes"], ["mill", "notes"], ["press", "notes"]],
@@ -92,16 +88,16 @@ CATALOG: dict[str, dict] = {
                   "skills": [], "tools": ["genealogy.expand"], "from": [["library", "notes"]], "to": [["hatchery", "notes"]],
                   "real": "论文关系图：默认是入馆时算出的相近关系；用 `papertown ingest --refs` 可以从 Semantic Scholar 补上真实引用。"},
     "market": {"stations": [st("列岗位", "notes"), st("按预算编队", "notes"), st("上岗", "notes"), st("结算 ROI", "notes")],
-               "skills": [], "tools": ["market.compile_team"], "from": [["cityhall", "egg"]], "to": [["mill", "notes"]],
+               "skills": [], "tools": ["market.compile_team"], "from": [["cityhall", "egg"]], "to": [["mill", "notes"], ["depot", "notes"]],
                "real": "组织编译：按复杂度和预算编最小够用的团队；论文出厂后按质量和花费结算 ROI，升级或降级。Lv.3 以上的员工用强模型。"},
     "cityhall": {"stations": [st("写下 idea", "egg"), st("设预算", "egg"), st("送孵化场", "egg"), st("等报告", "notes")],
                  "skills": [], "tools": [], "from": [], "to": [["hatchery", "egg"], ["market", "egg"]],
                  "real": "你的个人中心：所有项目、预算和待办；对话框里写下的 idea 从这里出发。"},
     "bank": {"stations": [st("记账", "notes"), st("预算提醒", "notes"), st("结算", "notes")],
-             "skills": [], "tools": [], "from": [["mill", "notes"], ["farm", "energy"]], "to": [],
+             "skills": [], "tools": [], "from": [["mill", "notes"], ["farm", "energy"], ["press", "notes"]], "to": [],
              "real": "每次模型调用都按 token 计价入账，记到对应的运行和论文上；HUD 上的花费就是这里的数字。"},
     "newspaper": {"stations": [st("收稿", "notes"), st("写摘要", "notes"), st("排版", "notes"), st("送报", "notes")],
-                  "skills": [], "tools": [], "from": [["customs", "notes"], ["farm", "table"], ["market", "notes"]], "to": [],
+                  "skills": [], "tools": [], "from": [["customs", "notes"], ["farm", "table"], ["market", "notes"]], "to": [["press", "notes"]],
                   "real": "「运行状态」页就是这份报纸：项目进度、新入馆论文、员工升降级和各类调用次数。"},
     "power": {"stations": [st("接单", "energy"), st("分卡", "energy"), st("发电", "energy"), st("抄表", "energy")],
               "skills": [], "tools": [], "from": [], "to": [["farm", "energy"]],
@@ -110,11 +106,11 @@ CATALOG: dict[str, dict] = {
                   "skills": [], "tools": ["power.status", "power.submit", "power.wait"], "from": [], "to": [["farm", "energy"]],
                   "real": "没有 GPU 时的备用电源：按方法草案生成带固定种子的模拟结果表，所有数字都标着「模拟」，保证 demo 能跑完。"},
     "coldstore": {"stations": [st("登记", "dataset"), st("下载", "dataset"), st("出库", "dataset")],
-                  "skills": [], "tools": [], "from": [], "to": [["farm", "dataset"]],
+                  "skills": [], "tools": [], "from": [], "to": [["farm", "dataset"], ["depot", "dataset"]],
                   "real": "以后做：数据集的大小、格式和存放位置。"},
     "weather": {"stations": [st("抓 DDL", "notes"), st("预警", "notes"), st("推送", "notes")],
-                "skills": [], "tools": [], "from": [], "to": [["newspaper", "notes"]],
-                "real": "以后做：会议 DDL 和日程，截稿临近时预警。"},
+                "skills": [], "tools": [], "from": [], "to": [["press", "notes"], ["farm", "notes"], ["newspaper", "notes"]],
+                "real": "以后做：会议 DDL 和日程，截稿临近时提醒印刷厂收稿、提醒实验农场别再加实验。"},
 }
 
 
@@ -125,24 +121,23 @@ class World:
         m = json.loads(town.s.manifest.read_text(encoding="utf-8"))
         self.types = {b["type"]: b for b in m["buildings"]}
         self.districts = m["districts"]
-        if not self.db.val("select count(*) from buildings"):
-            for p in m["placements"]:
-                if p["type"] in ("mill", "depot"):
-                    continue
-                self._place(p)
-        self._migrate()
+        self._migrate(m["placements"])
 
     def _place(self, p: dict) -> None:
         self.db.insert("buildings", {"id": p["id"], "type": p["type"], "x": p["x"], "y": p["y"], "name": p.get("name"),
                                      "label": p.get("label"), "accent": p.get("accent"), "status": "idle", "created_at": now()})
 
-    def _migrate(self) -> None:
-        """Towns from before the base camp had a mill per paper and a depot per repo: fold them."""
+    def _migrate(self, placements: list[dict]) -> None:
+        """Bring the town in line with the manifest: towns from before the base camp had a
+        mill per paper and a depot per repo, so fold those; then put every building where
+        the current layout has it (nobody moves buildings by hand, the design does)."""
         self.db.x("delete from buildings where type in ('mill', 'depot') and id not in ('mill', 'depot')")
         self.db.x("update lines set mill_id = 'mill' where mill_id is not null and mill_id != 'mill'")
         self.db.x("update stages set building = 'mill' where building like 'mill_%'")
-        for p in CANON:
-            if not self.db.one("select 1 from buildings where id = ?", p["id"]):
+        for p in placements:
+            if self.db.one("select 1 from buildings where id = ?", p["id"]):
+                self.db.update("buildings", {"id": p["id"]}, x=p["x"], y=p["y"])
+            else:
                 self._place(p)
 
     # ---------- placements ----------

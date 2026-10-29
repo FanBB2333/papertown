@@ -10,6 +10,12 @@ import type { Placement } from '../api';
 import { useAvatar } from './useAvatar';
 
 const BASE = { x: -790, y: -150, w: 1580, h: 950 };
+
+// a strip between two yards says which two it serves
+function where(key: string) {
+  const d = DISTRICTS[key];
+  return d ? (d.dir.includes('↔') ? `${d.name} · ${d.dir}` : d.name) : '';
+}
 const MIN_W = 420, MAX_W = BASE.w * 1.5;
 
 interface Props {
@@ -173,7 +179,7 @@ export function WorldMap({ placements, highlight, notes, active, onOpen }: Props
       </div>
       {tip && b && (
         <div className="ptip pnl" style={{ left: tip.x, top: tip.y }}>
-          <b>{tip.pl.name}</b><span>{DISTRICTS[b.district]?.name}</span>
+          <b>{tip.pl.name}</b><span>{where(b.district)}</span>
           <p>{b.rep}</p>
           <em>{tip.pl.live ? `${tip.pl.tech} · 点击进入` : '还没接入 · 点击查看计划'}</em>
         </div>

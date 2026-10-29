@@ -7,35 +7,59 @@
     "origin": "sprite (0,0) is the back corner of the footprint"
   },
   "districts": {
-    "port": {
-      "name": "数据港区",
-      "en": "Data Port",
+    "camp": {
+      "name": "造纸厂大本营",
+      "en": "Base Camp",
       "dir": "北",
-      "color": "#5aa0c8"
-    },
-    "industry": {
-      "name": "学术工业区",
-      "en": "Academic Industry",
-      "dir": "西",
       "color": "#a8743f"
     },
-    "depot": {
-      "name": "开源仓储区",
-      "en": "Open-source Depot",
+    "code": {
+      "name": "仓库",
+      "en": "Code Depot",
       "dir": "东",
       "color": "#4f8a3d"
     },
-    "plaza": {
-      "name": "中央广场",
-      "en": "Central Plaza",
-      "dir": "中",
-      "color": "#b07d4f"
-    },
-    "infra": {
-      "name": "基础设施区",
-      "en": "Infrastructure",
+    "field": {
+      "name": "实验农场",
+      "en": "Experiment Fields",
       "dir": "南",
+      "color": "#6f9a4a"
+    },
+    "print": {
+      "name": "印刷厂",
+      "en": "Print Works",
+      "dir": "西",
+      "color": "#4b5f9e"
+    },
+    "harbour": {
+      "name": "文献港",
+      "en": "Literature Harbour",
+      "dir": "造纸厂 ↔ 印刷厂",
+      "color": "#5aa0c8"
+    },
+    "wharf": {
+      "name": "开源码头",
+      "en": "Open-source Wharf",
+      "dir": "造纸厂 ↔ 仓库",
+      "color": "#4a5568"
+    },
+    "grid": {
+      "name": "算力带",
+      "en": "Compute Belt",
+      "dir": "仓库 ↔ 实验农场",
       "color": "#e0a030"
+    },
+    "press_row": {
+      "name": "成果街",
+      "en": "Results Row",
+      "dir": "实验农场 ↔ 印刷厂",
+      "color": "#9b4a4a"
+    },
+    "plaza": {
+      "name": "立项广场",
+      "en": "Project Square",
+      "dir": "中央",
+      "color": "#b07d4f"
     }
   },
   "buildings": [
@@ -43,7 +67,7 @@
       "type": "dock_arxiv",
       "name": "arXiv 码头",
       "en": "arXiv Dock",
-      "district": "port",
+      "district": "harbour",
       "footprint": [
         3,
         2
@@ -59,7 +83,7 @@
       "type": "dock_github",
       "name": "GitHub 码头",
       "en": "GitHub Dock",
-      "district": "port",
+      "district": "wharf",
       "footprint": [
         2,
         3
@@ -75,7 +99,7 @@
       "type": "customs",
       "name": "学术海关",
       "en": "Customs",
-      "district": "port",
+      "district": "harbour",
       "footprint": [
         2,
         2
@@ -91,7 +115,7 @@
       "type": "lighthouse",
       "name": "灯塔",
       "en": "Lighthouse",
-      "district": "port",
+      "district": "harbour",
       "footprint": [
         1,
         1
@@ -107,7 +131,7 @@
       "type": "hatchery",
       "name": "孵化场",
       "en": "Hatchery",
-      "district": "industry",
+      "district": "plaza",
       "footprint": [
         2,
         2
@@ -123,7 +147,7 @@
       "type": "mill",
       "name": "造纸厂",
       "en": "Paper Mill",
-      "district": "industry",
+      "district": "camp",
       "footprint": [
         3,
         2
@@ -139,7 +163,7 @@
       "type": "farm",
       "name": "实验农场",
       "en": "Experiment Farm",
-      "district": "industry",
+      "district": "field",
       "footprint": [
         3,
         3
@@ -155,7 +179,7 @@
       "type": "press",
       "name": "印刷厂",
       "en": "TeX Press",
-      "district": "industry",
+      "district": "print",
       "footprint": [
         2,
         2
@@ -171,7 +195,7 @@
       "type": "qa",
       "name": "质检所",
       "en": "Review Lab",
-      "district": "industry",
+      "district": "harbour",
       "footprint": [
         2,
         2
@@ -187,7 +211,7 @@
       "type": "depot",
       "name": "仓库",
       "en": "Repo Depot",
-      "district": "depot",
+      "district": "code",
       "footprint": [
         3,
         2
@@ -203,7 +227,7 @@
       "type": "workshop",
       "name": "加工车间",
       "en": "Workshop",
-      "district": "depot",
+      "district": "grid",
       "footprint": [
         2,
         2
@@ -219,7 +243,7 @@
       "type": "logistics",
       "name": "物流站",
       "en": "Logistics",
-      "district": "depot",
+      "district": "wharf",
       "footprint": [
         2,
         2
@@ -235,7 +259,7 @@
       "type": "library",
       "name": "图书馆",
       "en": "Library",
-      "district": "plaza",
+      "district": "harbour",
       "footprint": [
         3,
         3
@@ -267,7 +291,7 @@
       "type": "market",
       "name": "人才市场",
       "en": "Talent Market",
-      "district": "plaza",
+      "district": "wharf",
       "footprint": [
         3,
         2
@@ -299,7 +323,7 @@
       "type": "bank",
       "name": "银行",
       "en": "Bank",
-      "district": "plaza",
+      "district": "press_row",
       "footprint": [
         2,
         2
@@ -315,7 +339,7 @@
       "type": "newspaper",
       "name": "报社",
       "en": "Newsroom",
-      "district": "plaza",
+      "district": "press_row",
       "footprint": [
         2,
         2
@@ -331,7 +355,7 @@
       "type": "power",
       "name": "算力电厂",
       "en": "GPU Power Plant",
-      "district": "infra",
+      "district": "grid",
       "footprint": [
         3,
         3
@@ -347,7 +371,7 @@
       "type": "power_sim",
       "name": "模拟电厂",
       "en": "FakeGPU Backup",
-      "district": "infra",
+      "district": "grid",
       "footprint": [
         2,
         2
@@ -363,7 +387,7 @@
       "type": "coldstore",
       "name": "冷库",
       "en": "Dataset Store",
-      "district": "infra",
+      "district": "grid",
       "footprint": [
         2,
         2
@@ -379,7 +403,7 @@
       "type": "weather",
       "name": "气象台",
       "en": "Deadline Watch",
-      "district": "infra",
+      "district": "press_row",
       "footprint": [
         2,
         2
@@ -602,71 +626,121 @@
   ],
   "placements": [
     {
-      "id": "lighthouse",
-      "type": "lighthouse",
-      "x": 1,
-      "y": 1
-    },
-    {
-      "id": "dock_arxiv",
-      "type": "dock_arxiv",
-      "x": 0,
-      "y": 4
-    },
-    {
-      "id": "dock_github",
-      "type": "dock_github",
-      "x": 4,
-      "y": 0
-    },
-    {
-      "id": "customs",
-      "type": "customs",
-      "x": 4,
-      "y": 4
-    },
-    {
-      "id": "hatchery",
-      "type": "hatchery",
-      "x": 2,
-      "y": 9
-    },
-    {
       "id": "mill",
       "type": "mill",
-      "x": 1,
-      "y": 17,
-      "name": "造纸厂 #1"
+      "x": 2,
+      "y": 3,
+      "name": "造纸厂"
+    },
+    {
+      "id": "depot",
+      "type": "depot",
+      "x": 17,
+      "y": 3,
+      "name": "仓库",
+      "label": "code"
     },
     {
       "id": "farm",
       "type": "farm",
-      "x": 4,
+      "x": 17,
       "y": 17
     },
     {
       "id": "press",
       "type": "press",
-      "x": 1,
-      "y": 20
+      "x": 2,
+      "y": 17
     },
     {
-      "id": "qa",
-      "type": "qa",
-      "x": 4,
-      "y": 21
+      "id": "dock_arxiv",
+      "type": "dock_arxiv",
+      "x": 0,
+      "y": 9
+    },
+    {
+      "id": "customs",
+      "type": "customs",
+      "x": 1,
+      "y": 12
     },
     {
       "id": "library",
       "type": "library",
-      "x": 8,
-      "y": 8
+      "x": 5,
+      "y": 9
     },
     {
-      "id": "genealogy",
-      "type": "genealogy",
+      "id": "qa",
+      "type": "qa",
+      "x": 5,
+      "y": 13
+    },
+    {
+      "id": "lighthouse",
+      "type": "lighthouse",
+      "x": 0,
+      "y": 12
+    },
+    {
+      "id": "dock_github",
+      "type": "dock_github",
+      "x": 11,
+      "y": 0
+    },
+    {
+      "id": "logistics",
+      "type": "logistics",
+      "x": 14,
+      "y": 1
+    },
+    {
+      "id": "market",
+      "type": "market",
+      "x": 10,
+      "y": 5
+    },
+    {
+      "id": "workshop",
+      "type": "workshop",
+      "x": 16,
+      "y": 9
+    },
+    {
+      "id": "coldstore",
+      "type": "coldstore",
+      "x": 16,
+      "y": 13
+    },
+    {
+      "id": "power",
+      "type": "power",
+      "x": 20,
+      "y": 9
+    },
+    {
+      "id": "power_sim",
+      "type": "power_sim",
+      "x": 20,
+      "y": 13
+    },
+    {
+      "id": "newspaper",
+      "type": "newspaper",
+      "x": 11,
+      "y": 16
+    },
+    {
+      "id": "weather",
+      "type": "weather",
+      "x": 9,
+      "y": 20
+    },
+    {
+      "id": "bank",
+      "type": "bank",
       "x": 13,
-      "y": 8
+      "y": 20
     },
     {
       "id": "cityhall",
@@ -675,85 +749,16 @@
       "y": 11
     },
     {
-      "id": "bank",
-      "type": "bank",
-      "x": 14,
-      "y": 11
-    },
-    {
-      "id": "market",
-      "type": "market",
-      "x": 8,
-      "y": 13
-    },
-    {
-      "id": "newspaper",
-      "type": "newspaper",
-      "x": 11,
-      "y": 14
-    },
-    {
-      "id": "logistics",
-      "type": "logistics",
-      "x": 10,
-      "y": 2
-    },
-    {
-      "id": "depot_a",
-      "type": "depot",
-      "x": 17,
-      "y": 1,
-      "label": "sg-kit",
-      "accent": "#4f8a3d",
-      "name": "sg-kit 仓"
-    },
-    {
-      "id": "depot_b",
-      "type": "depot",
-      "x": 21,
-      "y": 1,
-      "label": "vla-bench",
-      "accent": "#7a5aa6",
-      "name": "vla-bench 仓"
-    },
-    {
-      "id": "depot_c",
-      "type": "depot",
-      "x": 17,
-      "y": 4,
-      "label": "paper-tpl",
-      "accent": "#2f8f9d",
-      "name": "paper-tpl 仓"
-    },
-    {
-      "id": "workshop",
-      "type": "workshop",
-      "x": 21,
-      "y": 4
-    },
-    {
-      "id": "coldstore",
-      "type": "coldstore",
+      "id": "hatchery",
+      "type": "hatchery",
       "x": 9,
-      "y": 18
+      "y": 8
     },
     {
-      "id": "power",
-      "type": "power",
-      "x": 18,
-      "y": 18
-    },
-    {
-      "id": "weather",
-      "type": "weather",
-      "x": 21,
-      "y": 17
-    },
-    {
-      "id": "power_sim",
-      "type": "power_sim",
-      "x": 21,
-      "y": 21
+      "id": "genealogy",
+      "type": "genealogy",
+      "x": 8,
+      "y": 12
     }
   ],
   "themes": {

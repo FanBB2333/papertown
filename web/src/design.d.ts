@@ -20,6 +20,8 @@ declare module '@design/sprites.js' {
 declare module '@design/world.js' {
   export const FLOW_KINDS: Record<string, string>;
   export function renderMap(o?: Record<string, unknown>): string;
+  export function footprint(p: { type: string; x: number; y: number }): { x: number; y: number; w: number; d: number };
+  export function tileMat(x: number, y: number): string;
 }
 
 declare module '@design/layouts.js' {

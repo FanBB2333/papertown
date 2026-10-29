@@ -148,7 +148,9 @@ const BUILDING_FLOWS = {
     real: '会议 DDL 和日程。' },
 };
 
-const place = id => PLACEMENTS.find(p => p.id === id) || PLACEMENTS.find(p => p.type === id);
+// the sample repos all live in the one depot now
+const place = id => PLACEMENTS.find(p => p.id === id) || PLACEMENTS.find(p => p.type === id) ||
+  (SAMPLE_REPOS.some(r => r.id === id) ? PLACEMENTS.find(p => p.type === 'depot') : undefined);
 
 // a depot takes its job and outgoing goods from its repo
 function flowOf(pl) {

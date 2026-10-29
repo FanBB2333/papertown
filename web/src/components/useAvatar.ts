@@ -1,17 +1,18 @@
 // You, walking the town: a small figure on the map moved with WASD or the arrow keys.
-// It cannot walk through buildings or into the harbour, the camera follows it, and next
+// It cannot walk through buildings or into the sea, the camera follows it, and next
 // to a building a hint offers E (or Enter / Space) to go inside.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { BUILDINGS, iso } from '@design/sprites.js';
+import { iso } from '@design/sprites.js';
+import { footprint, tileMat } from '@design/world.js';
 import type { Placement } from '../api';
 
 const N = 24;
 const SPEED = 4.2; // tiles per second
 const R = 0.22; // body radius in tiles
 const REACH = 1.1; // how close counts as "at the door"
-const STORE = 'pt-avatar';
-const START = { x: 7.5, y: 16.5 };
+const STORE = 'pt-avatar-2'; // bumped when the town is laid out anew
+const START = { x: 7.5, y: 4.5 }; // on the ring road, at the mill's door
 
 // screen-aligned directions on the isometric grid
 const DIRS: Record<string, [number, number]> = {
@@ -45,10 +46,7 @@ function save(p: { x: number; y: number }) {
   try { localStorage.setItem(STORE, JSON.stringify({ x: +p.x.toFixed(2), y: +p.y.toFixed(2) })); } catch { /* ignore */ }
 }
 
-function foot(p: Placement) {
-  const b = BUILDINGS[p.type];
-  return { x: p.x, y: p.y, w: b?.w ?? 1, d: b?.d ?? 1 };
-}
+const foot = (p: Placement) => footprint(p);
 
 // distance from a point to a footprint rectangle, in tiles
 function gap(px: number, py: number, p: Placement) {
@@ -77,7 +75,7 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
 
   const blocked = useCallback((x: number, y: number) => {
     if (x < 0.2 || y < 0.2 || x > N - 0.2 || y > N - 0.2) return true;
-    if (Math.floor(x) + Math.floor(y) <= 6) return true; // the harbour
+    if (tileMat(Math.floor(x), Math.floor(y)) === 'water') return true;
     for (const p of opts.current.placements) {
       const f = foot(p);
       if (x > f.x - 0.05 && x < f.x + f.w + 0.05 && y > f.y - 0.05 && y < f.y + f.d + 0.05) return true;
