@@ -92,7 +92,7 @@ create index if not exists ledger_ts on ledger(ts);
 """
 
 # (table, column, declaration) for columns added to existing tables
-ADDED = [("agents", "runtime", "text"), ("agents", "ext_id", "text")]
+ADDED = [("agents", "runtime", "text"), ("agents", "ext_id", "text"), ("lines", "hold", "text")]
 
 JSON_COLS = {"team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result"}
 

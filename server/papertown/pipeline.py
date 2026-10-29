@@ -239,11 +239,25 @@ class Pipeline:
         ln = self.line(line_id)
         return [self.town.market.get(i) for i in (ln["plan"] or {}).get("team", {}).get(key, [])]
 
+    def _held(self, line_id: str, key: str) -> bool:
+        """A demo sample can be parked before a stage, to show a paper part way along. The
+        hold is used up: 「继续」 runs the line on from there."""
+        if self.db.val("select hold from lines where id = ?", line_id) != key:
+            return False
+        self._set_line(line_id, status="paused", hold=None, note=f"展示样例停在「{NAMES[key]}」之前，点「继续」接着跑")
+        mill = self.line(line_id)["mill_id"]
+        if mill:
+            self.town.world.set_status(mill, "idle", line_id)
+        self._publish(line_id)
+        return True
+
     def _produce(self, line_id: str) -> None:
         def todo(key: str) -> bool:
             return self.db.val("select status from stages where line_id = ? and idx = ?", line_id, INDEX[key]) != "done"
 
         report = self.item(line_id, "hatch") or {}
+        if todo("method") and self._held(line_id, "method"):
+            return
         if todo("method"):
             team = self._team(line_id, "method")
             self._stage(line_id, "method", "run", pct=10, workers=[w["id"] for w in team])
@@ -256,6 +270,8 @@ class Pipeline:
             self._stage(line_id, "method", "done")
         draft = self.item(line_id, "method") or {}
 
+        if todo("exp") and self._held(line_id, "exp"):
+            return
         if todo("exp"):
             team = self._team(line_id, "exp")
             self._stage(line_id, "exp", "run", pct=10, workers=[w["id"] for w in team])
@@ -268,6 +284,8 @@ class Pipeline:
 
         while True:
             ln = self.line(line_id)
+            if todo("write") and self._held(line_id, "write"):
+                return
             if todo("write"):
                 team = self._team(line_id, "write")
                 feedback = (self.item(line_id, "review") or {}).get("feedback", []) if ln["revisions"] else []
@@ -280,6 +298,8 @@ class Pipeline:
                 self._stage(line_id, "write", "done")
             tex = self.item(line_id, "write") or {}
 
+            if self._held(line_id, "review"):
+                return
             team = self._team(line_id, "review")
             self._stage(line_id, "review", "run", pct=10, workers=[w["id"] for w in team])
             fmt = stages.format_check(self.town, ln, tex)

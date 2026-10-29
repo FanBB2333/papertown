@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import stages, status as status_mod
+from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
 from .config import Settings
 from .farm import FarmError, summarize
@@ -168,6 +168,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/lines/{line_id}/resume")
     def resume(line_id: str):
         return guard(town.pipeline.resume, line_id)
+
+    @app.get("/api/lines/{line_id}/papers")
+    def line_papers(line_id: str):
+        if not town.pipeline.snapshot(line_id):
+            raise HTTPException(404, "没有这条流水线")
+        return samples.papers_of(town, line_id)
+
+    @app.get("/api/library")
+    def library(q: str = "", topic: str = "", limit: int = 60):
+        return samples.shelf(town, q, topic, limit)
+
+    @app.post("/api/samples")
+    def put_samples():
+        try:
+            return samples.seed(town)
+        except samples.SampleError as e:
+            raise HTTPException(400, str(e)) from e
 
     @app.get("/api/lines/{line_id}/files/{name}")
     def file(line_id: str, name: str):

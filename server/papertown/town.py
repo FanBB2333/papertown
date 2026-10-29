@@ -55,10 +55,12 @@ class Town:
             self.seed_library()
 
     def start(self) -> None:
+        from . import samples
         self.pipeline.recover()
         self.farm.recover()
         self.agents.reconcile()
         self.mcp.start()
+        samples.maybe_seed(self)
 
     def stop(self) -> None:
         self.mcp.stop()

@@ -80,6 +80,8 @@ class Settings:
     paseo_host: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_HOST"))
     # where the bridge extension inside each pi reaches this server; `serve` sets it
     url: str = field(default_factory=lambda: _env("PAPERTOWN_URL", "http://127.0.0.1:8000"))
+    # offline demo: put the sample papers on the lines the first time the town starts empty
+    samples: bool = field(default_factory=lambda: _env("PAPERTOWN_SAMPLES", "1") != "0")
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 
