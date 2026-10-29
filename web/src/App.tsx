@@ -201,11 +201,18 @@ export function App() {
   const go3d = useCallback((lock = true) => {
     if (dim !== '2d') return;
     if (lock) (root.current?.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => {});
+    setChatOpen(false); // the chat and the settings belong to the view they were opened in
+    setSettingsOpen(false);
     setFrom3d(mapApi.current?.view() ?? null);
     setWant3d(true);
     setDim('to3d');
   }, [dim]);
-  const go2d = useCallback(() => { if (dim === '3d') setDim('to2d'); }, [dim]);
+  const go2d = useCallback(() => {
+    if (dim !== '3d') return;
+    setChatOpen(false);
+    setSettingsOpen(false);
+    setDim('to2d');
+  }, [dim]);
   useEffect(() => {
     if (world && hash3d.current) { hash3d.current = false; go3d(false); }
   }, [world, go3d]);

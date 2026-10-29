@@ -44,6 +44,8 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
     () => renderMap({ placements, labels: st.mapLabels, highlight, notes, anim: true, flows: false, decor: 'light', districts: false, dashes: false, vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
     [placements, highlight, notes, st.mapLabels],
   );
+  // the card belongs to the map in front of you: gone with a room, the chat or the 3D town
+  useEffect(() => { if (!active || hidden) setTip(null); }, [active, hidden]);
   const byId = useMemo(() => new Map(placements.map(p => [p.id, p])), [placements]);
 
   const svg = () => host.current?.querySelector('svg') ?? null;

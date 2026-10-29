@@ -182,9 +182,10 @@ export function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => 
   );
 }
 
-function LlmSwitch() {
+function LlmSwitch({ shown }: { shown: boolean }) {
   const [llm, setLlm] = useState<Llm | null>(null);
   const [open, setOpen] = useState(false);
+  useEffect(() => { if (!shown) setOpen(false); }, [shown]); // closing the drawer folds the picker too
 
   useEffect(() => { api.llm().then(setLlm).catch(() => {}); }, []);
   useEffect(() => listen(e => { if (e.type === 'llm') setLlm(e.llm); }), []);
@@ -242,7 +243,7 @@ export function Drawer(p: Props) {
         {(['chat', 'line', 'trace'] as Tab[]).map(t => (
           <a key={t} className={p.tab === t ? 'on' : ''} onClick={() => p.onTab(t)}>{{ chat: '对话', line: '流水线', trace: '调用轨迹' }[t]}</a>
         ))}
-        <LlmSwitch />
+        <LlmSwitch shown={p.open} />
         <button className="bench-x" title="收起 Esc" onClick={p.onClose}>×</button>
       </div>
       <div className="bench-pane" data-pane="chat">
