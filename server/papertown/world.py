@@ -22,7 +22,8 @@ TECH = {
     "power": "GPU 任务队列（未接入）", "power_sim": "模拟 GPU 后端", "dock_arxiv": "MCP · arXiv", "library": "RAG · BM25 + 覆盖率",
     "genealogy": "知识图谱 · 相近 / 引用", "depot": "RAG · 仓库文档",
 }
-KEY_LABELS = {"dock_arxiv", "hatchery", "farm", "press", "qa", "library", "market", "cityhall", "depot_a", "power_sim"}
+# The four buildings the main map is about; they are labelled and highlighted, the rest recede.
+CORE = {"mill", "farm", "press", "depot"}
 
 # Buildings backed by working code. The rest are scenery for now and say so.
 LIVE = {"dock_arxiv", "customs", "hatchery", "mill", "farm", "press", "qa", "depot", "library", "genealogy",
@@ -47,6 +48,11 @@ CATALOG: dict[str, dict] = {
     "lighthouse": {"stations": [st("订阅", "notes"), st("定时扫描", "notes"), st("发信号", "notes")],
                    "skills": [], "tools": ["arxiv.search"], "from": [], "to": [["newspaper", "notes"]],
                    "real": "以后做：定时盯住关注的作者和关键词，有撞车风险就提醒。"},
+    "mill": {"stations": [st("方法设计", "draft", "designer"), st("实验", "table", "experimenter"), st("写作排版", "tex", "writer"),
+                          st("质检", "pdf", "reviewer"), st("出厂", "pdf")],
+             "skills": ["method-design"], "tools": ["library.search", "depot.search"],
+             "from": [["hatchery", "notes"], ["market", "notes"], ["depot", "crate"]], "to": [["farm", "draft"], ["press", "draft"]],
+             "real": "一篇论文一座厂。放入一颗 idea，孵化通过后这里开工：方法设计师在厂里写方法草案，再交给实验农场、印刷厂和质检所。"},
     "hatchery": {"stations": [st("收蛋", "egg"), st("检索相似工作", "notes", "hatcher"), st("写撞车报告", "notes", "hatcher"),
                               st("等你决定", "egg"), st("建厂", "draft")],
                  "skills": ["novelty-check"], "tools": ["library.search", "arxiv.search", "genealogy.expand"],
@@ -126,12 +132,25 @@ class World:
     def name(self, b: dict) -> str:
         return b.get("name") or self.types[b["type"]]["name"]
 
+    def _buildings(self) -> list[dict]:
+        rows = self.db.q("select * from buildings order by created_at, id")
+        if not any(b["type"] == "mill" for b in rows):
+            rows.append(self._idle_mill())
+        return rows
+
+    def _idle_mill(self) -> dict:
+        # before the first idea hatches, an idle mill holds the first slot so the map always has one
+        x, y = MILL_SLOTS[0]
+        return {"id": "mill", "type": "mill", "x": x, "y": y, "name": "造纸厂", "label": None, "accent": None,
+                "line_id": None, "status": "idle", "virtual": True}
+
     def placements(self) -> list[dict]:
         out = []
-        for b in self.db.q("select * from buildings order by created_at, id"):
+        for b in self._buildings():
+            core = b["type"] in CORE
             out.append({"id": b["id"], "type": b["type"], "x": b["x"], "y": b["y"], "name": self.name(b),
                         "label": b["label"], "accent": b["accent"], "line_id": b["line_id"], "status": b["status"],
-                        "key": b["id"] in KEY_LABELS or b["type"] == "mill", "live": b["type"] in LIVE,
+                        "core": core, "key": core, "live": b["type"] in LIVE,
                         "tech": TECH.get(b["type"], self.types[b["type"]]["tech"])})
         return out
 
@@ -140,7 +159,7 @@ class World:
         if b:
             return b
         if bid == "mill":  # the newest mill stands in for the type
-            return self.db.one("select * from buildings where type = 'mill' order by created_at desc limit 1")
+            return self.db.one("select * from buildings where type = 'mill' order by created_at desc limit 1") or self._idle_mill()
         return self.db.one("select * from buildings where type = ? order by id limit 1", bid)
 
     def build_mill(self, line: dict) -> dict:
@@ -161,7 +180,7 @@ class World:
 
     def set_status(self, bid: str, status: str, line_id: str | None = None) -> None:
         b = self.get(bid)
-        if not b or b["status"] == status:
+        if not b or b.get("virtual") or b["status"] == status:
             return
         self.db.update("buildings", {"id": b["id"]}, status=status)
         self.town.bus.publish("building", id=b["id"], status=status, line_id=line_id)
@@ -179,7 +198,7 @@ class World:
                 "later": meta.get("later", False), "live": b["type"] in LIVE, "status": b["status"],
                 "skills": cat["skills"], "tools": cat["tools"], "real": cat["real"],
                 "from": self._goods(cat["from"]), "to": self._goods(cat["to"])}
-        if b["type"] == "mill":
+        if b["type"] == "mill" and not b.get("virtual"):
             return base | self._mill(b)
         active = self.db.one("select s.*, l.title, l.seq from stages s join lines l on l.id = s.line_id"
                              " where s.building = ? and s.status = 'run' order by s.started_at desc limit 1", b["type"])
@@ -239,6 +258,8 @@ class World:
         if t == "depot":
             r = town.depots.get(b["id"]) or {}
             return f"{r.get('issues', 0)} 个 open issue"
+        if t == "mill":
+            return "空闲 · 放入一颗 idea 后开工"
         if t == "newspaper":
             return "运行状态页"
         return "空闲"

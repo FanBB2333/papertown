@@ -13,7 +13,11 @@ def test_api_flow(tmp_path):
     with TestClient(app) as c:
         w = c.get("/api/world").json()
         ids = {p["id"] for p in w["placements"]}
-        assert {"hatchery", "library", "depot_a"} <= ids and not any(p["type"] == "mill" for p in w["placements"])
+        assert {"hatchery", "library", "depot_a"} <= ids
+        mills = [p for p in w["placements"] if p["type"] == "mill"]
+        assert [(m["id"], m["status"]) for m in mills] == [("mill", "idle")]  # idle stand-in until an idea hatches
+        assert {p["type"] for p in w["placements"] if p["core"]} == {"mill", "farm", "press", "depot"}
+        assert c.get("/api/buildings/mill").json()["job"].startswith("空闲")
         assert w["hud"]["offline"] is True
 
         r = c.post("/api/ideas", json={"text": "用检索增强做论文的新颖性评估"})

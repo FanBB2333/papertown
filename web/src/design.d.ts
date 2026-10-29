@@ -7,7 +7,7 @@ declare module '@design/theme.js' {
 
 declare module '@design/sprites.js' {
   export const DISTRICTS: Record<string, { name: string; en: string; dir: string; color: string }>;
-  export const BUILDINGS: Record<string, { name: string; rep: string; tech: string; district: string; later?: boolean }>;
+  export const BUILDINGS: Record<string, { name: string; rep: string; tech: string; district: string; accent: string; later?: boolean }>;
   export const ITEMS: Record<string, { name: string }>;
   export const WORKERS: Record<string, { name: string }>;
   export function spriteSVG(type: string, o?: { label?: string | null; accent?: string | null }): { html: string };

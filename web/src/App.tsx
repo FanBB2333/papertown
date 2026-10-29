@@ -4,8 +4,7 @@
 //   #view=status   #open=hatchery   #chat   — open a state directly (screenshots, demos)
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DISTRICTS } from '@design/sprites.js';
-import { FLOW_KINDS } from '@design/world.js';
+import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
 import { Item, Logo, Sprite } from './art';
 import { Drawer, type Composer, type Tab } from './components/Drawer';
@@ -192,8 +191,10 @@ export function App() {
         <aside className="legend pnl w-only">
           <h4>区域</h4>
           {Object.values(DISTRICTS).map(d => <div key={d.name} className="lg-row"><i style={{ background: d.color }} />{d.name}<em>{d.dir}</em></div>)}
-          <h4>物流</h4>
-          {Object.entries(FLOW_KINDS).map(([k, v]) => <div key={k} className="lg-row"><i className={`fkey fd-${k}`} />{v}</div>)}
+          <h4>核心建筑</h4>
+          {world?.placements.filter(p => p.core).map(p => (
+            <div key={p.id} className="lg-row lg-core" data-open={p.id}><i style={{ background: p.accent ?? BUILDINGS[p.type].accent }} />{p.name}</div>
+          ))}
         </aside>
       )}
 

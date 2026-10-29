@@ -1475,20 +1475,24 @@ function textWidth(s, size) {
   return w;
 }
 
-function pill(x, y, text, cls, size = 12) {
+function pill(x, y, text, cls, size = 12, style = '') {
   const w = textWidth(text, size) + 16, h = size + 9;
-  return `<g class="${cls}" transform="translate(${f1(x)},${f1(y)})"><rect x="${f1(-w / 2)}" y="${-h}" width="${f1(w)}" height="${h}" rx="${h / 2}"/>` +
+  return `<g class="${cls}"${style ? ` style="${style}"` : ''} transform="translate(${f1(x)},${f1(y)})"><rect x="${f1(-w / 2)}" y="${-h}" width="${f1(w)}" height="${h}" rx="${h / 2}"/>` +
     `<text x="0" y="${f1(-h / 2 + size * 0.36)}" font-size="${size}" text-anchor="middle">${text}</text></g>`;
 }
 
 export function placementName(pl) { return pl.name || BUILDINGS[pl.type].name; }
 
 // placements: live placements from the server (default: the static design ones); a
-// placement's `key` decides whether it is labelled, `status: 'busy'` marks it working.
+// placement's `key` decides whether it is labelled, `status: 'busy'` marks it working,
+// `core` puts a pad under it and dims everything that is not core.
 // notes: placement id -> text appended to its label.
+// decor: 'full' trees, lamps and boats; 'light' a few trees kept clear of core buildings; 'none'.
 export function renderMap(o = {}) {
-  const opt = { labels: 'key', anim: true, objects: true, flows: true, districts: true, highlight: null, note: '', notes: {}, vb: '-790 -150 1580 950', ...o };
+  const opt = { labels: 'key', anim: true, objects: true, flows: true, districts: true, decor: 'full', highlight: null, note: '', notes: {}, vb: '-790 -150 1580 950', ...o };
   const places = opt.placements || PLACEMENTS;
+  const hasCore = places.some(p => p.core);
+  const accent = pl => pl.accent || BUILDINGS[pl.type].accent;
   const out = [];
 
   // board edge
@@ -1524,6 +1528,15 @@ export function renderMap(o = {}) {
     out.push(`<ellipse class="focus" cx="${f1(cx)}" cy="${f1(cy)}" rx="${f1(rx)}" ry="${f1(rx / 2)}"/>`);
   }
 
+  // a pad under each core building
+  if (opt.objects) {
+    for (const pl of places.filter(p => p.core)) {
+      const f = footprint(pl), m = 0.35;
+      const pts = [[f.x - m, f.y - m], [f.x + f.w + m, f.y - m], [f.x + f.w + m, f.y + f.d + m], [f.x - m, f.y + f.d + m]];
+      out.push(`<path class="core-pad" style="--accent:${accent(pl)}" d="M${pts.map(([x, y]) => sp(x, y, 0.02)).join('L')}Z"/>`);
+    }
+  }
+
   // flows run on the roads, under the buildings
   if (opt.flows) {
     for (const fl of FLOWS) {
@@ -1546,22 +1559,27 @@ export function renderMap(o = {}) {
   if (opt.objects) {
     const objs = [];
     const blocked = new Set();
+    const light = opt.decor === 'light';
     for (const pl of places) {
-      const f = footprint(pl);
-      for (let x = f.x - 1; x <= f.x + f.w; x++) for (let y = f.y - 1; y <= f.y + f.d; y++) blocked.add(`${x},${y}`);
+      const f = footprint(pl), m = light && pl.core ? 2 : 1;
+      for (let x = f.x - m; x < f.x + f.w + m; x++) for (let y = f.y - m; y < f.y + f.d + m; y++) blocked.add(`${x},${y}`);
       objs.push({ k: f.x + f.w / 2 + f.y + f.d / 2, pl });
     }
-    for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
-      const m = tileMat(x, y);
-      if (!m.startsWith('grass') || blocked.has(`${x},${y}`)) continue;
-      const park = x >= 17 && y >= 8 && y <= 15;
-      if (hash(x, y, 3) < (park ? 0.5 : 0.2)) {
-        const jx = (hash(x, y, 4) - 0.5) * 0.3, jy = (hash(x, y, 5) - 0.5) * 0.3;
-        objs.push({ k: x + y + 1, prop: hash(x, y, 6) < 0.5 ? 'tree_pine' : 'tree_round', x: x + jx, y: y + jy });
+    if (opt.decor !== 'none') {
+      for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
+        const m = tileMat(x, y);
+        if (!m.startsWith('grass') || blocked.has(`${x},${y}`)) continue;
+        const park = x >= 17 && y >= 8 && y <= 15;
+        if (hash(x, y, 3) < (park ? 0.5 : 0.2) * (light ? 0.25 : 1)) {
+          const jx = (hash(x, y, 4) - 0.5) * 0.3, jy = (hash(x, y, 5) - 0.5) * 0.3;
+          objs.push({ k: x + y + 1, prop: hash(x, y, 6) < 0.5 ? 'tree_pine' : 'tree_round', x: x + jx, y: y + jy });
+        }
       }
     }
-    for (const [x, y] of LAMPS) objs.push({ k: x + y + 1, prop: 'lamp', x: x - 0.5, y: y - 0.5 });
-    for (const [x, y] of BOATS) objs.push({ k: x + y + 0.8, prop: 'boat', x, y, cls: 'bob' });
+    if (opt.decor === 'full') {
+      for (const [x, y] of LAMPS) objs.push({ k: x + y + 1, prop: 'lamp', x: x - 0.5, y: y - 0.5 });
+      for (const [x, y] of BOATS) objs.push({ k: x + y + 0.8, prop: 'boat', x, y, cls: 'bob' });
+    }
     objs.sort((a, b) => a.k - b.k);
 
     for (const ob of objs) {
@@ -1569,7 +1587,8 @@ export function renderMap(o = {}) {
         const pl = ob.pl, b = BUILDINGS[pl.type], p = new Pen();
         b.draw(p, pl);
         const [tx, ty] = iso(pl.x, pl.y);
-        out.push(`<g class="sp bld${pl.id === opt.highlight ? ' is-hl' : ''}${pl.status === 'busy' ? ' is-busy' : ''}" data-b="${pl.type}" data-id="${pl.id}" style="--accent:${pl.accent || b.accent}" transform="translate(${f1(tx)},${f1(ty)})">${p.o.join('')}</g>`);
+        const cls = `${pl.id === opt.highlight ? ' is-hl' : ''}${pl.status === 'busy' ? ' is-busy' : ''}${pl.core ? ' is-core' : hasCore ? ' is-dim' : ''}`;
+        out.push(`<g class="sp bld${cls}" data-b="${pl.type}" data-id="${pl.id}" style="--accent:${accent(pl)}" transform="translate(${f1(tx)},${f1(ty)})">${p.o.join('')}</g>`);
       } else {
         const p = new Pen();
         PROPS[ob.prop].draw(p);
@@ -1594,7 +1613,7 @@ export function renderMap(o = {}) {
       const [sx, sy] = iso(f.x + f.w / 2, f.y + f.d / 2, b.h + 0.5);
       const note = (isHl && opt.note) || opt.notes[pl.id];
       const text = note ? `${placementName(pl)} · ${note}` : placementName(pl);
-      out.push(pill(sx, sy, text, isHl ? 'blbl hl' : 'blbl', 12));
+      out.push(isHl ? pill(sx, sy, text, 'blbl hl', 12) : pl.core ? pill(sx, sy, text, 'blbl core', 13, `--accent:${accent(pl)}`) : pill(sx, sy, text, 'blbl', 12));
     }
   }
 

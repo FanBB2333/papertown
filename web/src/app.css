@@ -7,6 +7,16 @@
 .k-script { background: #8a6d3b; } .k-tool { background: #7f8a99; }
 .warn-t { color: var(--warn); }
 
+/* main map: the core buildings stand on a pad, the rest recede until hovered */
+.p-world .core-pad { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.p-world .bld.is-dim { opacity: .5; filter: saturate(.3); transition: opacity .15s, filter .15s; }
+.p-world .bld.is-dim:hover { opacity: 1; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--brand) 55%, transparent)); }
+.p-world .blbl.core rect { fill: var(--accent); stroke: none; }
+.p-world .blbl.core text { fill: #fff; }
+.p-world .dlbl { opacity: .7; }
+.lg-core { cursor: pointer; }
+.lg-core:hover { color: var(--brand); }
+
 /* buildings at work glow softly */
 .p-world .bld.is-busy { animation: busy 1.6s ease-in-out infinite; }
 @keyframes busy { 50% { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--brand) 70%, transparent)); } }

@@ -2,7 +2,7 @@
 
 export interface Placement {
   id: string; type: string; x: number; y: number; name: string; label: string | null; accent: string | null;
-  line_id: string | null; status: string; key: boolean; live: boolean; tech: string;
+  line_id: string | null; status: string; core: boolean; key: boolean; live: boolean; tech: string;
 }
 
 export interface Hud {

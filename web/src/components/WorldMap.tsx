@@ -1,5 +1,6 @@
 // The world map (layout A): the shared isometric SVG renderer, with drag to pan, wheel
-// to zoom, a hover card per building, and a minimap that jumps on click.
+// to zoom, a hover card per building, and a minimap that jumps on click. Kept quiet on
+// purpose: no goods flows, few trees, and the core buildings highlighted.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
@@ -24,7 +25,7 @@ export function WorldMap({ placements, highlight, notes, onOpen }: Props) {
   const [tip, setTip] = useState<{ x: number; y: number; pl: Placement } | null>(null);
 
   const markup = useMemo(
-    () => renderMap({ placements, labels: 'key', highlight, notes, anim: true, vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
+    () => renderMap({ placements, labels: 'key', highlight, notes, anim: true, flows: false, decor: 'light', vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
     [placements, highlight, notes],
   );
   const miniMarkup = useMemo(
