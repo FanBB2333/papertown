@@ -1,8 +1,8 @@
 """World state: what stands where, and what each building shows when you open it.
 
-Static placements come from assets/manifest.json (generated from design/src). Mills are
-not static: every paper gets its own mill, built on the next free slot in the industry
-district when its idea hatches.
+Static placements come from assets/manifest.json (generated from design/src), except
+for the four core buildings: one mill is the base camp for every project, one depot
+holds every project's code, and the farm and the press sit beside the mill.
 """
 
 from __future__ import annotations
@@ -15,7 +15,11 @@ from .db import now
 if TYPE_CHECKING:
     from .town import Town
 
-MILL_SLOTS = [(1, 17), (0, 12), (3, 12), (0, 14), (3, 14), (12, 19), (12, 21), (8, 21)]
+# the core buildings the server places itself (the design has a mill per paper and a depot per repo)
+CANON = [
+    {"id": "mill", "type": "mill", "x": 1, "y": 17, "name": "造纸厂"},
+    {"id": "depot", "type": "depot", "x": 18, "y": 2, "name": "仓库", "label": "code", "accent": "#4f8a3d"},
+]
 # What each building actually runs on today, where that differs from the design label.
 TECH = {
     "mill": "Skills + agent 编队", "farm": "Skill · 电厂接口", "press": "Skill · latexmk", "market": "组织编译 · ROI 升降级",
@@ -54,7 +58,7 @@ CATALOG: dict[str, dict] = {
              "from": [["hatchery", "notes"], ["market", "notes"], ["depot", "crate"]], "to": [["farm", "draft"], ["press", "draft"]],
              "real": "一篇论文一座厂。放入一颗 idea，孵化通过后这里开工：方法设计师在厂里写方法草案，再交给实验农场、印刷厂和质检所。"},
     "hatchery": {"stations": [st("收蛋", "egg"), st("检索相似工作", "notes", "hatcher"), st("写撞车报告", "notes", "hatcher"),
-                              st("等你决定", "egg"), st("建厂", "draft")],
+                              st("等你决定", "egg"), st("立项", "draft")],
                  "skills": ["novelty-check"], "tools": ["library.search", "arxiv.search", "genealogy.expand"],
                  "from": [["cityhall", "egg"], ["library", "notes"], ["genealogy", "notes"]], "to": [["mill", "notes"]],
                  "real": "RAG（图书馆检索）+ MCP（arXiv 码头）+ novelty-check skill；结论由 skill 自带的 verdict.py 计算。"},
@@ -70,9 +74,10 @@ CATALOG: dict[str, dict] = {
            "skills": ["anonymity-check", "paper-review"], "tools": ["press.read"],
            "from": [["press", "pdf"]], "to": [["dock_arxiv", "pdf"], ["press", "tex"]],
            "real": "anonymity-check 的脚本先做格式检查，再由几位不同视角的审稿人（paper-review skill）打分；不通过就退回印刷厂改一轮。"},
-    "depot": {"stations": [st("入库", "crate"), st("上架", "crate"), st("盘点", "crate", "keeper"), st("出货", "crate")],
-              "skills": [], "tools": ["depot.search"], "from": [["dock_github", "crate"]], "to": [["workshop", "crate"]],
-              "real": "一座仓库是一个 repo：README 和代码文档进 RAG，方法设计师在这里找 baseline 实现和指标定义。"},
+    "depot": {"stations": [st("读简报", "draft", "keeper"), st("写代码", "crate", "keeper"), st("跑测试", "crate", "keeper"), st("提交实验", "energy")],
+              "skills": [], "tools": ["papertown_submit_job", "papertown_job_status", "depot.search"],
+              "from": [["mill", "draft"], ["dock_github", "crate"]], "to": [["farm", "crate"]],
+              "real": "每个项目在这里有一个写代码的 pi：读方法草案、写代码和测试，然后把实验提交到实验农场。另有几个示例仓库的文档进了 RAG，方法设计师在这里找 baseline。"},
     "workshop": {"stations": [st("接单", "crate"), st("修理", "crate", "keeper"), st("跑 CI", "crate"), st("送回仓库", "crate")],
                  "skills": [], "tools": [], "from": [["depot", "crate"]], "to": [["depot", "crate"]],
                  "real": "以后做：维护 agent 回 issue、改文档、开 PR，改动先给你确认。"},
@@ -122,31 +127,32 @@ class World:
         self.districts = m["districts"]
         if not self.db.val("select count(*) from buildings"):
             for p in m["placements"]:
-                if p["type"] == "mill":
-                    continue  # mills are built per paper
-                self.db.insert("buildings", {"id": p["id"], "type": p["type"], "x": p["x"], "y": p["y"], "name": p.get("name"),
-                                             "label": p.get("label"), "accent": p.get("accent"), "status": "idle", "created_at": now()})
+                if p["type"] in ("mill", "depot"):
+                    continue
+                self._place(p)
+        self._migrate()
+
+    def _place(self, p: dict) -> None:
+        self.db.insert("buildings", {"id": p["id"], "type": p["type"], "x": p["x"], "y": p["y"], "name": p.get("name"),
+                                     "label": p.get("label"), "accent": p.get("accent"), "status": "idle", "created_at": now()})
+
+    def _migrate(self) -> None:
+        """Towns from before the base camp had a mill per paper and a depot per repo: fold them."""
+        self.db.x("delete from buildings where type in ('mill', 'depot') and id not in ('mill', 'depot')")
+        self.db.x("update lines set mill_id = 'mill' where mill_id is not null and mill_id != 'mill'")
+        self.db.x("update stages set building = 'mill' where building like 'mill_%'")
+        for p in CANON:
+            if not self.db.one("select 1 from buildings where id = ?", p["id"]):
+                self._place(p)
 
     # ---------- placements ----------
 
     def name(self, b: dict) -> str:
         return b.get("name") or self.types[b["type"]]["name"]
 
-    def _buildings(self) -> list[dict]:
-        rows = self.db.q("select * from buildings order by created_at, id")
-        if not any(b["type"] == "mill" for b in rows):
-            rows.append(self._idle_mill())
-        return rows
-
-    def _idle_mill(self) -> dict:
-        # before the first idea hatches, an idle mill holds the first slot so the map always has one
-        x, y = MILL_SLOTS[0]
-        return {"id": "mill", "type": "mill", "x": x, "y": y, "name": "造纸厂", "label": None, "accent": None,
-                "line_id": None, "status": "idle", "virtual": True}
-
     def placements(self) -> list[dict]:
         out = []
-        for b in self._buildings():
+        for b in self.db.q("select * from buildings order by created_at, id"):
             core = b["type"] in CORE
             out.append({"id": b["id"], "type": b["type"], "x": b["x"], "y": b["y"], "name": self.name(b),
                         "label": b["label"], "accent": b["accent"], "line_id": b["line_id"], "status": b["status"],
@@ -158,29 +164,15 @@ class World:
         b = self.db.one("select * from buildings where id = ?", bid)
         if b:
             return b
-        if bid == "mill":  # the newest mill stands in for the type
-            return self.db.one("select * from buildings where type = 'mill' order by created_at desc limit 1") or self._idle_mill()
+        if bid.startswith("mill_"):  # links from before the base camp
+            return self.db.one("select * from buildings where id = 'mill'")
         return self.db.one("select * from buildings where type = ? order by id limit 1", bid)
-
-    def build_mill(self, line: dict) -> dict:
-        taken = {(b["x"], b["y"]) for b in self.db.q("select x, y from buildings where type = 'mill'")}
-        slot = next((s for s in MILL_SLOTS if s not in taken), None)
-        if slot is None:  # town is full: the oldest finished paper's mill makes room
-            old = self.db.one("select b.* from buildings b join lines l on l.id = b.line_id where b.type = 'mill'"
-                              " and l.status in ('done', 'dropped') order by b.created_at limit 1")
-            if not old:
-                raise RuntimeError("工业区没有空地了，先结束一条流水线")
-            self.db.x("delete from buildings where id = ?", old["id"])
-            slot = (old["x"], old["y"])
-        bid = f"mill_{line['seq']}"
-        self.db.insert("buildings", {"id": bid, "type": "mill", "x": slot[0], "y": slot[1], "name": f"造纸厂 #{line['seq']}",
-                                     "line_id": line["id"], "status": "busy", "created_at": now()})
-        self.town.bus.publish("world", placements=self.placements(), built=bid)
-        return self.get(bid)
 
     def set_status(self, bid: str, status: str, line_id: str | None = None) -> None:
         b = self.get(bid)
-        if not b or b.get("virtual") or b["status"] == status:
+        if b and b["type"] == "mill":  # the base camp is busy while any project runs
+            status = "busy" if status == "busy" or self.db.val("select 1 from lines where status = 'running' and id != ?", line_id or "") else "idle"
+        if not b or b["status"] == status:
             return
         self.db.update("buildings", {"id": b["id"]}, status=status)
         self.town.bus.publish("building", id=b["id"], status=status, line_id=line_id)
@@ -198,7 +190,7 @@ class World:
                 "later": meta.get("later", False), "live": b["type"] in LIVE, "status": b["status"],
                 "skills": cat["skills"], "tools": cat["tools"], "real": cat["real"],
                 "from": self._goods(cat["from"]), "to": self._goods(cat["to"])}
-        if b["type"] == "mill" and not b.get("virtual"):
+        if b["type"] == "mill":
             return base | self._mill(b)
         active = self.db.one("select s.*, l.title, l.seq from stages s join lines l on l.id = s.line_id"
                              " where s.building = ? and s.status = 'run' order by s.started_at desc limit 1", b["type"])
@@ -212,18 +204,12 @@ class World:
                 s["st"] = "done"
         job = self._job(b, active)
         return base | {"job": job, "stations": stations, "active_line": active["line_id"] if active else None,
-                       "repo": self.town.depots.get(b["id"]) if b["type"] == "depot" else None}
+                       "repos": self.town.depots.all() if b["type"] == "depot" else None}
 
     def _goods(self, pairs: list) -> list[list[str]]:
         out = []
         for target, item in pairs:
-            if target == "depot":
-                out += [[r["id"], item] for r in self.town.depots.all()]
-            elif target == "mill":
-                m = self.get("mill")
-                if m:
-                    out.append([m["id"], item])
-            elif self.get(target):
+            if self.get(target):
                 out.append([target, item])
         return out
 
@@ -235,7 +221,7 @@ class World:
         if t not in LIVE:
             return "未接入"
         if active:
-            return f"造纸厂 #{active['seq']}「{active['title']}」"
+            return f"项目 #{active['seq']}「{active['title']}」"
         if t == "library":
             return f"馆藏 {town.library.count()} 篇"
         if t == "customs":
@@ -256,14 +242,13 @@ class World:
         if t == "power_sim":
             return town.plant.status()["summary"]
         if t == "depot":
-            r = town.depots.get(b["id"]) or {}
-            return f"{r.get('issues', 0)} 个 open issue"
-        if t == "mill":
-            return "空闲 · 放入一颗 idea 后开工"
+            n = self.db.val("select count(*) from agents where role = 'coder' and status in ('idle', 'working', 'starting')") or 0
+            return f"{n} 个代码 pi 在线"
         if t == "newspaper":
             return "运行状态页"
         return "空闲"
 
     def _mill(self, b: dict) -> dict:
-        line = self.town.pipeline.snapshot(b["line_id"]) if b["line_id"] else None
-        return {"job": line["title"] if line else "空闲", "line": line}
+        n = self.db.val("select count(*) from lines where status = 'running'") or 0
+        total = self.db.val("select count(*) from lines where status != 'dropped'") or 0
+        return {"job": f"{n} 个项目在跑，共 {total} 个" if total else "空闲 · 放入一颗 idea 后开工", "line": None, "stations": []}

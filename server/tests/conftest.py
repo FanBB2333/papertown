@@ -13,7 +13,7 @@ def make_settings(tmp: Path, **kw) -> Settings:
     if not skills.exists():
         shutil.copytree(SERVER_DIR / "skills", skills)
     base = dict(provider="mock", data_dir=tmp / "var", skills_dir=skills, arxiv_port=False, sim_gpu_seconds=0.05,
-                compile_tex=False)
+                compile_tex=False, pi_bin=str(tmp / "no-pi"))  # tests never start a real pi
     return Settings(**(base | kw))
 
 

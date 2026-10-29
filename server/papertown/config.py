@@ -59,6 +59,14 @@ class Settings:
     # seconds a simulated GPU job takes; tests set 0
     sim_gpu_seconds: float = field(default_factory=lambda: float(_env("PAPERTOWN_SIM_GPU_SECONDS", "6")))
     compile_tex: bool = field(default_factory=lambda: _env("PAPERTOWN_COMPILE_TEX", "1") != "0")
+    # pi agents in the press and the depot; they use pi's own model settings and login
+    pi_bin: str = field(default_factory=lambda: _env("PAPERTOWN_PI_BIN"))
+    pi_model: str = field(default_factory=lambda: _env("PAPERTOWN_PI_MODEL"))
+    tmux_bin: str = field(default_factory=lambda: _env("PAPERTOWN_TMUX_BIN"))
+    # where the bridge extension inside each pi reaches this server; `serve` sets it
+    url: str = field(default_factory=lambda: _env("PAPERTOWN_URL", "http://127.0.0.1:8000"))
+    # local job runner: how many commands run at once
+    local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 
     def __post_init__(self) -> None:
         defaults = {
@@ -78,6 +86,14 @@ class Settings:
     @property
     def press_dir(self) -> Path:
         return self.data_dir / "press"
+
+    @property
+    def projects_dir(self) -> Path:
+        return self.data_dir / "projects"
+
+    @property
+    def jobs_dir(self) -> Path:
+        return self.data_dir / "jobs"
 
     @property
     def offline(self) -> bool:

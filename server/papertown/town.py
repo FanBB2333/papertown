@@ -7,12 +7,14 @@ import json
 import uuid
 from pathlib import Path
 
+from .agents import Agents
 from .bank import Bank
 from .compute import Job, SimulatedPlant
 from .config import Settings
 from .db import DB, now
 from .depots import Depots
 from .events import EventBus
+from .farm import Farm, summarize
 from .graph import Genealogy
 from .library import Embedder, Library
 from .llm import make_provider
@@ -43,6 +45,8 @@ class Town:
         self.plant = SimulatedPlant(self.s.sim_gpu_seconds, on_change=self._job_changed)
         self.press = Press(self.s.press_dir, self.library, self.s.compile_tex)
         self.world = World(self)
+        self.farm = Farm(self)
+        self.agents = Agents(self)
         self.tools = ToolRegistry()
         self.mcp = McpHub(self)
         self.pipeline = Pipeline(self)
@@ -52,6 +56,8 @@ class Town:
 
     def start(self) -> None:
         self.pipeline.recover()
+        self.farm.recover()
+        self.agents.reconcile()
         self.mcp.start()
 
     def stop(self) -> None:
@@ -102,7 +108,39 @@ class Town:
         papers = [json.loads(line) for line in SEED.read_text(encoding="utf-8").splitlines() if line.strip()]
         return len(self.ingest(papers, "seed"))
 
+    def brief(self, line_id: str, role: str = "") -> str:
+        """Everything a pi agent should know about its project, as plain text."""
+        ln = self.pipeline.line(line_id)
+        out = [f"项目 #{ln['seq']}：{ln['title']}", f"状态：{ln['status']}，当前工序：{ln['stage']}", "", "## idea", ln["idea"]]
+        report = self.pipeline.item(line_id, "hatch") or {}
+        if report.get("gap"):
+            out += ["", "## 查重结论", f"{report.get('verdict', '')}：{report['gap']}"]
+        draft = self.pipeline.item(line_id, "method")
+        if draft:
+            out += ["", "## 方法草案", f"题目：{draft.get('title', '')}", f"问题：{draft.get('problem', '')}"]
+            out += [f"- 机制：{m}" for m in draft.get("mechanism") or []]
+            out += [f"- baseline：{b.get('name')}（{b.get('source', '')}）" for b in draft.get("baselines") or []]
+            if draft.get("datasets"):
+                out.append(f"- 数据 / 任务：{', '.join(draft['datasets'])}")
+            if draft.get("metrics"):
+                out.append(f"- 指标：{', '.join(draft['metrics'])}")
+        else:
+            out += ["", "## 方法草案", "还没有。孵化通过、造纸厂开工后会写出来。"]
+        jobs = self.farm.list(line_id, 20)
+        if jobs:
+            out += ["", "## 实验农场里的任务"]
+            out += [f"- {j['id']} {j['name']}（{j['backend']}）：{j['status']} {j['progress']}%"
+                    + (f"，{summarize(j)}" if j["status"] == "done" else "") for j in jobs]
+        review = self.pipeline.item(line_id, "review") or {}
+        if review.get("feedback"):
+            out += ["", "## 审稿意见"] + [f"- {x}" for x in review["feedback"][:8]]
+        if role == "writer":
+            files = [n for n in ("main.tex", "refs.bib", "main.pdf") if (self.press.dir(line_id) / n).exists()]
+            out += ["", "## 论文目录", "已有：" + ("、".join(files) if files else "还没有文件")]
+        return "\n".join(out)
+
     def _job_changed(self, job: Job) -> None:
+        self.farm.sync_sim(job)
         self.bus.publish("power", job={"id": job.id, "line_id": job.line_id, "status": job.status, "progress": job.progress},
                          plant=self.plant.status())
         if job.line_id:

@@ -1,11 +1,13 @@
 // The world map (layout A): the shared isometric SVG renderer, with drag to pan, wheel
 // to zoom, a hover card per building, and a minimap that jumps on click. Kept quiet on
-// purpose: no goods flows, few trees, and the core buildings highlighted.
+// purpose: no goods flows, few trees, and the core buildings highlighted. You walk it as
+// a small figure (useAvatar); a click on a building goes straight inside.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { renderMap } from '@design/world.js';
 import type { Placement } from '../api';
+import { useAvatar } from './useAvatar';
 
 const BASE = { x: -790, y: -150, w: 1580, h: 950 };
 const MIN_W = 420, MAX_W = BASE.w * 1.5;
@@ -14,10 +16,11 @@ interface Props {
   placements: Placement[];
   highlight: string | null;
   notes: Record<string, string>;
+  active: boolean;
   onOpen: (id: string) => void;
 }
 
-export function WorldMap({ placements, highlight, notes, onOpen }: Props) {
+export function WorldMap({ placements, highlight, notes, active, onOpen }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const mini = useRef<HTMLDivElement>(null);
   const vb = useRef({ ...BASE });
@@ -90,6 +93,25 @@ export function WorldMap({ placements, highlight, notes, onOpen }: Props) {
   // a new map markup replaces the <svg>: carry the current view over
   useLayoutEffect(apply, [markup, miniMarkup]);
 
+  // keep the walking figure inside the middle of the view
+  function follow(sx: number, sy: number, k: number) {
+    const v = vb.current, mx = v.w * 0.3, my = v.h * 0.3;
+    let tx = v.x, ty = v.y;
+    if (sx < v.x + mx) tx = sx - mx; else if (sx > v.x + v.w - mx) tx = sx - v.w + mx;
+    if (sy < v.y + my) ty = sy - my; else if (sy > v.y + v.h - my) ty = sy - v.h + my;
+    if (tx === v.x && ty === v.y) return;
+    v.x += (tx - v.x) * k;
+    v.y += (ty - v.y) * k;
+    apply();
+  }
+
+  const avatar = useAvatar({ host, placements, markup, active, onEnter: onOpen, follow });
+  useEffect(() => {
+    const s = svg();
+    s?.querySelectorAll('.bld.is-near').forEach(g => g.classList.remove('is-near'));
+    if (avatar.near) s?.querySelector(`.bld[data-id="${avatar.near.id}"]`)?.classList.add('is-near');
+  }, [avatar.near, markup]);
+
   useEffect(() => {
     fit();
     const el = host.current!;
@@ -128,7 +150,11 @@ export function WorldMap({ placements, highlight, notes, onOpen }: Props) {
 
   function onClick(e: React.MouseEvent) {
     const g = (e.target as Element).closest('[data-id]');
-    if (g && !drag.current?.moved) onOpen(g.getAttribute('data-id')!);
+    if (g && !drag.current?.moved) {
+      const id = g.getAttribute('data-id')!;
+      avatar.goTo(id);
+      onOpen(id);
+    }
   }
 
   function onMove(e: React.MouseEvent) {
@@ -163,7 +189,7 @@ export function WorldMap({ placements, highlight, notes, onOpen }: Props) {
         <div className="ptip pnl" style={{ left: tip.x, top: tip.y }}>
           <b>{tip.pl.name}</b><span>{DISTRICTS[b.district]?.name}</span>
           <p>{b.rep}</p>
-          <em>{tip.pl.live ? `${tip.pl.tech} · 点击查看流水线` : '还没接入 · 点击查看计划'}</em>
+          <em>{tip.pl.live ? `${tip.pl.tech} · 点击进入` : '还没接入 · 点击查看计划'}</em>
         </div>
       )}
     </>

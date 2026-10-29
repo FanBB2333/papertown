@@ -73,12 +73,25 @@ create table if not exists repo_docs(id integer primary key autoincrement, repo_
 create virtual table if not exists repo_fts using fts5(
   path, text, content='repo_docs', content_rowid='id', tokenize='porter unicode61');
 
+-- experiments on the farm: simulated pipeline runs and jobs the coding agents submit
+create table if not exists jobs(
+  id text primary key, line_id text, name text, backend text, status text, progress integer default 0,
+  command text, cwd text, config text, result text, note text, submitted_by text,
+  created_at text, started_at text, ended_at text);
+-- pi agents (coder in the depot, writer in the press) and the farm's monitors, one per project
+create table if not exists agents(
+  id text primary key, line_id text, role text, status text, tmux text, cwd text, token text,
+  model text, cost real default 0, created_at text, updated_at text);
+create table if not exists agent_events(id integer primary key autoincrement, agent_id text, ts text, kind text, data text);
+
+create index if not exists agent_events_agent on agent_events(agent_id, id);
+create index if not exists jobs_line on jobs(line_id, created_at);
 create index if not exists trace_line on trace(line_id, id);
 create index if not exists messages_line on messages(line_id, id);
 create index if not exists ledger_ts on ledger(ts);
 """
 
-JSON_COLS = {"team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data"}
+JSON_COLS = {"team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result"}
 
 
 def now() -> str:

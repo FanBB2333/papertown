@@ -10,13 +10,15 @@ import json
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import stages, status as status_mod
+from .agents import AgentError, ROLES
 from .config import Settings
+from .farm import FarmError, summarize
 from .pipeline import LineError
 from .town import Town
 
@@ -37,6 +39,37 @@ class AdjustIn(BaseModel):
 class ChatIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     building: str | None = None
+
+
+class AgentIn(BaseModel):
+    line_id: str
+    role: str
+
+
+class SayIn(BaseModel):
+    text: str = Field(min_length=1, max_length=20000)
+
+
+class JobIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    command: str = Field(min_length=1, max_length=4000)
+    backend: str = "local"
+    line_id: str | None = None
+
+
+class BridgeIn(BaseModel):
+    events: list[dict]
+
+
+def job_text(j: dict, log: str = "") -> str:
+    out = f"{j['id']} {j['name']}（{j['backend']}）：{j['status']} {j['progress']}%"
+    if j.get("note"):
+        out += f"，{j['note']}"
+    if j["status"] == "done":
+        out += f"\n{summarize(j)}"
+    if log:
+        out += f"\n--- 日志最后几行 ---\n{log}"
+    return out
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -162,6 +195,128 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/status")
     def status():
         return status_mod.status(town)
+
+    # ---------- the farm ----------
+
+    def farm(fn, *args):
+        try:
+            return fn(*args)
+        except FarmError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @app.get("/api/jobs")
+    def jobs(line_id: str | None = None):
+        return {"jobs": town.farm.list(line_id), "backends": town.farm.backends(), "plant": town.plant.status()}
+
+    @app.get("/api/jobs/{job_id}")
+    def job(job_id: str, tail: int = 200):
+        j = town.farm.get(job_id, tail=tail)
+        if not j:
+            raise HTTPException(404, "没有这个任务")
+        return j
+
+    @app.post("/api/jobs")
+    def job_submit(body: JobIn):
+        return farm(town.farm.submit, body.line_id, body.name, body.command, body.backend, "you")
+
+    @app.post("/api/jobs/{job_id}/cancel")
+    def job_cancel(job_id: str):
+        return farm(town.farm.cancel, job_id)
+
+    # ---------- agents ----------
+
+    def agents(fn, *args):
+        try:
+            return fn(*args)
+        except AgentError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @app.get("/api/agents")
+    def agent_roster(role: str):
+        if role not in ROLES:
+            raise HTTPException(400, "没有这个岗位")
+        return {"roster": town.agents.roster(role), "available": town.agents.available()}
+
+    @app.post("/api/agents")
+    def agent_open(body: AgentIn):
+        a = agents(town.agents.ensure, body.line_id, body.role)
+        return town.agents.public(a)
+
+    @app.get("/api/agents/{agent_id}")
+    def agent(agent_id: str, after: int = 0):
+        a = town.agents.get(agent_id)
+        if not a:
+            raise HTTPException(404, "没有这个员工")
+        return {"agent": town.agents.public(a), "events": town.agents.events(agent_id, after)}
+
+    @app.post("/api/agents/{agent_id}/start")
+    def agent_start(agent_id: str):
+        return agents(town.agents.start, agent_id)
+
+    @app.post("/api/agents/{agent_id}/stop")
+    def agent_stop(agent_id: str):
+        return agents(town.agents.stop, agent_id)
+
+    @app.post("/api/agents/{agent_id}/say")
+    def agent_say(agent_id: str, body: SayIn):
+        return agents(town.agents.say, agent_id, body.text)
+
+    @app.post("/api/agents/{agent_id}/brief")
+    def agent_brief(agent_id: str):
+        text = agents(town.agents.brief, agent_id)
+        return agents(town.agents.say, agent_id, "这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + text)
+
+    @app.post("/api/agents/{agent_id}/abort")
+    def agent_abort(agent_id: str):
+        agents(town.agents.abort, agent_id)
+        return {"ok": True}
+
+    # ---------- the bridge inside each pi ----------
+
+    def bridged(agent_id: str, token: str | None) -> dict:
+        try:
+            return town.agents.check(agent_id, token)
+        except AgentError as e:
+            raise HTTPException(403, str(e)) from e
+
+    @app.post("/api/bridge/{agent_id}/events")
+    def bridge_events(agent_id: str, body: BridgeIn, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        town.agents.ingest(agent_id, body.events)
+        return {"ok": True}
+
+    @app.get("/api/bridge/{agent_id}/inbox")
+    async def bridge_inbox(agent_id: str, wait: float = 20, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        t0 = asyncio.get_running_loop().time()
+        while not town.agents.has_mail(agent_id) and asyncio.get_running_loop().time() - t0 < min(wait, 25):
+            await asyncio.sleep(0.25)
+        return {"messages": town.agents.take(agent_id)}
+
+    @app.get("/api/bridge/{agent_id}/brief")
+    def bridge_brief(agent_id: str, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        return {"text": town.brief(a["line_id"], a["role"])}
+
+    @app.post("/api/bridge/{agent_id}/jobs")
+    def bridge_submit(agent_id: str, body: JobIn, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        return farm(town.farm.submit, a["line_id"], body.name, body.command, body.backend or "local", agent_id, a["cwd"])
+
+    @app.get("/api/bridge/{agent_id}/jobs")
+    def bridge_jobs(agent_id: str, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        rows = town.farm.list(a["line_id"], 30)
+        return {"jobs": rows, "text": "\n".join(job_text(j) for j in rows) or "这个项目还没有任务。"}
+
+    @app.get("/api/bridge/{agent_id}/jobs/{job_id}")
+    def bridge_job(agent_id: str, job_id: str, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        j = town.farm.get(job_id)
+        if not j or j["line_id"] != a["line_id"]:
+            raise HTTPException(404, "这个项目没有这个任务")
+        log = town.farm.log(job_id, 30)
+        return {"job": j, "text": job_text(j, log)}
 
     @app.get("/api/skills")
     def skills():

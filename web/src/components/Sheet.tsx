@@ -108,9 +108,9 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   return null;
 }
 
-function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, sheet }: {
+export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, real }: {
   line: Line; typeOf: (id: string) => string; onOpen: (id: string) => void; onHatch: (id: string) => void;
-  onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; sheet: SheetData;
+  onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; real: string;
 }) {
   const outputs = line.outputs ?? {};
   const done = Object.keys(outputs);
@@ -128,7 +128,7 @@ function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, 
       }))} />
       <section className="detail">
         <div className="pnl">
-          <h4>{line.stages.indexOf(cur) + 1}. {cur.name} · {{ done: '完成', run: '进行中', wait: '等你决定', todo: '排队' }[cur.status]}</h4>
+          <h4>{line.stages.findIndex(s => s.key === cur.key) + 1}. {cur.name} · {{ done: '完成', run: '进行中', wait: '等你决定', todo: '排队' }[cur.status]}</h4>
           <dl className="kv">
             <dt>员工</dt><dd>{cur.workers.length ? cur.workers.map(w => <span key={w.id} className="w"><Ava role={w.role} level={w.level} code={w.id} />{w.title} Lv.{w.level}</span>) : <span className="muted">不需要 agent</span>}</dd>
             <dt>预算</dt><dd><div className="bar"><i style={{ width: `${Math.min(100, 100 * line.spent / line.budget)}%` }} /></div>${line.spent.toFixed(4)} / ${line.budget.toFixed(2)}</dd>
@@ -137,7 +137,7 @@ function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, 
             <dt>状态</dt><dd>{line.note ?? cur.note ?? ({ waiting: '撞车报告已经发到对话框，等你决定', done: '已出厂' } as Record<string, string>)[line.status] ?? line.status}</dd>
           </dl>
           <div className="btns" style={{ marginTop: 12 }}>
-            {line.status === 'waiting' && <><button className="btn pri" onClick={() => onHatch(line.id)}>孵化并建厂</button><button className="btn" onClick={() => onAdjust(line.id)}>调整 idea</button></>}
+            {line.status === 'waiting' && <><button className="btn pri" onClick={() => onHatch(line.id)}>孵化并立项</button><button className="btn" onClick={() => onAdjust(line.id)}>调整 idea</button></>}
             {['paused', 'failed'].includes(line.status) && <button className="btn pri" onClick={() => onResume(line.id)}>继续</button>}
             <button className="btn" onClick={onAsk}>问问这里的员工</button>
           </div>
@@ -149,7 +149,7 @@ function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, 
         </div>
         <div className="pnl">
           <h4>{next ? `下一站 · ${next.name}` : '已出厂'}</h4>
-          <p className="real">{next ? `${sheet.real}` : '论文和源码都在下面，可以直接下载。'}</p>
+          <p className="real">{next ? real : '论文和源码都在下面，可以直接下载。'}</p>
           {line.files.length > 0 && <div className="btns">{line.files.map(f => <a key={f} className={`btn${f === 'main.pdf' ? ' pri' : ''}`} href={fileUrl(line.id, f)} target="_blank" rel="noreferrer">{f}</a>)}</div>}
           {next && <div className="btns" style={{ marginTop: 10 }}><button className="btn" onClick={() => onOpen(next.building)}>去{next.name}所在的建筑</button></div>}
         </div>
@@ -211,7 +211,7 @@ export function Sheet(p: Props) {
         </div>
       </header>
       {line ? (
-        <MillDetail line={line} typeOf={typeOf} sheet={s} onOpen={p.onOpen} onHatch={p.onHatch} onResume={p.onResume}
+        <MillDetail line={line} typeOf={typeOf} real={s.real} onOpen={p.onOpen} onHatch={p.onHatch} onResume={p.onResume}
           onAdjust={p.onAdjust} onAsk={() => p.onAsk(s.id, s.name)} />
       ) : (
         <>
@@ -235,21 +235,7 @@ export function Sheet(p: Props) {
               <div className="io-list">{goods(s.from, '来自')}{goods(s.to, '送往')}</div>
             </div>
             <div className="pnl">
-              {s.repo ? (
-                <>
-                  <h4>仓库信息 {s.repo.sample && <span className="chip">示例数据</span>}</h4>
-                  <dl className="kv">
-                    <dt>仓库</dt><dd>{s.repo.repo}</dd>
-                    <dt>简介</dt><dd>{s.repo.desc}</dd>
-                    <dt>语言</dt><dd>{s.repo.lang} · ★ {s.repo.stars}</dd>
-                    <dt>Issue</dt><dd>{s.repo.issues} 个 open · {s.repo.prs} 个 PR</dd>
-                    <dt>Release</dt><dd>{s.repo.release} · {s.repo.updated}更新</dd>
-                  </dl>
-                  <p className="real muted">{s.real}{s.repo.sample ? '这是示例仓库，接入 GitHub 端口后换成真实仓库。' : ''}</p>
-                </>
-              ) : (
-                <><h4>怎么实现的</h4><p className="real">{s.real}</p></>
-              )}
+              <h4>怎么实现的</h4><p className="real">{s.real}</p>
             </div>
           </section>
         </>

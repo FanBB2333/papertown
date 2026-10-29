@@ -1,14 +1,15 @@
-// Papertown: the world map is home (A). Chat slides in from the side (B), a building
-// opens as its production line (C), and the status view (D) sits beside the world.
+// Papertown: the world map is home (A), walked as a small figure. Chat slides in from
+// the side (B), a building opens full screen from the inside (C), and the status view
+// (D) sits beside the world.
 //
-//   #view=status   #open=hatchery   #chat   — open a state directly (screenshots, demos)
+//   #view=status   #open=farm   #open=depot&line=line_1   #chat   — open a state directly
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
 import { Item, Logo, Sprite } from './art';
 import { Drawer, type Composer, type Tab } from './components/Drawer';
-import { Sheet } from './components/Sheet';
+import { Interior } from './components/Interior';
 import { StatusView } from './components/StatusView';
 import { WorldMap } from './components/WorldMap';
 
@@ -36,13 +37,18 @@ export function App() {
   const [tab, setTab] = useState<Tab>('chat');
   const [composer, setComposer] = useState<Composer>({ kind: 'idea' });
   const [focusKey, setFocusKey] = useState(0);
-  const [sheet, setSheet] = useState<string | null>(hp.get('open'));
+  const [sheet, setSheetId] = useState<string | null>(hp.get('open'));
+  const [focus, setFocus] = useState<string | null>(hp.get('line'));
   const [legend, setLegend] = useState(false);
   const [tick, setTick] = useState(0);
   const [online, setOnline] = useState(true);
   const [asking, setAsking] = useState(false);
   const { toasts, push } = useToasts();
   const refresh = useRef<number>();
+  const setSheet = useCallback((id: string | null, lineId?: string | null) => {
+    setSheetId(id);
+    setFocus(lineId ?? null);
+  }, []);
 
   const load = useCallback(() => {
     clearTimeout(refresh.current);
@@ -71,8 +77,6 @@ export function App() {
         const i = ls.findIndex(l => l.id === e.line.id);
         return i < 0 ? [e.line, ...ls] : ls.map(l => l.id === e.line.id ? { ...l, ...e.line } : l);
       });
-    } else if (e.type === 'world' && e.built) {
-      push('一座新的造纸厂建好了');
     } else if (e.type === 'skills') {
       if (e.added?.length) push(`新 skill 上岗：${e.added.join('、')}`);
       if (e.removed?.length) push(`skill 下线：${e.removed.join('、')}`);
@@ -86,18 +90,10 @@ export function App() {
     if (ok) load();
   }), [load, push]);
 
-  // keep the newest mill in view: highlight it while it is working
-  const highlight = useMemo(() => {
-    const busy = world?.running.find(r => r.status === 'running' && r.mill_id);
-    return busy?.mill_id ?? null;
-  }, [world]);
   const notes = useMemo(() => {
     const n: Record<string, string> = {};
-    for (const r of world?.running ?? []) {
-      if (r.mill_id) n[r.mill_id] = r.stage;
-      else if (r.status === 'hatching') n.hatchery = '查重中';
-      else if (r.status === 'waiting') n.hatchery = '等你决定';
-    }
+    const running = world?.running.filter(r => r.status === 'running').length ?? 0;
+    if (running) n.mill = `${running} 个项目在跑`;
     return n;
   }, [world]);
 
@@ -140,12 +136,11 @@ export function App() {
     return () => removeEventListener('keydown', key);
   }, [sheet, chatOpen]);
 
-  // anything with data-open opens that building (stations, goods, list rows)
+  // anything with data-open opens that building (stations, goods, list rows); data-line picks the project
   function onRootClick(e: React.MouseEvent) {
     const t = e.target as Element;
-    if (t.classList.contains('p-modal')) { setSheet(null); return; }
     const el = t.closest('[data-open]');
-    if (el && !t.closest('.p-world')) setSheet(el.getAttribute('data-open'));
+    if (el && !t.closest('.p-world')) setSheet(el.getAttribute('data-open'), el.getAttribute('data-line'));
   }
 
   const hud = world?.hud;
@@ -165,7 +160,8 @@ export function App() {
 
   return (
     <div className={`proto la glow theme-paper${chatOpen ? ' chat-open' : ''}`} data-mode={view} onClick={onRootClick}>
-      {world && <WorldMap placements={world.placements} highlight={highlight} notes={notes} onOpen={setSheet} />}
+      {world && <WorldMap placements={world.placements} highlight={null} notes={notes} active={!sheet && view === 'world' && !chatOpen}
+        onOpen={id => setSheet(id)} />}
       <StatusView tick={tick} active={view === 'status'} />
 
       <header className="hud pnl">
@@ -202,7 +198,7 @@ export function App() {
         <h4>进行中</h4>
         {!world?.running.length && <p className="muted small rn-empty">还没有项目。点左下角放入一颗 idea。</p>}
         {world?.running.map(r => (
-          <div key={r.id} className="rn" data-open={r.mill_id ?? r.building}>
+          <div key={r.id} className="rn" data-open={r.mill_id ?? r.building} data-line={r.id}>
             <Sprite type={world.placements.find(p => p.id === (r.mill_id ?? r.building))?.type ?? 'hatchery'} />
             <div>
               <b>#{r.seq} · {r.title}</b>
@@ -223,12 +219,11 @@ export function App() {
         onHatch={id => act(() => api.hatch(id))} />
 
       {sheet && (
-        <div className="p-modal">
-          <Sheet id={sheet} tick={tick} placements={world?.placements ?? []} onClose={() => setSheet(null)} onOpen={setSheet}
-            onAsk={(id, name) => openChat({ kind: 'ask', building: id, name }, true)}
-            onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
-            onAdjust={id => openChat({ kind: 'adjust', lineId: id }, true)} />
-        </div>
+        <Interior id={sheet} focus={focus} tick={tick} placements={world?.placements ?? []} lines={lines} onClose={() => setSheet(null)}
+          onOpen={(id, lineId) => setSheet(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
+          onAsk={(id, name) => openChat({ kind: 'ask', building: id, name }, true)}
+          onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
+          onAdjust={id => openChat({ kind: 'adjust', lineId: id }, true)} toast={push} />
       )}
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast pnl">{t.text}</div>)}</div>
     </div>

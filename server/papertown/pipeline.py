@@ -200,17 +200,16 @@ class Pipeline:
         ids = [w for ws in plan["team"].values() for w in ws]
         self._set_line(line_id, status="running", plan=plan)
         self._stage(line_id, "team", "run", workers=ids)
-        mill = self.town.world.build_mill(ln)
-        self._set_line(line_id, mill_id=mill["id"])
-        self.db.update("stages", {"line_id": line_id, "idx": INDEX["method"]}, building=mill["id"])
+        self._set_line(line_id, mill_id="mill")
+        self.town.world.set_status("mill", "busy", line_id)
         self.town.save_item(line_id, "notes", "team", "market", "编队方案", plan)
         workers = {w["id"]: w for w in self.town.market.all()}
         def who(i: str) -> str:
             return f"{title(workers[i])} Lv.{workers[i]['level']}"
 
         roster = "；".join(f"{NAMES[k]}：{', '.join(who(i) for i in v)}" for k, v in plan["team"].items())
-        self._say(line_id, None, f"{mill['name']} 在工业区建起来了。人才市场编队：{roster}。{plan['reason']}。", kind="team",
-                  mill=mill["id"], team=plan["team"])
+        self._say(line_id, None, f"项目 #{ln['seq']} 在造纸厂立项。人才市场编队：{roster}。{plan['reason']}。", kind="team",
+                  mill="mill", team=plan["team"])
         self._stage(line_id, "team", "done")
         self._spawn(line_id, self._produce)
         return self.snapshot(line_id)
@@ -232,7 +231,7 @@ class Pipeline:
         for ln in self.db.q("select id from lines where status in ('running', 'hatching')"):
             self._set_line(ln["id"], status="paused", note="服务重启，点「继续」从当前工序接着跑")
             self.db.x("update stages set status = 'todo', pct = 0 where line_id = ? and status = 'run'", ln["id"])
-        self.db.x("update buildings set status = 'idle' where status = 'busy' and type != 'mill'")
+        self.db.x("update buildings set status = 'idle' where status = 'busy'")
 
     # ---------- production ----------
 

@@ -16,9 +16,8 @@ def test_idea_to_paper_offline(town):
     assert all(0 <= s["similarity"] <= 1 for s in report["similar"])
 
     snap = town.pipeline.hatch(line["id"])
-    assert snap["mill_id"] == "mill_1"
-    mill = town.world.get("mill_1")
-    assert (mill["x"], mill["y"]) == (1, 17)
+    assert snap["mill_id"] == "mill"  # one base camp for every project
+    assert [b["id"] for b in town.db.q("select id from buildings where type = 'mill'")] == ["mill"]
     ln = wait_for(town, line["id"], {"done", "failed"})
     assert ln["status"] == "done", ln["note"]
 
@@ -28,6 +27,10 @@ def test_idea_to_paper_offline(town):
     assert {"idea", "hatch", "team", "method", "exp", "write", "review", "ship"} <= outputs
     table = town.pipeline.item(line["id"], "exp")
     assert table["simulated"] is True and table["rows"][-1]["method"] == "Ours"
+    jobs = town.farm.list(line["id"])
+    assert [(j["backend"], j["status"]) for j in jobs] == [("sim", "done")]  # mirrored onto the farm board
+    notes = town.agents.events(f"monitor-{line['id']}")
+    assert notes and "跑完了" in notes[-1]["data"]["text"]
     assert "main.tex" in snap["files"] and "refs.bib" in snap["files"]
     assert "Anonymous Authors" in town.press.read(line["id"])
 

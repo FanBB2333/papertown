@@ -43,9 +43,31 @@ export interface Station { name: string; out: string; team: string[]; st: 'todo'
 export interface Sheet {
   id: string; type: string; name: string; label: string | null; accent: string | null; district: string; rep: string;
   tech: string; later: boolean; live: boolean; status: string; job: string; stations?: Station[]; skills: string[];
-  tools: string[]; real: string; from: [string, string][]; to: [string, string][]; repo?: any; line?: Line | null;
+  tools: string[]; real: string; from: [string, string][]; to: [string, string][]; repos?: any[] | null; line?: Line | null;
   active_line?: string | null;
 }
+
+export type AgentRole = 'coder' | 'writer' | 'monitor';
+export type AgentStatus = 'stopped' | 'starting' | 'idle' | 'working' | 'error' | 'watching';
+
+export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note'; data: any }
+
+export interface Agent {
+  id: string; line_id: string; role: AgentRole; status: AgentStatus; tmux: string | null; cwd: string | null;
+  model: string | null; cost: number; attach: string | null; name: string; last: AgentEvent | null; updated_at: string;
+}
+
+export interface ProjectRef { id: string; seq: number; title: string; status: string; stage: string }
+export interface RosterRow { line: ProjectRef; agent: Agent | null }
+export interface Roster { roster: RosterRow[]; available: { ok: boolean; note: string; pi: string | null; tmux: string | null } }
+
+export interface Job {
+  id: string; line_id: string | null; name: string; backend: string; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  progress: number; command: string | null; cwd: string | null; result: any; note: string | null; submitted_by: string | null;
+  created_at: string; started_at: string | null; ended_at: string | null; log?: string;
+}
+export interface Backend { id: string; name: string; ready: boolean; note: string; active: number }
+export interface JobBoard { jobs: Job[]; backends: Backend[]; plant: Hud['plant'] }
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, {
@@ -69,17 +91,41 @@ export const api = {
   adjust: (id: string, text: string) => call<Line>('POST', `/api/lines/${id}/adjust`, { text }),
   resume: (id: string) => call<Line>('POST', `/api/lines/${id}/resume`),
   ask: (text: string, building: string) => call<{ ok: boolean }>('POST', '/api/chat', { text, building }),
+  jobs: (lineId?: string) => call<JobBoard>('GET', `/api/jobs${lineId ? `?line_id=${lineId}` : ''}`),
+  job: (id: string) => call<Job>('GET', `/api/jobs/${id}?tail=400`),
+  cancelJob: (id: string) => call<Job>('POST', `/api/jobs/${id}/cancel`),
+  roster: (role: AgentRole) => call<Roster>('GET', `/api/agents?role=${role}`),
+  agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`),
+  openAgent: (lineId: string, role: AgentRole) => call<Agent>('POST', '/api/agents', { line_id: lineId, role }),
+  startAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/start`),
+  stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
+  say: (id: string, text: string) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text }),
+  brief: (id: string) => call<AgentEvent>('POST', `/api/agents/${id}/brief`),
+  abort: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/abort`),
 };
 
 export const fileUrl = (lineId: string, name: string) => `/api/lines/${lineId}/files/${name}`;
 
 export type ServerEvent = { id: number; type: string; ts: string; [k: string]: any };
 
+const listeners = new Set<(e: ServerEvent) => void>();
+
+// Components that need live events (an agent's transcript, the job board) listen here.
+export function listen(fn: (e: ServerEvent) => void): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
 // One EventSource for the app; the browser reconnects on its own.
 export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boolean) => void): () => void {
   const es = new EventSource('/api/events');
-  const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item'];
-  for (const t of types) es.addEventListener(t, ev => onEvent(JSON.parse((ev as MessageEvent).data)));
+  const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
+    'job', 'agent', 'agent_event', 'agent_delta'];
+  for (const t of types) es.addEventListener(t, ev => {
+    const e = JSON.parse((ev as MessageEvent).data);
+    onEvent(e);
+    for (const fn of listeners) fn(e);
+  });
   es.onopen = () => onState(true);
   es.onerror = () => onState(false);
   return () => es.close();

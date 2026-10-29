@@ -18,9 +18,12 @@ papertown/
   graph.py       族谱：相近边与引用边
   market.py      人才市场：分诊、按预算编最小团队、ROI 结算与升降级
   compute.py     模拟 GPU 电厂
+  farm.py        实验农场：统一的任务看板（本地执行器、模拟电厂，nvidb 待接入）和每个项目的看田员
+  agents.py      仓库和印刷厂的 pi 员工：tmux 里的交互式 pi、收发消息、记录对话
+  pi/bridge.ts   加载进 pi 的扩展，把对话实时同步到 Papertown，并提供提交实验的工具
   press.py       印刷厂：TeX 组装与 latexmk 编译
   bank.py        账本：按模型单价记账
-  world.py       世界地图状态与建筑详情
+  world.py       世界地图状态与建筑详情（一座造纸厂做大本营，一座仓库）
   status.py      「运行状态」页的数据
   mcp_server.py  Papertown 自己的只读 MCP server
 skills/          员工的 skills
@@ -39,4 +42,5 @@ uv run papertown ingest "vision language action" "scene graph planning" [--max 5
 uv run papertown skills
 uv run papertown demo "<idea>"
 uv run papertown mcp
+uv run papertown job submit --line line_1 --name main -- python run.py
 ```

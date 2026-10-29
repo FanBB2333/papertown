@@ -71,7 +71,7 @@ function Report({ m, line, onHatch, onAdjust }: { m: Message; line?: Line; onHat
       {r.suggestions?.length > 0 && <ul className="sugg">{r.suggestions.map((s: string) => <li key={s}>{s}</li>)}</ul>}
       {waiting && (
         <div className="btns">
-          <button className="btn pri" onClick={onHatch}>孵化并建厂</button>
+          <button className="btn pri" onClick={onHatch}>孵化并立项</button>
           <button className="btn" onClick={onAdjust}>调整 idea</button>
         </div>
       )}
