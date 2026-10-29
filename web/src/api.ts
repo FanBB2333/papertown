@@ -88,6 +88,14 @@ export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | '
 export interface PaseoPermission { id: string; name: string; title: string | null; arg: string }
 export interface StartOpts { runtime?: 'pi' | 'paseo'; provider?: string; model?: string; thinking?: string }
 
+// a paper in the library, as the cards on its shelves show it
+export interface PaperCard {
+  paper_id: string; arxiv_id: string; title: string; year: string; authors: string; snippet: string; url: string;
+  tags: string[]; topic?: string; similarity?: number;
+  note?: string; closest?: boolean; // in a paper's survey: why it is close, and whether it is one of the closest three
+}
+export interface Shelf { total: number; topics: { label: string; n: number }[]; papers: PaperCard[] }
+
 export interface ProjectRef { id: string; seq: number; title: string; status: string; stage: string }
 export interface RosterRow { line: ProjectRef; agent: Agent | null }
 export interface Roster { roster: RosterRow[]; available: { ok: boolean; note: string; pi: string | null; tmux: string | null } }
@@ -137,6 +145,8 @@ export const api = {
   permit: (id: string, requestId: string, allow: boolean) => call<{ ok: boolean }>('POST', `/api/agents/${id}/permit`, { request_id: requestId, allow }),
   llm: () => call<Llm>('GET', '/api/llm'),
   samples: () => call<{ added: string[]; note: string }>('POST', '/api/samples'),
+  library: (q = '', topic = '', limit = 60) => call<Shelf>('GET', `/api/library?${new URLSearchParams({ q, topic, limit: String(limit) })}`),
+  papersOf: (lineId: string) => call<{ survey: PaperCard[]; references: PaperCard[] }>('GET', `/api/lines/${lineId}/papers`),
   setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
   say: (id: string, text: string) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text }),

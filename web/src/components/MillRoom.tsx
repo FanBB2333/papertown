@@ -117,7 +117,7 @@ export function MillRoom(p: Props) {
               </div>
             </div>
             <div className="lc">
-              <MillDetail line={line} typeOf={typeOf} real={REAL} onOpen={id => p.onOpen(id, line.id)} onHatch={p.onHatch}
+              <MillDetail line={line} typeOf={typeOf} real={REAL} tick={p.tick} onOpen={id => p.onOpen(id, line.id)} onHatch={p.onHatch}
                 onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', '造纸厂')} />
             </div>
           </>

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { api, fileUrl, type Line, type Placement, type Sheet as SheetData, type Stage } from '../api';
 import { Ava, Item, ROLE_NAMES, Sprite, itemName } from '../art';
+import { LibraryShelf, LinePapers } from './Papers';
 
 interface Props {
   id: string;
@@ -108,9 +109,9 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   return null;
 }
 
-export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, real }: {
+export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, real, tick = 0 }: {
   line: Line; typeOf: (id: string) => string; onOpen: (id: string) => void; onHatch: (id: string) => void;
-  onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; real: string;
+  onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; real: string; tick?: number;
 }) {
   const outputs = line.outputs ?? {};
   const done = Object.keys(outputs);
@@ -154,6 +155,7 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
           {next && <div className="btns" style={{ marginTop: 10 }}><button className="btn" onClick={() => onOpen(next.building)}>去{next.name}所在的建筑</button></div>}
         </div>
       </section>
+      <LinePapers lineId={line.id} tick={tick} />
     </>
   );
 }
@@ -211,7 +213,7 @@ export function Sheet(p: Props) {
         </div>
       </header>
       {line ? (
-        <MillDetail line={line} typeOf={typeOf} real={s.real} onOpen={p.onOpen} onHatch={p.onHatch} onResume={p.onResume}
+        <MillDetail line={line} typeOf={typeOf} real={s.real} tick={p.tick} onOpen={p.onOpen} onHatch={p.onHatch} onResume={p.onResume}
           onAdjust={p.onAdjust} onAsk={() => p.onAsk(s.id, s.name)} />
       ) : (
         <>
@@ -238,6 +240,7 @@ export function Sheet(p: Props) {
               <h4>怎么实现的</h4><p className="real">{s.real}</p>
             </div>
           </section>
+          {s.type === 'library' && <LibraryShelf tick={p.tick} />}
         </>
       )}
     </div>
