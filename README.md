@@ -70,6 +70,8 @@ uv run papertown demo "让 VLA 模型用结构化的场景图做长程规划"
 | `PAPERTOWN_PI_MODEL` | 给 pi 员工指定模型；不设时用 pi 自己的默认模型 |
 | `PAPERTOWN_LOCAL_JOBS` | 实验农场本地执行器同时跑几个任务，默认 2 |
 | `PAPERTOWN_SAMPLES=0` | 离线模式下不自动放入样例项目 |
+| `PAPERTOWN_NVIDB=0`、`PAPERTOWN_NVIDB_BIN` | 关掉 nvidb 显卡读取；nvidb 的路径（默认在 PATH 上找） |
+| `PAPERTOWN_PROJECTS` | 本地项目清单的位置，默认数据目录下的 `projects.json` |
 
 完整列表见 [`.env.example`](.env.example) 和 `server/papertown/config.py`。
 
@@ -85,11 +87,34 @@ uv run papertown demo "让 VLA 模型用结构化的场景图做长程规划"
 | arXiv 码头 | 真实：MCP server，拉到的论文自动入馆 |
 | 造纸厂、质检所、人才市场 | 真实：所有项目共用一座造纸厂；按预算编队、多视角审稿、结算 ROI 并升降级 |
 | 仓库、印刷厂的 pi 员工 | 真实：本机的 pi，跑在后台 tmux 里，网页和终端双向同步 |
-| 实验农场 | 真实：本地执行器在项目代码目录里跑命令；nvidb 还没接入 |
+| 实验农场 | 真实：本地执行器在项目代码目录里跑命令；接入的本地项目在 nvidb 队列里的任务也显示在这里（只读） |
+| 算力电厂 | 真实：从 nvidb 读你自己机器上的显卡和任务队列，只读 |
 | 印刷厂 | 真实：组装 TeX 和 refs.bib，本机有 `latexmk` 时编译 PDF |
 | 参考仓库 | 示例数据：三个虚构的示例仓库，文档进了检索库 |
 | 模拟电厂 | **模拟**：离线流水线的实验结果是按种子生成的，结果里带 `simulated: true` |
 | 其余建筑 | 未接入，点开能看到计划 |
+
+## 本机的显卡（nvidb）
+
+装了 [nvidb](https://github.com/FanBB2333/nvidb) 的话，算力电厂、实验农场的「明细」和农场车间顶上会显示它管着的每台机器、每张卡：可排显存（扣掉别人的程序、已给任务预留的部分和余量之后）、利用率、温度，以及卡上跑着的任务和程序。状态分三档：空闲（几乎没人用）、有空（还放得下 8G 以上的任务）、满。
+
+读取用的是 `nvidb queue status --json --no-tick`，只读 nvidb 的数据库、不去连节点，几秒读一次。Papertown 不提交、不取消、不确认告警，提交任务照旧用 `nvidb job submit`。机器的地址和用户名不会出现在网页上。
+
+## 接入本地项目
+
+自己已有的项目可以接进小镇展示：代码在一个 git 仓库里，论文在另一个 LaTeX 仓库里（比如 Overleaf 的 git 克隆）。在数据目录（默认 `server/var/`，不进 git）写一个 `projects.json`：
+
+```json
+{"projects": [{"key": "my-proj", "code": "~/repos/my-code", "paper": "~/repos/overleaf/my-paper", "match": ["my-code", "my-proj"]}]}
+```
+
+启动时每个项目变成一条状态为「本地项目」的生产线：
+
+- 造纸厂明细里有「本地仓库」：代码仓库的分支、远端、最近提交、没提交的改动、语言分布和 README 摘要；论文的标题、摘要、章节、词数、图表和引用数，已经编译过的 PDF 可以直接打开。「调研文章」列出 `.bib` 里的参考文献。
+- `match` 里的字符串用来从 nvidb 队列里认领这个项目的任务（匹配工作目录、任务名或提交者；不写时用代码仓库的目录名和 `key`）。认领到的任务出现在实验农场和仓库的发货区，实验工序的进度也按它们算。
+- 这条线不走流水线，也不花预算；前四道工序记为已完成，写作工序在有论文仓库时记为进行中。
+
+两个仓库 Papertown 只读：git 命令带 `--no-optional-locks`，不往里写任何文件。给这样的项目配的代码员工和写作员工会直接在仓库里工作，改动是真的；它们的说明（`AGENTS.md`）和 `pt` 工具放在 Papertown 自己的项目目录里，简报会提醒它们先看 `git status`、提交和推送前问你。
 
 ## 仓库和印刷厂里的员工
 
