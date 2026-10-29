@@ -1,0 +1,82 @@
+/* The GPU board (from nvidb): machines as cards, GPUs as tiles with a memory bar split into
+   the queue's jobs, other work, promised memory and what is left. */
+
+.gpus { margin: 0 0 18px; }
+.p-sheet .gpus { padding: 0 18px 18px; margin-top: 18px; }
+.gpus > h4 { margin: 0 0 10px; font: 17px var(--head); }
+.gpus.off { padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--line); }
+.gpus.off h4 { font-size: 14px; margin-bottom: 4px; }
+.gpus-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.gpus-head p { margin: 0; }
+.gpus-head code { font-size: 11.5px; }
+.gpus-sum { display: flex; gap: 6px; }
+.gpus-sum div { display: flex; flex-direction: column; align-items: center; min-width: 58px; padding: 7px 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
+.gpus-sum b { font: 700 17px var(--head); }
+.gpus-sum span { font-size: 11px; color: var(--muted); }
+.gpus-sum .k-idle b { color: var(--ok); }
+.gpus-sum .k-room b { color: var(--warn); }
+.lnk { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
+.lnk:hover { text-decoration: underline; }
+
+.nodes { display: flex; flex-direction: column; gap: 10px; }
+.node { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); }
+.node.down { opacity: .7; border-style: dashed; }
+.gpu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 8px; margin-top: 10px; }
+
+.gpu {
+  position: relative; display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 9px 11px 8px; border-radius: 11px;
+  border: 1px solid var(--line); background: var(--panel2);
+  animation: rise-in .45s var(--out) both; animation-delay: calc(var(--i, 0) * 35ms);
+  transition: border-color .35s var(--out), background-color .35s var(--out);
+}
+.gpu::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--bad); }
+.gpu.gpu-idle::before { background: var(--ok); }
+.gpu.gpu-room::before { background: var(--warn); }
+.g-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.g-top b { font-size: 13px; }
+.g-st { font-size: 11px; padding: 0 7px; border-radius: 99px; color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.gpu-idle .g-st { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.gpu-room .g-st { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.g-name { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-nums { display: flex; justify-content: space-between; gap: 6px; font-size: 11.5px; color: var(--muted); }
+.g-nums b { color: var(--ink); font-weight: 600; }
+.g-who { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-who em { color: var(--warn); font-style: normal; }
+
+.mem { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.mem i { display: block; height: 100%; transition: width .8s var(--out); }
+.m-q { background: var(--brand); }
+.m-x { background: color-mix(in srgb, var(--ink) 42%, transparent); }
+.m-r { background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--brand) 55%, transparent) 0 3px, transparent 3px 6px); }
+.g-util { height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 6%, transparent); overflow: hidden; }
+.g-util i { display: block; height: 100%; width: 100%; transform: scaleX(var(--u)); transform-origin: left; background: color-mix(in srgb, var(--ink) 40%, transparent); transition: transform .8s var(--out); }
+
+.mem-key { display: flex; gap: 14px; margin-top: 10px; }
+.mem-key i { display: inline-block; width: 10px; height: 8px; margin-right: 5px; border-radius: 2px; vertical-align: 0; }
+.m-f { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+
+/* the one-line version at the top of the farm's floor */
+.gstrip {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 9px 14px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--panel); animation: rise-in .45s var(--out) both;
+}
+.gstrip.off { border-style: dashed; background: transparent; }
+.gstrip > b { font: 14px var(--head); }
+.gstrip em { font-style: normal; }
+.gstrip .k-idle { color: var(--ok); background: none; }
+.gs-cells { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+.gs-node { display: flex; gap: 3px; padding: 3px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.gs-node i { width: 12px; height: 16px; border-radius: 3px; background: var(--bad); transition: background-color .4s var(--out); }
+.gs-node i.gpu-idle { background: var(--ok); }
+.gs-node i.gpu-room { background: var(--warn); }
+
+@media (max-width: 720px) {
+  .gpus-sum { flex-wrap: wrap; }
+  .gs-cells { margin-left: 0; }
+}
+
+/* an nvidb job in the farm's job detail */
+.job-detail .kv { margin-top: 10px; }
+.kv dd.brk { word-break: break-all; }
+.kv dd.warn { color: var(--warn); }
+.nv-notes { margin: 0; white-space: pre-wrap; line-height: 1.6; }

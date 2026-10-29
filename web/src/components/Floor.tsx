@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, listen, type Agent, type Job, type Line, type RosterRow } from '../api';
 import { Ava, Item, ROLE_NAMES } from '../art';
 import '../floor.css';
+import { GpuStrip } from './Gpus';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 
 type WState = 'working' | 'waiting' | 'resting' | 'error' | 'done' | 'off';
@@ -314,6 +315,7 @@ export function Floor({ type, lines, tick, onPick }: { type: CoreType; lines: Li
           <span><i className="k-error" />出错</span>
         </div>
       </div>
+      {type === 'farm' && <GpuStrip />}
       <div className="fl-lanes">
         {lanes.length ? lanes.map((l, i) => <LaneRow key={l.id} lane={l} i={i} onPick={onPick} />)
           : <div className="room-empty"><p>{th.empty}</p></div>}

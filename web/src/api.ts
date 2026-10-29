@@ -104,6 +104,27 @@ export interface Job {
   id: string; line_id: string | null; name: string; backend: string; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   progress: number; command: string | null; cwd: string | null; result: any; note: string | null; submitted_by: string | null;
   created_at: string; started_at: string | null; ended_at: string | null; log?: string;
+  external?: boolean; nvidb?: NvJob; // a job in nvidb's queue, shown here but managed there
+}
+
+// nvidb: the GPUs on your own machines and its job queue, read only
+export interface NvJob {
+  id: number; name: string; state: string; node: string | null; gpu_ids: number[]; lane: string | null; vram_mb: number;
+  progress: string | null; submitter: string | null; workdir: string | null; command: string; notes: string; held: boolean;
+  created_at: string | null; started_at: string | null; finished_at: string | null; elapsed_s: number | null;
+  exit_code: number | null; last_error: string;
+}
+export interface GpuProc { user: string | null; name: string; mem_mb: number; managed: boolean; job_id: number | null; job_name: string | null }
+export interface Gpu {
+  index: number; name: string; mem_total_mb: number; mem_used_mb: number; free_mb: number; util_percent: number;
+  temperature_c: number | null; queue_mem_mb: number; external_mem_mb: number; reserved_mb: number; attribution: string | null;
+  state: 'idle' | 'room' | 'full'; procs: GpuProc[];
+}
+export interface GpuNode { name: string; state: string; enabled: boolean; last_seen: string | null; last_error: string | null; gpus: Gpu[] }
+export interface GpuStatus {
+  ok: boolean; note: string; at: string | null; ticked?: string | null; nodes: GpuNode[]; jobs: NvJob[];
+  summary: { nodes: number; up: number; gpus: number; idle: number; room: number; free_mb: number; total_mb: number } | null;
+  counts: Record<string, number>; alerts: number;
 }
 export interface Backend { id: string; name: string; ready: boolean; note: string; active: number }
 export interface JobBoard { jobs: Job[]; backends: Backend[]; plant: Hud['plant'] }
@@ -132,6 +153,7 @@ export const api = {
   ask: (text: string, building: string) => call<{ ok: boolean }>('POST', '/api/chat', { text, building }),
   jobs: (lineId?: string) => call<JobBoard>('GET', `/api/jobs${lineId ? `?line_id=${lineId}` : ''}`),
   job: (id: string) => call<Job>('GET', `/api/jobs/${id}?tail=400`),
+  gpus: (fresh = false) => call<GpuStatus>('GET', `/api/gpus${fresh ? '?fresh=1' : ''}`),
   cancelJob: (id: string) => call<Job>('POST', `/api/jobs/${id}/cancel`),
   roster: (role: AgentRole) => call<Roster>('GET', `/api/agents?role=${role}`),
   agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`),

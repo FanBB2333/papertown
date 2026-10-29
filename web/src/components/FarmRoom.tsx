@@ -1,9 +1,11 @@
 // The experiment farm: one board for every job, whoever submitted it, and one monitor
-// per project writing down what its jobs are doing. The backends strip shows where nvidb
-// will plug in.
+// per project writing down what its jobs are doing. Under the backends strip, the GPUs
+// nvidb sees on your machines; a linked project's jobs in nvidb's queue are on the board
+// too, read only.
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, listen, type Job, type JobBoard, type Line, type RosterRow } from '../api';
+import { GpuBoard, gb } from './Gpus';
 import type { RoomActions } from './Interior';
 
 interface Props extends RoomActions {
@@ -41,11 +43,37 @@ function JobDetail({ id, onClose, toast }: { id: string; onClose: () => void; to
         </div>
       </div>
       <div className="bar big"><i style={{ width: `${j.progress}%` }} /></div>
-      <p className="small">{JOB_STATUS[j.status]} · {j.progress}%{j.note ? ` · ${j.note}` : ''}</p>
+      <p className="small">{JOB_STATUS[j.status]} · {j.progress}%{j.note && !j.nvidb ? ` · ${j.note}` : ''}</p>
+      {j.nvidb && <NvidbJob n={j.nvidb} />}
       {j.command && <><h4>命令</h4><pre className="code">{j.command}</pre></>}
       {j.result && <><h4>结果{j.result.simulated ? '（模拟）' : ''}</h4><Result r={j.result} /></>}
-      {j.backend !== 'sim' && <><h4>日志</h4><pre className="code log-box">{j.log || '（还没有输出）'}</pre></>}
+      {j.nvidb ? <><h4>日志</h4><p className="muted small">日志留在 nvidb 里，这里不去节点上读：<code>nvidb job logs {j.nvidb.id} -n 200</code></p></>
+        : j.backend !== 'sim' && <><h4>日志</h4><pre className="code log-box">{j.log || '（还没有输出）'}</pre></>}
     </div>
+  );
+}
+
+function dur(s: number | null) {
+  if (s == null) return '—';
+  return s < 60 ? `${Math.round(s)} 秒` : s < 3600 ? `${Math.floor(s / 60)} 分钟` : `${Math.floor(s / 3600)} 小时 ${Math.floor(s % 3600 / 60)} 分`;
+}
+
+// a job in nvidb's queue: where it runs and what it reported, managed with nvidb itself
+function NvidbJob({ n }: { n: NonNullable<Job['nvidb']> }) {
+  return (
+    <>
+      <p className="muted small">nvidb 队列里的任务，在这里只读；要取消、改预留或看事件，用 <code>nvidb job show {n.id}</code>。</p>
+      <dl className="kv">
+        <dt>在哪</dt><dd>{n.node ? `${n.node} · GPU ${n.gpu_ids.join(', ') || '—'}` : n.lane ? `排在 ${n.lane}` : '还没分配'}</dd>
+        <dt>预留显存</dt><dd>{n.vram_mb ? gb(n.vram_mb) : '不占显存'}</dd>
+        {n.progress && <><dt>状态行</dt><dd>{n.progress}</dd></>}
+        <dt>用时</dt><dd>{dur(n.elapsed_s)}{n.exit_code != null ? ` · 退出码 ${n.exit_code}` : ''}</dd>
+        {n.held && <><dt>卡住了</dt><dd className="warn">依赖的任务没有成功结束，在等人决定</dd></>}
+        {n.workdir && <><dt>目录</dt><dd className="brk">{n.workdir}</dd></>}
+      </dl>
+      {n.notes && <><h4>说明</h4><p className="small nv-notes">{n.notes}</p></>}
+      {n.last_error && <><h4>出错</h4><pre className="code">{n.last_error}</pre></>}
+    </>
   );
 }
 
@@ -108,11 +136,12 @@ export function FarmRoom(p: Props) {
         <div className="backends">
           {(board?.backends ?? []).map(b => (
             <div key={b.id} className={`backend${b.ready ? '' : ' off'}`}>
-              <div className="proj-top"><b>{b.name}</b><span className={`pst ${b.ready ? 'pst-running' : 'pst-paused'}`}>{b.ready ? `${active(b.id)} 个在跑` : '未接入'}</span></div>
+              <div className="proj-top"><b>{b.name}</b><span className={`pst ${b.ready ? 'pst-running' : 'pst-paused'}`}>{b.ready ? `${b.id === 'nvidb' ? b.active : active(b.id)} 个在跑` : '未接入'}</span></div>
               <p className="muted small">{b.note}</p>
             </div>
           ))}
         </div>
+        <GpuBoard />
         <div className="board">
           {!jobs.length && <div className="room-empty small-empty"><p>还没有任务。仓库里的代码员工提交实验（pi 用 <code>papertown_submit_job</code>，Paseo 里的 agent 用 <code>.papertown/pt submit</code>），或者流水线跑到实验工序时，任务会出现在这里。</p></div>}
           {groups.map(([name, list]) => list.length > 0 && (

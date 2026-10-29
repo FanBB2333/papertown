@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { api, fileUrl, type Line, type Placement, type Sheet as SheetData, type Stage } from '../api';
 import { Ava, Item, ROLE_NAMES, Sprite, itemName } from '../art';
+import { GpuBoard } from './Gpus';
 import { LibraryShelf, LinePapers } from './Papers';
 
 interface Props {
@@ -241,6 +242,7 @@ export function Sheet(p: Props) {
             </div>
           </section>
           {s.type === 'library' && <LibraryShelf tick={p.tick} />}
+          {s.type === 'power' && <GpuBoard />}
         </>
       )}
     </div>
