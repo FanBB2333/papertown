@@ -107,7 +107,7 @@ class Farm:
         command = (command or "").strip()
         if not command:
             raise FarmError("command 不能为空")
-        workdir = Path(cwd) if cwd else (self.town.s.projects_dir / line_id / "code" if line_id else self.dir)
+        workdir = Path(cwd) if cwd else (self.town.linked.workdir(line_id, "coder") or self.town.s.projects_dir / line_id / "code" if line_id else self.dir)
         workdir.mkdir(parents=True, exist_ok=True)
         job_id = f"job_{uuid.uuid4().hex[:8]}"
         row = {"id": job_id, "line_id": line_id, "name": (name or "job")[:60], "backend": backend, "status": "queued", "progress": 0,

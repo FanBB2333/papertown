@@ -17,6 +17,7 @@ from .events import EventBus
 from .farm import Farm, summarize
 from .graph import Genealogy
 from .library import Embedder, Library
+from .linked import Linked
 from .llm import make_provider
 from .market import Market
 from .mcp_hub import McpHub
@@ -52,6 +53,7 @@ class Town:
         self.tools = ToolRegistry()
         self.mcp = McpHub(self)
         self.pipeline = Pipeline(self)
+        self.linked = Linked(self)
         self._register_tools()
         if not self.library.count():
             self.seed_library()
@@ -63,6 +65,7 @@ class Town:
         self.agents.reconcile()
         self.mcp.start()
         samples.maybe_seed(self)
+        self.linked.sync()
 
     def stop(self) -> None:
         self.mcp.stop()
@@ -159,7 +162,7 @@ class Town:
                 out.append(f"- 数据 / 任务：{', '.join(draft['datasets'])}")
             if draft.get("metrics"):
                 out.append(f"- 指标：{', '.join(draft['metrics'])}")
-        else:
+        elif not ln.get("linked"):
             out += ["", "## 方法草案", "还没有。孵化通过、造纸厂开工后会写出来。"]
         jobs = self.farm.list(line_id, 20)
         if jobs:
@@ -169,10 +172,29 @@ class Town:
         review = self.pipeline.item(line_id, "review") or {}
         if review.get("feedback"):
             out += ["", "## 审稿意见"] + [f"- {x}" for x in review["feedback"][:8]]
-        if role == "writer":
+        info = self.linked.summary(line_id)
+        if info:
+            out += self._linked_brief(info, role)
+        elif role == "writer":
             files = [n for n in ("main.tex", "refs.bib", "main.pdf") if (self.press.dir(line_id) / n).exists()]
             out += ["", "## 论文目录", "已有：" + ("、".join(files) if files else "还没有文件")]
         return "\n".join(out)
+
+    @staticmethod
+    def _linked_brief(info: dict, role: str) -> list[str]:
+        out = ["", "## 本地仓库", "这个项目是从本机仓库接入的：工作目录就是仓库本身，改动都是真的。动手前先看 git status，"
+               "只改和任务有关的文件，提交、推送前先问用户。"]
+        c, p = info.get("code"), info.get("paper")
+        if c:
+            out += [f"- 代码：{c['path']}（分支 {c.get('branch') or '?'}，{c.get('files', 0)} 个文件，未提交改动 {c.get('dirty', 0)} 处）"]
+            out += [f"  - {x['hash']} {x['subject']}" for x in (c.get("commits") or [])[:5]]
+        if p:
+            out += [f"- 论文：{p['path']}，主文件 {p.get('main') or '?'}，{p.get('bib', 0)} 条参考文献"]
+            if p.get("sections"):
+                out.append("  - 章节：" + " / ".join(p["sections"]))
+        if role == "coder":
+            out.append("实验跑在 nvidb 的 GPU 队列上（nvidb job submit），实验农场会按工作目录和名字认出这个项目的任务。")
+        return out
 
     def _job_changed(self, job: Job) -> None:
         self.farm.sync_sim(job)

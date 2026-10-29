@@ -152,6 +152,8 @@ def shelf(town: "Town", q: str = "", topic: str = "", limit: int = 60) -> dict:
 def papers_of(town: "Town", line_id: str) -> dict:
     """What a paper read and cites: the hatchery's survey (closest first, each with how close
     and why) and the references the press put in its bibliography."""
+    if town.linked.of(line_id):  # a project of your own: what its .bib cites
+        return {"survey": [], "references": town.linked.references(line_id)}
     report = town.pipeline.item(line_id, "hatch") or {}
     tex = town.pipeline.item(line_id, "write") or {}
     topics = _seed_topics()

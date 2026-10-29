@@ -175,6 +175,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "没有这条流水线")
         return samples.papers_of(town, line_id)
 
+    @app.get("/api/lines/{line_id}/linked/pdf")
+    def linked_pdf(line_id: str):
+        p = town.linked.pdf(line_id)
+        if not p:
+            raise HTTPException(404, "这个项目的论文还没有编译好的 PDF")
+        return FileResponse(p, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{p.name}"'})
+
     @app.get("/api/library")
     def library(q: str = "", topic: str = "", limit: int = 60):
         return samples.shelf(town, q, topic, limit)
@@ -248,7 +255,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/jobs")
     def jobs(line_id: str | None = None):
-        return {"jobs": town.farm.list(line_id), "backends": town.farm.backends(), "plant": town.plant.status()}
+        ext = [j for j in town.linked.farm_jobs() if not line_id or j["line_id"] == line_id]
+        return {"jobs": ext + town.farm.list(line_id), "backends": town.farm.backends(), "plant": town.plant.status()}
 
     @app.get("/api/gpus")
     def gpus(fresh: bool = False):
@@ -256,6 +264,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str, tail: int = 200):
+        if job_id.startswith("nvidb-"):  # one of a linked project's jobs in nvidb's queue
+            j = next((x for x in town.linked.farm_jobs() if x["id"] == job_id), None)
+            if not j:
+                raise HTTPException(404, "nvidb 里没有这个任务了")
+            return j
         j = town.farm.get(job_id, tail=tail)
         if not j:
             raise HTTPException(404, "没有这个任务")

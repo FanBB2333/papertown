@@ -174,6 +174,9 @@ class Agents:
         return self.get(agent_id)
 
     def _workdir(self, line_id: str, role: str) -> Path | None:
+        linked = self.town.linked.workdir(line_id, role)  # a project of your own: its repository itself
+        if linked:
+            return linked
         if role == "coder":
             d = self.s.projects_dir / line_id / "code"
         elif role == "writer":
@@ -182,6 +185,15 @@ class Agents:
             return None
         d.mkdir(parents=True, exist_ok=True)
         return d
+
+    def _home(self, line_id: str, role: str) -> Path:
+        """Where Papertown keeps an agent's own files (its guide, the pt tool). That is its
+        working directory, except in a linked repository, which Papertown does not write into."""
+        if self.town.linked.workdir(line_id, role):
+            d = self.s.projects_dir / line_id / role
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+        return self._workdir(line_id, role)
 
     def roster(self, role: str) -> list[dict]:
         """Every project with its agent for this role (None until one is created)."""
@@ -218,20 +230,26 @@ class Agents:
     def alive(self, a: dict) -> bool:
         return bool(self.tmux and a.get("tmux")) and self._tmux("has-session", "-t", a["tmux"]).returncode == 0
 
-    def _guide(self, a: dict, runtime: str) -> None:
+    def _guide(self, a: dict, runtime: str) -> str:
+        """Write the role's guide where the agent reads it; returns the text. In a linked
+        repository the repo's own AGENTS.md and CLAUDE.md are left alone: the guide goes into
+        Papertown's directory and reaches the agent with its brief instead."""
         line = self.db.one("select * from lines where id = ?", a["line_id"])
         cwd = Path(a["cwd"])
         cwd.mkdir(parents=True, exist_ok=True)
         text = GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS[runtime])
-        (cwd / "AGENTS.md").write_text(text, encoding="utf-8")
+        home = self._home(a["line_id"], a["role"])
+        (home / "AGENTS.md").write_text(text, encoding="utf-8")
         if runtime == "paseo":
-            (cwd / "CLAUDE.md").write_text(text, encoding="utf-8")  # Claude Code reads this one
+            if home == cwd:
+                (cwd / "CLAUDE.md").write_text(text, encoding="utf-8")  # Claude Code reads this one
             self._tools(a)
+        return text
 
     def _tools(self, a: dict) -> Path:
         """`.papertown/pt` in the role's own directory, with who it speaks for in link.json, for
         a shell that has no PAPERTOWN_* environment (an imported conversation). Returns pt."""
-        tools = self._workdir(a["line_id"], a["role"]) / ".papertown"
+        tools = self._home(a["line_id"], a["role"]) / ".papertown"
         tools.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(PT, tools / "pt")
         (tools / "pt").chmod(0o755)
@@ -299,8 +317,13 @@ class Agents:
         if not st["ok"]:
             raise AgentError(st["note"])
         line = self.db.one("select * from lines where id = ?", a["line_id"])
-        self._guide(a, "paseo")
-        prompt = "这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
+        guide = self._guide(a, "paseo")
+        if self.town.linked.of(a["line_id"]):
+            pt = self._tools(a)
+            prompt = (guide.replace(".papertown/pt", str(pt)) + "\n\n这是项目简报，先读一遍，再说说你打算怎么开始：\n\n"
+                      + self.town.brief(a["line_id"], a["role"]))
+        else:
+            prompt = "这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
         try:
             r = self.paseo.create(
                 title=f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}", provider=provider, model=model,
@@ -509,6 +532,9 @@ class Agents:
             raise AgentError("没有这个员工")
         text = self.town.brief(a["line_id"], a["role"])
         if a.get("runtime") != "paseo":
+            if self.town.linked.of(a["line_id"]):  # in a linked repo the guide is not in AGENTS.md: send it along
+                line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
+                text = GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS["pi"]) + "\n\n" + text
             return "这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + text
         pt = self._tools(a)
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])

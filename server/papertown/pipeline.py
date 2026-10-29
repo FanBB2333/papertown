@@ -78,9 +78,14 @@ class Pipeline:
         cur = next((r for r in out_stages if r["status"] in ("run", "wait")), None)
         items = self.db.q("select id, kind, stage, building, title, created_at from items where line_id = ? order by created_at", line_id)
         files = [f for f in ("main.tex", "refs.bib", "main.pdf", "paper.zip") if (self.town.press.root / line_id / f).exists()]
+        linked = self.town.linked.summary(line_id) if ln.get("linked") else None
+        if linked:
+            self.town.linked.overlay(line_id, out_stages)
+            done = sum(1 for r in out_stages if r["status"] == "done")
+            cur = next((r for r in out_stages if r["status"] in ("run", "wait")), None)
         return {**{k: ln[k] for k in ("id", "seq", "title", "idea", "budget", "spent", "status", "stage", "mill_id", "verdict",
                                        "revisions", "note", "created_at", "updated_at")},
-                "pct": round(100 * done / len(STAGES)), "current": cur, "stages": out_stages, "team": team,
+                "pct": round(100 * done / len(STAGES)), "current": cur, "stages": out_stages, "team": team, "linked": linked,
                 "reason": (ln["plan"] or {}).get("reason") if ln["plan"] else None, "items": items, "files": files}
 
     def lines(self) -> list[dict]:

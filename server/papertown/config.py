@@ -85,6 +85,8 @@ class Settings:
     # nvidb's GPU queue, read only: the cards on your machines and their jobs ("0" turns it off)
     nvidb: bool = field(default_factory=lambda: _env("PAPERTOWN_NVIDB", "1") != "0")
     nvidb_bin: str = field(default_factory=lambda: _env("PAPERTOWN_NVIDB_BIN"))
+    # your own projects, linked in from local repos (see linked.py); default: projects.json in the data dir
+    projects: str = field(default_factory=lambda: _env("PAPERTOWN_PROJECTS"))
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 
@@ -97,6 +99,10 @@ class Settings:
     @property
     def db_path(self) -> Path:
         return self.data_dir / "papertown.db"
+
+    @property
+    def projects_file(self) -> Path:
+        return Path(self.projects).expanduser() if self.projects else self.data_dir / "projects.json"
 
     @property
     def press_dir(self) -> Path:
