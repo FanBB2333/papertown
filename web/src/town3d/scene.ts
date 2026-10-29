@@ -414,13 +414,14 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
         if (Math.abs(next - b.lift) > 1e-4) moving = true;
         b.lift = next;
         b.group.position.y = b.lift;
-        if (b.beam) b.beam.rotation.y = t * 0.9;
+        if (b.beam) b.beam.rotation.y = t * 0.9 + Math.sin(t * 1.8) * 0.35; // sweeps faster past the land, lingers over the sea
       }
       for (const q of puffs) {
         const u = (t / 3.4 + q.phase) % 1; // each puff rises, drifts and thins over 3.4 s
-        const r = (0.07 + u * 0.16) * q.s;
+        const up = 1 - (1 - u) * (1 - u), wide = Math.sqrt(u); // pushed out fast, slowing as it cools
+        const r = (0.07 + wide * 0.16) * q.s;
         q.mesh.scale.setScalar(r);
-        q.mesh.position.set(q.at[0] + u * 0.32 * q.s, q.at[1] + 0.06 + u * 0.95 * q.s, q.at[2] - u * 0.1 * q.s);
+        q.mesh.position.set(q.at[0] + u * u * 0.32 * q.s, q.at[1] + 0.06 + up * 0.95 * q.s, q.at[2] - u * u * 0.1 * q.s);
         (q.mesh.material as THREE.MeshLambertMaterial).opacity = 0.85 * Math.min(1, u * 6) * (1 - u);
       }
       waveSets.forEach((w, i) => { w.position.x = Math.sin(t * 0.8 + i * Math.PI) * 0.06; });

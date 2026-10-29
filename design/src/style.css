@@ -146,7 +146,7 @@ body.solo { padding: 0; background: #111; }
 .blbl.hl text { fill: var(--brand-ink); }
 .focus { fill: color-mix(in srgb, var(--brand) 16%, transparent); stroke: var(--brand); stroke-width: 2.5; stroke-dasharray: 10 8; }
 
-.anim .focus { animation: dash 1.6s linear infinite; }
+.anim .focus { animation: dash 1.6s cubic-bezier(.45, 0, .25, 1) infinite; }
 @keyframes dash { to { stroke-dashoffset: -36; } }
 .anim .smoke { transform-box: fill-box; transform-origin: center; animation: puff 3.6s ease-out infinite; }
 .anim .smoke.s2 { animation-delay: -1.2s; }
@@ -292,7 +292,7 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
 .lc .line { position: relative; padding: 16px 18px 10px; flex: none; }
 .belt { position: absolute; left: 16px; right: 16px; top: 76px; height: 12px; border-radius: 6px;
   background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 20%, transparent) 0 10px, color-mix(in srgb, var(--ink) 8%, transparent) 10px 20px); }
-.anim-ui .belt { animation: belt .9s linear infinite; }
+.anim-ui .belt { animation: belt .9s cubic-bezier(.6, 0, .3, 1) infinite; } /* indexing: a push, then a rest */
 @keyframes belt { to { background-position: 20px 0; } }
 .stations { position: relative; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; }
 .stn { position: relative; background: var(--panel); border: var(--pborder); border-radius: var(--radius); box-shadow: var(--pshadow); padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }

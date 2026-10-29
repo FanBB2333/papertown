@@ -241,7 +241,7 @@ export function renderMap(o = {}) {
       const dots = opt.anim ? [0, 0.5] : [0.35];
       for (const k of dots) {
         if (opt.anim) {
-          out.push(`<circle class="fdot fd-${fl.kind}" r="5.5"><animateMotion dur="${fl.dur}s" begin="-${f1(fl.dur * k)}s" repeatCount="indefinite" path="${d}"/></circle>`);
+          out.push(`<circle class="fdot fd-${fl.kind}" r="5.5"><animateMotion dur="${fl.dur}s" begin="-${f1(fl.dur * k)}s" repeatCount="indefinite" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines=".42 0 .3 1" path="${d}"/></circle>`);
         } else {
           const [x, y] = fl.pts[Math.min(1, fl.pts.length - 1)];
           const [sx, sy] = iso(x, y, 0.15);

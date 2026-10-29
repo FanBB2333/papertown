@@ -111,16 +111,24 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
   // the walking loop
   useEffect(() => {
     let raf = 0, last = 0, walking = false, saved = 0;
+    const vel = { x: 0, y: 0 };
     const frame = (t: number) => {
       raf = requestAnimationFrame(frame);
       const dt = Math.min(0.05, last ? (t - last) / 1000 : 0);
       last = t;
       let dx = 0, dy = 0;
       for (const k of keys.current) { dx += DIRS[k][0]; dy += DIRS[k][1]; }
-      const moving = opts.current.active && (dx || dy);
+      // ease into a walk and out of it; a room or the chat coming up stops you at once
+      const len = Math.hypot(dx, dy), on = opts.current.active;
+      const a = 1 - Math.exp(-dt * 12);
+      vel.x += ((len && on ? dx / len * SPEED : 0) - vel.x) * a;
+      vel.y += ((len && on ? dy / len * SPEED : 0) - vel.y) * a;
+      if (!on || Math.hypot(vel.x, vel.y) < 0.05) { vel.x = 0; vel.y = 0; }
+      const moving = !!(vel.x || vel.y);
       if (moving) {
-        const len = Math.hypot(dx, dy), step = SPEED * dt;
-        pos.current = slide(opts.current.placements, pos.current, pos.current.x + dx / len * step, pos.current.y + dy / len * step);
+        const before = pos.current;
+        pos.current = slide(opts.current.placements, pos.current, pos.current.x + vel.x * dt, pos.current.y + vel.y * dt);
+        if (pos.current === before) { vel.x = 0; vel.y = 0; } // walked into a wall
         const sdx = (dx - dy); // screen x direction
         if (sdx) el.current?.classList.toggle('face-left', sdx < 0);
         place();
@@ -129,8 +137,8 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
         opts.current.follow(sx, sy - 20, 1 - Math.pow(0.0015, dt));
         if (t - saved > 600) { saved = t; savePos(pos.current); }
       }
-      if (!!moving !== walking) {
-        walking = !!moving;
+      if (moving !== walking) {
+        walking = moving;
         el.current?.classList.toggle('walking', walking);
         if (!walking) savePos(pos.current);
       }
