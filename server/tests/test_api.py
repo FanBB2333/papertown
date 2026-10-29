@@ -46,3 +46,13 @@ def test_message_conversion():
     o = OpenAICompatProvider._messages("sys", turns)
     assert o[0]["role"] == "system" and o[2]["tool_calls"][0]["function"]["name"] == "library_search"
     assert o[3] == {"role": "tool", "tool_call_id": "c1", "content": "{}"}
+
+
+def test_the_town_model_can_be_switched_for_this_run(tmp_path):
+    app = create_app(make_settings(tmp_path))
+    with TestClient(app) as c:
+        info = c.get("/api/llm").json()
+        assert info["provider"] == "mock" and {p["id"] for p in info["providers"]} == {"mock", "anthropic", "openai"}
+        assert c.post("/api/llm", json={"provider": "nope"}).status_code == 400
+        got = c.post("/api/llm", json={"model_strong": "scripted-2"}).json()
+        assert got["provider"] == "mock" and got["model_strong"] == "scripted-2" and app.state.town.s.model_strong == "scripted-2"

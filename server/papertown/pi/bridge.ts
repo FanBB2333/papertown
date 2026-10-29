@@ -10,12 +10,17 @@
  *   - messages typed in the app are long-polled from the server and injected with
  *     pi.sendUserMessage(), as a follow-up while pi is busy
  *   - pi.registerTool() adds the Papertown tools (project brief; job submission for coders)
+ *   - the model, thinking level, session and context usage are reported as `state`, and
+ *     slash commands typed in the app arrive as `cmd`: the ones pi's extension API can do
+ *     (model, thinking, compact, new, clone, name, session, reload) run here; extension
+ *     commands, skills and prompt templates go through pi's own expansion. The rest of
+ *     pi's built-in commands need its terminal UI, so the server types them into tmux.
  *
  * Environment (set by the server): PAPERTOWN_URL, PAPERTOWN_AGENT, PAPERTOWN_AGENT_TOKEN,
  * PAPERTOWN_AGENT_ROLE. Without them the extension does nothing.
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 const SERVER = process.env.PAPERTOWN_URL ?? "";
@@ -39,6 +44,20 @@ function textOf(content: unknown): string {
 function clip(s: string, n: number): string {
 	return s.length > n ? `${s.slice(0, n)}…` : s;
 }
+
+// the thinking levels a model takes, as pi-ai's getSupportedThinkingLevels() decides them
+const LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+function levelsOf(m: any): string[] {
+	if (!m?.reasoning) return ["off"];
+	return LEVELS.filter((l) => {
+		const mapped = m.thinkingLevelMap?.[l];
+		if (mapped === null) return false;
+		return l === "xhigh" || l === "max" ? mapped !== undefined : true;
+	});
+}
+
+const modelRef = (m: any) => (m ? { provider: m.provider, id: m.id, name: m.name ?? m.id, reasoning: !!m.reasoning, contextWindow: m.contextWindow ?? null } : null);
+const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(n));
 
 export default function papertownBridge(pi: ExtensionAPI) {
 	if (!SERVER || !AGENT) return;
@@ -102,12 +121,147 @@ export default function papertownBridge(pi: ExtensionAPI) {
 			session: ctx?.sessionManager.getSessionFile() ?? null,
 			idle: ctx?.isIdle() ?? true,
 		});
+		state(true);
 	}
 
-	function deliver(m: { id: number; kind?: string; text?: string }) {
+	// what the app shows next to the chat; `full` adds the model list and the commands
+	function state(full = false) {
+		if (!ctx) return;
+		const sm = ctx.sessionManager;
+		const ev: Ev = {
+			t: "state",
+			model: modelRef(ctx.model),
+			thinking: pi.getThinkingLevel(),
+			levels: levelsOf(ctx.model),
+			session: { id: sm.getSessionId(), name: pi.getSessionName() ?? null, file: sm.getSessionFile() ?? null },
+			context: ctx.getContextUsage() ?? null,
+		};
+		if (full) {
+			const reg = ctx.modelRegistry;
+			const models = reg.getAvailable().map(modelRef);
+			ev.models = models;
+			ev.providers = Object.fromEntries([...new Set(models.map((m: any) => m.provider))].map((p) => [p, reg.getProviderDisplayName(p)]));
+			ev.commands = pi.getCommands().map((c) => ({ name: c.name, description: c.description ?? "", source: c.source }));
+		}
+		send(ev);
+	}
+
+	function note(text: string, error = false) {
+		send({ t: "note", text, error });
+	}
+
+	function findModel(arg: string) {
+		const all = ctx?.modelRegistry.getAvailable() ?? [];
+		const want = arg.trim().toLowerCase();
+		const [p, id] = want.includes("/") ? [want.slice(0, want.indexOf("/")), want.slice(want.indexOf("/") + 1)] : ["", want];
+		return (
+			all.find((m) => m.provider.toLowerCase() === p && m.id.toLowerCase() === id) ??
+			all.find((m) => !p && m.id.toLowerCase() === id) ??
+			all.find((m) => `${m.provider}/${m.id}`.toLowerCase().includes(want) || (m.name ?? "").toLowerCase().includes(want))
+		);
+	}
+
+	function stats() {
+		const sm = ctx!.sessionManager;
+		let user = 0, assistant = 0, tools = 0, input = 0, output = 0, cacheRead = 0, cacheWrite = 0, cost = 0;
+		for (const e of sm.getEntries() as any[]) {
+			const m = e.type === "message" ? e.message : null;
+			if (!m) continue;
+			if (m.role === "user") user++;
+			if (m.role === "toolResult") tools++;
+			if (m.role !== "assistant") continue;
+			assistant++;
+			const u = m.usage ?? {};
+			input += u.input ?? 0; output += u.output ?? 0; cacheRead += u.cacheRead ?? 0; cacheWrite += u.cacheWrite ?? 0;
+			cost += u.cost?.total ?? 0;
+		}
+		const c = ctx!.getContextUsage();
+		return [
+			`会话 ${pi.getSessionName() ?? sm.getSessionId()}`,
+			`消息：你 ${user} 条，pi ${assistant} 条，工具结果 ${tools} 条`,
+			`token：输入 ${fmt(input)}，输出 ${fmt(output)}，缓存读 ${fmt(cacheRead)}，缓存写 ${fmt(cacheWrite)}`,
+			`花费 $${cost.toFixed(4)}`,
+			c ? `上下文 ${c.tokens == null ? "?" : fmt(c.tokens)} / ${fmt(c.contextWindow)}${c.percent == null ? "" : `（${c.percent.toFixed(0)}%）`}` : "",
+			`文件 ${sm.getSessionFile() ?? "（未保存）"}`,
+		].filter(Boolean).join("\n");
+	}
+
+	// slash commands from the app
+	async function command(name: string, args: string) {
+		if (!ctx) return;
+		switch (name) {
+			case "model": {
+				if (!args) return state(true);
+				const m = findModel(args);
+				if (!m) return note(`没有找到可用的模型「${args}」。没登录的供应商要先在终端里 /login。`, true);
+				if (!(await pi.setModel(m))) return note(`${m.provider} 还没有配置登录或 key，先在终端里 /login。`, true);
+				return; // model_select reports it
+			}
+			case "thinking": {
+				if (!args) return note(`思考强度：${pi.getThinkingLevel()}（可选 ${levelsOf(ctx.model).join(" / ")}）`);
+				if (!LEVELS.includes(args as any)) return note(`没有这个思考强度：${args}`, true);
+				pi.setThinkingLevel(args as any);
+				return state();
+			}
+			case "compact":
+				note("正在压缩上下文…");
+				return ctx.compact({
+					customInstructions: args || undefined,
+					onComplete: (r: any) => { note(`上下文已压缩${r?.tokensBefore ? `（压缩前 ${fmt(r.tokensBefore)} token）` : ""}。`); state(); },
+					onError: (e) => note(`压缩失败：${e.message}`, true),
+				});
+			case "name":
+				if (!args) return note(`会话名：${pi.getSessionName() ?? "（未命名）"}`);
+				pi.setSessionName(args);
+				return state();
+			case "session":
+				return note(stats());
+			case "new":
+			case "clone":
+			case "reload":
+				// these replace or reload the session, which pi only allows from a command
+				return void pi.sendUserMessage(`/papertown ${name}`, { expandPromptTemplates: true });
+			default:
+				// extension commands, /skill:name and prompt templates, expanded by pi itself
+				return void pi.sendUserMessage(`/${name}${args ? ` ${args}` : ""}`, ctx.isIdle()
+					? { expandPromptTemplates: true }
+					: { expandPromptTemplates: true, deliverAs: "followUp" });
+		}
+	}
+
+	pi.registerCommand("papertown", {
+		description: "Papertown bridge: new | clone | reload (used by the web app)",
+		handler: async (args: string, c: ExtensionCommandContext) => {
+			const op = args.trim();
+			if (!c.isIdle()) {
+				c.abort();
+				await c.waitForIdle();
+			}
+			if (op === "new") {
+				note("开始新会话。");
+				await c.newSession();
+			} else if (op === "clone") {
+				const leaf = c.sessionManager.getLeafId();
+				if (!leaf) return note("会话还是空的，没有可复制的。", true);
+				note("复制当前会话，在副本里继续。");
+				await c.fork(leaf, { position: "at" });
+			} else if (op === "reload") {
+				await c.reload();
+				note("已重新加载扩展、skills、提示模板和上下文文件。");
+				state(true);
+			}
+		},
+	});
+
+	function deliver(m: { id: number; kind?: string; text?: string; name?: string; args?: string }) {
 		if (m.kind === "abort") {
 			ctx?.abort();
 			send({ t: "delivered", ids: [m.id] });
+			return;
+		}
+		if (m.kind === "cmd") {
+			send({ t: "delivered", ids: [m.id] });
+			command(m.name ?? "", (m.args ?? "").trim()).catch((e) => note(`/${m.name} 出错：${e?.message ?? e}`, true));
 			return;
 		}
 		if (!m.text) return;
@@ -123,6 +277,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		while (!stopped) {
 			try {
 				const { messages } = await call("/inbox?wait=20", {}, 30000);
+				if (stopped) break; // the session was replaced while this poll was out
 				if (!online) {
 					online = true;
 					hello(); // also after the server restarts
@@ -193,9 +348,30 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		});
 	});
 
-	pi.on("agent_settled", async (e) => {
+	pi.on("agent_settled", async (e, c) => {
+		ctx = c;
 		flushDelta();
 		send({ t: "settled", aborted: e.aborted });
+		state();
+	});
+
+	// changes made in the terminal (/model, Ctrl+P, /thinking, /name, /compact) show up in the app too
+	pi.on("model_select", async (e, c) => {
+		ctx = c;
+		if (e.source !== "restore") note(`模型换成 ${e.model.provider}/${e.model.id}。`);
+		state();
+	});
+	pi.on("thinking_level_select", async (_e, c) => {
+		ctx = c;
+		state();
+	});
+	pi.on("session_info_changed", async (_e, c) => {
+		ctx = c;
+		state();
+	});
+	pi.on("session_compact", async (_e, c) => {
+		ctx = c;
+		state();
 	});
 
 	pi.on("session_shutdown", async () => {

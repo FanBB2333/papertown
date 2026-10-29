@@ -91,6 +91,9 @@ create index if not exists messages_line on messages(line_id, id);
 create index if not exists ledger_ts on ledger(ts);
 """
 
+# (table, column, declaration) for columns added to existing tables
+ADDED = [("agents", "runtime", "text"), ("agents", "ext_id", "text")]
+
 JSON_COLS = {"team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result"}
 
 
@@ -119,6 +122,9 @@ class DB:
         self.lock = threading.RLock()  # serialises multi-statement writes
         with self.lock:
             self.conn.executescript(SCHEMA)
+            for table, col, decl in ADDED:  # columns added after a table first shipped
+                if col not in {r[1] for r in self.conn.execute(f"pragma table_info({table})")}:
+                    self.conn.execute(f"alter table {table} add column {col} {decl}")
             self.conn.commit()
 
     @property

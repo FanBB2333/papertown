@@ -92,8 +92,8 @@ export function MillRoom(p: Props) {
                   <span>${l.spent.toFixed(2)} / ${l.budget.toFixed(2)}</span>
                 </div>
                 <div className="crew">
-                  <span className={`crew-a s-${coder?.status ?? 'none'}`}>代码 pi · {coder ? AGENT_STATUS[coder.status] : '—'}</span>
-                  <span className={`crew-a s-${writer?.status ?? 'none'}`}>写作 pi · {writer ? AGENT_STATUS[writer.status] : '—'}</span>
+                  <span className={`crew-a s-${coder?.status ?? 'none'}`}>代码员工 · {coder ? AGENT_STATUS[coder.status] : '—'}</span>
+                  <span className={`crew-a s-${writer?.status ?? 'none'}`}>写作员工 · {writer ? AGENT_STATUS[writer.status] : '—'}</span>
                   {jobs[l.id] ? <span className="crew-a s-working">实验 {jobs[l.id]}</span> : null}
                 </div>
               </button>

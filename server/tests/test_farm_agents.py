@@ -66,3 +66,78 @@ def test_bridge_mirrors_a_pi_session(tmp_path):
         assert j["line_id"] == line_id and j["submitted_by"] == a["id"]
         assert wait_job(town, j["id"])["status"] == "done"
         assert c.get(f"/api/agents?role=coder").json()["roster"][0]["agent"]["id"] == a["id"]
+
+
+def test_bridge_reports_state_and_runs_commands(tmp_path):
+    app = create_app(make_settings(tmp_path))
+    with TestClient(app) as c:
+        town = app.state.town
+        line_id = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
+        wait_for(town, line_id, {"waiting"})
+        a = c.post("/api/agents", json={"line_id": line_id, "role": "writer"}).json()
+        h = {"x-papertown-token": town.agents.get(a["id"])["token"]}
+        state = {"t": "state", "model": {"provider": "p", "id": "m1"}, "thinking": "high", "levels": ["off", "high"],
+                 "models": [{"provider": "p", "id": "m1"}, {"provider": "p", "id": "m2"}], "commands": [{"name": "review", "source": "prompt"}]}
+        c.post(f"/api/bridge/{a['id']}/events", json={"events": [{"t": "hello", "idle": True}, state,
+                                                                    {"t": "state", "model": {"provider": "p", "id": "m2"}, "thinking": "off"},
+                                                                    {"t": "note", "text": "模型换成 p/m2。"}]}, headers=h)
+        got = c.get(f"/api/agents/{a['id']}").json()
+        st = got["agent"]["state"]
+        assert st["model"]["id"] == "m2" and st["thinking"] == "off" and len(st["models"]) == 2 and got["agent"]["model"] == "p/m2"
+        assert got["events"][-1]["data"]["text"] == "模型换成 p/m2。"
+
+        # a slash command for a pi that is running goes to its bridge, not to the model
+        town.agents.alive = lambda _a: True
+        ev = c.post(f"/api/agents/{a['id']}/say", json={"text": "/model p/m1"}).json()
+        assert ev["data"]["cmd"] and town.agents.take(a["id"]) == [{"id": ev["data"]["mid"], "kind": "cmd", "name": "model", "args": "p/m1"}]
+        typed = []
+        town.agents._tmux = lambda *args: typed.append(args)
+        c.post(f"/api/agents/{a['id']}/say", json={"text": "/settings"})
+        assert ("send-keys", "-t", f"pt-{a['id']}", "-l", "/settings") in typed and not town.agents.take(a["id"])
+
+
+FAKE_PASEO = r"""#!/bin/sh
+echo "$@" >> "$(dirname "$0")/calls.log"
+case "$1" in
+  status) echo '{"localDaemon": "running", "connectedDaemon": "reachable", "serverId": "srv_test", "daemonVersion": "0.13.2"}' ;;
+  run) echo '{"agentId": "pa-1", "status": "running", "provider": "pi", "cwd": "/tmp", "title": "t"}' ;;
+  ls) echo '[{"id": "pa-1", "status": "idle", "provider": "pi/openai-codex/gpt-5.6-luna"}]' ;;
+  provider) if [ "$2" = ls ]; then echo '[{"provider": "pi", "label": "Pi", "status": "available"}, {"provider": "omp", "status": "unavailable"}]';
+            else echo '[{"model": "Luna", "id": "openai-codex/gpt-5.6-luna", "thinkingOptionIds": ["off", "high"], "defaultThinkingOptionId": "high"}]'; fi ;;
+  *) echo '{}' ;;
+esac
+"""
+
+
+def test_paseo_agents_are_created_driven_and_followed(tmp_path):
+    fake = tmp_path / "bin" / "paseo"
+    fake.parent.mkdir()
+    fake.write_text(FAKE_PASEO)
+    fake.chmod(0o755)
+    app = create_app(make_settings(tmp_path, paseo_bin=str(fake)))
+    with TestClient(app) as c:
+        town = app.state.town
+        line_id = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
+        wait_for(town, line_id, {"waiting"})
+        info = c.get("/api/paseo").json()
+        assert info["status"]["ok"] and [p["id"] for p in info["providers"]] == ["pi"] and info["providers"][0]["models"][0]["thinking"] == ["off", "high"]
+
+        a = c.post("/api/agents", json={"line_id": line_id, "role": "coder"}).json()
+        r = c.post(f"/api/agents/{a['id']}/start", json={"runtime": "paseo", "provider": "pi", "model": "openai-codex/gpt-5.6-luna", "thinking": "high"}).json()
+        assert r["runtime"] == "paseo" and r["ext_id"] == "pa-1" and r["attach"] is None
+        cwd = town.agents.get(a["id"])["cwd"]
+        from pathlib import Path
+        assert ".papertown/pt" in (Path(cwd) / "AGENTS.md").read_text() and (Path(cwd) / ".papertown" / "pt").exists()
+        run = next(l for l in (fake.parent / "calls.log").read_text().splitlines() if l.startswith("run"))
+        assert "--provider pi" in run and "--model openai-codex/gpt-5.6-luna" in run and "papertown.agent=" + a["id"] in run and "PAPERTOWN_AGENT_TOKEN=" in run
+
+        c.post(f"/api/agents/{a['id']}/say", json={"text": "先跑测试"})
+        c.post(f"/api/agents/{a['id']}/abort")
+        log = (fake.parent / "calls.log").read_text()
+        assert "send pa-1 --no-wait --prompt-file" in log and "stop pa-1" in log
+
+        # the watcher follows Paseo's status
+        t0 = time.time()
+        while town.agents.get(a["id"])["status"] != "idle" and time.time() - t0 < 10:
+            time.sleep(0.2)
+        assert town.agents.get(a["id"])["status"] == "idle"

@@ -30,6 +30,17 @@ def _detect_provider() -> str:
     return "mock"
 
 
+# providers the town's own workers can use, with their default (strong, cheap) models and a
+# few suggestions for the switch in the chat drawer
+PROVIDERS = {
+    "mock": {"name": "离线演示", "default": ("scripted", "scripted"), "models": ["scripted"]},
+    "anthropic": {"name": "Anthropic", "default": ("claude-opus-5-5", "claude-haiku-5-5"),
+                  "models": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"]},
+    "openai": {"name": "OpenAI 兼容接口", "default": ("deepseek-chat", "deepseek-chat"),
+               "models": ["deepseek-chat", "deepseek-reasoner", "qwen-max", "glm-4.6"]},
+}
+
+
 @dataclass
 class Settings:
     # mock | anthropic | openai (any OpenAI-compatible endpoint: DeepSeek, Qwen, ...)
@@ -63,18 +74,17 @@ class Settings:
     pi_bin: str = field(default_factory=lambda: _env("PAPERTOWN_PI_BIN"))
     pi_model: str = field(default_factory=lambda: _env("PAPERTOWN_PI_MODEL"))
     tmux_bin: str = field(default_factory=lambda: _env("PAPERTOWN_TMUX_BIN"))
+    # or in Paseo (paseo.sh): its CLI, the web app it serves, and an explicit daemon endpoint
+    paseo_bin: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_BIN"))
+    paseo_url: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_URL", "http://127.0.0.1:6767"))
+    paseo_host: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_HOST"))
     # where the bridge extension inside each pi reaches this server; `serve` sets it
     url: str = field(default_factory=lambda: _env("PAPERTOWN_URL", "http://127.0.0.1:8000"))
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 
     def __post_init__(self) -> None:
-        defaults = {
-            "anthropic": ("claude-opus-5-5", "claude-haiku-5-5"),
-            "openai": ("deepseek-chat", "deepseek-chat"),
-            "mock": ("scripted", "scripted"),
-        }
-        strong, cheap = defaults.get(self.provider, ("scripted", "scripted"))
+        strong, cheap = PROVIDERS.get(self.provider, PROVIDERS["mock"])["default"]
         self.model_strong = self.model_strong or strong
         self.model_cheap = self.model_cheap or cheap
         self.data_dir.mkdir(parents=True, exist_ok=True)

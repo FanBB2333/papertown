@@ -10,7 +10,7 @@ from pathlib import Path
 from .agents import Agents
 from .bank import Bank
 from .compute import Job, SimulatedPlant
-from .config import Settings
+from .config import PROVIDERS, Settings
 from .db import DB, now
 from .depots import Depots
 from .events import EventBus
@@ -62,6 +62,37 @@ class Town:
 
     def stop(self) -> None:
         self.mcp.stop()
+
+    # ---------- the town's own model ----------
+
+    def llm(self) -> dict:
+        s = self.s
+        return {"provider": s.provider, "model_strong": s.model_strong, "model_cheap": s.model_cheap, "effort": s.effort,
+                "openai_base_url": s.openai_base_url, "offline": s.offline,
+                "providers": [{"id": k, "name": v["name"], "models": v["models"]} for k, v in PROVIDERS.items()]}
+
+    def set_llm(self, provider: str | None = None, model_strong: str | None = None, model_cheap: str | None = None,
+                effort: str | None = None) -> dict:
+        """Switch the provider and models the workers use, for this run of the server (the
+        environment decides again at the next start). Keys still come from the environment."""
+        s = self.s
+        old = (s.provider, s.model_strong, s.model_cheap, s.effort)
+        if provider and provider not in PROVIDERS:
+            raise ValueError(f"没有这个供应商：{provider}")
+        if provider and provider != s.provider:
+            s.provider = provider
+            s.model_strong, s.model_cheap = PROVIDERS[provider]["default"]
+        s.model_strong = (model_strong or "").strip() or s.model_strong
+        s.model_cheap = (model_cheap or "").strip() or s.model_cheap
+        s.effort = effort or s.effort
+        try:
+            self.provider = make_provider(s)
+        except Exception as e:
+            s.provider, s.model_strong, s.model_cheap, s.effort = old
+            raise ValueError(f"切换失败：{e}") from e
+        info = self.llm()
+        self.bus.publish("llm", llm=info)
+        return info
 
     # ---------- shared helpers ----------
 

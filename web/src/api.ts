@@ -52,10 +52,34 @@ export type AgentStatus = 'stopped' | 'starting' | 'idle' | 'working' | 'error' 
 
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note'; data: any }
 
+export interface ModelRef { provider: string; id: string; name: string; reasoning: boolean; contextWindow: number | null }
+
+// what a pi's bridge reports: its model and thinking level, the models it can switch to, its session
+export interface PiState {
+  model: ModelRef | null; thinking: string; levels: string[];
+  session: { id: string; name: string | null; file: string | null };
+  context: { tokens: number | null; contextWindow: number; percent: number | null } | null;
+  models?: ModelRef[]; providers?: Record<string, string>;
+  commands?: { name: string; description: string; source: string }[];
+}
+
 export interface Agent {
   id: string; line_id: string; role: AgentRole; status: AgentStatus; tmux: string | null; cwd: string | null;
   model: string | null; cost: number; attach: string | null; name: string; last: AgentEvent | null; updated_at: string;
+  runtime: 'pi' | 'paseo'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
 }
+
+export interface PaseoModel { id: string; name: string; thinking: string[]; default_thinking: string | null }
+export interface PaseoProvider { id: string; label: string; modes: string; models: PaseoModel[] }
+export interface PaseoInfo {
+  status: { ok: boolean; note: string; server_id?: string; web?: string | null; version?: string };
+  providers: PaseoProvider[];
+}
+export interface Llm {
+  provider: string; model_strong: string; model_cheap: string; effort: string; offline: boolean; openai_base_url: string;
+  providers: { id: string; name: string; models: string[] }[];
+}
+export interface StartOpts { runtime?: 'pi' | 'paseo'; provider?: string; model?: string; thinking?: string }
 
 export interface ProjectRef { id: string; seq: number; title: string; status: string; stage: string }
 export interface RosterRow { line: ProjectRef; agent: Agent | null }
@@ -97,7 +121,11 @@ export const api = {
   roster: (role: AgentRole) => call<Roster>('GET', `/api/agents?role=${role}`),
   agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`),
   openAgent: (lineId: string, role: AgentRole) => call<Agent>('POST', '/api/agents', { line_id: lineId, role }),
-  startAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/start`),
+  startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
+  openInPaseo: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/open`),
+  paseo: () => call<PaseoInfo>('GET', '/api/paseo'),
+  llm: () => call<Llm>('GET', '/api/llm'),
+  setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
   say: (id: string, text: string) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text }),
   brief: (id: string) => call<AgentEvent>('POST', `/api/agents/${id}/brief`),
@@ -120,7 +148,7 @@ export function listen(fn: (e: ServerEvent) => void): () => void {
 export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boolean) => void): () => void {
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = JSON.parse((ev as MessageEvent).data);
     onEvent(e);

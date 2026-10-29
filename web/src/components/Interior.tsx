@@ -34,8 +34,8 @@ interface Props extends RoomActions {
 const ROOMS: Record<string, { title: string; sub: string }> = {
   mill: { title: '造纸厂', sub: '大本营：所有项目都在这里立项、排工序、出厂' },
   farm: { title: '实验农场', sub: '每个项目的实验任务在这里排队、运行，由看田员盯着进度' },
-  press: { title: '印刷厂', sub: '每个项目一个写论文的 pi，稿子就在印刷厂的目录里' },
-  depot: { title: '仓库', sub: '每个项目一个写代码的 pi：写代码、跑测试，再把实验提交到农场' },
+  press: { title: '印刷厂', sub: '每个项目一个写论文的 agent（Paseo 或本机 pi），稿子就在印刷厂的目录里' },
+  depot: { title: '仓库', sub: '每个项目一个写代码的 agent（Paseo 或本机 pi）：写代码、跑测试，再把实验提交到农场' },
 };
 
 export function Interior(p: Props) {

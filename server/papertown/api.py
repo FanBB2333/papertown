@@ -46,6 +46,20 @@ class AgentIn(BaseModel):
     role: str
 
 
+class StartIn(BaseModel):
+    runtime: str | None = None  # pi (tmux) | paseo
+    provider: str | None = None
+    model: str | None = None
+    thinking: str | None = None
+
+
+class LlmIn(BaseModel):
+    provider: str | None = None
+    model_strong: str | None = None
+    model_cheap: str | None = None
+    effort: str | None = None
+
+
 class SayIn(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
 
@@ -250,8 +264,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"agent": town.agents.public(a), "events": town.agents.events(agent_id, after)}
 
     @app.post("/api/agents/{agent_id}/start")
-    def agent_start(agent_id: str):
-        return agents(town.agents.start, agent_id)
+    def agent_start(agent_id: str, body: StartIn | None = None):
+        b = body or StartIn()
+        return agents(town.agents.start, agent_id, b.runtime, b.provider, b.model, b.thinking)
+
+    @app.post("/api/agents/{agent_id}/open")
+    def agent_open_desktop(agent_id: str):
+        agents(town.agents.open_desktop, agent_id)
+        return {"ok": True}
+
+    @app.get("/api/llm")
+    def llm():
+        return town.llm()
+
+    @app.post("/api/llm")
+    def set_llm(body: LlmIn):
+        try:
+            return town.set_llm(body.provider, body.model_strong, body.model_cheap, body.effort)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @app.get("/api/paseo")
+    def paseo():
+        p = town.agents.paseo
+        st = p.status(fresh=True)
+        try:
+            providers = p.providers() if st["ok"] else []
+        except Exception as e:  # noqa: BLE001 - the CLI's own message is the useful part
+            st = st | {"note": str(e)}
+            providers = []
+        return {"status": st, "providers": providers}
 
     @app.post("/api/agents/{agent_id}/stop")
     def agent_stop(agent_id: str):

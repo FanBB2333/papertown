@@ -80,13 +80,30 @@ uv run papertown demo "让 VLA 模型用结构化的场景图做长程规划"
 | 模拟电厂 | **模拟**：离线流水线的实验结果是按种子生成的，结果里带 `simulated: true` |
 | 其余建筑 | 未接入，点开能看到计划 |
 
-## pi 员工
+## 仓库和印刷厂里的员工
 
-仓库和印刷厂里的员工是本机的 [pi](https://github.com/earendil-works/pi)（`@earendil-works/pi-coding-agent`）。在建筑里点「启动」后，服务端在一个独立的 tmux 服务器里启动交互式 pi，并加载 `server/papertown/pi/bridge.ts`。这个扩展只用了 pi 公开的扩展 API，写法参照 pi 自带的官方示例 `examples/extensions/file-trigger.ts` 和 `send-user-message.ts`：
+每个项目在仓库有一个写代码的员工，在印刷厂有一个写论文的员工。启动时可以选两种运行方式，工作目录都一样：代码员工在 `server/var/projects/<项目>/code`，写作员工在印刷厂的 `server/var/press/<项目>`，里面会写一份 `AGENTS.md` 交代它的职责，启动时先把项目简报发给它。
+
+### Paseo（推荐）
+
+[Paseo](https://paseo.sh) 在本机跑一个守护进程（默认 `127.0.0.1:6767`），托管 Claude Code、Codex、OpenCode、Pi、Copilot 等 agent。Papertown 通过 `paseo` CLI（它是这个端点的客户端）为每个项目创建 agent，供应商、模型和思考强度在启动时从 Paseo 列出的清单里选；房间里直接嵌入 Paseo 自己的 agent 页面，所以 slash 命令、模型切换、模式和权限审批都和在 Paseo 里一样，手机上的 Paseo 也能看到同一个 agent。
+
+```bash
+paseo daemon start                                      # 守护进程
+paseo daemon config set features.webUi.enabled true     # 让守护进程提供网页端，房间才能嵌入对话
+paseo daemon restart
+```
+
+这些 agent 用 `.papertown/pt` 读项目简报、把实验提交到实验农场（`pt brief`、`pt submit <名字> -- <命令>`、`pt jobs`）。Papertown 每隔几秒同步一次它们的状态。Paseo 用它自己的登录和设置，Papertown 不碰任何 key。
+
+### pi · 后台终端
+
+本机的 [pi](https://github.com/earendil-works/pi)（`@earendil-works/pi-coding-agent`）跑在一个独立的 tmux 服务器里，加载 `server/papertown/pi/bridge.ts`。这个扩展只用了 pi 公开的扩展 API，写法参照 pi 自带的官方示例 `examples/extensions/file-trigger.ts` 和 `send-user-message.ts`：
 
 - pi 的事件（你的输入、流式回复、工具调用、结束）实时转发到网页；
 - 网页里发的消息由扩展用 `pi.sendUserMessage()` 注入，pi 正忙时排在它手上的事之后；
-- 代码 pi 多了 `papertown_submit_job` / `papertown_job_status` 两个工具，实验提交后出现在实验农场。
+- 网页上能切换模型和思考强度，并显示上下文用量；输入 `/` 可以用 pi 的命令：`/model`、`/thinking`、`/compact`、`/new`、`/clone`、`/name`、`/session`、`/reload` 由扩展通过 pi 的 API 执行，扩展命令、skills 和提示模板交给 pi 自己展开；`/settings`、`/resume`、`/fork`、`/tree`、`/login`、`/export` 这类需要 pi 终端界面的命令会被敲进 tmux，在终端里接着操作；
+- 代码员工多了 `papertown_submit_job` / `papertown_job_status` 两个工具，实验提交后出现在实验农场。
 
 想直接在终端里看同一段对话，复制建筑里显示的命令，例如：
 
@@ -94,7 +111,11 @@ uv run papertown demo "让 VLA 模型用结构化的场景图做长程规划"
 tmux -L papertown attach -t pt-coder-line_1
 ```
 
-pi 用它自己的模型设置和登录，Papertown 不碰任何 key；pi 报告的费用会记进银行。工作目录：代码 pi 在 `server/var/projects/<项目>/code`，写作 pi 在印刷厂的 `server/var/press/<项目>`，两处都会写一份 `AGENTS.md` 交代它的职责。
+pi 用它自己的模型设置和登录，Papertown 不碰任何 key；pi 报告的费用会记进银行。
+
+### 小镇自己的员工
+
+对话抽屉右上角可以切换小镇员工用的供应商（离线演示 / Anthropic / OpenAI 兼容接口）和强、便宜两档模型。只在这次运行里有效，key 照旧从环境变量读取，重启后按环境变量重新决定。
 
 实验任务也可以手动提交：
 

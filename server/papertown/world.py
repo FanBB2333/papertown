@@ -238,7 +238,7 @@ class World:
             return town.plant.status()["summary"]
         if t == "depot":
             n = self.db.val("select count(*) from agents where role = 'coder' and status in ('idle', 'working', 'starting')") or 0
-            return f"{n} 个代码 pi 在线"
+            return f"{n} 个代码员工在线"
         if t == "newspaper":
             return "运行状态页"
         return "空闲"

@@ -13,7 +13,7 @@ interface Props extends RoomActions {
 }
 
 const JOB_STATUS: Record<string, string> = { queued: '排队', running: '运行中', done: '完成', failed: '失败', cancelled: '已取消' };
-const WHO = (by: string | null) => !by ? '—' : by === 'pipeline' ? '流水线' : by === 'you' ? '你' : by.startsWith('coder-') ? '代码 pi' : by;
+const WHO = (by: string | null) => !by ? '—' : by === 'pipeline' ? '流水线' : by === 'you' ? '你' : by.startsWith('coder-') ? '代码员工' : by;
 
 function ago(ts: string | null) {
   if (!ts) return '';
@@ -99,7 +99,7 @@ export function FarmRoom(p: Props) {
           <button key={line.id} className={`mon${only === line.id ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={() => setOnly(line.id)}>
             <div className="proj-top"><b>#{line.seq} {line.title}</b>
               <span className={`pulse${(board?.jobs ?? []).some(j => j.line_id === line.id && j.status === 'running') ? ' on' : ''}`} /></div>
-            <p className="mon-note">{agent?.last?.data?.text ?? '还没有实验。代码 pi 提交任务后，这里会写下进度。'}</p>
+            <p className="mon-note">{agent?.last?.data?.text ?? '还没有实验。代码员工提交任务后，这里会写下进度。'}</p>
             {agent?.last && <span className="muted small">{ago(agent.last.ts)}</span>}
           </button>
         ))}
@@ -114,7 +114,7 @@ export function FarmRoom(p: Props) {
           ))}
         </div>
         <div className="board">
-          {!jobs.length && <div className="room-empty small-empty"><p>还没有任务。仓库里的代码 pi 用 <code>papertown_submit_job</code> 提交实验，或者流水线跑到实验工序时，任务会出现在这里。</p></div>}
+          {!jobs.length && <div className="room-empty small-empty"><p>还没有任务。仓库里的代码员工提交实验（pi 用 <code>papertown_submit_job</code>，Paseo 里的 agent 用 <code>.papertown/pt submit</code>），或者流水线跑到实验工序时，任务会出现在这里。</p></div>}
           {groups.map(([name, list]) => list.length > 0 && (
             <div key={name} className="jgroup">
               <h4>{name} <span className="muted">{list.length}</span></h4>
