@@ -72,8 +72,8 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
 
   useEffect(() => { eng.current?.setPlaces(placements, notes); }, [placements, notes]);
   useEffect(() => {
-    eng.current?.setOptions({ sensitivity: st.sensitivity, invertY: st.invertY, fov: st.fov, bob: st.bob, quality: st.quality, calm: st.motion === 'calm' });
-  }, [st.sensitivity, st.invertY, st.fov, st.bob, st.quality, st.motion]);
+    eng.current?.setOptions({ sensitivity: st.sensitivity, invertY: st.invertY, fov: st.fov, hand: st.hand, bob: st.bob, quality: st.quality, calm: st.motion === 'calm' });
+  }, [st.sensitivity, st.invertY, st.fov, st.hand, st.bob, st.quality, st.motion]);
 
   // in: show the map's own view in 3D, fade over the map, then fly down to your eyes
   useEffect(() => {

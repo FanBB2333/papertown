@@ -12,6 +12,7 @@ import { KEY_LABELS, placementName } from '@design/world.js';
 import type { Placement } from '../api';
 import type { MapView } from '../components/WorldMap';
 import { doorOf, free, loadPos, nearest, savePos, slide, START, type Pos } from '../components/walk';
+import { Hand } from './hand';
 import { buildTown, Materials, PAPER, type Town } from './scene';
 
 // the palette is given in display colours and the lights are tuned for them: no linear workflow
@@ -35,11 +36,12 @@ export interface EngineOptions {
   sensitivity: number; // times LOOK
   invertY: boolean;
   fov: number; // through your eyes, degrees
-  bob: boolean; // the view sways with your steps
+  hand: boolean; // your hand and pencil in view
+  bob: boolean; // the view and the hand sway with your steps
   quality: 'low' | 'mid' | 'high'; // resolution and shadows
   calm: boolean; // shorter flights in and out
 }
-const OPTIONS: EngineOptions = { sensitivity: 1, invertY: false, fov: 68, bob: true, quality: 'high', calm: false };
+const OPTIONS: EngineOptions = { sensitivity: 1, invertY: false, fov: 68, hand: true, bob: true, quality: 'high', calm: false };
 const SHADOW = { low: 0, mid: 1024, high: 2048 };
 
 export interface EngineEvents {
@@ -67,6 +69,7 @@ export class Engine {
   private sun: THREE.DirectionalLight;
   private opt = { ...OPTIONS };
   private mats = new Materials();
+  private hand = new Hand();
   private town: Town | null = null;
   private sig = '';
   private places: Placement[] = [];
@@ -160,6 +163,7 @@ export class Engine {
     document.removeEventListener('pointerlockchange', this.onLock);
     this.town?.dispose();
     this.mats.dispose();
+    this.hand.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -348,6 +352,7 @@ export class Engine {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.hand.setAspect(w / h);
     this.wake();
   }
 
@@ -385,6 +390,9 @@ export class Engine {
       town.me.rotation.y = -this.heading;
     }
     this.renderer.render(this.scene, this.camera);
+    const v = Math.hypot(this.vel.x, this.vel.y);
+    this.hand.update(dt, { show: this.opt.hand && this.eyes, walk: this.opt.bob ? v / WALK : 0, phase: this.bob, t: this.clock });
+    this.hand.render(this.renderer);
     this.drawTags();
     this.drawMarker();
     if (this.shown && (this.active || this.flight)) this.raf = requestAnimationFrame(this.frame);
@@ -543,6 +551,7 @@ export class Engine {
     if (!this.active || !this.eyes || typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
     if (['KeyE', 'Enter', 'Space'].includes(e.code)) {
       e.preventDefault();
+      if (!e.repeat) this.hand.swing();
       if (!e.repeat && this.reach) this.go(this.reach.id);
       return;
     }
@@ -563,6 +572,7 @@ export class Engine {
     if (!this.locked || !this.active || !this.eyes) return;
     const clamp = (v: number) => Math.max(-160, Math.min(160, v)); // browsers now and then report a wild jump
     const k = LOOK * this.opt.sensitivity;
+    this.hand.look(clamp(e.movementX), clamp(e.movementY) * (this.opt.invertY ? -1 : 1));
     this.heading += clamp(e.movementX) * k;
     this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - clamp(e.movementY) * k * (this.opt.invertY ? -1 : 1)));
   };
@@ -571,6 +581,7 @@ export class Engine {
     if (e.button !== 0 || !this.active || !this.eyes) return;
     if (this.locked) {
       e.preventDefault();
+      this.hand.swing();
       if (this.target?.how === 'look') this.go(this.target.pl.id); // a click goes where you aim; E also takes the door you stand at
     } else if (e.target === this.renderer.domElement) {
       this.lock();

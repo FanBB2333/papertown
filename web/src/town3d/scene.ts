@@ -13,7 +13,7 @@ import { PX, Pen3, ZS, type Glyph, type V3 } from './pen3';
 const THEME = THEMES.sketch as { mats: Record<string, unknown>; ink: string; text: string; ui: { bg: string; head: string } };
 export const PAPER = THEME.ui.bg;
 export const TOP = 1.15; // how much brighter the lights make an upward face than the map's flat fill
-const INK = '#2e1f12';
+export const INK = '#2e1f12';
 const WATER_Y = -0.1;
 
 // ---------- materials ----------
@@ -66,7 +66,7 @@ function noise(a: number, b: number, c: number) {
 }
 
 // segments as hand-drawn strokes: shared edges drawn once, each a touch long at both ends and off by a hair
-function inkLines(seg: number[], mat: THREE.Material) {
+export function inkLines(seg: number[], mat: THREE.Material) {
   const out: number[] = [], seen = new Set<string>();
   const key = (i: number) => `${seg[i].toFixed(3)},${seg[i + 1].toFixed(3)},${seg[i + 2].toFixed(3)}`;
   for (let i = 0; i < seg.length; i += 6) {
