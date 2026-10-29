@@ -21,8 +21,18 @@
 .t3-tag.core { background: var(--accent); color: #fffaf2; font-size: 14px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, #2e1f12); }
 .t3-tag.on { box-shadow: 0 0 0 2px var(--brand); }
 
-.t3-cross { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; pointer-events: none; }
-.t3-cross::before, .t3-cross::after { content: ''; position: absolute; background: var(--ink); opacity: .7; border-radius: 1px; }
+.t3-cross { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; pointer-events: none; transition: transform .3s var(--spring); }
+.t3-cross::before, .t3-cross::after { content: ''; position: absolute; background: var(--ink); opacity: .7; border-radius: 1px; transition: background-color .2s; }
+.t3-cross.hot { transform: rotate(45deg) scale(1.15); }
+.t3-cross.hot::before, .t3-cross.hot::after { background: var(--brand); opacity: 1; }
+
+/* the mouse is free: one click on the town takes it back */
+.t3-resume {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 22px; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; animation: tip-in .35s var(--spring) both;
+}
+.t3-resume b { font-family: var(--head); font-size: 17px; font-weight: 400; }
+.t3-resume span { color: var(--muted); font-size: 12.5px; }
 .t3-cross::before { left: 8px; top: 2px; width: 2px; height: 14px; }
 .t3-cross::after { top: 8px; left: 2px; height: 2px; width: 14px; }
 

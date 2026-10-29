@@ -175,15 +175,19 @@ export function App() {
     openRoom(el.getAttribute('data-open')!, el.getAttribute('data-line'), { x: r.left + r.width / 2, y: r.top + r.height / 2 });
   }
 
-  const go3d = useCallback(() => {
+  const root = useRef<HTMLDivElement>(null);
+  // lock: take the mouse for looking round right away (this runs in the click on the switch,
+  // which the browser requires); from a link there is no click, and the town asks for one
+  const go3d = useCallback((lock = true) => {
     if (dim !== '2d') return;
+    if (lock) (root.current?.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => {});
     setFrom3d(mapApi.current?.view() ?? null);
     setWant3d(true);
     setDim('to3d');
   }, [dim]);
   const go2d = useCallback(() => { if (dim === '3d') setDim('to2d'); }, [dim]);
   useEffect(() => {
-    if (world && hash3d.current) { hash3d.current = false; go3d(); }
+    if (world && hash3d.current) { hash3d.current = false; go3d(false); }
   }, [world, go3d]);
 
   // the walking hint fades once you have moved or after a while
@@ -200,7 +204,7 @@ export function App() {
   const running = world?.running ?? [];
 
   return (
-    <div className={`proto la theme-sketch${chatOpen ? ' chat-open' : ''}${sheet && !leaving ? ' in-room' : ''}${dim !== '2d' ? ' in-3d' : ''}`} data-mode={view} onClick={onRootClick}
+    <div ref={root} className={`proto la theme-sketch${chatOpen ? ' chat-open' : ''}${sheet && !leaving ? ' in-room' : ''}${dim !== '2d' ? ' in-3d' : ''}`} data-mode={view} onClick={onRootClick}
       style={door ? { ['--ox' as string]: `${door.x}px`, ['--oy' as string]: `${door.y}px` } : undefined}>
       {world && <WorldMap placements={world.placements} highlight={null} notes={notes} active={!sheet && view === 'world' && !chatOpen && dim === '2d'}
         hidden={dim === '3d' || dim === 'to2d'} api={mapApi} onOpen={(id, at) => openRoom(id, null, at)} />}
@@ -211,6 +215,7 @@ export function App() {
             onOpen={(id, at) => openRoom(id, null, at)}
             onCovered={() => setDim(d => d === 'to3d' ? '3d' : d)}
             onLeft={v => { mapApi.current?.setView(v); setDim('2d'); }}
+            onLeave={go2d}
             onFail={msg => { push(msg); setWant3d(false); setDim('2d'); }} />
         </Suspense>
       )}
@@ -224,7 +229,7 @@ export function App() {
         </div>
         <div className="seg w-only" role="tablist" title="平面地图和 3D 漫游之间切换，人站在同一个地方">
           <button className={dim === '2d' || dim === 'to2d' ? 'on' : ''} onClick={go2d}>平面</button>
-          <button className={dim === '3d' || dim === 'to3d' ? 'on' : ''} onClick={go3d}>3D 漫游</button>
+          <button className={dim === '3d' || dim === 'to3d' ? 'on' : ''} onClick={() => go3d()}>3D 漫游</button>
         </div>
         {hud && <div className="hud-quiet">
           <span><b>{hud.lines.running}</b> 个项目在跑</span>

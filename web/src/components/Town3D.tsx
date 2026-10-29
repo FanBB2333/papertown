@@ -1,8 +1,10 @@
 // The town in 3D, walked through your own eyes (town3d/engine.ts does the work). It
 // takes over from the map and hands back to it: on the way in the camera starts exactly
 // where the map was looking and flies down to where you stand; on the way out it flies
-// back up over you and the map appears underneath. Rooms open from the building's door
-// as on the map. Loaded on demand, so the map does not carry three.js.
+// back up over you and the map appears underneath. The mouse is locked to the middle of
+// the screen as in a first-person game; while it is free, a prompt in the middle asks for
+// a click to take it again. Rooms open from the building's door as on the map. Loaded on
+// demand, so the map does not carry three.js.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
@@ -23,6 +25,7 @@ interface Props {
   onOpen: (id: string, at: { x: number; y: number }) => void;
   onCovered: () => void; // the 3D town now fully covers the map
   onLeft: (v: MapView) => void; // back at the map's angle over you: the map can take over
+  onLeave: () => void; // asked from inside the town (M) to go back to the map
   onFail: (msg: string) => void;
 }
 
@@ -34,16 +37,17 @@ function where(key: string) {
   return d ? (d.dir.includes('↔') ? `${d.name} · ${d.dir}` : d.name) : '';
 }
 
-export default function Town3D({ placements, notes, phase, from, active, onOpen, onCovered, onLeft, onFail }: Props) {
+export default function Town3D({ placements, notes, phase, from, active, onOpen, onCovered, onLeft, onLeave, onFail }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const tags = useRef<HTMLDivElement>(null);
   const marker = useRef<SVGGElement>(null);
   const eng = useRef<Engine | null>(null);
-  const cb = useRef({ onOpen, onCovered, onLeft, onFail });
-  cb.current = { onOpen, onCovered, onLeft, onFail };
+  const cb = useRef({ onOpen, onCovered, onLeft, onLeave, onFail });
+  cb.current = { onOpen, onCovered, onLeft, onLeave, onFail };
   const [on, setOn] = useState(false);
   const [target, setTarget] = useState<Target | null>(null);
   const [locked, setLocked] = useState(false);
+  const [eyes, setEyes] = useState(false); // landed, walking through your own eyes
   const [help, setHelp] = useState(true);
   const helpTimer = useRef<number>();
 
@@ -52,7 +56,9 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
       eng.current = new Engine(host.current!, tags.current!, marker.current, {
         target: setTarget,
         lock: setLocked,
+        eyes: setEyes,
         open: (id, at) => cb.current.onOpen(id, at),
+        leave: () => cb.current.onLeave(),
         moved: () => { if (helpTimer.current === undefined) helpTimer.current = window.setTimeout(() => setHelp(false), 2500); },
       });
     } catch (e) {
@@ -110,23 +116,27 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
   }
 
   const pl = target?.pl, b = pl && BUILDINGS[pl.type];
-  const live = phase === 'live' && active;
+  const live = phase === 'live' && active && eyes;
   return (
     <div ref={host} className={`t3 w-only${on ? ' on' : ''}${locked ? ' locked' : ''}`}>
       <div ref={tags} className="t3-tags" />
-      {locked && <div className="t3-cross" />}
+      {live && locked && <div className={`t3-cross${target?.how === 'look' ? ' hot' : ''}`} />}
+      {live && !locked && (
+        <div className="pnl t3-resume">
+          <b>点击画面继续漫游</b>
+          <span>鼠标会留在画面中间：移动鼠标转视角，<kbd>Esc</kbd> 放开</span>
+        </div>
+      )}
       {live && pl && b && (
         <div className="pnl t3-card" key={pl.id}>
           <b>{placementName(pl)}</b><span>{where(b.district)}</span>
           <p>{b.rep}</p>
-          <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : '还没接入，进去看计划 · '}{target!.how === 'hover' ? '点击进入' : <>按 <kbd>E</kbd> 进去</>}</em>
+          <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : '还没接入，进去看计划 · '}{locked && target!.how === 'look' ? <>点击或按 <kbd>E</kbd> 进去</> : <>按 <kbd>E</kbd> 进去</>}</em>
         </div>
       )}
-      {live && (
+      {live && locked && (
         <div className={`walk-hint t3-help${help ? '' : ' gone'}`}>
-          {locked
-            ? <>移动鼠标看四周 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走 · <kbd>Shift</kbd> 跑 · <kbd>Esc</kbd> 放开鼠标</>
-            : <><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走 · <kbd>Shift</kbd> 跑 · 拖动画面转头，点一下锁定鼠标 · 到门口按 <kbd>E</kbd> 进去</>}
+          移动鼠标看四周 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走 · <kbd>Shift</kbd> 跑 · 对准建筑点击或按 <kbd>E</kbd> 进去 · <kbd>M</kbd> 回到平面 · <kbd>Esc</kbd> 放开鼠标
         </div>
       )}
       <div className="pnl t3-mini" title="点一下就过去；点建筑到它门口" onClick={onMini}>

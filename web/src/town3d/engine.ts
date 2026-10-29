@@ -2,7 +2,9 @@
 // minimap marker. It has two ways of looking: from the air, at exactly the map's angle
 // (30° down, from the +x +y corner, with a near-orthographic lens), and through your
 // own eyes. Going in and out of 3D is a camera flight between the two, so the map and
-// the 3D town hand over to each other without a cut.
+// the 3D town hand over to each other without a cut. Through your eyes the mouse works
+// as in a first-person game: it is locked to the middle of the screen, moving it turns
+// your head, and a click goes into the building under the crosshair.
 
 import * as THREE from 'three';
 import { BUILDINGS } from '@design/sprites.js';
@@ -17,7 +19,7 @@ THREE.ColorManagement.enabled = false;
 
 export const EYE = 0.55; // eye height in tiles
 const WALK = 1.8, RUN = 3.6, TURN = 2.2; // tiles / s, rad / s
-const LOOK = 0.0024, DRAG = 0.0045; // rad per pixel, pointer locked / dragging
+const LOOK = 0.0022; // rad per pixel of mouse movement
 const AIM = 4.5; // how far a look at a building reaches its door
 const FOV_AIR = 2, FOV_EYE = 68;
 const MAP_PX = 32 * Math.SQRT2; // map pixels per tile, across the screen
@@ -26,13 +28,15 @@ const AIR_EL = Math.PI / 6, AIR_AZ = Math.PI / 4; // the map's camera, as seen f
 
 interface Orbit { t: THREE.Vector3; d: number; az: number; el: number; fov: number }
 
-export interface Target { pl: Placement; how: 'door' | 'look' | 'hover' }
+export interface Target { pl: Placement; how: 'door' | 'look' }
 
 export interface EngineEvents {
   target(t: Target | null): void;
   lock(on: boolean): void;
+  eyes(on: boolean): void; // landed in your own eyes / took off again
   open(id: string, at: { x: number; y: number }): void;
   moved(): void;
+  leave(): void; // asked to go back to the map (M)
 }
 
 const ease = (s: number) => s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;
@@ -78,11 +82,9 @@ export class Engine {
   private shadowed = 0;
   private hidden = new Set<string>(); // tags behind a building
   private probe = 0; // which tags to test for that next
-  private mouse: { x: number; y: number } | null = null;
-  private drag: { x: number; y: number; moved: boolean } | null = null;
   private target: Target | null = null;
   private reach: Placement | null = null;
-  private locked = false;
+  private locked = !!document.pointerLockElement; // the app may have locked it on the way in
 
   constructor(private host: HTMLElement, private tagHost: HTMLElement, private marker: SVGGElement | null, private ev: EngineEvents) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -122,21 +124,21 @@ export class Engine {
     this.sizer.observe(host);
     this.resize();
     const c = this.renderer.domElement;
-    c.addEventListener('pointerdown', this.onDown);
-    c.addEventListener('pointerleave', () => { this.mouse = null; });
-    addEventListener('pointermove', this.onMove);
-    addEventListener('pointerup', this.onUp);
+    c.style.cursor = 'pointer';
+    addEventListener('mousemove', this.onMove);
+    addEventListener('mousedown', this.onDown);
     addEventListener('keydown', this.onKey);
     addEventListener('keyup', this.onKeyUp);
     addEventListener('blur', this.onBlur);
     document.addEventListener('pointerlockchange', this.onLock);
+    ev.lock(this.locked);
   }
 
   dispose() {
     cancelAnimationFrame(this.raf);
     this.sizer.disconnect();
-    removeEventListener('pointermove', this.onMove);
-    removeEventListener('pointerup', this.onUp);
+    removeEventListener('mousemove', this.onMove);
+    removeEventListener('mousedown', this.onDown);
     removeEventListener('keydown', this.onKey);
     removeEventListener('keyup', this.onKeyUp);
     removeEventListener('blur', this.onBlur);
@@ -240,7 +242,7 @@ export class Engine {
     if (!free(this.places, this.pos.x, this.pos.y)) this.pos = { ...START };
     this.heading = HEADING;
     this.pitch = -0.05;
-    this.eyes = false;
+    this.setEyes(false);
     this.flight = null;
     this.orbit = this.air(from);
     this.shown = true;
@@ -264,8 +266,7 @@ export class Engine {
   async down() {
     this.heading = this.openHeading(); // the flight turns you there on the way down
     await this.fly(() => this.eye(), 2100);
-    this.eyes = true;
-    this.ev.moved();
+    this.setEyes(true);
   }
 
   // back up to the map's angle, over where you stand; the map takes over from there
@@ -273,7 +274,7 @@ export class Engine {
     document.exitPointerLock?.();
     this.keys.clear();
     savePos(this.pos);
-    this.eyes = false;
+    this.setEyes(false);
     const v = { cx: (this.pos.x - this.pos.y) * 32, cy: (this.pos.x + this.pos.y) * 16, w: this.width };
     await this.fly(() => this.air(v), 1500);
     return v;
@@ -281,11 +282,25 @@ export class Engine {
 
   setShown(on: boolean) { this.shown = on; this.wake(); }
 
+  private setEyes(on: boolean) {
+    if (this.eyes === on) return;
+    this.eyes = on;
+    this.ev.eyes(on);
+  }
+
+  // take the mouse for looking round; needs a click (or a key) the browser counts as the user's
+  lock() {
+    const p = this.renderer.domElement.requestPointerLock?.() as Promise<void> | undefined;
+    p?.catch?.(() => {}); // refused: a click on the town tries again
+  }
+
   setActive(on: boolean) {
     this.active = on;
     if (!on) {
       this.keys.clear();
-      if (this.locked) document.exitPointerLock?.();
+      // a room, the chat or the status view came up: give the mouse back (not while flying in,
+      // when the app has just locked it for the walk ahead)
+      if (this.eyes && this.locked) document.exitPointerLock?.();
       this.setTarget(null);
       this.reach = null;
     }
@@ -380,22 +395,12 @@ export class Engine {
     return (h?.object.userData.id as string) ?? null;
   }
 
-  private ndc(x: number, y: number) {
-    const r = this.renderer.domElement.getBoundingClientRect();
-    return [((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1] as const;
-  }
-
-  // what E would walk into (the building you look at up close, or the door you stand at),
-  // and what the card shows (that, unless the mouse is over another building)
+  // what a click or E walks into: the building under the crosshair up close, or else the door you stand at
   private aim() {
     const byId = (id: string | null) => (id && this.places.find(p => p.id === id)) || null;
     const look = byId(this.hit(0, 0, AIM)), door = look ? null : nearest(this.places, this.pos.x, this.pos.y);
     this.reach = look ?? door;
-    const hov = !this.locked && this.mouse && !this.drag?.moved ? byId(this.hit(...this.ndc(this.mouse.x, this.mouse.y))) : null;
-    const t: Target | null = hov && hov.id !== this.reach?.id ? { pl: hov, how: 'hover' }
-      : look ? { pl: look, how: 'look' } : door ? { pl: door, how: 'door' } : null;
-    this.renderer.domElement.style.cursor = hov ? 'pointer' : this.locked ? 'none' : 'grab';
-    this.setTarget(t);
+    this.setTarget(look ? { pl: look, how: 'look' } : door ? { pl: door, how: 'door' } : null);
   }
 
   private setTarget(t: Target | null) {
@@ -506,6 +511,7 @@ export class Engine {
       if (!e.repeat && this.reach) this.go(this.reach.id);
       return;
     }
+    if (e.code === 'KeyM' && !e.repeat) { e.preventDefault(); this.ev.leave(); return; }
     if (/^(Key[WASD]|Arrow(Up|Down|Left|Right)|Shift(Left|Right))$/.test(e.code)) {
       e.preventDefault();
       this.keys.add(e.code);
@@ -516,46 +522,27 @@ export class Engine {
   private onKeyUp = (e: KeyboardEvent) => { this.keys.delete(e.code); };
   private onBlur = () => { this.keys.clear(); };
 
-  private onDown = (e: PointerEvent) => {
+  // with the mouse locked, moving it turns your head; a click goes into the building under the crosshair.
+  // Unlocked, a click on the town takes the mouse back.
+  private onMove = (e: MouseEvent) => {
+    if (!this.locked || !this.active || !this.eyes) return;
+    const clamp = (v: number) => Math.max(-160, Math.min(160, v)); // browsers now and then report a wild jump
+    this.heading += clamp(e.movementX) * LOOK;
+    this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - clamp(e.movementY) * LOOK));
+  };
+
+  private onDown = (e: MouseEvent) => {
     if (e.button !== 0 || !this.active || !this.eyes) return;
-    this.drag = { x: e.clientX, y: e.clientY, moved: false };
-  };
-
-  private onMove = (e: PointerEvent) => {
-    if (!this.active || !this.eyes) return;
     if (this.locked) {
-      this.heading += e.movementX * LOOK;
-      this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - e.movementY * LOOK));
-      return;
+      e.preventDefault();
+      if (this.target?.how === 'look') this.go(this.target.pl.id); // a click goes where you aim; E also takes the door you stand at
+    } else if (e.target === this.renderer.domElement) {
+      this.lock();
     }
-    const inside = e.target === this.renderer.domElement;
-    this.mouse = inside ? { x: e.clientX, y: e.clientY } : null;
-    const d = this.drag;
-    if (d) {
-      const dx = e.clientX - d.x, dy = e.clientY - d.y;
-      if (!d.moved && Math.hypot(dx, dy) < 4) return;
-      d.moved = true;
-      // drag the view, like turning a photo sphere
-      this.heading -= dx * DRAG;
-      this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch + dy * DRAG));
-      d.x = e.clientX;
-      d.y = e.clientY;
-      this.renderer.domElement.style.cursor = 'grabbing';
-    }
-  };
-
-  private onUp = (e: PointerEvent) => {
-    const d = this.drag;
-    this.drag = null;
-    if (!d || d.moved || !this.active || !this.eyes) return;
-    // a click: on a building goes in, elsewhere takes the mouse for looking round
-    const id = this.locked ? this.hit(0, 0, AIM) : this.hit(...this.ndc(e.clientX, e.clientY));
-    if (id) this.go(id);
-    else if (!this.locked) (this.renderer.domElement.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => {});
   };
 
   private onLock = () => {
-    this.locked = document.pointerLockElement === this.renderer.domElement;
+    this.locked = !!document.pointerLockElement;
     this.ev.lock(this.locked);
     this.wake();
   };
