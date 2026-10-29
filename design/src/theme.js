@@ -211,6 +211,9 @@ function specColor(spec, accent) {
   }
 }
 
+// one material's base colour (the left-face fill) as a plain colour string
+export function matColor(t, mat, accent) { return toC(specColor(t.mats[mat], accent)); }
+
 export function resolveSVG(markup, accent, t) {
   const WHITE = [255, 255, 255, 1], BLACK = [0, 0, 0, 1];
   const stroke = t.stroke ? toC(specColor(t.stroke, accent)) : null;

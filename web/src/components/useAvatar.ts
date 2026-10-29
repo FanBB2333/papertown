@@ -4,15 +4,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { iso } from '@design/sprites.js';
-import { footprint, tileMat } from '@design/world.js';
+import { footprint } from '@design/world.js';
 import type { Placement } from '../api';
+import { START, doorOf, free as freeAt, loadPos, nearest, savePos, slide } from './walk';
 
-const N = 24;
 const SPEED = 4.2; // tiles per second
-const R = 0.22; // body radius in tiles
-const REACH = 1.1; // how close counts as "at the door"
-const STORE = 'pt-avatar-2'; // bumped when the town is laid out anew
-const START = { x: 7.5, y: 4.5 }; // on the ring road, at the mill's door
 
 // screen-aligned directions on the isometric grid
 const DIRS: Record<string, [number, number]> = {
@@ -34,26 +30,7 @@ const FIGURE = `
 </g>
 <g class="av-hint"><rect rx="10" ry="10" height="20" y="-66"/><text y="-52" text-anchor="middle"></text></g>`;
 
-function load(): { x: number; y: number } {
-  try {
-    const v = JSON.parse(localStorage.getItem(STORE) ?? 'null');
-    if (v && Number.isFinite(v.x) && Number.isFinite(v.y)) return v;
-  } catch { /* private mode or bad data */ }
-  return { ...START };
-}
-
-function save(p: { x: number; y: number }) {
-  try { localStorage.setItem(STORE, JSON.stringify({ x: +p.x.toFixed(2), y: +p.y.toFixed(2) })); } catch { /* ignore */ }
-}
-
 const foot = (p: Placement) => footprint(p);
-
-// distance from a point to a footprint rectangle, in tiles
-function gap(px: number, py: number, p: Placement) {
-  const f = foot(p);
-  const dx = Math.max(f.x - px, 0, px - (f.x + f.w)), dy = Math.max(f.y - py, 0, py - (f.y + f.d));
-  return Math.hypot(dx, dy);
-}
 
 interface Opts {
   host: React.RefObject<HTMLElement>;
@@ -65,7 +42,7 @@ interface Opts {
 }
 
 export function useAvatar({ host, placements, markup, active, onEnter, follow }: Opts) {
-  const pos = useRef(load());
+  const pos = useRef(loadPos());
   const keys = useRef(new Set<keyof typeof DIRS>());
   const el = useRef<SVGGElement | null>(null);
   const nearRef = useRef<Placement | null>(null);
@@ -73,17 +50,7 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
   const opts = useRef({ placements, active, onEnter, follow });
   opts.current = { placements, active, onEnter, follow };
 
-  const blocked = useCallback((x: number, y: number) => {
-    if (x < 0.2 || y < 0.2 || x > N - 0.2 || y > N - 0.2) return true;
-    if (tileMat(Math.floor(x), Math.floor(y)) === 'water') return true;
-    for (const p of opts.current.placements) {
-      const f = foot(p);
-      if (x > f.x - 0.05 && x < f.x + f.w + 0.05 && y > f.y - 0.05 && y < f.y + f.d + 0.05) return true;
-    }
-    return false;
-  }, []);
-  const free = useCallback((x: number, y: number) =>
-    !blocked(x - R, y - R) && !blocked(x + R, y - R) && !blocked(x - R, y + R) && !blocked(x + R, y + R), [blocked]);
+  const free = useCallback((x: number, y: number) => freeAt(opts.current.placements, x, y), []);
 
   // painter order: slot the figure between the buildings behind it and those in front
   const place = useCallback(() => {
@@ -118,12 +85,7 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
   }, []);
 
   const updateNear = useCallback(() => {
-    const { x, y } = pos.current;
-    let best: Placement | null = null, bd = REACH;
-    for (const p of opts.current.placements) {
-      const d = gap(x, y, p) - (p.core ? 0.3 : 0);
-      if (d < bd) { bd = d; best = p; }
-    }
+    const best = nearest(opts.current.placements, pos.current.x, pos.current.y);
     if (best?.id !== nearRef.current?.id) {
       nearRef.current = best;
       setNear(best);
@@ -158,28 +120,24 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
       const moving = opts.current.active && (dx || dy);
       if (moving) {
         const len = Math.hypot(dx, dy), step = SPEED * dt;
-        const nx = pos.current.x + dx / len * step, ny = pos.current.y + dy / len * step;
-        // slide along walls: try both axes, then each alone
-        if (free(nx, ny)) pos.current = { x: nx, y: ny };
-        else if (free(nx, pos.current.y)) pos.current = { ...pos.current, x: nx };
-        else if (free(pos.current.x, ny)) pos.current = { ...pos.current, y: ny };
+        pos.current = slide(opts.current.placements, pos.current, pos.current.x + dx / len * step, pos.current.y + dy / len * step);
         const sdx = (dx - dy); // screen x direction
         if (sdx) el.current?.classList.toggle('face-left', sdx < 0);
         place();
         updateNear();
         const [sx, sy] = iso(pos.current.x, pos.current.y);
         opts.current.follow(sx, sy - 20, 1 - Math.pow(0.0015, dt));
-        if (t - saved > 600) { saved = t; save(pos.current); }
+        if (t - saved > 600) { saved = t; savePos(pos.current); }
       }
       if (!!moving !== walking) {
         walking = !!moving;
         el.current?.classList.toggle('walking', walking);
-        if (!walking) save(pos.current);
+        if (!walking) savePos(pos.current);
       }
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [free, place, updateNear]);
+  }, [place, updateNear]);
 
   useEffect(() => {
     const typing = (e: KeyboardEvent) => {
@@ -204,22 +162,26 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
     return () => { removeEventListener('keydown', down); removeEventListener('keyup', up); removeEventListener('blur', blur); };
   }, []);
 
-  useEffect(() => { if (!active) keys.current.clear(); }, [active]);
+  // back on the map (from a room or the 3D town): stand wherever you were last
+  useEffect(() => {
+    if (!active) { keys.current.clear(); return; }
+    pos.current = loadPos();
+    if (!free(pos.current.x, pos.current.y)) pos.current = { ...START };
+    place();
+    updateNear();
+  }, [active, free, place, updateNear]);
   useEffect(updateNear, [placements, updateNear]);
 
   // stand at a building's door (after clicking it on the map)
   const goTo = useCallback((id: string) => {
     const p = opts.current.placements.find(q => q.id === id);
-    if (!p) return;
-    const f = foot(p);
-    const spots = [[f.x + f.w / 2, f.y + f.d + 0.6], [f.x + f.w + 0.6, f.y + f.d / 2], [f.x + f.w / 2, f.y - 0.6], [f.x - 0.6, f.y + f.d / 2]];
-    const spot = spots.find(([x, y]) => free(x, y));
+    const spot = p && doorOf(opts.current.placements, p);
     if (!spot) return;
-    pos.current = { x: spot[0], y: spot[1] };
-    save(pos.current);
+    pos.current = spot;
+    savePos(pos.current);
     place();
     updateNear();
-  }, [free, place, updateNear]);
+  }, [place, updateNear]);
 
   const where = useCallback(() => iso(pos.current.x, pos.current.y), []);
   return { near, goTo, where };

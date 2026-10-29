@@ -692,6 +692,9 @@ function specColor(spec, accent) {
   }
 }
 
+// one material's base colour (the left-face fill) as a plain colour string
+export function matColor(t, mat, accent) { return toC(specColor(t.mats[mat], accent)); }
+
 export function resolveSVG(markup, accent, t) {
   const WHITE = [255, 255, 255, 1], BLACK = [0, 0, 0, 1];
   const stroke = t.stroke ? toC(specColor(t.stroke, accent)) : null;
@@ -1508,7 +1511,7 @@ export const N = 24;
 // the core buildings, and how many times their sprite size they are drawn
 export const SCALE = { mill: 1.6, depot: 1.6, farm: 1.5, press: 2.2 };
 const YARD = [4.5, 19.5]; // yard centres along each axis
-const RING = [4, 19]; // the ring road's rows and columns
+export const RING = [4, 19]; // the ring road's rows and columns
 
 // x, y are the back corner of the footprint in tile units
 export const PLACEMENTS = [
@@ -1541,7 +1544,7 @@ export const PLACEMENTS = [
   { id: 'genealogy', type: 'genealogy', x: 8, y: 12 },
 ];
 
-const KEY_LABELS = new Set(['mill', 'depot', 'farm', 'press', 'dock_arxiv', 'library', 'qa', 'dock_github', 'market', 'power', 'newspaper', 'cityhall', 'hatchery']);
+export const KEY_LABELS = new Set(['mill', 'depot', 'farm', 'press', 'dock_arxiv', 'library', 'qa', 'dock_github', 'market', 'power', 'newspaper', 'cityhall', 'hatchery']);
 
 // band and square names, at [x, y, z]
 const DISTRICT_LABELS = [
@@ -1593,6 +1596,11 @@ function yardOutline(r, inset = 0.3, rad = 1.3) {
   return pts;
 }
 
+// each core building's yard as an outline in tile coordinates, with its accent
+export function yards(places) {
+  return places.filter(p => SCALE[p.type]).map(pl => ({ id: pl.id, pts: yardOutline(yardOf(pl)), accent: pl.accent || BUILDINGS[pl.type].accent }));
+}
+
 const CORE_FEET = PLACEMENTS.filter(p => SCALE[p.type]).map(footprint);
 const under = (x, y) => CORE_FEET.some(f => x + 1 > f.x && x < f.x + f.w && y + 1 > f.y && y < f.y + f.d);
 
@@ -1631,6 +1639,34 @@ function pill(x, y, text, cls, size = 12, style = '') {
 }
 
 export function placementName(pl) { return pl.name || BUILDINGS[pl.type].name; }
+
+// trees, and for 'full' lamps and boats, kept clear of the buildings and their yards; the
+// same every time. k is the painter-sort key.
+// decor: 'full'; 'light' a few trees; 'none'.
+export function decorItems(places, decor = 'full') {
+  const items = [];
+  if (decor === 'none') return items;
+  const blocked = new Set();
+  for (const pl of places) {
+    const f = footprint(pl), r = SCALE[pl.type] ? yardOf(pl) : { x0: f.x - 1, y0: f.y - 1, x1: f.x + f.w + 1, y1: f.y + f.d + 1 };
+    for (let x = Math.floor(r.x0); x < r.x1; x++) for (let y = Math.floor(r.y0); y < r.y1; y++) blocked.add(`${x},${y}`);
+  }
+  const light = decor === 'light';
+  for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
+    const m = tileMat(x, y);
+    if (!m.startsWith('grass') || blocked.has(`${x},${y}`)) continue;
+    const rim = x >= N - 1 || y >= N - 1; // the near shore, where a few trees frame the board
+    if (hash(x, y, 3) < (rim ? 0.55 : 0.18) * (light ? 0.3 : 1)) {
+      const jx = (hash(x, y, 4) - 0.5) * 0.3, jy = (hash(x, y, 5) - 0.5) * 0.3;
+      items.push({ k: x + y + 1, prop: hash(x, y, 6) < 0.5 ? 'tree_pine' : 'tree_round', x: x + jx, y: y + jy });
+    }
+  }
+  if (decor === 'full') {
+    for (const [x, y] of LAMPS) items.push({ k: x + y + 1, prop: 'lamp', x: x - 0.5, y: y - 0.5 });
+    for (const [x, y] of BOATS) items.push({ k: x + y + 0.8, prop: 'boat', x, y, cls: 'bob' });
+  }
+  return items;
+}
 
 // placements: live placements from the server (default: the static design ones); a
 // placement's `key` decides whether it is labelled, `status: 'busy'` marks it working,
@@ -1682,13 +1718,12 @@ export function renderMap(o = {}) {
 
   // each core building's yard: a rounded square of tinted ground filling its corner
   if (opt.objects) {
-    for (const pl of places.filter(p => SCALE[p.type])) {
-      const pts = yardOutline(yardOf(pl));
+    for (const { pts, accent: acc } of yards(places)) {
       if (isHand()) {
         const d = handPath(pts.map(([x, y]) => iso(x, y, 0.02)));
-        out.push(`<g class="core-pad-g" style="--accent:${accent(pl)}"><path class="core-pad" d="${d.wash}"/><path class="core-pad-ink" d="${d.ink}"/></g>`);
+        out.push(`<g class="core-pad-g" style="--accent:${acc}"><path class="core-pad" d="${d.wash}"/><path class="core-pad-ink" d="${d.ink}"/></g>`);
       } else {
-        out.push(`<path class="core-pad" style="--accent:${accent(pl)}" d="M${pts.map(([x, y]) => sp(x, y, 0.02)).join('L')}Z"/>`);
+        out.push(`<path class="core-pad" style="--accent:${acc}" d="M${pts.map(([x, y]) => sp(x, y, 0.02)).join('L')}Z"/>`);
       }
     }
   }
@@ -1713,29 +1748,8 @@ export function renderMap(o = {}) {
 
   // objects, painter-sorted by footprint centre
   if (opt.objects) {
-    const objs = [];
-    const blocked = new Set();
-    const light = opt.decor === 'light';
-    for (const pl of places) {
-      const f = footprint(pl), r = SCALE[pl.type] ? yardOf(pl) : { x0: f.x - 1, y0: f.y - 1, x1: f.x + f.w + 1, y1: f.y + f.d + 1 };
-      for (let x = Math.floor(r.x0); x < r.x1; x++) for (let y = Math.floor(r.y0); y < r.y1; y++) blocked.add(`${x},${y}`);
-      objs.push({ k: f.x + f.w / 2 + f.y + f.d / 2, pl });
-    }
-    if (opt.decor !== 'none') {
-      for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
-        const m = tileMat(x, y);
-        if (!m.startsWith('grass') || blocked.has(`${x},${y}`)) continue;
-        const rim = x >= N - 1 || y >= N - 1; // the near shore, where a few trees frame the board
-        if (hash(x, y, 3) < (rim ? 0.55 : 0.18) * (light ? 0.3 : 1)) {
-          const jx = (hash(x, y, 4) - 0.5) * 0.3, jy = (hash(x, y, 5) - 0.5) * 0.3;
-          objs.push({ k: x + y + 1, prop: hash(x, y, 6) < 0.5 ? 'tree_pine' : 'tree_round', x: x + jx, y: y + jy });
-        }
-      }
-    }
-    if (opt.decor === 'full') {
-      for (const [x, y] of LAMPS) objs.push({ k: x + y + 1, prop: 'lamp', x: x - 0.5, y: y - 0.5 });
-      for (const [x, y] of BOATS) objs.push({ k: x + y + 0.8, prop: 'boat', x, y, cls: 'bob' });
-    }
+    const objs = places.map(pl => { const f = footprint(pl); return { k: f.x + f.w / 2 + f.y + f.d / 2, pl }; });
+    objs.push(...decorItems(places, opt.decor));
     objs.sort((a, b) => a.k - b.k);
 
     for (const ob of objs) {

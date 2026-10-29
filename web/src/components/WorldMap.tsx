@@ -18,15 +18,21 @@ function where(key: string) {
 }
 const MIN_W = 420, MAX_W = BASE.w * 1.5;
 
+// what part of the map is on screen: its centre and width in map (svg) units
+export interface MapView { cx: number; cy: number; w: number }
+export interface MapApi { view(): MapView; setView(v: MapView): void }
+
 interface Props {
   placements: Placement[];
   highlight: string | null;
   notes: Record<string, string>;
   active: boolean;
+  hidden?: boolean; // the 3D town is showing instead
+  api?: React.MutableRefObject<MapApi | null>;
   onOpen: (id: string, at: { x: number; y: number }) => void;
 }
 
-export function WorldMap({ placements, highlight, notes, active, onOpen }: Props) {
+export function WorldMap({ placements, highlight, notes, active, hidden, api, onOpen }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const vb = useRef({ ...BASE });
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; id: number; moved: boolean } | null>(null);
@@ -90,6 +96,11 @@ export function WorldMap({ placements, highlight, notes, active, onOpen }: Props
 
   // a new map markup replaces the <svg>: carry the current view over
   useLayoutEffect(apply, [markup]);
+
+  if (api) api.current = {
+    view: () => { const v = vb.current; return { cx: v.x + v.w / 2, cy: v.y + v.h / 2, w: v.w }; },
+    setView: ({ cx, cy, w }) => { const v = vb.current; v.w = w; v.h = w * aspect(); v.x = cx - w / 2; v.y = cy - v.h / 2; apply(); },
+  };
 
   // keep the walking figure inside the middle of the view
   function follow(sx: number, sy: number, k: number) {
@@ -170,14 +181,14 @@ export function WorldMap({ placements, highlight, notes, active, onOpen }: Props
   const b = tip && BUILDINGS[tip.pl.type];
   return (
     <>
-      <section className="p-world map-bg w-only" ref={host} onClick={onClick} onMouseMove={onMove} onMouseLeave={() => setTip(null)}
+      <section className={`p-world map-bg w-only${hidden ? ' is-hidden' : ''}`} ref={host} onClick={onClick} onMouseMove={onMove} onMouseLeave={() => setTip(null)}
         dangerouslySetInnerHTML={{ __html: markup }} />
-      <div className="zoom-ctl w-only">
+      <div className={`zoom-ctl w-only${hidden ? ' is-hidden' : ''}`}>
         <button title="放大" onClick={() => zoomCenter(0.7)}>＋</button>
         <button title="缩小" onClick={() => zoomCenter(1.4)}>－</button>
         <button title="看全图" onClick={fit}>⟲</button>
       </div>
-      {tip && b && (
+      {tip && b && !hidden && (
         <div className="ptip pnl" style={{ left: tip.x, top: tip.y }}>
           <b>{tip.pl.name}</b><span>{where(b.district)}</span>
           <p>{b.rep}</p>

@@ -1,18 +1,24 @@
 // Papertown: the world map is home (A), walked as a small figure. Chat slides in from
 // the side (B), a building opens full screen from the inside (C), and the status view
-// (D) sits beside the world.
+// (D) sits beside the world. The same town can be walked in 3D, through your own eyes;
+// the camera flies between the map's view and yours, so either hands over to the other.
 //
-//   #view=status   #open=farm   #open=depot&line=line_1   #chat   — open a state directly
+//   #view=status   #open=farm   #open=depot&line=line_1   #chat   #3d   — open a state directly
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
 import { Item, Logo } from './art';
 import { Drawer, type Composer, type Tab } from './components/Drawer';
 import { Interior } from './components/Interior';
 import { StatusView } from './components/StatusView';
-import { WorldMap } from './components/WorldMap';
+import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
+
+const Town3D = lazy(() => import('./components/Town3D'));
 
 type View = 'world' | 'status';
+// the map, the 3D town, and the flights between them
+type Dim = '2d' | 'to3d' | '3d' | 'to2d';
+const PHASE = { '2d': 'off', to3d: 'enter', '3d': 'live', to2d: 'leave' } as const;
 const TICK_EVENTS = new Set(['line', 'world', 'building', 'bank', 'power', 'workers', 'library', 'skills']);
 
 function useToasts() {
@@ -43,6 +49,11 @@ export function App() {
   const [asking, setAsking] = useState(false);
   const { toasts, push } = useToasts();
   const refresh = useRef<number>();
+  const [dim, setDim] = useState<Dim>('2d');
+  const [from3d, setFrom3d] = useState<MapView | null>(null);
+  const [want3d, setWant3d] = useState(false); // the 3D code has been asked for
+  const mapApi = useRef<MapApi | null>(null);
+  const hash3d = useRef(hp.has('3d'));
   const setSheet = useCallback((id: string | null, lineId?: string | null) => {
     setSheetId(id);
     setFocus(lineId ?? null);
@@ -164,6 +175,17 @@ export function App() {
     openRoom(el.getAttribute('data-open')!, el.getAttribute('data-line'), { x: r.left + r.width / 2, y: r.top + r.height / 2 });
   }
 
+  const go3d = useCallback(() => {
+    if (dim !== '2d') return;
+    setFrom3d(mapApi.current?.view() ?? null);
+    setWant3d(true);
+    setDim('to3d');
+  }, [dim]);
+  const go2d = useCallback(() => { if (dim === '3d') setDim('to2d'); }, [dim]);
+  useEffect(() => {
+    if (world && hash3d.current) { hash3d.current = false; go3d(); }
+  }, [world, go3d]);
+
   // the walking hint fades once you have moved or after a while
   const [hint, setHint] = useState(true);
   useEffect(() => {
@@ -178,10 +200,20 @@ export function App() {
   const running = world?.running ?? [];
 
   return (
-    <div className={`proto la theme-sketch${chatOpen ? ' chat-open' : ''}${sheet && !leaving ? ' in-room' : ''}`} data-mode={view} onClick={onRootClick}
+    <div className={`proto la theme-sketch${chatOpen ? ' chat-open' : ''}${sheet && !leaving ? ' in-room' : ''}${dim !== '2d' ? ' in-3d' : ''}`} data-mode={view} onClick={onRootClick}
       style={door ? { ['--ox' as string]: `${door.x}px`, ['--oy' as string]: `${door.y}px` } : undefined}>
-      {world && <WorldMap placements={world.placements} highlight={null} notes={notes} active={!sheet && view === 'world' && !chatOpen}
-        onOpen={(id, at) => openRoom(id, null, at)} />}
+      {world && <WorldMap placements={world.placements} highlight={null} notes={notes} active={!sheet && view === 'world' && !chatOpen && dim === '2d'}
+        hidden={dim === '3d' || dim === 'to2d'} api={mapApi} onOpen={(id, at) => openRoom(id, null, at)} />}
+      {world && want3d && (
+        <Suspense fallback={null}>
+          <Town3D placements={world.placements} notes={notes} phase={PHASE[dim]} from={from3d}
+            active={!sheet && view === 'world' && !chatOpen && dim === '3d'}
+            onOpen={(id, at) => openRoom(id, null, at)}
+            onCovered={() => setDim(d => d === 'to3d' ? '3d' : d)}
+            onLeft={v => { mapApi.current?.setView(v); setDim('2d'); }}
+            onFail={msg => { push(msg); setWant3d(false); setDim('2d'); }} />
+        </Suspense>
+      )}
       <StatusView tick={tick} active={view === 'status'} />
 
       <header className="hud">
@@ -189,6 +221,10 @@ export function App() {
         <div className="seg" role="tablist">
           <button className={view === 'world' ? 'on' : ''} onClick={() => setView('world')}>小镇</button>
           <button className={view === 'status' ? 'on' : ''} onClick={() => setView('status')}>运行状态</button>
+        </div>
+        <div className="seg w-only" role="tablist" title="平面地图和 3D 漫游之间切换，人站在同一个地方">
+          <button className={dim === '2d' || dim === 'to2d' ? 'on' : ''} onClick={go2d}>平面</button>
+          <button className={dim === '3d' || dim === 'to3d' ? 'on' : ''} onClick={go3d}>3D 漫游</button>
         </div>
         {hud && <div className="hud-quiet">
           <span><b>{hud.lines.running}</b> 个项目在跑</span>
@@ -215,7 +251,7 @@ export function App() {
       )}
 
       <button className="newidea btn pri w-only" onClick={() => openChat({ kind: 'idea' }, true)}><Item k="egg" />放入一颗新 idea</button>
-      <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走动 · 到门口按 <kbd>E</kbd> 进去 · 也可以直接点建筑</div>
+      {dim === '2d' && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走动 · 到门口按 <kbd>E</kbd> 进去 · 也可以直接点建筑</div>}
 
       <Drawer open={chatOpen} tab={tab} onTab={setTab} onClose={() => setChatOpen(false)} messages={messages} trace={trace}
         lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer} focusKey={focusKey}
