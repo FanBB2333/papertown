@@ -52,3 +52,4 @@
 
 /* the map's own furniture steps aside while the town is in 3D */
 .proto.in-3d .zoom-ctl { opacity: 0; pointer-events: none; }
+.t3.no-tags .t3-tags, .t3.no-mini .t3-mini { display: none; }

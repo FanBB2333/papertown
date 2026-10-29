@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { placementName, renderMap } from '@design/world.js';
 import type { Placement } from '../api';
+import { useSettings } from '../settings';
 import { Engine, type Target } from '../town3d/engine';
 import '../town3d.css';
 import type { MapView } from './WorldMap';
@@ -50,6 +51,7 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
   const [eyes, setEyes] = useState(false); // landed, walking through your own eyes
   const [help, setHelp] = useState(true);
   const helpTimer = useRef<number>();
+  const st = useSettings();
 
   useEffect(() => {
     try {
@@ -69,6 +71,9 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
   }, []);
 
   useEffect(() => { eng.current?.setPlaces(placements, notes); }, [placements, notes]);
+  useEffect(() => {
+    eng.current?.setOptions({ sensitivity: st.sensitivity, invertY: st.invertY, fov: st.fov, bob: st.bob, quality: st.quality, calm: st.motion === 'calm' });
+  }, [st.sensitivity, st.invertY, st.fov, st.bob, st.quality, st.motion]);
 
   // in: show the map's own view in 3D, fade over the map, then fly down to your eyes
   useEffect(() => {
@@ -118,7 +123,7 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
   const pl = target?.pl, b = pl && BUILDINGS[pl.type];
   const live = phase === 'live' && active && eyes;
   return (
-    <div ref={host} className={`t3 w-only${on ? ' on' : ''}${locked ? ' locked' : ''}`}>
+    <div ref={host} className={`t3 w-only${on ? ' on' : ''}${locked ? ' locked' : ''}${st.tags3d ? '' : ' no-tags'}${st.minimap ? '' : ' no-mini'}`}>
       <div ref={tags} className="t3-tags" />
       {live && locked && <div className={`t3-cross${target?.how === 'look' ? ' hot' : ''}`} />}
       {live && !locked && (
@@ -134,7 +139,7 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
           <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : '还没接入，进去看计划 · '}{locked && target!.how === 'look' ? <>点击或按 <kbd>E</kbd> 进去</> : <>按 <kbd>E</kbd> 进去</>}</em>
         </div>
       )}
-      {live && locked && (
+      {live && locked && st.walkHint && (
         <div className={`walk-hint t3-help${help ? '' : ' gone'}`}>
           移动鼠标看四周 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走 · <kbd>Shift</kbd> 跑 · 对准建筑点击或按 <kbd>E</kbd> 进去 · <kbd>M</kbd> 回到平面 · <kbd>Esc</kbd> 放开鼠标
         </div>

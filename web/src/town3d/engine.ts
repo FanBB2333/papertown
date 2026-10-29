@@ -21,7 +21,7 @@ export const EYE = 0.55; // eye height in tiles
 const WALK = 1.8, RUN = 3.6, TURN = 2.2; // tiles / s, rad / s
 const LOOK = 0.0022; // rad per pixel of mouse movement
 const AIM = 4.5; // how far a look at a building reaches its door
-const FOV_AIR = 2, FOV_EYE = 68;
+const FOV_AIR = 2;
 const MAP_PX = 32 * Math.SQRT2; // map pixels per tile, across the screen
 const HEADING = -0.75 * Math.PI; // looking the way the map does, towards -x -y
 const AIR_EL = Math.PI / 6, AIR_AZ = Math.PI / 4; // the map's camera, as seen from its target
@@ -29,6 +29,18 @@ const AIR_EL = Math.PI / 6, AIR_AZ = Math.PI / 4; // the map's camera, as seen f
 interface Orbit { t: THREE.Vector3; d: number; az: number; el: number; fov: number }
 
 export interface Target { pl: Placement; how: 'door' | 'look' }
+
+// what you can set for the walk (the settings sheet)
+export interface EngineOptions {
+  sensitivity: number; // times LOOK
+  invertY: boolean;
+  fov: number; // through your eyes, degrees
+  bob: boolean; // the view sways with your steps
+  quality: 'low' | 'mid' | 'high'; // resolution and shadows
+  calm: boolean; // shorter flights in and out
+}
+const OPTIONS: EngineOptions = { sensitivity: 1, invertY: false, fov: 68, bob: true, quality: 'high', calm: false };
+const SHADOW = { low: 0, mid: 1024, high: 2048 };
 
 export interface EngineEvents {
   target(t: Target | null): void;
@@ -51,7 +63,9 @@ function typing(e: Event) {
 export class Engine {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(FOV_EYE, 1, 0.05, 300);
+  private camera = new THREE.PerspectiveCamera(OPTIONS.fov, 1, 0.05, 300);
+  private sun: THREE.DirectionalLight;
+  private opt = { ...OPTIONS };
   private mats = new Materials();
   private town: Town | null = null;
   private sig = '';
@@ -85,6 +99,7 @@ export class Engine {
   private target: Target | null = null;
   private reach: Placement | null = null;
   private locked = !!document.pointerLockElement; // the app may have locked it on the way in
+  private started = false; // options applied once
 
   constructor(private host: HTMLElement, private tagHost: HTMLElement, private marker: SVGGElement | null, private ev: EngineEvents) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -105,7 +120,7 @@ export class Engine {
     const fill = new THREE.DirectionalLight(0xffffff, 0.44 * Math.PI);
     fill.position.set(-0.64, 0.34, -0.69);
     this.scene.add(fill);
-    const sun = new THREE.DirectionalLight(0xffffff, 0.79 * Math.PI);
+    const sun = this.sun = new THREE.DirectionalLight(0xffffff, 0.79 * Math.PI);
     sun.position.set(12 + 0.443 * 40, 0.633 * 40, 12 + 0.633 * 40);
     sun.target.position.set(12, 0, 12);
     sun.castShadow = true;
@@ -198,8 +213,8 @@ export class Engine {
   private eye(): Orbit {
     const cp = Math.cos(this.pitch), d = 3;
     const f = new THREE.Vector3(Math.cos(this.heading) * cp, Math.sin(this.pitch), Math.sin(this.heading) * cp);
-    const e = new THREE.Vector3(this.pos.x, EYE + Math.sin(this.bob) * 0.012, this.pos.y);
-    return { t: e.addScaledVector(f, d), d, az: Math.atan2(-f.z, -f.x), el: Math.asin(-f.y), fov: FOV_EYE };
+    const e = new THREE.Vector3(this.pos.x, EYE + (this.opt.bob ? Math.sin(this.bob) * 0.012 : 0), this.pos.y);
+    return { t: e.addScaledVector(f, d), d, az: Math.atan2(-f.z, -f.x), el: Math.asin(-f.y), fov: this.opt.fov };
   }
 
   private place(o: Orbit) {
@@ -265,7 +280,7 @@ export class Engine {
 
   async down() {
     this.heading = this.openHeading(); // the flight turns you there on the way down
-    await this.fly(() => this.eye(), 2100);
+    await this.fly(() => this.eye(), this.opt.calm ? 1200 : 2100);
     this.setEyes(true);
   }
 
@@ -276,11 +291,31 @@ export class Engine {
     savePos(this.pos);
     this.setEyes(false);
     const v = { cx: (this.pos.x - this.pos.y) * 32, cy: (this.pos.x + this.pos.y) * 16, w: this.width };
-    await this.fly(() => this.air(v), 1500);
+    await this.fly(() => this.air(v), this.opt.calm ? 900 : 1500);
     return v;
   }
 
   setShown(on: boolean) { this.shown = on; this.wake(); }
+
+  setOptions(o: EngineOptions) {
+    const was = this.opt;
+    this.opt = { ...o };
+    if (o.quality !== was.quality || !this.started) {
+      this.started = true;
+      const size = SHADOW[o.quality];
+      this.renderer.setPixelRatio(Math.min(o.quality === 'high' ? 2 : o.quality === 'mid' ? 1.5 : 1, devicePixelRatio));
+      this.resize();
+      // lit materials pick up a light that stops or starts casting by themselves
+      this.sun.castShadow = size > 0;
+      if (size && this.sun.shadow.mapSize.x !== size) {
+        this.sun.shadow.mapSize.set(size, size);
+        this.sun.shadow.map?.dispose();
+        this.sun.shadow.map = null;
+      }
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+    this.wake();
+  }
 
   private setEyes(on: boolean) {
     if (this.eyes === on) return;
@@ -527,8 +562,9 @@ export class Engine {
   private onMove = (e: MouseEvent) => {
     if (!this.locked || !this.active || !this.eyes) return;
     const clamp = (v: number) => Math.max(-160, Math.min(160, v)); // browsers now and then report a wild jump
-    this.heading += clamp(e.movementX) * LOOK;
-    this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - clamp(e.movementY) * LOOK));
+    const k = LOOK * this.opt.sensitivity;
+    this.heading += clamp(e.movementX) * k;
+    this.pitch = Math.max(-1.2, Math.min(1.2, this.pitch - clamp(e.movementY) * k * (this.opt.invertY ? -1 : 1)));
   };
 
   private onDown = (e: MouseEvent) => {
