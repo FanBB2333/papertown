@@ -29,7 +29,19 @@ export interface Line {
   mill_id: string | null; verdict: string | null; revisions: number; note: string | null; pct: number;
   current: Stage | null; stages: Stage[]; team: Record<string, string[]>; reason: string | null; files: string[];
   outputs?: Record<string, any>;
+  linked?: Linked | null; // a project linked in from local repositories (status 'linked')
 }
+
+export interface Commit { hash: string; when: string; author: string; subject: string }
+export interface LinkedCode {
+  path: string; name: string; missing?: boolean; branch?: string; remote?: string | null; commits?: Commit[]; dirty?: number;
+  files?: number; langs?: { ext: string; n: number }[]; dirs?: string[]; title?: string | null; readme?: string;
+}
+export interface LinkedPaper {
+  path: string; name: string; missing?: boolean; main?: string | null; title?: string | null; abstract?: string; sections?: string[];
+  figures?: number; tables?: number; words?: number; bib?: number; pdf?: boolean; pdf_at?: string | null; commits?: Commit[]; dirty?: number;
+}
+export interface Linked { key: string; match: string[]; code: LinkedCode | null; paper: LinkedPaper | null }
 
 export interface Message {
   id: number; ts: string; line_id: string | null; role: 'user' | 'worker' | 'system'; worker_id: string | null;
@@ -177,6 +189,8 @@ export const api = {
 };
 
 export const fileUrl = (lineId: string, name: string) => `/api/lines/${lineId}/files/${name}`;
+// a linked project's paper, compiled in its own repository
+export const linkedPdfUrl = (lineId: string) => `/api/lines/${lineId}/linked/pdf`;
 
 export type ServerEvent = { id: number; type: string; ts: string; [k: string]: any };
 

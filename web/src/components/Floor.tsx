@@ -76,10 +76,13 @@ function millLanes(lines: Line[]): Lane[] {
       return { key: s.key, name: s.name, state, art: <Item k={s.out} />, workers, note: s.note ?? undefined };
     });
     const cur = l.stages[at];
+    // a linked project moves only while its experiments run in nvidb
+    const linked = l.linked && [l.linked.code?.name, l.linked.paper?.name].filter(Boolean).join(' + ');
     return {
       id: l.id, seq: l.seq, title: l.title, status: l.status, tag: STATUS[l.status] ?? l.status,
-      note: l.note ?? (l.status === 'done' ? '已出厂' : cur ? `在「${cur.name}」` : undefined),
-      stations, at, token: <Item k={cur?.out ?? 'egg'} />, moving: l.status === 'running' || l.status === 'hatching',
+      note: linked ? `本地仓库 ${linked}` : l.note ?? (l.status === 'done' ? '已出厂' : cur ? `在「${cur.name}」` : undefined),
+      stations, at, token: <Item k={cur?.out ?? 'egg'} />,
+      moving: l.status === 'running' || l.status === 'hatching' || !!l.linked && l.stages.some(s => s.key === 'exp' && s.status === 'run'),
     };
   });
 }
@@ -117,14 +120,15 @@ function depotLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
       state: i === 0 ? find : i === 3 ? ship : i === bay ? coding : 'todo',
       workers: i === 0 ? stageWorkers(method, find === 'run' ? 'working' : find === 'done' ? 'done' : 'off', find === 'run' ? '翻仓库' : undefined)
         : i === bay ? [coder] : [],
-      note: i === 3 ? (mine.length ? `发出 ${mine.length} 箱实验，${live.length} 箱在排队或在跑` : '还没发货')
-        : i === 0 ? (find === 'done' ? '方法设计时在仓库群里找过 baseline' : '方法设计工序会来这里找 baseline') : undefined,
+      note: i === 3 ? (mine.length ? `${l?.linked ? 'nvidb 里' : '发出'} ${mine.length} 箱实验，${live.length} 箱在排队或在跑` : '还没发货')
+        : i === 0 ? (l?.linked ? method?.note ?? undefined : find === 'done' ? '方法设计时在仓库群里找过 baseline' : '方法设计工序会来这里找 baseline') : undefined,
     }));
     const at = live.length ? 3 : st !== 'off' ? bay : find === 'done' ? 1 : 0;
     return {
       id: line.id, seq: line.seq, title: line.title, status: l?.status ?? line.status,
       tag: agent?.started ? AGENT_STATUS[agent.status] ?? agent.status : '还没配代码员工',
-      note: agent?.started ? `${agent.runtime === 'paseo' ? 'Paseo' : 'pi'}${agent.model ? ` · ${agent.model}` : ''}` : '在「明细」里给它配一位代码员工',
+      note: [l?.linked?.code ? `${l.linked.code.path} · ${l.linked.code.branch ?? ''}${l.linked.code.dirty ? ` · ${l.linked.code.dirty} 处没提交` : ''}` : '',
+        agent?.started ? `${agent.runtime === 'paseo' ? 'Paseo' : 'pi'}${agent.model ? ` · ${agent.model}` : ''}` : l?.linked ? '' : '在「明细」里给它配一位代码员工'].filter(Boolean).join(' · '),
       stations, at, token: <Item k="crate" />, moving: st === 'working' || live.length > 0,
     };
   });
@@ -186,7 +190,8 @@ function farmLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
     return {
       id, seq: ln?.seq ?? row?.line.seq ?? 0, title: ln?.title ?? row?.line.title ?? id, status: running >= 0 ? 'running' : all.some(j => j.status === 'queued') ? 'waiting' : all.length ? 'done' : '',
       tag: running >= 0 ? '有实验在跑' : all.some(j => j.status === 'queued') ? '在排队' : all.length ? `收了 ${all.filter(j => j.status === 'done').length} 茬` : '还没种',
-      note: row?.agent?.last?.data?.text ? String(row.agent.last.data.text).split('\n')[0].slice(0, 60) : '流水线跑到实验工序、或代码员工提交任务后就会种上',
+      note: row?.agent?.last?.data?.text ? String(row.agent.last.data.text).split('\n')[0].slice(0, 60)
+        : ln?.linked ? ln.stages.find(s => s.key === 'exp')?.note ?? 'nvidb 里还没有它的任务' : '流水线跑到实验工序、或代码员工提交任务后就会种上',
       stations, at, moving: running >= 0,
     };
   }).sort((a, b) => b.seq - a.seq);
@@ -201,10 +206,12 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
   return rows.map(({ line, agent }) => {
     const l = lines.find(x => x.id === line.id);
     const stage = (k: string) => l?.stages.find(s => s.key === k);
-    const printed = !!l?.files.some(f => f === 'main.pdf' || f === 'main.tex');
+    const paper = l?.linked?.paper;
+    const printed = paper ? !!paper.pdf : !!l?.files.some(f => f === 'main.pdf' || f === 'main.tex');
     const parked = !!l && ['paused', 'failed'].includes(l.status);
     const next = l?.stages.find(s => s.status !== 'done')?.key; // where a parked line will pick up
-    const done = (i: number) => i === 1 ? printed && stage('write')?.status === 'done' : stage(PRESS[i][3])?.status === 'done';
+    // a linked paper is still being written while its PDF is already printed
+    const done = (i: number) => i === 1 ? printed && (!!paper || stage('write')?.status === 'done') : stage(PRESS[i][3])?.status === 'done';
     let at = PRESS.findIndex((_, i) => !done(i));
     if (at < 0) at = PRESS.length - 1;
     const writer = agentWorker(agent, 'writer', agent?.status === 'working' ? '在写稿' : undefined);
@@ -228,7 +235,8 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
     });
     return {
       id: line.id, seq: line.seq, title: line.title, status: l?.status ?? line.status, tag: l ? STATUS[l.status] ?? l.status : line.status,
-      note: [agent?.started ? `写作员工：${agent.runtime === 'paseo' ? 'Paseo' : 'pi'}` : '', l?.revisions ? `改过 ${l.revisions} 版` : printed ? '稿子已经排出来了' : '还没开印'].filter(Boolean).join(' · '),
+      note: [paper ? `${paper.path} · 约 ${paper.words ?? 0} 词` : '', agent?.started ? `写作员工：${agent.runtime === 'paseo' ? 'Paseo' : 'pi'}` : '',
+        l?.revisions ? `改过 ${l.revisions} 版` : printed ? '稿子已经排出来了' : '还没开印'].filter(Boolean).join(' · '),
       stations, at, token: <span className="sheets">{Array.from({ length: Math.min(4, 1 + (l?.revisions ?? 0) + (printed ? 1 : 0)) }, (_, i) => <i key={i} />)}</span>,
       moving: l?.status === 'running',
     };

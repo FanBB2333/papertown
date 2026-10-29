@@ -9,7 +9,7 @@ export function Card({ p, i = 0 }: { p: PaperCard; i?: number }) {
     <a className={`pcard${p.closest ? ' close' : ''}`} href={p.url} target="_blank" rel="noreferrer" style={{ ['--i' as string]: i }}>
       <div className="pc-top">
         {p.topic && <span className="pc-topic">{p.topic}</span>}
-        <span className="muted small">{p.year} · arXiv {p.arxiv_id}</span>
+        <span className="muted small">{[p.year, p.arxiv_id && `arXiv ${p.arxiv_id}`].filter(Boolean).join(' · ')}</span>
       </div>
       <b>{p.title}</b>
       <span className="pc-au">{p.authors}</span>
@@ -74,18 +74,20 @@ export function LinePapers({ lineId, tick }: { lineId: string; tick: number }) {
     return () => { live = false; clearTimeout(t); };
   }, [lineId, tick]);
   if (!got || (!got.survey.length && !got.references.length)) return null;
-  const list = tab === 'survey' ? got.survey : got.references;
+  // a project that never went through the hatchery has only what its paper cites
+  const shown = tab === 'survey' && !got.survey.length ? 'references' : tab;
+  const list = shown === 'survey' ? got.survey : got.references;
   return (
     <section className="line-papers">
       <div className="shelf-head">
         <h4>调研文章</h4>
         <div className="out-tabs">
-          <a className={tab === 'survey' ? 'on' : ''} onClick={() => setTab('survey')}>孵化场查到的 · {got.survey.length}</a>
-          <a className={tab === 'references' ? 'on' : ''} onClick={() => setTab('references')}>论文里引用的 · {got.references.length}</a>
+          <a className={shown === 'survey' ? 'on' : ''} onClick={() => setTab('survey')}>孵化场查到的 · {got.survey.length}</a>
+          <a className={shown === 'references' ? 'on' : ''} onClick={() => setTab('references')}>论文里引用的 · {got.references.length}</a>
         </div>
       </div>
       {list.length ? <div className="pcards">{list.map((p, i) => <Card key={p.paper_id} p={p} i={i} />)}</div>
-        : <p className="muted small">{tab === 'references' ? '还没写到论文，印刷厂排版后这里会列出 refs.bib 里的文章。' : '—'}</p>}
+        : <p className="muted small">{shown === 'references' ? '还没写到论文，印刷厂排版后这里会列出 refs.bib 里的文章。' : '—'}</p>}
     </section>
   );
 }

@@ -6,6 +6,7 @@ import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { api, fileUrl, type Line, type Placement, type Sheet as SheetData, type Stage } from '../api';
 import { Ava, Item, ROLE_NAMES, Sprite, itemName } from '../art';
 import { GpuBoard } from './Gpus';
+import { LinkedRepos } from './Linked';
 import { LibraryShelf, LinePapers } from './Papers';
 
 interface Props {
@@ -133,7 +134,7 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
           <h4>{line.stages.findIndex(s => s.key === cur.key) + 1}. {cur.name} · {{ done: '完成', run: '进行中', wait: '等你决定', todo: '排队' }[cur.status]}</h4>
           <dl className="kv">
             <dt>员工</dt><dd>{cur.workers.length ? cur.workers.map(w => <span key={w.id} className="w"><Ava role={w.role} level={w.level} code={w.id} />{w.title} Lv.{w.level}</span>) : <span className="muted">不需要 agent</span>}</dd>
-            <dt>预算</dt><dd><div className="bar"><i style={{ width: `${Math.min(100, 100 * line.spent / line.budget)}%` }} /></div>${line.spent.toFixed(4)} / ${line.budget.toFixed(2)}</dd>
+            <dt>预算</dt><dd>{line.linked ? <span className="muted">本地项目，不走流水线，不记预算</span> : <><div className="bar"><i style={{ width: `${Math.min(100, 100 * line.spent / line.budget)}%` }} /></div>${line.spent.toFixed(4)} / ${line.budget.toFixed(2)}</>}</dd>
             <dt>Skills</dt><dd>{(STAGE_SKILLS[cur.key] ?? []).map(s => <span key={s} className="chip">{s}</span>)}{!STAGE_SKILLS[cur.key] && <span className="muted">—</span>}</dd>
             <dt>工具</dt><dd>{(STAGE_TOOLS[cur.key] ?? []).map(s => <span key={s} className="chip">{s}</span>)}</dd>
             <dt>状态</dt><dd>{line.note ?? cur.note ?? ({ waiting: '撞车报告已经发到对话框，等你决定', done: '已出厂' } as Record<string, string>)[line.status] ?? line.status}</dd>
@@ -147,7 +148,8 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
         <div className="pnl">
           <h4>产出 · {shown ? names[shown] : '—'}</h4>
           <div className="out-tabs">{done.map(k => <a key={k} className={k === shown ? 'on' : ''} onClick={() => setView(k)}>{names[k]}</a>)}</div>
-          {shown && <Output stage={shown} body={outputs[shown]} lineId={line.id} />}
+          {shown ? <Output stage={shown} body={outputs[shown]} lineId={line.id} />
+            : line.linked && <p className="muted small">本地项目不走流水线，没有工序产出。代码和论文的现状在下面「本地仓库」里。</p>}
         </div>
         <div className="pnl">
           <h4>{next ? `下一站 · ${next.name}` : '已出厂'}</h4>
@@ -156,6 +158,7 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
           {next && <div className="btns" style={{ marginTop: 10 }}><button className="btn" onClick={() => onOpen(next.building)}>去{next.name}所在的建筑</button></div>}
         </div>
       </section>
+      <LinkedRepos line={line} onOpen={onOpen} />
       <LinePapers lineId={line.id} tick={tick} />
     </>
   );

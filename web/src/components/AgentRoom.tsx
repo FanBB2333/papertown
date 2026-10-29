@@ -66,7 +66,8 @@ export function AgentRoom(p: Props) {
         ? cur.agent.runtime === 'paseo'
           ? <PaseoChat key={cur.agent.id} {...p} agent={cur.agent} line={p.lines.find(l => l.id === cur.line.id)} />
           : <AgentChat key={cur.agent.id} {...p} agent={cur.agent} line={p.lines.find(l => l.id === cur.line.id)} />
-        : <Hire key={cur.line.id} line={cur.line} role={p.role} agent={cur.agent} ok={!!roster?.available.ok} toast={p.toast} onDone={() => setBump(b => b + 1)} />)}
+        : <Hire key={cur.line.id} line={cur.line} role={p.role} agent={cur.agent} ok={!!roster?.available.ok} toast={p.toast} onDone={() => setBump(b => b + 1)}
+          repo={p.lines.find(l => l.id === cur.line.id)?.linked?.[p.role === 'writer' ? 'paper' : 'code']?.path} />)}
     </div>
   );
 }
@@ -76,8 +77,9 @@ function lastLine(e: AgentEvent): string {
   return (e.kind === 'user' ? '你：' : '') + (t.length > 60 ? t.slice(0, 60) + '…' : t);
 }
 
-function Hire({ line, role, agent, ok, toast, onDone }: {
+function Hire({ line, role, agent, ok, toast, onDone, repo }: {
   line: { id: string; seq: number; title: string }; role: AgentRole; agent: Agent | null; ok: boolean; toast: (t: string) => void; onDone: () => void;
+  repo?: string; // a linked project's own repository, which the agent works in
 }) {
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<PaseoInfo | null>(null);
@@ -118,7 +120,9 @@ function Hire({ line, role, agent, ok, toast, onDone }: {
     <section className="room-main hire">
       <div className="hire-wrap">
         <h2>#{line.seq} 还没有{r.name}</h2>
-        <p className="muted">选一种运行方式。工作目录都是这个项目在{r.place}的目录，启动时会先把项目简报发给它。</p>
+        {repo ? (
+          <p className="warn-box">这是从本地接入的项目：员工会直接在 <code>{repo}</code> 里改文件，改动是真的。启动时会让它先看 git status、提交和推送前问你；它的说明和 pt 工具放在 Papertown 自己的目录里，不写进仓库。</p>
+        ) : <p className="muted">选一种运行方式。工作目录都是这个项目在{r.place}的目录，启动时会先把项目简报发给它。</p>}
         <div className="hire-opts">
           <div className="hire-card">
             <h3>Paseo <span className="chip">推荐</span></h3>

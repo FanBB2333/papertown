@@ -17,6 +17,9 @@ interface Props extends RoomActions {
 const JOB_STATUS: Record<string, string> = { queued: '排队', running: '运行中', done: '完成', failed: '失败', cancelled: '已取消' };
 const WHO = (by: string | null) => !by ? '—' : by === 'pipeline' ? '流水线' : by === 'you' ? '你' : by.startsWith('coder-') ? '代码员工' : by;
 
+// a linked project's experiments are its jobs in nvidb, counted on its experiment stage
+const linkedNote = (l?: Line) => l?.linked ? l.stages.find(s => s.key === 'exp')?.note ?? 'nvidb 里还没有它的任务。' : undefined;
+
 function ago(ts: string | null) {
   if (!ts) return '';
   const s = (Date.now() - Date.parse(ts)) / 1000;
@@ -127,7 +130,7 @@ export function FarmRoom(p: Props) {
           <button key={line.id} className={`mon${only === line.id ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={() => setOnly(line.id)}>
             <div className="proj-top"><b>#{line.seq} {line.title}</b>
               <span className={`pulse${(board?.jobs ?? []).some(j => j.line_id === line.id && j.status === 'running') ? ' on' : ''}`} /></div>
-            <p className="mon-note">{agent?.last?.data?.text ?? '还没有实验。代码员工提交任务后，这里会写下进度。'}</p>
+            <p className="mon-note">{agent?.last?.data?.text ?? linkedNote(p.lines.find(l => l.id === line.id)) ?? '还没有实验。代码员工提交任务后，这里会写下进度。'}</p>
             {agent?.last && <span className="muted small">{ago(agent.last.ts)}</span>}
           </button>
         ))}

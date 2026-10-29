@@ -15,6 +15,7 @@ interface Props extends RoomActions {
 
 export const STATUS: Record<string, string> = {
   hatching: '查重中', waiting: '等你决定', running: '生产中', paused: '已暂停', failed: '出错', done: '已出厂', dropped: '已放弃',
+  linked: '本地项目',
 };
 export const AGENT_STATUS: Record<string, string> = {
   stopped: '未启动', starting: '启动中', idle: '待命', working: '工作中', error: '出错', watching: '值守',
@@ -89,7 +90,7 @@ export function MillRoom(p: Props) {
                 </div>
                 <div className="proj-meta">
                   <span>{l.current?.name ?? (l.status === 'done' ? '已出厂' : STATUS[l.status])}</span>
-                  <span>${l.spent.toFixed(2)} / ${l.budget.toFixed(2)}</span>
+                  <span>{l.linked ? l.linked.code?.name ?? l.linked.paper?.name : `$${l.spent.toFixed(2)} / $${l.budget.toFixed(2)}`}</span>
                 </div>
                 <div className="crew">
                   <span className={`crew-a s-${coder?.status ?? 'none'}`}>代码员工 · {coder ? AGENT_STATUS[coder.status] : '—'}</span>
