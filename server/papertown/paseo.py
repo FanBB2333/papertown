@@ -4,9 +4,13 @@ Paseo (paseo.sh) runs a local daemon that hosts coding agents from many provider
 (Claude Code, Codex, OpenCode, Pi, Copilot, ...) and serves its own app for them. The town
 talks to that daemon through the `paseo` CLI, which is a client of the daemon's WebSocket
 endpoint (127.0.0.1:6767 by default): it creates one agent per project and role, sends it
-messages and reads its status. The conversation itself is shown in Paseo's own web app,
-embedded in the room, so its slash commands, model and thinking switches, modes and
-permission prompts all work as they do in Paseo.
+messages and reads its status. Reading conversations goes through Paseo's official SDK
+(@getpaseo/client, in paseo_link/): the room shows a trimmed transcript of the agent, and
+existing Paseo conversations on this machine can be imported into a project. The full
+Paseo page can be opened in the room as well, for its slash commands, model and thinking
+switches, modes and permission prompts.
+
+    cd server/papertown/paseo_link && pnpm install          # the SDK, once
 
     paseo daemon config set features.webUi.enabled true   # serve the web app the room embeds
     paseo daemon restart
@@ -27,6 +31,8 @@ from pathlib import Path
 from typing import Any
 
 APP_CLI = "/Applications/Paseo.app/Contents/Resources/bin/paseo"
+APP_NODE = "/Applications/Paseo.app/Contents/Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper"  # Electron, run as node
+LINK = Path(__file__).parent / "paseo_link"
 
 
 class PaseoError(Exception):
@@ -40,6 +46,14 @@ def _find(explicit: str) -> str | None:
         if c and Path(c).exists():
             return c
     return None
+
+
+def _node() -> list[str] | None:
+    from .agents import _which  # same lookup as for pi: PATH, Homebrew, nvm
+    node = _which("node")
+    if node:
+        return [node]
+    return [APP_NODE] if Path(APP_NODE).exists() else None
 
 
 class Paseo:
@@ -66,6 +80,37 @@ class Paseo:
             return json.loads(out) if out else None
         except json.JSONDecodeError:
             raise PaseoError(f"paseo {args[0]} 的输出不是 JSON") from None
+
+    def _link(self, *args: str, timeout: float = 30) -> Any:
+        """Run paseo_link/link.mjs (the SDK) and parse its JSON."""
+        node = _node()
+        if not self.bin or not node:
+            raise PaseoError("本机没有找到 Paseo 或 node")
+        if not (LINK / "node_modules" / "@getpaseo" / "client").exists():
+            raise PaseoError("还没装 Paseo 的 SDK：在 server/papertown/paseo_link 里运行 pnpm install")
+        env = {**os.environ, "ELECTRON_RUN_AS_NODE": "1"}
+        if self.host:
+            env["PASEO_WS"] = f"ws://{self.host}/ws"
+        try:
+            r = subprocess.run([*node, str(LINK / "link.mjs"), *args], capture_output=True, text=True, timeout=timeout, cwd=LINK, env=env)
+        except subprocess.TimeoutExpired:
+            raise PaseoError("读取 Paseo 超时") from None
+        if r.returncode != 0:
+            raise PaseoError(f"读取 Paseo 失败：{(r.stderr.strip().splitlines() or [r.returncode])[-1]}")
+        return json.loads(r.stdout)
+
+    def conversations(self) -> list[dict]:
+        """Every Paseo agent on this machine, newest first (not archived)."""
+        return self._cached("conversations", 5, lambda: self._link("list"))
+
+    def timeline(self, agent_id: str, limit: int = 200) -> dict:
+        return self._link("timeline", agent_id, str(limit))
+
+    def label(self, agent_id: str, labels: dict[str, str]) -> None:
+        args = ["agent", "update", agent_id]
+        for k, v in labels.items():
+            args += ["--label", f"{k}={v}"]
+        self._cli(*args)
 
     def _cached(self, key: str, ttl: float, fn) -> Any:
         with self._lock:
@@ -158,6 +203,9 @@ class Paseo:
 
     def interrupt(self, agent_id: str) -> None:
         self._cli("stop", agent_id)
+
+    def permit(self, agent_id: str, request_id: str, allow: bool) -> None:
+        self._cli("permit", "allow" if allow else "deny", agent_id, request_id)
 
     def open_desktop(self, agent_id: str) -> None:
         self._cli("agent", "open", agent_id)

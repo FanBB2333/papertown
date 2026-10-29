@@ -160,6 +160,8 @@
 .msg-u p:last-of-type, .msg-a p:last-child { margin-bottom: 0; }
 .msg-u .code, .msg-a .code { margin: 6px 0; }
 .msg-u .meta { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); text-align: right; }
+.msg-u .more { display: block; margin: 4px 0 0 auto; padding: 0; border: 0; background: none; font: inherit; font-size: 12px; color: var(--brand); cursor: pointer; }
+.msg-u .more:hover { text-decoration: underline; }
 .streaming .caret { display: inline-block; width: 7px; height: 14px; margin-left: 2px; background: var(--brand); vertical-align: -2px; animation: blink 1s steps(2) infinite; }
 .note { align-self: center; font-size: 12px; color: var(--muted); padding: 2px 10px; }
 .note.err { color: var(--bad); }
@@ -220,3 +222,36 @@
 .llm-btn:hover, .llm-btn.on { color: var(--ink); border-color: var(--brand); }
 .llm-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 14px; animation: rise-in .25s var(--out) both; }
 .llm-pop input { font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+
+/* importing a Paseo conversation */
+.import-card { grid-column: 1 / -1; }
+.conv-q { font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.conv-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+.conv { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--ink); font: 13.5px var(--font); text-align: left; cursor: pointer; transition: background .2s; }
+.conv:hover:not(:disabled) { background: color-mix(in srgb, var(--brand) 9%, transparent); }
+.conv:disabled { opacity: .5; cursor: default; }
+.conv b { font-weight: 500; }
+.conv em { font-style: normal; font-size: 11px; color: var(--muted); }
+
+/* tool calls folded into one quiet line */
+.trail { align-self: flex-start; max-width: min(760px, 86%); font-size: 12.5px; color: var(--muted); animation: rise-in .3s var(--out) both; }
+.trail > button { display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 3px 10px 3px 6px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--ink) 5%, transparent); color: inherit; font: inherit; cursor: pointer; transition: background .2s; }
+.trail > button:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.trail .t-ic { width: 16px; text-align: center; color: var(--ok); }
+.trail.t-run .t-ic { color: var(--brand); }
+.trail.t-bad .t-ic, .trail em { color: var(--bad); font-style: normal; }
+.trail b { font-weight: 500; color: var(--ink); white-space: nowrap; }
+.trail .t-arg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+.trail ul { list-style: none; margin: 6px 0 0 22px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.trail li { display: flex; gap: 8px; min-width: 0; }
+.trail li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+.trail li.t-bad b { color: var(--bad); }
+.trail-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.note.warn { color: var(--warn); }
+.paseo-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
+.paseo-veil { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #1b1b1b; color: #cfcfcf; font-size: 13px; transition: opacity .6s var(--out), visibility .6s; }
+.paseo-veil.gone { opacity: 0; visibility: hidden; }
+.paseo-veil p { margin: 0; }
+.ask { align-self: flex-start; width: min(620px, 86%); padding: 12px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); animation: rise-in .3s var(--out) both; }
+.ask p { margin: 0 0 6px; font-size: 13.5px; }
+.ask .code { margin: 0 0 8px; max-height: 120px; overflow: auto; }

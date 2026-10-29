@@ -86,15 +86,20 @@ uv run papertown demo "让 VLA 模型用结构化的场景图做长程规划"
 
 ### Paseo（推荐）
 
-[Paseo](https://paseo.sh) 在本机跑一个守护进程（默认 `127.0.0.1:6767`），托管 Claude Code、Codex、OpenCode、Pi、Copilot 等 agent。Papertown 通过 `paseo` CLI（它是这个端点的客户端）为每个项目创建 agent，供应商、模型和思考强度在启动时从 Paseo 列出的清单里选；房间里直接嵌入 Paseo 自己的 agent 页面，所以 slash 命令、模型切换、模式和权限审批都和在 Paseo 里一样，手机上的 Paseo 也能看到同一个 agent。
+[Paseo](https://paseo.sh) 在本机跑一个守护进程（默认 `127.0.0.1:6767`），托管 Claude Code、Codex、OpenCode、Pi、Copilot 等 agent。Papertown 通过 `paseo` CLI（它是这个端点的客户端）为每个项目创建 agent，供应商、模型和思考强度在启动时从 Paseo 列出的清单里选；对话记录通过 Paseo 的官方 SDK（`@getpaseo/client`）读取。手机上的 Paseo 也能看到同一个 agent。
 
 ```bash
 paseo daemon start                                      # 守护进程
-paseo daemon config set features.webUi.enabled true     # 让守护进程提供网页端，房间才能嵌入对话
+paseo daemon config set features.webUi.enabled true     # 让守护进程提供网页端，「完整界面」才能嵌入
 paseo daemon restart
+cd server/papertown/paseo_link && pnpm install          # SDK，装一次
 ```
 
-这些 agent 用 `.papertown/pt` 读项目简报、把实验提交到实验农场（`pt brief`、`pt submit <名字> -- <命令>`、`pt jobs`）。Papertown 每隔几秒同步一次它们的状态。Paseo 用它自己的登录和设置，Papertown 不碰任何 key。
+房间里默认是精简视图：只显示你和它的消息，工具调用收成一行（点开看每一步），思考过程和待办留在 Paseo 里，长消息（比如项目简报）先折起来。它要运行命令或改文件时会弹出权限卡片，在这里点「允许」或「拒绝」就行。「完整界面」嵌入 Paseo 自己的 agent 页面，slash 命令、模型切换和模式都和在 Paseo 里一样；「桌面端」在 Paseo 应用里打开同一个 agent。
+
+本机 Paseo 里已有的对话也能接过来：在没有员工的项目房间里点「导入 Paseo 里已有的对话」，选一段，它就成了这个项目的员工。工作目录保持对话原来的目录，Papertown 给它打上 `papertown.*` 标签，一段对话只能导入给一个项目。
+
+这些 agent 用 `.papertown/pt` 读项目简报、把实验提交到实验农场（`pt brief`、`pt submit <名字> -- <命令>`、`pt jobs`）。导入的对话不在项目目录里，可以点房间侧栏的「发送项目简报」把用法发给它。Papertown 每隔几秒同步一次它们的状态。Paseo 用它自己的登录和设置，Papertown 不碰任何 key。
 
 ### pi · 后台终端
 

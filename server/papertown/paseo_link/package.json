@@ -1,0 +1,9 @@
+{
+  "name": "papertown-paseo-link",
+  "private": true,
+  "type": "module",
+  "description": "Reads Paseo agents and timelines for the Papertown server through the official SDK",
+  "dependencies": {
+    "@getpaseo/client": "0.13.2"
+  }
+}

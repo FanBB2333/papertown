@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Papertown from inside an agent's shell, for agents that run in Paseo: read the project
 brief, submit experiments to the farm and check on them. The server passes
-PAPERTOWN_URL, PAPERTOWN_AGENT and PAPERTOWN_AGENT_TOKEN in the agent's environment.
+PAPERTOWN_URL, PAPERTOWN_AGENT and PAPERTOWN_AGENT_TOKEN in the agent's environment; a
+conversation imported from Paseo has none of them and reads link.json next to this file.
 
     .papertown/pt brief
     .papertown/pt submit main -- python run.py --seed 0
@@ -15,10 +16,22 @@ import urllib.error
 import urllib.request
 
 
+def link():
+    if os.environ.get("PAPERTOWN_AGENT_TOKEN"):
+        return os.environ["PAPERTOWN_URL"], os.environ["PAPERTOWN_AGENT"], os.environ["PAPERTOWN_AGENT_TOKEN"]
+    try:
+        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "link.json"), encoding="utf-8") as f:
+            d = json.load(f)
+    except OSError:
+        sys.exit("找不到 Papertown：环境里没有 PAPERTOWN_* 变量，旁边也没有 link.json")
+    return d["url"], d["agent"], d["token"]
+
+
 def call(path, body=None):
-    base = os.environ["PAPERTOWN_URL"].rstrip("/") + "/api/bridge/" + os.environ["PAPERTOWN_AGENT"]
+    url, agent, token = link()
+    base = url.rstrip("/") + "/api/bridge/" + agent
     req = urllib.request.Request(base + path, data=None if body is None else json.dumps(body).encode(),
-                                 headers={"content-type": "application/json", "x-papertown-token": os.environ["PAPERTOWN_AGENT_TOKEN"]},
+                                 headers={"content-type": "application/json", "x-papertown-token": token},
                                  method="GET" if body is None else "POST")
     try:
         with urllib.request.urlopen(req, timeout=30) as r:

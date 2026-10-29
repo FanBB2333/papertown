@@ -141,3 +141,80 @@ def test_paseo_agents_are_created_driven_and_followed(tmp_path):
         while town.agents.get(a["id"])["status"] != "idle" and time.time() - t0 < 10:
             time.sleep(0.2)
         assert town.agents.get(a["id"])["status"] == "idle"
+
+
+class FakeLink:
+    """Stands in for Paseo's SDK link: one conversation and its timeline."""
+
+    def __init__(self):
+        self.labels, self.permits = {}, []
+        self.conv = {"id": "conv-1", "title": "旧对话", "provider": "claude", "model": "claude-haiku-5-5", "cwd": None,
+                     "status": "idle", "updated": "2026-10-29T00:00:00Z", "last_user": None}
+
+    def conversations(self):
+        return [self.conv]
+
+    def label(self, agent_id, labels):
+        self.labels[agent_id] = labels
+
+    def timeline(self, agent_id, limit):
+        return {"agent": self.conv | {"status": "permission", "permissions": [{"id": "req-1", "name": "Bash", "title": None, "arg": "ls"}]},
+                "items": [{"kind": "user", "text": "hi"}, {"kind": "tool", "name": "Bash", "status": "completed", "arg": "ls"}]}
+
+    def permit(self, agent_id, request_id, allow):
+        self.permits.append((agent_id, request_id, allow))
+
+    def list(self, labels):
+        return [self.conv]
+
+
+def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
+    app = create_app(make_settings(tmp_path))
+    with TestClient(app) as c:
+        town = app.state.town
+        link = FakeLink()
+        own = tmp_path / "their-repo"
+        own.mkdir()
+        link.conv["cwd"] = str(own)
+        for name in ("conversations", "label", "timeline", "permit", "list"):
+            setattr(town.agents.paseo, name, getattr(link, name))
+        first = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
+        second = c.post("/api/ideas", json={"text": "用小模型给论文图表自动写说明文字"}).json()["id"]
+        wait_for(town, first, {"waiting"})
+        wait_for(town, second, {"waiting"})
+
+        a = c.post("/api/agents/import", json={"line_id": first, "role": "coder", "ext_id": "conv-1"}).json()
+        assert a["runtime"] == "paseo" and a["ext_id"] == "conv-1" and a["model"] == "claude/claude-haiku-5-5"
+        assert town.agents.get(a["id"])["cwd"] == str(own)  # the conversation keeps its own directory
+        assert not any(own.iterdir())  # and nothing is written there
+        assert link.labels["conv-1"]["papertown.agent"] == a["id"]
+
+        # the brief tells it where pt is; pt finds the town through link.json, without PAPERTOWN_* env
+        sent = []
+        town.agents.paseo.send = lambda ext, text: sent.append(text)
+        c.post(f"/api/agents/{a['id']}/brief")
+        import json, re, subprocess, sys
+        from pathlib import Path
+        pt = Path(re.search(r"`(\S+/pt) brief`", sent[0]).group(1))
+        assert pt.parent.parent == Path(town.agents._workdir(first, "coder"))
+        r = subprocess.run([sys.executable, "-c", "import runpy, sys; print(*runpy.run_path(sys.argv[1])['link']())", str(pt)],
+                           capture_output=True, text=True, env={"PATH": "/usr/bin:/bin"})
+        url, agent_id, token = r.stdout.split()
+        assert url == town.s.url and agent_id == a["id"]
+        job = c.post(f"/api/bridge/{a['id']}/jobs", json={"name": "smoke", "command": "echo PROGRESS 100"},
+                     headers={"x-papertown-token": token}).json()
+        assert job["cwd"] == str(own)  # experiments run where the conversation works
+
+        seq = town.pipeline.line(first)["seq"]
+        convs = c.get("/api/paseo/conversations").json()["conversations"]
+        assert convs[0]["linked"] == f"#{seq} 的代码员工"
+        taken = c.post("/api/agents/import", json={"line_id": second, "role": "coder", "ext_id": "conv-1"})
+        assert taken.status_code == 400 and f"#{seq} 的代码员工" in taken.json()["detail"]
+        assert c.post("/api/agents/import", json={"line_id": first, "role": "coder", "ext_id": "nope"}).status_code == 400
+
+        t = c.get(f"/api/agents/{a['id']}/timeline").json()
+        assert [i["kind"] for i in t["items"]] == ["user", "tool"] and t["paseo"]["permissions"][0]["id"] == "req-1"
+        assert t["agent"]["status"] == "working"  # waiting on a permission counts as busy
+
+        assert c.post(f"/api/agents/{a['id']}/permit", json={"request_id": "req-1", "allow": True}).json() == {"ok": True}
+        assert link.permits == [("conv-1", "req-1", True)]

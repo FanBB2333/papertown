@@ -7,3 +7,4 @@ web/node_modules/
 web/dist/
 .env
 .DS_Store
+server/papertown/paseo_link/node_modules/

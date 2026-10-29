@@ -7,7 +7,7 @@
 //   pi's slash commands typed here run in pi (the ones that need its terminal UI open there).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, fileUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoInfo, type PiState, type Roster, type StartOpts } from '../api';
+import { api, fileUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
 
@@ -63,7 +63,9 @@ export function AgentRoom(p: Props) {
         {roster && !roster.available.ok && <p className="warn-box small">{roster.available.note}，没法启动 pi。装好后重启服务即可。</p>}
       </aside>
       {cur && (cur.agent?.started
-        ? <AgentChat key={cur.agent.id} {...p} agent={cur.agent} line={p.lines.find(l => l.id === cur.line.id)} />
+        ? cur.agent.runtime === 'paseo'
+          ? <PaseoChat key={cur.agent.id} {...p} agent={cur.agent} line={p.lines.find(l => l.id === cur.line.id)} />
+          : <AgentChat key={cur.agent.id} {...p} agent={cur.agent} line={p.lines.find(l => l.id === cur.line.id)} />
         : <Hire key={cur.line.id} line={cur.line} role={p.role} agent={cur.agent} ok={!!roster?.available.ok} toast={p.toast} onDone={() => setBump(b => b + 1)} />)}
     </div>
   );
@@ -155,10 +157,51 @@ function Hire({ line, role, agent, ok, toast, onDone }: {
             <button className="btn" disabled={!ok || busy} onClick={() => go({ runtime: 'pi' })}>{busy ? '启动中…' : '启动 pi'}</button>
             {!ok && <p className="muted small">本机没有 pi 或 tmux。</p>}
           </div>
+          {info?.status.ok && <ImportCard busy={busy} onPick={async id => {
+            setBusy(true);
+            try { await api.importAgent(line.id, role, id); onDone(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+          }} />}
         </div>
       </div>
     </section>
   );
+}
+
+// an existing Paseo conversation on this machine, taken over as this project's agent
+function ImportCard({ busy, onPick }: { busy: boolean; onPick: (id: string) => void }) {
+  const [list, setList] = useState<PaseoConversation[] | null>(null);
+  const [err, setErr] = useState('');
+  const [q, setQ] = useState('');
+  useEffect(() => { api.conversations().then(d => setList(d.conversations)).catch(e => setErr((e as Error).message)); }, []);
+  const k = q.trim().toLowerCase();
+  const shown = (list ?? []).filter(c => !k || `${c.title ?? ''} ${c.provider} ${c.model ?? ''} ${c.cwd}`.toLowerCase().includes(k));
+  return (
+    <div className="hire-card import-card">
+      <h3>导入 Paseo 里已有的对话</h3>
+      <p className="muted small">选一段本机 Paseo 里的对话交给这个项目，之后在这里接着聊。它的工作目录不变。</p>
+      {err ? <p className="warn-box small">{err}</p> : !list ? <p className="muted small">正在读取 Paseo 的对话…</p> : !list.length ? <p className="muted small">Paseo 里还没有对话。</p> : (
+        <>
+          {list.length > 5 && <input className="conv-q" value={q} placeholder="按标题、供应商或目录筛选" onChange={e => setQ(e.target.value)} />}
+          <div className="conv-list">
+            {shown.map(c => (
+              <button key={c.id} className="conv" disabled={busy || !!c.linked} onClick={() => onPick(c.id)} title={c.cwd}>
+                <b>{c.title || '（无标题）'}</b>
+                <span className="muted small">{[c.provider, c.model].filter(Boolean).join(' · ')} · {short(c.cwd)} · {ago(c.last_user ?? c.updated)}</span>
+                {c.linked && <em>已导入给 {c.linked}</em>}
+              </button>
+            ))}
+            {!shown.length && <p className="muted small">没有匹配的对话。</p>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const short = (p: string) => p.replace(/^\/Users\/[^/]+/, '~').split('/').slice(-2).join('/');
+function ago(iso: string) {
+  const m = Math.max(0, (Date.now() - Date.parse(iso)) / 60000);
+  return m < 1 ? '刚刚' : m < 60 ? `${Math.round(m)} 分钟前` : m < 1440 ? `${Math.round(m / 60)} 小时前` : `${Math.round(m / 1440)} 天前`;
 }
 
 // pi's slash commands: [name, what it does, needs pi's terminal UI]
@@ -174,72 +217,28 @@ const PI_COMMANDS: [string, string, boolean?][] = [
 
 type Item = { ev: AgentEvent; end?: AgentEvent };
 
-function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent; line?: Line; role: AgentRole } & RoomActions) {
-  const [agent, setAgent] = useState(initial);
-  const [events, setEvents] = useState<AgentEvent[]>([]);
-  const [live, setLive] = useState('');
-  const [text, setText] = useState('');
+// what the project has next to the chat: experiments for code, the manuscript for papers
+function Aside({ agent, role, line, onOpen, children }: { agent: Agent; role: AgentRole; line?: Line; onOpen: RoomActions['onOpen']; children: React.ReactNode }) {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [repos, setRepos] = useState<any[]>([]);
-  const scroll = useRef<HTMLDivElement>(null);
-  const stick = useRef(true);
-  const r = ROLE[role];
-
   useEffect(() => {
+    if (role !== 'coder') return;
     let alive = true;
-    api.agent(initial.id).then(d => { if (alive) { setAgent(d.agent); setEvents(d.events); } }).catch(() => {});
-    if (role === 'coder') {
-      api.jobs(initial.line_id).then(b => alive && setJobs(b.jobs)).catch(() => {});
-      api.building('depot').then(s => alive && setRepos(s.repos ?? [])).catch(() => {});
-    }
-    return () => { alive = false; };
-  }, [initial.id, initial.line_id, role]);
-
-  useEffect(() => listen(e => {
-    if (e.type === 'agent' && e.agent?.id === agent.id) setAgent(e.agent);
-    else if (e.type === 'agent_event' && e.event.agent_id === agent.id) {
-      setEvents(list => list.some(x => x.id === e.event.id) ? list.map(x => x.id === e.event.id ? e.event : x) : [...list, e.event]);
-      if (e.event.kind === 'assistant') setLive('');
-    } else if (e.type === 'agent_delta' && e.agent_id === agent.id) setLive(t => t + e.text);
-    else if (e.type === 'job' && e.job.line_id === agent.line_id && role === 'coder') {
-      setJobs(js => js.some(j => j.id === e.job.id) ? js.map(j => j.id === e.job.id ? e.job : j) : [e.job, ...js]);
-    }
-  }), [agent.id, agent.line_id, role]);
-
-  // pair each tool call with its result
-  const items = useMemo(() => {
-    const ends = new Map(events.filter(e => e.kind === 'tool_end').map(e => [e.data.id, e]));
-    return events.filter(e => e.kind !== 'tool_end').map(ev => ({ ev, end: ev.kind === 'tool' ? ends.get(ev.data.id) : undefined }) as Item);
-  }, [events]);
-
-  useEffect(() => {
-    const el = scroll.current;
-    if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [items.length, live]);
-
-  async function run(fn: () => Promise<unknown>) {
-    try { await fn(); } catch (e) { toast((e as Error).message); }
-  }
-
-  function send() {
-    const t = text.trim();
-    if (!t) return;
-    setText('');
-    stick.current = true;
-    run(() => api.say(agent.id, t));
-  }
-
-  const on = ['idle', 'working', 'starting'].includes(agent.status);
+    api.jobs(agent.line_id).then(b => alive && setJobs(b.jobs)).catch(() => {});
+    api.building('depot').then(s => alive && setRepos(s.repos ?? [])).catch(() => {});
+    const off = listen(e => {
+      if (e.type === 'job' && e.job.line_id === agent.line_id) setJobs(js => js.some(j => j.id === e.job.id) ? js.map(j => j.id === e.job.id ? e.job : j) : [e.job, ...js]);
+    });
+    return () => { alive = false; off(); };
+  }, [agent.line_id, role]);
   const files = line?.files ?? [];
-  const pt = role === 'coder' ? '.papertown/pt submit' : '';
-
-  const aside = (head: React.ReactNode) => (
+  return (
     <aside className="room-aside">
-      {head}
+      {children}
       {role === 'coder' && (
         <div className="pnl-s">
           <h4>提交到农场的实验</h4>
-          {!jobs.length && <p className="muted small">还没有。{agent.runtime === 'paseo' ? `它会用 ${pt} 提交。` : 'pi 会用 papertown_submit_job 提交。'}</p>}
+          {!jobs.length && <p className="muted small">还没有。{agent.runtime === 'paseo' ? '它用 .papertown/pt submit 提交。' : 'pi 会用 papertown_submit_job 提交。'}</p>}
           {jobs.slice(0, 8).map(j => (
             <button key={j.id} className={`job mini s-${j.status}`} onClick={() => onOpen('farm', agent.line_id)}>
               <span className="job-name"><b>{j.name}</b><small>{j.backend}</small></span>
@@ -264,44 +263,231 @@ function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
       )}
     </aside>
   );
+}
 
-  if (agent.runtime === 'paseo') {
-    return (
-      <>
-        <section className="room-main chat-main paseo-main">
-          <header className="chat-head">
-            <div className="chat-who">
-              <span className={`dot s-${agent.status}`} />
-              <div><b>{r.name} · #{line?.seq ?? ''}</b><span className="muted small">Paseo · {AGENT_STATUS[agent.status]}{agent.model ? ` · ${agent.model}` : ''}</span></div>
-            </div>
-            <div className="btns">
-              {agent.status === 'working' && <button className="btn" onClick={() => run(() => api.abort(agent.id))}>打断</button>}
-              <button className="btn" onClick={() => run(() => api.brief(agent.id))}>发送项目简报</button>
-              <button className="btn" onClick={() => run(() => api.openInPaseo(agent.id))}>在 Paseo 桌面端打开</button>
-              {agent.web && <a className="btn" href={agent.web} target="_blank" rel="noreferrer">新窗口</a>}
-            </div>
-          </header>
-          {agent.web
-            ? <iframe className="paseo-frame" src={agent.web} title={`Paseo · ${r.place}`} allow="clipboard-read; clipboard-write; microphone" />
-            : (
-              <div className="room-empty">
-                <h2>Paseo 的网页端没开</h2>
-                <p>打开后对话会直接显示在这里：<code>paseo daemon config set features.webUi.enabled true</code>，再 <code>paseo daemon restart</code>。现在可以先在桌面端里看。</p>
-                <button className="btn pri" onClick={() => run(() => api.openInPaseo(agent.id))}>在 Paseo 桌面端打开</button>
-              </div>
-            )}
-        </section>
-        {aside(
-          <div className="pnl-s">
-            <h4>Paseo</h4>
-            <p className="muted small">对话、命令、模型切换和权限审批都在 Paseo 的界面里；手机上的 Paseo 也能看到同一个 agent。它用 <code>.papertown/pt</code> 读项目简报、提交实验。</p>
-            {agent.ext_id && <p className="muted small path">agent：{agent.ext_id}</p>}
-            {agent.cwd && <p className="muted small path">目录：{agent.cwd}</p>}
-          </div>,
-        )}
-      </>
-    );
+// a Paseo agent: its conversation trimmed to messages and folded tool trails, read through
+// Paseo's SDK; the full Paseo page (commands, model switches, permissions) is one click away
+function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent; line?: Line; role: AgentRole } & RoomActions) {
+  const [agent, setAgent] = useState(initial);
+  const [items, setItems] = useState<PaseoItem[] | null>(null);
+  const [asks, setAsks] = useState<PaseoPermission[]>([]);
+  const [full, setFull] = useState(false);
+  const [text, setText] = useState('');
+  const [err, setErr] = useState('');
+  const [sent, setSent] = useState<string[]>([]);
+  const scroll = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  const status = useRef(initial.status);
+  const nudge = useRef(0);
+  const r = ROLE[role];
+  status.current = agent.status;
+
+  // poll the timeline: every 2 s while it works or right after you wrote, else every 7 s
+  useEffect(() => {
+    let alive = true, t = 0;
+    const tick = async () => {
+      try {
+        const d = await api.timeline(initial.id);
+        if (!alive) return;
+        setAgent(d.agent);
+        setItems(d.items);
+        setAsks(d.paseo?.permissions ?? []);
+        setSent(xs => xs.filter(x => !d.items.some(i => i.kind === 'user' && i.text?.trim() === x)));
+        setErr('');
+      } catch (e) {
+        if (alive) setErr((e as Error).message);
+      }
+      if (alive) t = window.setTimeout(tick, status.current === 'working' || Date.now() - nudge.current < 20000 ? 2000 : 7000);
+    };
+    tick();
+    return () => { alive = false; clearTimeout(t); };
+  }, [initial.id]);
+  useEffect(() => listen(e => { if (e.type === 'agent' && e.agent?.id === initial.id) setAgent(e.agent); }), [initial.id]);
+
+  useEffect(() => {
+    const el = scroll.current;
+    if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [items?.length, sent.length, full]);
+
+  async function run(fn: () => Promise<unknown>) {
+    try { await fn(); } catch (e) { toast((e as Error).message); }
   }
+  function send() {
+    const t = text.trim();
+    if (!t) return;
+    setText('');
+    stick.current = true;
+    nudge.current = Date.now();
+    setSent(xs => [...xs, t]);
+    run(() => api.say(agent.id, t));
+  }
+
+  const rows = useMemo(() => fold(items ?? [], i => i.kind === 'tool'), [items]);
+  return (
+    <>
+      <section className="room-main chat-main paseo-main">
+        <header className="chat-head">
+          <div className="chat-who">
+            <span className={`dot s-${agent.status}`} />
+            <div><b>{r.name} · #{line?.seq ?? ''}</b><span className="muted small">{AGENT_STATUS[agent.status]} · {agent.model ?? 'Paseo'}</span></div>
+          </div>
+          <div className="btns">
+            {agent.status === 'working' && <button className="btn" onClick={() => run(() => api.abort(agent.id))}>打断</button>}
+            <button className="btn" disabled={!agent.web} title={agent.web ? 'Paseo 自己的界面：命令、模型切换、权限审批' : 'Paseo 的网页端没开'} onClick={() => setFull(f => !f)}>{full ? '精简视图' : '完整界面'}</button>
+            <button className="btn" onClick={() => run(() => api.openInPaseo(agent.id))}>桌面端</button>
+          </div>
+        </header>
+        {full && agent.web
+          ? <FullPaseo src={agent.web} title={`Paseo · ${r.place}`} />
+          : (
+            <>
+              <div className="transcript" ref={scroll} onScroll={e => {
+                const el = e.currentTarget;
+                stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+              }}>
+                {err && <div className="note err">{err}</div>}
+                {items && !items.length && !sent.length && <div className="room-empty small-empty"><p>还没有对话。</p></div>}
+                {rows.map((x, i) => Array.isArray(x)
+                  ? <Trail key={i} tools={x.map(t => ({ name: t.name ?? '', arg: t.arg, st: t.status === 'running' ? 'run' : t.status === 'completed' ? 'ok' : 'bad', note: t.error ?? undefined }))} />
+                  : x.kind === 'user' ? <UserMsg key={i} text={x.text ?? ''} />
+                    : x.kind === 'assistant' ? <div key={i} className="msg-a"><Text text={x.text ?? ''} /></div>
+                      : <div key={i} className={`note${x.kind === 'error' ? ' err' : ''}`}>{x.text}</div>)}
+                {sent.map((t, i) => <div key={`s${i}`} className="msg-u"><Text text={t} /><span className="meta">发送中</span></div>)}
+                {asks.map(q => (
+                  <div key={q.id} className="ask">
+                    <p><b>它想{q.name === 'Bash' ? '运行命令' : `用 ${q.name}`}</b>{q.title && q.title !== q.name ? ` · ${q.title}` : ''}</p>
+                    {q.arg && <pre className="code">{q.arg}</pre>}
+                    <div className="btns">
+                      <button className="btn pri" onClick={() => { nudge.current = Date.now(); setAsks(xs => xs.filter(x => x.id !== q.id)); run(() => api.permit(agent.id, q.id, true)); }}>允许</button>
+                      <button className="btn" onClick={() => { nudge.current = Date.now(); setAsks(xs => xs.filter(x => x.id !== q.id)); run(() => api.permit(agent.id, q.id, false)); }}>拒绝</button>
+                    </div>
+                  </div>
+                ))}
+                {agent.status === 'working' && !asks.length && <div className="thinking"><i /><i /><i /></div>}
+              </div>
+              <div className="chat-compose">
+                <textarea value={text} rows={2} placeholder={agent.status === 'working' ? '它在忙，发出的消息会插进它手上的事' : `对${r.name}说点什么，Enter 发送`}
+                  onChange={e => setText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
+                <button className="btn pri" disabled={!text.trim()} onClick={send}>发送</button>
+              </div>
+            </>
+          )}
+      </section>
+      <Aside agent={agent} role={role} line={line} onOpen={onOpen}>
+        <div className="pnl-s">
+          <h4>Paseo</h4>
+          <p className="muted small">同一段对话也在 Paseo 的桌面端和手机上。权限审批在这里就能点；命令和模型切换在「完整界面」里。</p>
+          <div className="btns"><button className="btn" onClick={() => run(() => api.brief(agent.id))}>发送项目简报</button></div>
+          {agent.cwd && <p className="muted small path">目录：{agent.cwd}</p>}
+        </div>
+      </Aside>
+    </>
+  );
+}
+
+// a long message from you (a project brief, a pasted log) shows its first lines until opened
+function UserMsg({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const lines = text.split('\n'), long = lines.length > 6 || text.length > 360;
+  const shown = open || !long ? text : lines.slice(0, 4).join('\n').slice(0, 240).trimEnd() + '…';
+  return (
+    <div className={`msg-u${long ? ' long' : ''}`}>
+      <Text text={shown} />
+      {long && <button className="more" onClick={() => setOpen(o => !o)}>{open ? '收起' : `展开全部（${lines.length} 行）`}</button>}
+    </div>
+  );
+}
+
+// Paseo's own page for the agent. Its app takes a few seconds to boot and shows its home
+// before it jumps to the agent, so a veil covers it until then.
+function FullPaseo({ src, title }: { src: string; title: string }) {
+  const [ready, setReady] = useState(false);
+  return (
+    <div className="paseo-wrap">
+      <iframe className="paseo-frame" src={src} title={title} allow="clipboard-read; clipboard-write; microphone"
+        onLoad={() => window.setTimeout(() => setReady(true), 7000)} />
+      <div className={`paseo-veil${ready ? ' gone' : ''}`}><span className="thinking"><i /><i /><i /></span><p>正在打开 Paseo 的界面…</p></div>
+    </div>
+  );
+}
+
+// consecutive entries that match `is` come out as one array, the rest one by one
+function fold<T>(list: T[], is: (x: T) => boolean): (T | T[])[] {
+  const out: (T | T[])[] = [];
+  for (const x of list) {
+    const last = out[out.length - 1];
+    if (is(x) && Array.isArray(last)) last.push(x);
+    else out.push(is(x) ? [x] : x);
+  }
+  return out;
+}
+
+// a run of tool calls as one quiet line; opens to the list
+function Trail({ tools, children }: { tools: { name: string; arg?: string; st: 'run' | 'ok' | 'bad'; note?: string }[]; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const last = tools[tools.length - 1], bad = tools.filter(t => t.st === 'bad').length, busy = tools.some(t => t.st === 'run');
+  return (
+    <div className={`trail${open ? ' open' : ''}${busy ? ' t-run' : bad ? ' t-bad' : ''}`}>
+      <button onClick={() => setOpen(o => !o)}>
+        <span className="t-ic">{busy ? '…' : bad ? '!' : '✓'}</span>
+        <b>{tools.length > 1 ? `${tools.length} 个工具` : last.name}</b>
+        <span className="t-arg">{tools.length > 1 ? `${last.name} ${last.arg ?? ''}` : last.arg}</span>
+        {bad > 0 && <em>{bad} 个出错</em>}
+      </button>
+      {open && (children ?? <ul>{tools.map((t, i) => <li key={i} className={`t-${t.st}`}><b>{t.name}</b><span>{t.arg}</span>{t.note && <em>{t.note}</em>}</li>)}</ul>)}
+    </div>
+  );
+}
+
+function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent; line?: Line; role: AgentRole } & RoomActions) {
+  const [agent, setAgent] = useState(initial);
+  const [events, setEvents] = useState<AgentEvent[]>([]);
+  const [live, setLive] = useState('');
+  const [text, setText] = useState('');
+  const scroll = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  const r = ROLE[role];
+
+  useEffect(() => {
+    let alive = true;
+    api.agent(initial.id).then(d => { if (alive) { setAgent(d.agent); setEvents(d.events); } }).catch(() => {});
+    return () => { alive = false; };
+  }, [initial.id]);
+
+  useEffect(() => listen(e => {
+    if (e.type === 'agent' && e.agent?.id === agent.id) setAgent(e.agent);
+    else if (e.type === 'agent_event' && e.event.agent_id === agent.id) {
+      setEvents(list => list.some(x => x.id === e.event.id) ? list.map(x => x.id === e.event.id ? e.event : x) : [...list, e.event]);
+      if (e.event.kind === 'assistant') setLive('');
+    } else if (e.type === 'agent_delta' && e.agent_id === agent.id) setLive(t => t + e.text);
+  }), [agent.id]);
+
+  // pair each tool call with its result
+  const items = useMemo(() => {
+    const ends = new Map(events.filter(e => e.kind === 'tool_end').map(e => [e.data.id, e]));
+    return events.filter(e => e.kind !== 'tool_end').map(ev => ({ ev, end: ev.kind === 'tool' ? ends.get(ev.data.id) : undefined }) as Item);
+  }, [events]);
+  const rows = useMemo(() => fold(items, x => x.ev.kind === 'tool'), [items]);
+
+  useEffect(() => {
+    const el = scroll.current;
+    if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [items.length, live]);
+
+  async function run(fn: () => Promise<unknown>) {
+    try { await fn(); } catch (e) { toast((e as Error).message); }
+  }
+
+  function send() {
+    const t = text.trim();
+    if (!t) return;
+    setText('');
+    stick.current = true;
+    run(() => api.say(agent.id, t));
+  }
+
+  const on = ['idle', 'working', 'starting'].includes(agent.status);
 
   const st = agent.state;
   const word = text.startsWith('/') && !/\s/.test(text) ? text.slice(1).toLowerCase() : null;
@@ -329,7 +515,11 @@ function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         }}>
           {!items.length && !live && <div className="room-empty small-empty"><p>还没有对话。可以先「发送项目简报」，让它读一遍项目再开始。</p></div>}
-          {items.map(({ ev, end }) => <Entry key={ev.id} ev={ev} end={end} />)}
+          {rows.map(x => Array.isArray(x)
+            ? <Trail key={x[0].ev.id} tools={x.map(({ ev, end }) => ({ name: ev.data.name, arg: toolArg(ev.data.args), st: !end ? 'run' : end.data.error ? 'bad' : 'ok' }))}>
+                <div className="trail-list">{x.map(t => <Tool key={t.ev.id} {...t} />)}</div>
+              </Trail>
+            : <Entry key={x.ev.id} ev={x.ev} end={x.end} />)}
           {live && <div className="msg-a streaming"><Text text={live} /><i className="caret" /></div>}
           {agent.status === 'working' && !live && <div className="thinking"><i /><i /><i /></div>}
         </div>
@@ -352,7 +542,7 @@ function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
           <button className="btn pri" disabled={!text.trim()} onClick={send}>发送</button>
         </div>
       </section>
-      {aside(
+      <Aside agent={agent} role={role} line={line} onOpen={onOpen}>
         <div className="pnl-s">
           <h4>终端</h4>
           <p className="muted small">pi 在后台的 tmux 里运行，接上就能看到同一段对话，在那里输入也会同步到这里。</p>
@@ -361,8 +551,8 @@ function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
           }}>复制</button></div>}
           {agent.cwd && <p className="muted small path">目录：{agent.cwd}</p>}
           {st?.session && <p className="muted small path">会话：{st.session.name ?? st.session.id}</p>}
-        </div>,
-      )}
+        </div>
+      </Aside>
     </>
   );
 }
@@ -388,10 +578,11 @@ function Entry({ ev, end }: Item) {
   return <div className={`note${d.error ? ' err' : ''}`}>{d.text}</div>;
 }
 
+const toolArg = (a: any = {}) => String(a.command ?? a.path ?? a.file_path ?? a.name ?? a.query ?? (Object.keys(a).length ? JSON.stringify(a) : '')).slice(0, 160);
+
 function Tool({ ev, end }: Item) {
   const [open, setOpen] = useState(false);
-  const d = ev.data, a = d.args ?? {};
-  const arg = a.command ?? a.path ?? a.file_path ?? a.name ?? a.query ?? (Object.keys(a).length ? JSON.stringify(a) : '');
+  const d = ev.data, arg = toolArg(d.args);
   const st = !end ? 'run' : end.data.error ? 'bad' : 'ok';
   return (
     <div className={`tool t-${st}`}>

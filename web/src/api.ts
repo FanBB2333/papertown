@@ -79,6 +79,13 @@ export interface Llm {
   provider: string; model_strong: string; model_cheap: string; effort: string; offline: boolean; openai_base_url: string;
   providers: { id: string; name: string; models: string[] }[];
 }
+export interface PaseoConversation {
+  id: string; title: string | null; provider: string; model: string | null; cwd: string; status: string;
+  updated: string; last_user: string | null; linked: string | null;
+}
+// a Paseo conversation trimmed for the room: messages, and tools as one-liners
+export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
+export interface PaseoPermission { id: string; name: string; title: string | null; arg: string }
 export interface StartOpts { runtime?: 'pi' | 'paseo'; provider?: string; model?: string; thinking?: string }
 
 export interface ProjectRef { id: string; seq: number; title: string; status: string; stage: string }
@@ -124,6 +131,10 @@ export const api = {
   startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
   openInPaseo: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/open`),
   paseo: () => call<PaseoInfo>('GET', '/api/paseo'),
+  conversations: () => call<{ conversations: PaseoConversation[] }>('GET', '/api/paseo/conversations'),
+  importAgent: (lineId: string, role: AgentRole, extId: string) => call<Agent>('POST', '/api/agents/import', { line_id: lineId, role, ext_id: extId }),
+  timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null } }>('GET', `/api/agents/${id}/timeline`),
+  permit: (id: string, requestId: string, allow: boolean) => call<{ ok: boolean }>('POST', `/api/agents/${id}/permit`, { request_id: requestId, allow }),
   llm: () => call<Llm>('GET', '/api/llm'),
   setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),

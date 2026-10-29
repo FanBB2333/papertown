@@ -46,6 +46,17 @@ class AgentIn(BaseModel):
     role: str
 
 
+class ImportIn(BaseModel):
+    line_id: str
+    role: str
+    ext_id: str
+
+
+class PermitIn(BaseModel):
+    request_id: str
+    allow: bool
+
+
 class StartIn(BaseModel):
     runtime: str | None = None  # pi (tmux) | paseo
     provider: str | None = None
@@ -268,6 +279,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         b = body or StartIn()
         return agents(town.agents.start, agent_id, b.runtime, b.provider, b.model, b.thinking)
 
+    @app.post("/api/agents/import")
+    def agent_import(body: ImportIn):
+        return agents(town.agents.import_paseo, body.line_id, body.role, body.ext_id)
+
+    @app.get("/api/agents/{agent_id}/timeline")
+    def agent_timeline(agent_id: str, limit: int = 200):
+        return agents(town.agents.timeline, agent_id, min(max(limit, 1), 1000))
+
+    @app.post("/api/agents/{agent_id}/permit")
+    def agent_permit(agent_id: str, body: PermitIn):
+        agents(town.agents.permit, agent_id, body.request_id, body.allow)
+        return {"ok": True}
+
+    @app.get("/api/paseo/conversations")
+    def paseo_conversations():
+        try:
+            rows = town.agents.paseo.conversations()
+        except Exception as e:  # noqa: BLE001 - the SDK's own message is the useful part
+            raise HTTPException(400, str(e)) from e
+        linked = {a["ext_id"]: f"#{a['seq']} 的{ROLES[a['role']]['name']}" for a in town.db.q(
+            "select a.ext_id, a.role, l.seq from agents a join lines l on l.id = a.line_id where a.runtime = 'paseo' and a.ext_id is not null")}
+        return {"conversations": [c | {"linked": linked.get(c["id"])} for c in rows]}
+
     @app.post("/api/agents/{agent_id}/open")
     def agent_open_desktop(agent_id: str):
         agents(town.agents.open_desktop, agent_id)
@@ -305,8 +339,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/agents/{agent_id}/brief")
     def agent_brief(agent_id: str):
-        text = agents(town.agents.brief, agent_id)
-        return agents(town.agents.say, agent_id, "这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + text)
+        return agents(town.agents.say, agent_id, agents(town.agents.brief, agent_id))
 
     @app.post("/api/agents/{agent_id}/abort")
     def agent_abort(agent_id: str):

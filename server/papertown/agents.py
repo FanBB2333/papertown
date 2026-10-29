@@ -18,6 +18,7 @@ An agent runs in one of two places:
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 import shlex
@@ -225,10 +226,19 @@ class Agents:
         (cwd / "AGENTS.md").write_text(text, encoding="utf-8")
         if runtime == "paseo":
             (cwd / "CLAUDE.md").write_text(text, encoding="utf-8")  # Claude Code reads this one
-            tools = cwd / ".papertown"
-            tools.mkdir(exist_ok=True)
-            shutil.copyfile(PT, tools / "pt")
-            (tools / "pt").chmod(0o755)
+            self._tools(a)
+
+    def _tools(self, a: dict) -> Path:
+        """`.papertown/pt` in the role's own directory, with who it speaks for in link.json, for
+        a shell that has no PAPERTOWN_* environment (an imported conversation). Returns pt."""
+        tools = self._workdir(a["line_id"], a["role"]) / ".papertown"
+        tools.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(PT, tools / "pt")
+        (tools / "pt").chmod(0o755)
+        link = tools / "link.json"
+        link.write_text(json.dumps({"url": self.s.url, "agent": a["id"], "token": a["token"]}), encoding="utf-8")
+        link.chmod(0o600)
+        return tools / "pt"
 
     def start(self, agent_id: str, runtime: str | None = None, provider: str | None = None,
               model: str | None = None, thinking: str | None = None) -> dict:
@@ -303,6 +313,61 @@ class Agents:
         self._event(a["id"], "note", {"text": f"在 Paseo 里启动了 {provider}{f' · {model}' if model else ''}，并发了项目简报。"})
         self.watch()
         return self.public(self.get(a["id"]))
+
+    def import_paseo(self, line_id: str, role: str, ext_id: str) -> dict:
+        """Take over an existing Paseo conversation as this project's agent for the role."""
+        if role not in PI_ROLES:
+            raise AgentError("这个岗位不能对话")
+        try:
+            conv = next((c for c in self.paseo.conversations() if c["id"] == ext_id), None)
+        except PaseoError as e:
+            raise AgentError(str(e)) from e
+        if not conv:
+            raise AgentError("Paseo 里没有这段对话")
+        other = self.db.one("select id from agents where ext_id = ? and runtime = 'paseo'", ext_id)
+        a = self.ensure(line_id, role)
+        if other and other["id"] != a["id"]:
+            o = self.get(other["id"])
+            seq = self.db.val("select seq from lines where id = ?", o["line_id"])
+            raise AgentError(f"这段对话已经导入给了 #{seq} 的{ROLES[o['role']]['name']}")
+        try:
+            self.paseo.label(ext_id, {"papertown": "1", "papertown.agent": a["id"], "papertown.line": line_id, "papertown.role": role})
+        except PaseoError as e:
+            raise AgentError(str(e)) from e
+        model = "/".join(x for x in (conv["provider"], conv.get("model")) if x)
+        # the conversation keeps working where it was (nothing is written there); the tools
+        # stay in the project's own directory
+        self._tools(a)
+        self._set(a["id"], runtime="paseo", ext_id=ext_id, model=model, cwd=conv.get("cwd") or a["cwd"], status=PASEO_STATUS.get(conv["status"], "idle"))
+        self._event(a["id"], "note", {"text": f"导入了 Paseo 里的对话「{conv.get('title') or ext_id[:8]}」。点侧栏的「发送项目简报」，它就知道这个项目和怎么用 Papertown。"})
+        self.watch()
+        return self.public(self.get(a["id"]))
+
+    def timeline(self, agent_id: str, limit: int = 200) -> dict:
+        """A Paseo agent's conversation, trimmed for the room; also refreshes its status."""
+        a = self.get(agent_id)
+        if not a or a.get("runtime") != "paseo" or not a.get("ext_id"):
+            raise AgentError("这个员工不在 Paseo 里")
+        try:
+            t = self.paseo.timeline(a["ext_id"], limit)
+        except PaseoError as e:
+            raise AgentError(str(e)) from e
+        snap = t.get("agent") or {}
+        status = PASEO_STATUS.get(snap.get("status"), a["status"])
+        model = "/".join(x for x in (snap.get("provider"), snap.get("model")) if x) or a["model"]
+        if status != a["status"] or model != a["model"]:
+            self._set(agent_id, status=status, model=model)
+        return {"agent": self.public(self.get(agent_id)), "paseo": snap, "items": t.get("items", [])}
+
+    def permit(self, agent_id: str, request_id: str, allow: bool) -> None:
+        """Answer a Paseo agent's permission request (run this command, edit that file)."""
+        a = self.get(agent_id)
+        if not a or a.get("runtime") != "paseo" or not a.get("ext_id"):
+            raise AgentError("这个员工不在 Paseo 里")
+        try:
+            self.paseo.permit(a["ext_id"], request_id, allow)
+        except PaseoError as e:
+            raise AgentError(str(e)) from e
 
     def open_desktop(self, agent_id: str) -> None:
         a = self.get(agent_id)
@@ -437,10 +502,22 @@ class Agents:
             return bool(self._inbox.get(agent_id))
 
     def brief(self, agent_id: str) -> str:
+        """The project brief as a message to the agent; a Paseo agent also gets the tools,
+        by full path, since an imported conversation works outside the project."""
         a = self.get(agent_id)
         if not a:
             raise AgentError("没有这个员工")
-        return self.town.brief(a["line_id"], a["role"])
+        text = self.town.brief(a["line_id"], a["role"])
+        if a.get("runtime") != "paseo":
+            return "这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + text
+        pt = self._tools(a)
+        line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
+        return (f"你现在是 Papertown 里项目 #{line['seq']}「{line['title']}」的{ROLES[a['role']]['name']}。先读一遍下面的简报，再说说你打算怎么开始。\n\n"
+                f"Papertown 的工具（在终端里直接用这个路径运行）：\n"
+                f"- `{pt} brief` 读最新的项目简报\n"
+                f"- `{pt} submit <名字> -- <命令>` 把实验提交到实验农场，命令在当前目录用 bash 执行；"
+                f"脚本打印 `PROGRESS <0-100>` 汇报进度，结束时打印 `RESULT {{json}}`\n"
+                f"- `{pt} jobs [任务 id]` 查看任务进度、结果和日志\n\n" + text)
 
     # ---------- from the bridge ----------
 
