@@ -5,6 +5,7 @@ server/.venv/
 server/var/
 web/node_modules/
 web/dist/
+web/dist-demo/
 .env
 .DS_Store
 server/papertown/paseo_link/node_modules/

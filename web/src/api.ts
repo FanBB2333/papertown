@@ -1,5 +1,6 @@
 // REST calls and the live event stream from the Papertown server.
 
+import { DEMO, demoCall, demoFile } from './demo';
 import { localize, tr, trx } from './i18n';
 
 export interface Placement {
@@ -183,6 +184,7 @@ export interface RagHit extends PaperCard { matched: string[] }
 export interface RagResult { query: string; expanded: string; terms: string[]; method: 'coverage' | 'embedding'; hits: RagHit[] }
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
+  if (DEMO) return localize(await demoCall(method, url)) as T;
   const r = await fetch(url, {
     method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined,
   });
@@ -243,7 +245,7 @@ export const api = {
   abort: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/abort`),
 };
 
-export const fileUrl = (lineId: string, name: string) => `/api/lines/${lineId}/files/${name}`;
+export const fileUrl = (lineId: string, name: string) => (DEMO ? demoFile(lineId, name) : `/api/lines/${lineId}/files/${name}`);
 // a linked project's paper, compiled in its own repository
 export const linkedPdfUrl = (lineId: string) => `/api/lines/${lineId}/linked/pdf`;
 
@@ -259,6 +261,7 @@ export function listen(fn: (e: ServerEvent) => void): () => void {
 
 // One EventSource for the app; the browser reconnects on its own.
 export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boolean) => void): () => void {
+  if (DEMO) { onState(true); return () => {}; } // the demo is a snapshot: nothing happens live
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
     'job', 'agent', 'agent_event', 'agent_delta', 'llm'];

@@ -8,12 +8,14 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
 import { Item, Logo } from './art';
+import { DemoWelcome, RepoLink } from './components/Demo';
 import { Drawer, type Composer, type Tab } from './components/Drawer';
 import { Interior } from './components/Interior';
 import { SettingsPanel } from './components/Settings';
 import { StatusView } from './components/StatusView';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { getSettings, useSettings } from './settings';
+import { DEMO } from './demo';
 import { tr } from './i18n';
 
 const Town3D = lazy(() => import('./components/Town3D'));
@@ -266,7 +268,8 @@ export function App() {
         </div>}
         <div className="hud-r">
           {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? tr('没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板；仓库和印刷厂的 pi 用 pi 自己的设置') : hud.model}>
-            {!online ? tr('连接断开') : hud.offline ? tr('离线模式') : hud.provider}</span>}
+            {!online ? tr('连接断开') : DEMO ? tr('静态演示') : hud.offline ? tr('离线模式') : hud.provider}</span>}
+          {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={() => setSettingsOpen(true)}><Gear />{tr('设置')}</button>
           <button className="btn" onClick={() => chatOpen ? setChatOpen(false) : openChat()}>{tr('对话')}</button>
         </div>
@@ -303,6 +306,7 @@ export function App() {
       )}
       <SettingsPanel open={settingsOpen} hud={hud ?? null} onClose={() => setSettingsOpen(false)} />
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>
+      {DEMO && <DemoWelcome />}
     </div>
   );
 }
