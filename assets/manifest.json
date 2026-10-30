@@ -272,6 +272,38 @@
       "file": "assets/sprites/buildings/library.svg"
     },
     {
+      "type": "academy",
+      "name": "技能学堂",
+      "en": "Skill Academy",
+      "district": "plaza",
+      "footprint": [
+        2,
+        2
+      ],
+      "height": 2.5,
+      "accent": "#8a6fb0",
+      "represents": "员工学本事的地方：每个项目、每段对话各配哪些 skill",
+      "tech": "skim · 分层 skill 配置",
+      "later": false,
+      "file": "assets/sprites/buildings/academy.svg"
+    },
+    {
+      "type": "exchange",
+      "name": "接线局",
+      "en": "MCP Exchange",
+      "district": "plaza",
+      "footprint": [
+        2,
+        2
+      ],
+      "height": 2.8,
+      "accent": "#3a8fa0",
+      "represents": "小镇和外部工具之间的总机：每条线接一个 MCP server",
+      "tech": "MCP · 工具接线",
+      "later": false,
+      "file": "assets/sprites/buildings/exchange.svg"
+    },
+    {
       "type": "genealogy",
       "name": "族谱馆",
       "en": "Lineage Hall",
@@ -759,6 +791,18 @@
       "type": "genealogy",
       "x": 8,
       "y": 12
+    },
+    {
+      "id": "academy",
+      "type": "academy",
+      "x": 13,
+      "y": 8
+    },
+    {
+      "id": "exchange",
+      "type": "exchange",
+      "x": 15,
+      "y": 11
     }
   ],
   "themes": {

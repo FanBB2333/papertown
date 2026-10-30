@@ -464,6 +464,41 @@ export const BUILDINGS = {
       p.decalL(1.5, 2.7, 1.83, '<path class="m-acc f-l" d="M-7,-3L0,-1L7,-3L7,4L0,6L-7,4Z"/><path class="ln m-dark" d="M0,-1V6"/>');
     },
   },
+  academy: {
+    name: '技能学堂', en: 'Skill Academy', district: 'plaza', w: 2, d: 2, h: 2.5, accent: '#8a6fb0',
+    rep: '员工学本事的地方：每个项目、每段对话各配哪些 skill', tech: 'skim · 分层 skill 配置',
+    draw(p) {
+      p.box(0, 0, 0, 2, 2, 0.1, 'm-base');
+      p.box(0.25, 0.3, 0.1, 1.5, 1.35, 0.9, 'm-wall');
+      p.rowL(1.65, 0.35, 1.65, 0.45, 2, 0.24, 0.32);
+      p.winL(1.65, 0.88, 0.1, 0.24, 0.5, 'm-dark');
+      p.rowR(1.75, 0.42, 1.55, 0.45, 3, 0.22, 0.32);
+      p.gableY(0.2, 0.25, 1.0, 1.6, 1.45, 0.5, 'm-roof', 'm-white');
+      p.decalL(1.0, 1.7, 1.17, '<path class="m-acc f-l" d="M0,-5.5L1.6,-1.7L5.6,-1.7L2.4,0.7L3.6,4.6L0,2.3L-3.6,4.6L-2.4,0.7L-5.6,-1.7L-1.6,-1.7Z"/>');
+      p.box(0.86, 0.5, 1.3, 0.28, 0.28, 0.55, 'm-white');
+      p.winL(0.78, 0.92, 1.5, 0.16, 0.2, 'm-dark');
+      p.pyramid(0.8, 0.44, 1.85, 0.4, 0.4, 0.38, 'm-acc');
+    },
+  },
+  exchange: {
+    name: '接线局', en: 'MCP Exchange', district: 'plaza', w: 2, d: 2, h: 2.8, accent: '#3a8fa0',
+    rep: '小镇和外部工具之间的总机：每条线接一个 MCP server', tech: 'MCP · 工具接线',
+    draw(p) {
+      p.box(0, 0, 0, 2, 2, 0.1, 'm-base');
+      p.box(0.42, 0.2, 0.1, 0.12, 0.12, 2.55, 'm-metal');
+      p.line([[0.2, 0.26, 2.35], [0.78, 0.26, 2.35]], 'ln2 m-metal');
+      p.line([[0.24, 0.26, 2.05], [0.74, 0.26, 2.05]], 'ln2 m-metal');
+      p.line([[0.24, 0.26, 2.35], [1.85, 0.6, 1.25]], 'ln m-dark');
+      p.line([[0.74, 0.26, 2.05], [1.85, 1.3, 1.2]], 'ln m-dark');
+      p.box(0.2, 0.55, 0.1, 1.55, 1.25, 1.0, 'm-wall');
+      p.rowL(1.8, 0.3, 1.65, 0.62, 3, 0.26, 0.28);
+      p.winL(1.8, 0.83, 0.1, 0.28, 0.44, 'm-dark');
+      p.rowR(1.75, 0.68, 1.68, 0.6, 3, 0.2, 0.3);
+      p.box(0.15, 0.5, 1.1, 1.65, 1.35, 0.1, 'm-roof');
+      p.cyl(1.25, 1.0, 1.2, 0.18, 0.22, 'm-acc');
+      p.decalR(1.75, 1.18, 0.38, '<rect class="m-acc f-r" x="-5" y="-3.5" width="10" height="7" rx="1.5"/><path class="ln m-white" d="M-2,-6.5V-3.5M2,-6.5V-3.5"/>');
+    },
+  },
   genealogy: {
     name: '族谱馆', en: 'Lineage Hall', district: 'plaza', w: 2, d: 2, h: 2.6, accent: '#5e8c5a',
     rep: '引用关系图谱：谁是谁的"祖先"，方法怎么传下来', tech: '知识图谱 + GraphRAG',

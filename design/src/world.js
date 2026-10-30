@@ -47,9 +47,12 @@ export const PLACEMENTS = [
   { id: 'cityhall', type: 'cityhall', x: 11, y: 11 },
   { id: 'hatchery', type: 'hatchery', x: 9, y: 8 },
   { id: 'genealogy', type: 'genealogy', x: 8, y: 12 },
+  // what the agents know and what they can reach: skills, MCP tools (and the library's RAG)
+  { id: 'academy', type: 'academy', x: 13, y: 8 },
+  { id: 'exchange', type: 'exchange', x: 15, y: 11 },
 ];
 
-export const KEY_LABELS = new Set(['mill', 'depot', 'farm', 'press', 'dock_arxiv', 'library', 'qa', 'dock_github', 'market', 'power', 'newspaper', 'cityhall', 'hatchery']);
+export const KEY_LABELS = new Set(['mill', 'depot', 'farm', 'press', 'dock_arxiv', 'library', 'qa', 'dock_github', 'market', 'power', 'newspaper', 'cityhall', 'hatchery', 'academy', 'exchange']);
 
 // band and square names, at [x, y, z]
 const DISTRICT_LABELS = [
