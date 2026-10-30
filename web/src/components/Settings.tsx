@@ -7,16 +7,17 @@ import { api, listen, type Hud, type Llm, type PaseoInfo, type Roster } from '..
 import { DEFAULTS, resetSettings, setSettings, useSettings, type Settings as S } from '../settings';
 import { LlmForm } from './Drawer';
 import '../settings.css';
+import { LANG, LANGS, setLang, tr } from '../i18n';
 
 type Tab = 'look' | 'map' | 'walk' | 'model' | 'agents' | 'demo' | 'keys';
 const TABS: [Tab, string, string][] = [
-  ['look', '外观与动效', '动画、纸纹、打开时的视图'],
-  ['map', '平面地图', '缩放、拖动、建筑名字'],
-  ['walk', '3D 漫游', '鼠标、视野、手、画质'],
-  ['model', '模型', '小镇员工用的大模型'],
-  ['agents', '员工 Agent', 'Paseo 和本机 pi'],
-  ['demo', '展示模式', '样例项目和调研文章'],
-  ['keys', '快捷键', '所有按键一览'],
+  ['look', tr('外观与动效'), tr('动画、纸纹、打开时的视图')],
+  ['map', tr('平面地图'), tr('缩放、拖动、建筑名字')],
+  ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质')],
+  ['model', tr('模型'), tr('小镇员工用的大模型')],
+  ['agents', tr('员工 Agent'), tr('Paseo 和本机 pi')],
+  ['demo', tr('展示模式'), tr('样例项目和调研文章')],
+  ['keys', tr('快捷键'), tr('所有按键一览')],
 ];
 
 function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
@@ -55,14 +56,17 @@ const set = <K extends keyof S>(k: K) => (v: S[K]) => setSettings({ [k]: v } as 
 function Look({ s }: { s: S }) {
   return (
     <>
-      <Row label="动画" desc="柔和：动画更短更轻，适合投影或容易晕的时候">
-        <Pick value={s.motion} options={[['full', '完整'], ['calm', '柔和']]} onChange={set('motion')} />
+      <Row label={tr('语言')} desc={tr('界面文字的语言，切换后页面会重新载入')}>
+        <Pick value={LANG} options={LANGS} onChange={setLang} />
       </Row>
-      <Row label="纸纹" desc="盖在整个页面上的纸张纹理">
-        <Slider value={s.grain} min={0} max={1} step={0.05} fmt={v => v ? `${Math.round(v * 100)}%` : '关'} onChange={set('grain')} />
+      <Row label={tr('动画')} desc={tr('柔和：动画更短更轻，适合投影或容易晕的时候')}>
+        <Pick value={s.motion} options={[['full', tr('完整')], ['calm', tr('柔和')]]} onChange={set('motion')} />
       </Row>
-      <Row label="打开小镇时" desc="下次打开页面先看到哪种视图">
-        <Pick value={s.start} options={[['2d', '平面地图'], ['3d', '3D 漫游']]} onChange={set('start')} />
+      <Row label={tr('纸纹')} desc={tr('盖在整个页面上的纸张纹理')}>
+        <Slider value={s.grain} min={0} max={1} step={0.05} fmt={v => v ? `${Math.round(v * 100)}%` : tr('关')} onChange={set('grain')} />
+      </Row>
+      <Row label={tr('打开小镇时')} desc={tr('下次打开页面先看到哪种视图')}>
+        <Pick value={s.start} options={[['2d', tr('平面地图')], ['3d', tr('3D 漫游')]]} onChange={set('start')} />
       </Row>
     </>
   );
@@ -71,16 +75,16 @@ function Look({ s }: { s: S }) {
 function MapTab({ s }: { s: S }) {
   return (
     <>
-      <Row label="顺滑缩放和拖动" desc="缩放带缓动，松手后地图会顺势滑一小段">
+      <Row label={tr('顺滑缩放和拖动')} desc={tr('缩放带缓动，松手后地图会顺势滑一小段')}>
         <Toggle value={s.smoothMap} onChange={set('smoothMap')} />
       </Row>
-      <Row label="滚轮缩放速度">
+      <Row label={tr('滚轮缩放速度')}>
         <Slider value={s.zoomSpeed} min={0.5} max={2} step={0.1} fmt={v => `${v.toFixed(1)}×`} onChange={set('zoomSpeed')} />
       </Row>
-      <Row label="建筑名字" desc="主要：四座核心建筑和几处地标；全部：每栋都标">
-        <Pick value={s.mapLabels} options={[['key', '主要'], ['all', '全部']]} onChange={set('mapLabels')} />
+      <Row label={tr('建筑名字')} desc={tr('主要：四座核心建筑和几处地标；全部：每栋都标')}>
+        <Pick value={s.mapLabels} options={[['key', tr('主要')], ['all', tr('全部')]]} onChange={set('mapLabels')} />
       </Row>
-      <Row label="走动提示" desc="地图底部的按键提示">
+      <Row label={tr('走动提示')} desc={tr('地图底部的按键提示')}>
         <Toggle value={s.walkHint} onChange={set('walkHint')} />
       </Row>
     </>
@@ -90,28 +94,28 @@ function MapTab({ s }: { s: S }) {
 function Walk({ s }: { s: S }) {
   return (
     <>
-      <Row label="鼠标灵敏度" desc="鼠标锁在画面中间时，移动多少转多少">
+      <Row label={tr('鼠标灵敏度')} desc={tr('鼠标锁在画面中间时，移动多少转多少')}>
         <Slider value={s.sensitivity} min={0.3} max={3} step={0.05} fmt={v => `${v.toFixed(2)}×`} onChange={set('sensitivity')} />
       </Row>
-      <Row label="上下反转" desc="鼠标往前推是低头">
+      <Row label={tr('上下反转')} desc={tr('鼠标往前推是低头')}>
         <Toggle value={s.invertY} onChange={set('invertY')} />
       </Row>
-      <Row label="视野" desc="越大看得越广，边缘拉伸也越明显">
+      <Row label={tr('视野')} desc={tr('越大看得越广，边缘拉伸也越明显')}>
         <Slider value={s.fov} min={55} max={95} step={1} fmt={v => `${v}°`} onChange={set('fov')} />
       </Row>
-      <Row label="显示手" desc="画面右下角你的手和铅笔，走路时会跟着摆">
+      <Row label={tr('显示手')} desc={tr('画面右下角你的手和铅笔，走路时会跟着摆')}>
         <Toggle value={s.hand} onChange={set('hand')} />
       </Row>
-      <Row label="走路时晃动" desc="视角随步子轻轻上下">
+      <Row label={tr('走路时晃动')} desc={tr('视角随步子轻轻上下')}>
         <Toggle value={s.bob} onChange={set('bob')} />
       </Row>
-      <Row label="画质" desc="低：不画阴影、降低分辨率，老电脑更流畅">
-        <Pick value={s.quality} options={[['low', '低'], ['mid', '中'], ['high', '高']]} onChange={set('quality')} />
+      <Row label={tr('画质')} desc={tr('低：不画阴影、降低分辨率，老电脑更流畅')}>
+        <Pick value={s.quality} options={[['low', tr('低')], ['mid', tr('中')], ['high', tr('高')]]} onChange={set('quality')} />
       </Row>
-      <Row label="建筑名字" desc="悬在建筑上方的名字">
+      <Row label={tr('建筑名字')} desc={tr('悬在建筑上方的名字')}>
         <Toggle value={s.tags3d} onChange={set('tags3d')} />
       </Row>
-      <Row label="小地图" desc="右下角的小地图，点一下就过去">
+      <Row label={tr('小地图')} desc={tr('右下角的小地图，点一下就过去')}>
         <Toggle value={s.minimap} onChange={set('minimap')} />
       </Row>
     </>
@@ -123,13 +127,13 @@ function Model() {
   const [n, setN] = useState(0);
   useEffect(() => { api.llm().then(setLlm).catch(() => {}); }, []);
   useEffect(() => listen(e => { if (e.type === 'llm') setLlm(e.llm); }), []);
-  if (!llm) return <p className="muted">读取中…</p>;
+  if (!llm) return <p className="muted">{tr('读取中…')}</p>;
   const name = llm.providers.find(x => x.id === llm.provider)?.name ?? llm.provider;
   return (
     <>
-      <p className="st-note">现在：<b>{name}</b> · {llm.model_strong}{llm.model_cheap !== llm.model_strong ? ` / ${llm.model_cheap}` : ''}{llm.offline ? '（离线模式，员工按 skill 的步骤调用工具，文字用模板）' : ''}</p>
+      <p className="st-note">{tr('现在：')}<b>{name}</b> · {llm.model_strong}{llm.model_cheap !== llm.model_strong ? ` / ${llm.model_cheap}` : ''}{llm.offline ? tr('（离线模式，员工按 skill 的步骤调用工具，文字用模板）') : ''}</p>
       <LlmForm key={n} llm={llm} onDone={l => { if (l) setLlm(l); setN(x => x + 1); }} />
-      <p className="muted small">仓库和印刷厂里的代码、写作员工用的是 Paseo 或 pi 自己的模型，在各自的房间里切换。</p>
+      <p className="muted small">{tr('仓库和印刷厂里的代码、写作员工用的是 Paseo 或 pi 自己的模型，在各自的房间里切换。')}</p>
     </>
   );
 }
@@ -144,25 +148,25 @@ function Agents() {
   const st = paseo && paseo !== 'err' ? paseo.status : null;
   return (
     <>
-      <Row label="Paseo" desc="托管 Claude Code、Codex、OpenCode 等 agent 的本机守护进程">
-        <span className={`chip ${st?.ok ? 'ok' : 'warn'}`}>{paseo === null ? '检查中…' : st?.ok ? `已连接${st.version ? ` · ${st.version}` : ''}` : '未连接'}</span>
+      <Row label="Paseo" desc={tr('托管 Claude Code、Codex、OpenCode 等 agent 的本机守护进程')}>
+        <span className={`chip ${st?.ok ? 'ok' : 'warn'}`}>{paseo === null ? tr('检查中…') : st?.ok ? tr('已连接{0}', st.version ? ` · ${st.version}` : '') : tr('未连接')}</span>
       </Row>
       {st && !st.ok && <p className="warn-box small">{st.note}</p>}
       {st?.ok && (
         <>
-          <Row label="网页端" desc="房间里「完整界面」嵌入的就是它">
-            <span className="muted small">{st.web ?? '没开：paseo daemon config set features.webUi.enabled true'}</span>
+          <Row label={tr('网页端')} desc={tr('房间里「完整界面」嵌入的就是它')}>
+            <span className="muted small">{st.web ?? tr('没开：paseo daemon config set features.webUi.enabled true')}</span>
           </Row>
-          <Row label="可用的供应商">
-            <span className="st-tags">{paseo !== 'err' && paseo?.providers.map(p => <span key={p.id} className="chip">{p.label} · {p.models.length} 个模型</span>)}</span>
+          <Row label={tr('可用的供应商')}>
+            <span className="st-tags">{paseo !== 'err' && paseo?.providers.map(p => <span key={p.id} className="chip">{p.label} · {tr('{0} 个模型', p.models.length)}</span>)}</span>
           </Row>
         </>
       )}
-      <Row label="本机 pi" desc="跑在 tmux 里的后台终端 agent">
-        <span className={`chip ${pi?.ok ? 'ok' : 'warn'}`}>{pi === null ? '检查中…' : pi.ok ? '可用' : '不可用'}</span>
+      <Row label={tr('本机 pi')} desc={tr('跑在 tmux 里的后台终端 agent')}>
+        <span className={`chip ${pi?.ok ? 'ok' : 'warn'}`}>{pi === null ? tr('检查中…') : pi.ok ? tr('可用') : tr('不可用')}</span>
       </Row>
       {pi && !pi.ok && <p className="warn-box small">{pi.note}</p>}
-      <p className="muted small">雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。</p>
+      <p className="muted small">{tr('雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。')}</p>
     </>
   );
 }
@@ -184,25 +188,25 @@ function Demo({ hud }: { hud: Hud | null }) {
   }
   return (
     <>
-      <Row label="现在" desc="没有配置模型 key 时就是展示模式">
-        <span className={`chip ${hud?.offline ? 'warn' : 'ok'}`}>{hud ? (hud.offline ? '展示模式（离线）' : `在线 · ${hud.provider}`) : '…'}</span>
+      <Row label={tr('现在')} desc={tr('没有配置模型 key 时就是展示模式')}>
+        <span className={`chip ${hud?.offline ? 'warn' : 'ok'}`}>{hud ? (hud.offline ? tr('展示模式（离线）') : tr('在线 · {0}', hud.provider)) : '…'}</span>
       </Row>
-      <Row label="样例项目" desc="放入几篇写到不同工序的样例论文：有的已出厂，有的停在实验或写作前，有的等你决定孵不孵化">
-        <button className="btn pri" disabled={busy || !hud?.offline} onClick={seed}>{busy ? '放入中…' : '放入样例项目'}</button>
+      <Row label={tr('样例项目')} desc={tr('放入几篇写到不同工序的样例论文：有的已出厂，有的停在实验或写作前，有的等你决定孵不孵化')}>
+        <button className="btn pri" disabled={busy || !hud?.offline} onClick={seed}>{busy ? tr('放入中…') : tr('放入样例项目')}</button>
       </Row>
-      {!hud?.offline && <p className="muted small">接了模型以后样例也会真的调用模型、花钱，所以只在展示模式里提供。</p>}
+      {!hud?.offline && <p className="muted small">{tr('接了模型以后样例也会真的调用模型、花钱，所以只在展示模式里提供。')}</p>}
       {msg && <p className="st-note">{msg}</p>}
-      <Row label="调研文章" desc="图书馆的馆藏，样例项目查重和写方法时从这里找相近工作">
-        <span className="muted small">馆藏 {hud?.library ?? '…'} 篇 · 在小镇里进图书馆翻看</span>
+      <Row label={tr('调研文章')} desc={tr('图书馆的馆藏，样例项目查重和写方法时从这里找相近工作')}>
+        <span className="muted small">{tr('馆藏')} {tr('{0} 篇 · 在小镇里进图书馆翻看', hud?.library ?? '…')}</span>
       </Row>
     </>
   );
 }
 
 const KEYS: [string, string][] = [
-  ['W A S D / 方向键', '走动（3D 里 ←/→ 转身）'], ['Shift', '3D 里跑'], ['E / Enter / 空格', '进门口或准星对着的建筑'],
-  ['鼠标', '3D 里转视角；平面上拖动地图、滚轮缩放'], ['点击', '平面上进建筑；3D 里进准星对着的建筑'],
-  ['M', '3D 里回到平面'], ['Esc', '放开鼠标 / 关闭对话 / 回到小镇 / 关闭设置'], [',', '打开设置'],
+  [tr('W A S D / 方向键'), tr('走动（3D 里 ←/→ 转身）')], ['Shift', tr('3D 里跑')], [tr('E / Enter / 空格'), tr('进门口或准星对着的建筑')],
+  [tr('鼠标'), tr('3D 里转视角；平面上拖动地图、滚轮缩放')], [tr('点击'), tr('平面上进建筑；3D 里进准星对着的建筑')],
+  ['M', tr('3D 里回到平面')], ['Esc', tr('放开鼠标 / 关闭对话 / 回到小镇 / 关闭设置')], [',', tr('打开设置')],
 ];
 
 export function SettingsPanel({ open, hud, onClose }: { open: boolean; hud: Hud | null; onClose: () => void }) {
@@ -212,16 +216,16 @@ export function SettingsPanel({ open, hud, onClose }: { open: boolean; hud: Hud 
   if (!open) return null;
   return (
     <div className="st-back" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="settings pnl" role="dialog" aria-modal="true" aria-label="设置">
+      <div className="settings pnl" role="dialog" aria-modal="true" aria-label={tr('设置')}>
         <nav className="st-nav">
-          <h2>设置</h2>
+          <h2>{tr('设置')}</h2>
           {TABS.map(([k, name, sub]) => (
             <button key={k} className={k === tab ? 'on' : ''} onClick={() => setTab(k)}><b>{name}</b><span>{sub}</span></button>
           ))}
-          <button className="btn st-reset" disabled={!changed} onClick={resetSettings} title="外观、地图和 3D 的设置回到默认">恢复默认</button>
+          <button className="btn st-reset" disabled={!changed} onClick={resetSettings} title={tr('外观、地图和 3D 的设置回到默认')}>{tr('恢复默认')}</button>
         </nav>
         <section className="st-body" key={tab}>
-          <header><h3>{TABS.find(t => t[0] === tab)![1]}</h3><button className="sh-x" onClick={onClose} title="关闭（Esc）">×</button></header>
+          <header><h3>{TABS.find(t => t[0] === tab)![1]}</h3><button className="sh-x" onClick={onClose} title={tr('关闭（Esc）')}>×</button></header>
           {tab === 'look' && <Look s={s} />}
           {tab === 'map' && <MapTab s={s} />}
           {tab === 'walk' && <Walk s={s} />}

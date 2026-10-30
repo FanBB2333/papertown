@@ -2,11 +2,12 @@
 
 import { BUILDINGS, ITEMS, WORKERS, itemSVG, spriteSVG, workerSVG } from '@design/sprites.js';
 import { LOGO } from '@design/layouts.js';
+import { tr } from './i18n';
 
 const html = (__html: string) => ({ dangerouslySetInnerHTML: { __html } });
 
 export const ROLE_NAMES: Record<string, string> = {
-  hatcher: '孵化员', scout: '调研员', designer: '方法设计师', experimenter: '实验员', writer: '写手', reviewer: '审稿人', keeper: '仓管员',
+  hatcher: tr('孵化员'), scout: tr('调研员'), designer: tr('方法设计师'), experimenter: tr('实验员'), writer: tr('写手'), reviewer: tr('审稿人'), keeper: tr('仓管员'),
 };
 
 export function Logo() {

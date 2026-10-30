@@ -7,6 +7,7 @@ import { iso } from '@design/sprites.js';
 import { footprint } from '@design/world.js';
 import type { Placement } from '../api';
 import { START, doorOf, free as freeAt, loadPos, nearest, savePos, slide } from './walk';
+import { tr } from '../i18n';
 
 const SPEED = 4.2; // tiles per second
 
@@ -78,7 +79,7 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
     g.classList.toggle('has-hint', !!p);
     if (!p) return;
     const t = g.querySelector('.av-hint text')!, r = g.querySelector('.av-hint rect')!;
-    t.textContent = `E 进入${p.name}`;
+    t.textContent = tr('E 进入{0}', p.name);
     const w = [...t.textContent].reduce((s, ch) => s + (/[　-鿿＀-￯]/.test(ch) ? 12 : 7), 0) + 18;
     r.setAttribute('width', String(w));
     r.setAttribute('x', String(-w / 2));

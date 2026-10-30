@@ -13,6 +13,7 @@ import { FarmRoom } from './FarmRoom';
 import { Floor, type CoreType } from './Floor';
 import { MillRoom } from './MillRoom';
 import { Sheet } from './Sheet';
+import { tr } from '../i18n';
 
 export interface RoomActions {
   onOpen: (id: string, lineId?: string) => void;
@@ -35,10 +36,10 @@ interface Props extends RoomActions {
 }
 
 const ROOMS: Record<string, { title: string; sub: string }> = {
-  mill: { title: '造纸厂', sub: '大本营：所有项目都在这里立项、排工序、出厂' },
-  farm: { title: '实验农场', sub: '每个项目的实验任务在这里排队、运行，由看田员盯着进度' },
-  press: { title: '印刷厂', sub: '每个项目一个写论文的 agent（Paseo 或本机 pi），稿子就在印刷厂的目录里' },
-  depot: { title: '仓库', sub: '每个项目一个写代码的 agent（Paseo 或本机 pi）：写代码、跑测试，再把实验提交到农场' },
+  mill: { title: tr('造纸厂'), sub: tr('大本营：所有项目都在这里立项、排工序、出厂') },
+  farm: { title: tr('实验农场'), sub: tr('每个项目的实验任务在这里排队、运行，由看田员盯着进度') },
+  press: { title: tr('印刷厂'), sub: tr('每个项目一个写论文的 agent（Paseo 或本机 pi），稿子就在印刷厂的目录里') },
+  depot: { title: tr('仓库'), sub: tr('每个项目一个写代码的 agent（Paseo 或本机 pi）：写代码、跑测试，再把实验提交到农场') },
 };
 
 export function Interior(p: Props) {
@@ -67,18 +68,18 @@ export function Interior(p: Props) {
   return (
     <div className={`interior in-${type} m-${p.motion}`} role="dialog" aria-modal="true" style={{ ['--accent' as string]: pl?.accent ?? BUILDINGS[type]?.accent }}>
       <header className="in-head">
-        <button className="in-back" onClick={p.onClose}><span aria-hidden>←</span> 回到小镇 <kbd>Esc</kbd></button>
+        <button className="in-back" onClick={p.onClose}><span aria-hidden>←</span> {tr('回到小镇')} <kbd>Esc</kbd></button>
         <div className="in-title">
           <span className="in-art"><Sprite type={type} label={pl?.label} accent={pl?.accent} /></span>
           <div><h1>{room.title}</h1><p>{room.sub}</p></div>
         </div>
-        <div className="seg in-view" role="tablist" title="车间：每个项目的 Agent 在做什么；明细：项目、对话和任务的全部内容">
-          <button className={view === 'floor' ? 'on' : ''} onClick={() => setView('floor')}>车间</button>
-          <button className={view === 'detail' ? 'on' : ''} onClick={() => setView('detail')}>明细</button>
+        <div className="seg in-view" role="tablist" title={tr('车间：每个项目的 Agent 在做什么；明细：项目、对话和任务的全部内容')}>
+          <button className={view === 'floor' ? 'on' : ''} onClick={() => setView('floor')}>{tr('车间')}</button>
+          <button className={view === 'detail' ? 'on' : ''} onClick={() => setView('detail')}>{tr('明细')}</button>
         </div>
         <div className="in-tools">
-          {type === 'mill' && <button className="btn pri" onClick={p.onIdea}>放入一颗新 idea</button>}
-          <button className="btn" onClick={() => p.onAsk(pl?.id ?? type, room.title)}>问问这里的员工</button>
+          {type === 'mill' && <button className="btn pri" onClick={p.onIdea}>{tr('放入一颗新 idea')}</button>}
+          <button className="btn" onClick={() => p.onAsk(pl?.id ?? type, room.title)}>{tr('问问这里的员工')}</button>
         </div>
       </header>
       <div className="in-body">{body}</div>

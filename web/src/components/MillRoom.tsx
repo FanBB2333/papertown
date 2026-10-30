@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, listen, type Agent, type Line, type Placement } from '../api';
 import type { RoomActions } from './Interior';
 import { MillDetail } from './Sheet';
+import { tr } from '../i18n';
 
 interface Props extends RoomActions {
   focus: string | null;
@@ -14,14 +15,14 @@ interface Props extends RoomActions {
 }
 
 export const STATUS: Record<string, string> = {
-  hatching: '查重中', waiting: '等你决定', running: '生产中', paused: '已暂停', failed: '出错', done: '已出厂', dropped: '已放弃',
-  linked: '本地项目',
+  hatching: tr('查重中'), waiting: tr('等你决定'), running: tr('生产中'), paused: tr('已暂停'), failed: tr('出错'), done: tr('已出厂'), dropped: tr('已放弃'),
+  linked: tr('本地项目'),
 };
 export const AGENT_STATUS: Record<string, string> = {
-  stopped: '未启动', starting: '启动中', idle: '待命', working: '工作中', error: '出错', watching: '值守',
+  stopped: tr('未启动'), starting: tr('启动中'), idle: tr('待命'), working: tr('工作中'), error: tr('出错'), watching: tr('值守'),
 };
 
-const REAL = '工序按顺序走：方法设计在造纸厂，代码和实验在仓库与实验农场，写作在印刷厂，最后经质检所出厂。';
+const REAL = tr('工序按顺序走：方法设计在造纸厂，代码和实验在仓库与实验农场，写作在印刷厂，最后经质检所出厂。');
 
 export function MillRoom(p: Props) {
   const [sel, setSel] = useState<string | null>(p.focus);
@@ -62,9 +63,9 @@ export function MillRoom(p: Props) {
   if (!lines.length) {
     return (
       <div className="room-empty">
-        <h2>还没有项目</h2>
-        <p>放入一颗 idea，孵化场查完重、你点了「孵化并立项」，它就会出现在这里。</p>
-        <button className="btn pri" onClick={p.onIdea}>放入一颗新 idea</button>
+        <h2>{tr('还没有项目')}</h2>
+        <p>{tr('放入一颗 idea，孵化场查完重、你点了「孵化并立项」，它就会出现在这里。')}</p>
+        <button className="btn pri" onClick={p.onIdea}>{tr('放入一颗新 idea')}</button>
       </div>
     );
   }
@@ -73,10 +74,10 @@ export function MillRoom(p: Props) {
     <div className="room room-mill">
       <aside className="room-side">
         <div className="tally">
-          <div><b>{count(['running', 'hatching'])}</b><span>在跑</span></div>
-          <div><b>{count(['waiting', 'paused', 'failed'])}</b><span>等你</span></div>
-          <div><b>{count(['done'])}</b><span>已出厂</span></div>
-          <div><b>${spent.toFixed(2)}</b><span>总花费</span></div>
+          <div><b>{count(['running', 'hatching'])}</b><span>{tr('在跑')}</span></div>
+          <div><b>{count(['waiting', 'paused', 'failed'])}</b><span>{tr('等你')}</span></div>
+          <div><b>{count(['done'])}</b><span>{tr('已出厂')}</span></div>
+          <div><b>${spent.toFixed(2)}</b><span>{tr('总花费')}</span></div>
         </div>
         <div className="plist">
           {lines.map((l, i) => {
@@ -89,13 +90,13 @@ export function MillRoom(p: Props) {
                   {l.stages.map(s => <i key={s.key} className={`d-${s.status}`} title={s.name} />)}
                 </div>
                 <div className="proj-meta">
-                  <span>{l.current?.name ?? (l.status === 'done' ? '已出厂' : STATUS[l.status])}</span>
+                  <span>{l.current?.name ?? (l.status === 'done' ? tr('已出厂') : STATUS[l.status])}</span>
                   <span>{l.linked ? l.linked.code?.name ?? l.linked.paper?.name : `$${l.spent.toFixed(2)} / $${l.budget.toFixed(2)}`}</span>
                 </div>
                 <div className="crew">
-                  <span className={`crew-a s-${coder?.status ?? 'none'}`}>代码员工 · {coder ? AGENT_STATUS[coder.status] : '—'}</span>
-                  <span className={`crew-a s-${writer?.status ?? 'none'}`}>写作员工 · {writer ? AGENT_STATUS[writer.status] : '—'}</span>
-                  {jobs[l.id] ? <span className="crew-a s-working">实验 {jobs[l.id]}</span> : null}
+                  <span className={`crew-a s-${coder?.status ?? 'none'}`}>{tr('代码员工 ·')} {coder ? AGENT_STATUS[coder.status] : '—'}</span>
+                  <span className={`crew-a s-${writer?.status ?? 'none'}`}>{tr('写作员工 ·')} {writer ? AGENT_STATUS[writer.status] : '—'}</span>
+                  {jobs[l.id] ? <span className="crew-a s-working">{tr('实验')} {jobs[l.id]}</span> : null}
                 </div>
               </button>
             );
@@ -112,17 +113,17 @@ export function MillRoom(p: Props) {
                 <p>{line.idea}</p>
               </div>
               <div className="go-row">
-                <button className="btn" onClick={() => p.onOpen('depot', line.id)}>去仓库 · 代码</button>
-                <button className="btn" onClick={() => p.onOpen('farm', line.id)}>去农场 · 实验</button>
-                <button className="btn" onClick={() => p.onOpen('press', line.id)}>去印刷厂 · 论文</button>
+                <button className="btn" onClick={() => p.onOpen('depot', line.id)}>{tr('去仓库 · 代码')}</button>
+                <button className="btn" onClick={() => p.onOpen('farm', line.id)}>{tr('去农场 · 实验')}</button>
+                <button className="btn" onClick={() => p.onOpen('press', line.id)}>{tr('去印刷厂 · 论文')}</button>
               </div>
             </div>
             <div className="lc">
               <MillDetail line={line} typeOf={typeOf} real={REAL} tick={p.tick} onOpen={id => p.onOpen(id, line.id)} onHatch={p.onHatch}
-                onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', '造纸厂')} />
+                onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} />
             </div>
           </>
-        ) : <p className="muted">加载中…</p>}
+        ) : <p className="muted">{tr('加载中…')}</p>}
       </section>
     </div>
   );

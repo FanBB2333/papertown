@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, fileUrl, listen, type Line, type Llm, type Message, type Placement, type TraceRow } from '../api';
 import { Ava, ROLE_NAMES } from '../art';
+import { tr } from '../i18n';
 
 export type Composer = { kind: 'idea' } | { kind: 'ask'; building: string; name: string } | { kind: 'adjust'; lineId: string };
 export type Tab = 'chat' | 'line' | 'trace';
@@ -39,12 +40,12 @@ export function traceRow(t: TraceRow) {
 function Who({ m, placements }: { m: Message; placements: Placement[] }) {
   const w = m.worker;
   const at = placements.find(p => p.id === (m.body?.from ?? ''));
-  if (!w) return <div className="who"><b>Papertown</b>{m.kind === 'error' && <span className="chip bad">出错</span>}</div>;
+  if (!w) return <div className="who"><b>Papertown</b>{m.kind === 'error' && <span className="chip bad">{tr('出错')}</span>}</div>;
   return (
     <div className="who">
       <Ava role={w.role} level={w.level} code={w.id} />
       <b>{ROLE_NAMES[w.role]} {w.id}</b>
-      {m.kind === 'report' ? <span className="chip ok">撞车报告</span> : at ? <span className="chip">{at.name}</span> : null}
+      {m.kind === 'report' ? <span className="chip ok">{tr('撞车报告')}</span> : at ? <span className="chip">{at.name}</span> : null}
     </div>
   );
 }
@@ -56,7 +57,7 @@ function Report({ m, line, onHatch, onAdjust }: { m: Message; line?: Line; onHat
   const waiting = line?.status === 'waiting' && line.verdict === r.verdict;
   return (
     <>
-      <p>检索了图书馆 {r.sources?.library ?? 0} 篇、arXiv {r.sources?.arxiv ?? 0} 篇，最接近的工作：</p>
+      <p>{tr('检索了图书馆')} {tr('{0} 篇、arXiv', r.sources?.library ?? 0)} {tr('{0} 篇，最接近的工作：', r.sources?.arxiv ?? 0)}</p>
       {r.similar?.length ? (
         <ul className="sim">
           {r.similar.map((x: any) => (
@@ -66,17 +67,17 @@ function Report({ m, line, onHatch, onAdjust }: { m: Message; line?: Line; onHat
             </li>
           ))}
         </ul>
-      ) : <p className="muted">没有检索到相近的工作。</p>}
+      ) : <p className="muted">{tr('没有检索到相近的工作。')}</p>}
       <p className="verdict"><span className={`chip ${VERDICT_CHIP[r.verdict] ?? ''}`}>{r.verdict}</span>{r.gap}</p>
       {r.suggestions?.length > 0 && <ul className="sugg">{r.suggestions.map((s: string) => <li key={s}>{s}</li>)}</ul>}
       {waiting && (
         <div className="btns">
-          <button className="btn pri" onClick={onHatch}>孵化并立项</button>
-          <button className="btn" onClick={onAdjust}>调整 idea</button>
+          <button className="btn pri" onClick={onHatch}>{tr('孵化并立项')}</button>
+          <button className="btn" onClick={onAdjust}>{tr('调整 idea')}</button>
         </div>
       )}
       <div className="cost">
-        {m.body.steps} 步 · ${Number(m.body.cost ?? 0).toFixed(4)} · skills：{(m.body.skills ?? []).join(', ') || '—'} · 检索方式 {r.sources?.method}
+        {m.body.steps} {tr('步 · $')}{Number(m.body.cost ?? 0).toFixed(4)} {tr('· skills：')}{(m.body.skills ?? []).join(', ') || '—'} {tr('· 检索方式')} {r.sources?.method}
         {m.body.degraded && <> · <span className="warn-t">{m.body.degraded}</span></>}
         {r.verdict_note && <> · {r.verdict_note}</>}
       </div>
@@ -95,7 +96,7 @@ function Bubble({ m, lines, placements, onHatch, onAdjust, onOpen }: {
       {m.kind === 'report'
         ? <Report m={m} line={line} onHatch={() => onHatch(m.line_id!)} onAdjust={() => onAdjust(m.line_id!)} />
         : <p>{m.body.text}</p>}
-      {m.kind === 'team' && m.body.mill && <div className="btns"><button className="btn pri" onClick={() => onOpen(m.body.mill)}>去造纸厂</button></div>}
+      {m.kind === 'team' && m.body.mill && <div className="btns"><button className="btn pri" onClick={() => onOpen(m.body.mill)}>{tr('去造纸厂')}</button></div>}
       {m.kind === 'paper' && m.line_id && (
         <div className="btns">
           {(m.body.files ?? []).filter((f: string) => f !== 'refs.bib').map((f: string) => (
@@ -110,7 +111,7 @@ function Bubble({ m, lines, placements, onHatch, onAdjust, onOpen }: {
 function LinePane({ lines, placements, onOpen }: { lines: Line[]; placements: Placement[]; onOpen: (id: string) => void }) {
   const [sel, setSel] = useState<string | null>(null);
   const line = lines.find(l => l.id === sel) ?? lines.find(l => ['running', 'hatching', 'waiting', 'paused'].includes(l.status)) ?? lines[0];
-  if (!line) return <div className="pane-pad"><p className="muted">还没有论文在生产。到「对话」里写下一个 idea。</p></div>;
+  if (!line) return <div className="pane-pad"><p className="muted">{tr('还没有论文在生产。到「对话」里写下一个 idea。')}</p></div>;
   const name = (id: string) => placements.find(p => p.id === id)?.name ?? id;
   return (
     <div className="pane-pad">
@@ -124,13 +125,13 @@ function LinePane({ lines, placements, onOpen }: { lines: Line[]; placements: Pl
       <ol className="steps">
         {line.stages.map((s, i) => (
           <li key={s.key} className={s.status === 'wait' ? 'run' : s.status} onClick={() => onOpen(s.building)}>
-            <i>{i + 1}</i><b>{s.name}{s.status === 'wait' ? ' · 等你决定' : s.status === 'run' && s.pct ? ` · ${s.pct}%` : ''}</b>
+            <i>{i + 1}</i><b>{s.name}{s.status === 'wait' ? tr(' · 等你决定') : s.status === 'run' && s.pct ? ` · ${s.pct}%` : ''}</b>
             <span>{name(s.building)}</span>
           </li>
         ))}
       </ol>
-      {line.reason && <p className="muted small" style={{ marginTop: 10 }}>编队：{line.reason}</p>}
-      <p className="muted small">已花 ${line.spent.toFixed(4)} / ${line.budget.toFixed(2)}{line.note ? ` · ${line.note}` : ''}</p>
+      {line.reason && <p className="muted small" style={{ marginTop: 10 }}>{tr('编队：')}{line.reason}</p>}
+      <p className="muted small">{tr('已花 $')}{line.spent.toFixed(4)} / ${line.budget.toFixed(2)}{line.note ? ` · ${line.note}` : ''}</p>
     </div>
   );
 }
@@ -153,7 +154,7 @@ export function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => 
   }
   return (
     <div className="llm-form">
-      <label className="field">供应商
+      <label className="field">{tr('供应商')}
         <select value={draft.provider} onChange={e => {
           const id = e.target.value, d = llm.providers.find(x => x.id === id);
           setDraft(x => ({ ...x, provider: id, model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' }));
@@ -161,10 +162,10 @@ export function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => 
           {llm.providers.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
         </select>
       </label>
-      <label className="field">强模型（Lv.3 以上的员工、最终回答）
+      <label className="field">{tr('强模型（Lv.3 以上的员工、最终回答）')}
         <input list="llm-models" value={draft.model_strong} onChange={e => setDraft(x => ({ ...x, model_strong: e.target.value }))} />
       </label>
-      <label className="field">便宜模型（其余员工）
+      <label className="field">{tr('便宜模型（其余员工）')}
         <input list="llm-models" value={draft.model_cheap} onChange={e => setDraft(x => ({ ...x, model_cheap: e.target.value }))} />
       </label>
       <datalist id="llm-models">{pv?.models.map(m => <option key={m} value={m} />)}</datalist>
@@ -175,9 +176,9 @@ export function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => 
           </select>
         </label>
       )}
-      <p className="muted small">key 照旧从环境变量读取。切换只在这次运行里有效，重启服务后按环境变量重新决定。{draft.provider === 'openai' ? ` 接口：${llm.openai_base_url}` : ''}</p>
+      <p className="muted small">{tr('key 照旧从环境变量读取。切换只在这次运行里有效，重启服务后按环境变量重新决定。')}{draft.provider === 'openai' ? tr(' 接口：{0}', llm.openai_base_url) : ''}</p>
       {err && <p className="warn-box small">{err}</p>}
-      <div className="btns"><button className="btn pri" onClick={apply}>应用</button><button className="btn" onClick={() => onDone(null)}>取消</button></div>
+      <div className="btns"><button className="btn pri" onClick={apply}>{tr('应用')}</button><button className="btn" onClick={() => onDone(null)}>{tr('取消')}</button></div>
     </div>
   );
 }
@@ -194,7 +195,7 @@ function LlmSwitch({ shown }: { shown: boolean }) {
   const name = llm.providers.find(x => x.id === llm.provider)?.name ?? llm.provider;
   return (
     <div className="llm-switch">
-      <button className={`llm-btn${open ? ' on' : ''}`} onClick={() => setOpen(o => !o)} title="员工用的模型">{name} · {llm.model_strong}</button>
+      <button className={`llm-btn${open ? ' on' : ''}`} onClick={() => setOpen(o => !o)} title={tr('员工用的模型')}>{name} · {llm.model_strong}</button>
       {open && (
         <div className="llm-pop pnl">
           <LlmForm key={`${llm.provider}:${llm.model_strong}:${llm.model_cheap}`} llm={llm} onDone={l => { if (l) setLlm(l); setOpen(false); }} />
@@ -235,20 +236,20 @@ export function Drawer(p: Props) {
   }
 
   const c = p.composer;
-  const placeholder = c.kind === 'ask' ? `问问${c.name}的员工…` : c.kind === 'adjust' ? '改写你的 idea，孵化员会重新查重…'
-    : '写下你的 idea，孵化员会先帮你查重…';
+  const placeholder = c.kind === 'ask' ? tr('问问{0}的员工…', c.name) : c.kind === 'adjust' ? tr('改写你的 idea，孵化员会重新查重…')
+    : tr('写下你的 idea，孵化员会先帮你查重…');
   return (
     <aside className="p-drawer pnl" data-show={p.tab}>
       <div className="bench-tabs">
         {(['chat', 'line', 'trace'] as Tab[]).map(t => (
-          <a key={t} className={p.tab === t ? 'on' : ''} onClick={() => p.onTab(t)}>{{ chat: '对话', line: '流水线', trace: '调用轨迹' }[t]}</a>
+          <a key={t} className={p.tab === t ? 'on' : ''} onClick={() => p.onTab(t)}>{{ chat: tr('对话'), line: tr('流水线'), trace: tr('调用轨迹') }[t]}</a>
         ))}
         <LlmSwitch shown={p.open} />
-        <button className="bench-x" title="收起 Esc" onClick={p.onClose}>×</button>
+        <button className="bench-x" title={tr('收起 Esc')} onClick={p.onClose}>×</button>
       </div>
       <div className="bench-pane" data-pane="chat">
         <div className="chat" ref={chat}>
-          {p.messages.length === 0 && <div className="msg bot"><p>这里是 Papertown。写下一个研究 idea，孵化员会去图书馆和 arXiv 查重，再决定要不要建一座造纸厂。</p></div>}
+          {p.messages.length === 0 && <div className="msg bot"><p>{tr('这里是 Papertown。写下一个研究 idea，孵化员会去图书馆和 arXiv 查重，再决定要不要建一座造纸厂。')}</p></div>}
           {p.messages.map(m => (
             <Bubble key={m.id} m={m} lines={p.lines} placements={p.placements} onHatch={p.onHatch} onOpen={p.onOpen}
               onAdjust={id => p.setComposer({ kind: 'adjust', lineId: id })} />
@@ -259,25 +260,25 @@ export function Drawer(p: Props) {
       <div className="bench-pane" data-pane="line"><LinePane lines={p.lines} placements={p.placements} onOpen={p.onOpen} /></div>
       <div className="bench-pane" data-pane="trace">
         <div className="pane-pad">
-          <h5>最近的调用</h5>
-          <div className="trace-rows">{p.trace.length ? [...p.trace].reverse().map(traceRow) : <p className="muted">还没有调用。</p>}</div>
+          <h5>{tr('最近的调用')}</h5>
+          <div className="trace-rows">{p.trace.length ? [...p.trace].reverse().map(traceRow) : <p className="muted">{tr('还没有调用。')}</p>}</div>
         </div>
       </div>
       {c.kind !== 'idea' && (
         <div className="mode">
-          <span className="chip pri">{c.kind === 'ask' ? `问 ${c.name}` : '调整 idea'}</span>
-          <button className="bench-x" onClick={() => { p.setComposer({ kind: 'idea' }); setText(''); }} title="改回写新 idea">×</button>
+          <span className="chip pri">{c.kind === 'ask' ? tr('问 {0}', c.name) : tr('调整 idea')}</span>
+          <button className="bench-x" onClick={() => { p.setComposer({ kind: 'idea' }); setText(''); }} title={tr('改回写新 idea')}>×</button>
         </div>
       )}
       <div className="composer">
         <input ref={input} value={text} placeholder={placeholder} onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) send(); }} />
         {c.kind === 'idea' && (
-          <select className="budget" value={budget} onChange={e => setBudget(Number(e.target.value))} title="这篇论文的预算">
+          <select className="budget" value={budget} onChange={e => setBudget(Number(e.target.value))} title={tr('这篇论文的预算')}>
             {BUDGETS.map(b => <option key={b} value={b}>${b.toFixed(2)}</option>)}
           </select>
         )}
-        <button className="btn pri" onClick={send} disabled={sending}>{sending ? '发送中' : '发送'}</button>
+        <button className="btn pri" onClick={send} disabled={sending}>{sending ? tr('发送中') : tr('发送')}</button>
       </div>
     </aside>
   );

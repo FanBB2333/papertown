@@ -1,5 +1,7 @@
 // REST calls and the live event stream from the Papertown server.
 
+import { localize, tr, trx } from './i18n';
+
 export interface Placement {
   id: string; type: string; x: number; y: number; name: string; label: string | null; accent: string | null;
   line_id: string | null; status: string; core: boolean; key: boolean; live: boolean; tech: string;
@@ -146,8 +148,8 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
     method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined,
   });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? data.detail : '输入有误') : `请求失败 ${r.status}`);
-  return data as T;
+  if (!r.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? trx(data.detail) : tr('输入有误')) : tr('请求失败 {0}', r.status));
+  return localize(data) as T;
 }
 
 export const api = {
@@ -208,7 +210,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
     'job', 'agent', 'agent_event', 'agent_delta', 'llm'];
   for (const t of types) es.addEventListener(t, ev => {
-    const e = JSON.parse((ev as MessageEvent).data);
+    const e = localize(JSON.parse((ev as MessageEvent).data));
     onEvent(e);
     for (const fn of listeners) fn(e);
   });

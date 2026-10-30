@@ -13,6 +13,7 @@ import { renderMap } from '@design/world.js';
 import type { Placement } from '../api';
 import { useSettings } from '../settings';
 import { useAvatar } from './useAvatar';
+import { tr } from '../i18n';
 
 const BASE = { x: -790, y: -150, w: 1580, h: 950 };
 
@@ -268,15 +269,15 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
       <section className={`p-world map-bg w-only${hidden ? ' is-hidden' : ''}`} ref={host} onClick={onClick} onMouseMove={onMove} onMouseLeave={() => setTip(null)}
         dangerouslySetInnerHTML={{ __html: markup }} />
       <div className={`zoom-ctl w-only${hidden ? ' is-hidden' : ''}`}>
-        <button title="放大" onClick={() => zoomCenter(0.7)}>＋</button>
-        <button title="缩小" onClick={() => zoomCenter(1.4)}>－</button>
-        <button title="看全图" onClick={() => fit()}>⟲</button>
+        <button title={tr('放大')} onClick={() => zoomCenter(0.7)}>{tr('＋')}</button>
+        <button title={tr('缩小')} onClick={() => zoomCenter(1.4)}>{tr('－')}</button>
+        <button title={tr('看全图')} onClick={() => fit()}>⟲</button>
       </div>
       {tip && b && !hidden && (
         <div className="ptip pnl" style={{ left: tip.x, top: tip.y }}>
           <b>{tip.pl.name}</b><span>{where(b.district)}</span>
           <p>{b.rep}</p>
-          <em>{tip.pl.live ? `${tip.pl.tech} · 点击进入` : '还没接入 · 点击查看计划'}</em>
+          <em>{tip.pl.live ? tr('{0} · 点击进入', tip.pl.tech) : tr('还没接入 · 点击查看计划')}</em>
         </div>
       )}
     </>

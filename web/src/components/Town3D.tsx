@@ -14,6 +14,7 @@ import { useSettings } from '../settings';
 import { Engine, type Target } from '../town3d/engine';
 import '../town3d.css';
 import type { MapView } from './WorldMap';
+import { tr } from '../i18n';
 
 export type Phase = 'enter' | 'live' | 'leave' | 'off';
 
@@ -64,7 +65,7 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
         moved: () => { if (helpTimer.current === undefined) helpTimer.current = window.setTimeout(() => setHelp(false), 2500); },
       });
     } catch (e) {
-      cb.current.onFail(`这台设备打不开 3D 小镇（WebGL 不可用）：${(e as Error).message}`);
+      cb.current.onFail(tr('这台设备打不开 3D 小镇（WebGL 不可用）：{0}', (e as Error).message));
       return;
     }
     return () => { eng.current?.dispose(); eng.current = null; clearTimeout(helpTimer.current); };
@@ -128,23 +129,23 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
       {live && locked && <div className={`t3-cross${target?.how === 'look' ? ' hot' : ''}`} />}
       {live && !locked && (
         <div className="pnl t3-resume">
-          <b>点击画面继续漫游</b>
-          <span>鼠标会留在画面中间：移动鼠标转视角，<kbd>Esc</kbd> 放开</span>
+          <b>{tr('点击画面继续漫游')}</b>
+          <span>{tr('鼠标会留在画面中间：移动鼠标转视角，')}<kbd>Esc</kbd> {tr('放开')}</span>
         </div>
       )}
       {live && pl && b && (
         <div className="pnl t3-card" key={pl.id}>
           <b>{placementName(pl)}</b><span>{where(b.district)}</span>
           <p>{b.rep}</p>
-          <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : '还没接入，进去看计划 · '}{locked && target!.how === 'look' ? <>点击或按 <kbd>E</kbd> 进去</> : <>按 <kbd>E</kbd> 进去</>}</em>
+          <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : tr('还没接入，进去看计划 · ')}{locked && target!.how === 'look' ? <>{tr('点击或按')} <kbd>E</kbd> {tr('进去')}</> : <>{tr('按')} <kbd>E</kbd> {tr('进去')}</>}</em>
         </div>
       )}
       {live && locked && st.walkHint && (
         <div className={`walk-hint t3-help${help ? '' : ' gone'}`}>
-          移动鼠标看四周 · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走 · <kbd>Shift</kbd> 跑 · 对准建筑点击或按 <kbd>E</kbd> 进去 · <kbd>M</kbd> 回到平面 · <kbd>Esc</kbd> 放开鼠标
+          {tr('移动鼠标看四周 ·')} <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('走 ·')} <kbd>Shift</kbd> {tr('跑 · 对准建筑点击或按')} <kbd>E</kbd> {tr('进去 ·')} <kbd>M</kbd> {tr('回到平面 ·')} <kbd>Esc</kbd> {tr('放开鼠标')}
         </div>
       )}
-      <div className="pnl t3-mini" title="点一下就过去；点建筑到它门口" onClick={onMini}>
+      <div className="pnl t3-mini" title={tr('点一下就过去；点建筑到它门口')} onClick={onMini}>
         <div dangerouslySetInnerHTML={{ __html: mini }} />
         <svg className="t3-me" viewBox={MINI_VB} preserveAspectRatio="xMidYMid meet">
           <g ref={marker}><path className="cone" d="M0,0L130,-60A143,143 0 0 1 130,60Z" /><circle r="24" /></g>

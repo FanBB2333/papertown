@@ -14,6 +14,7 @@ import { SettingsPanel } from './components/Settings';
 import { StatusView } from './components/StatusView';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { getSettings, useSettings } from './settings';
+import { tr } from './i18n';
 
 const Town3D = lazy(() => import('./components/Town3D'));
 
@@ -81,7 +82,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    api.world().then(setWorld).catch(e => push(`连不上服务器：${e.message}`));
+    api.world().then(setWorld).catch(e => push(tr('连不上服务器：{0}', e.message)));
     api.lines().then(setLines).catch(() => {});
     api.messages().then(setMessages).catch(() => {});
     api.trace().then(setTrace).catch(() => {});
@@ -100,8 +101,8 @@ export function App() {
         return i < 0 ? [e.line, ...ls] : ls.map(l => l.id === e.line.id ? { ...l, ...e.line } : l);
       });
     } else if (e.type === 'skills') {
-      if (e.added?.length) push(`新 skill 上岗：${e.added.join('、')}`);
-      if (e.removed?.length) push(`skill 下线：${e.removed.join('、')}`);
+      if (e.added?.length) push(tr('新 skill 上岗：{0}', e.added.join(tr('、'))));
+      if (e.removed?.length) push(tr('skill 下线：{0}', e.removed.join(tr('、'))));
     }
     if (TICK_EVENTS.has(e.type)) {
       setTick(t => t + 1);
@@ -115,7 +116,7 @@ export function App() {
   const notes = useMemo(() => {
     const n: Record<string, string> = {};
     const running = world?.running.filter(r => r.status === 'running').length ?? 0;
-    if (running) n.mill = `${running} 个项目在跑`;
+    if (running) n.mill = tr('{0} 个项目在跑', running);
     return n;
   }, [world]);
 
@@ -252,22 +253,22 @@ export function App() {
       <header className="hud">
         <div className="brand"><Logo /><b>Papertown</b></div>
         <div className="seg" role="tablist">
-          <button className={view === 'world' ? 'on' : ''} onClick={() => setView('world')}>小镇</button>
-          <button className={view === 'status' ? 'on' : ''} onClick={() => setView('status')}>运行状态</button>
+          <button className={view === 'world' ? 'on' : ''} onClick={() => setView('world')}>{tr('小镇')}</button>
+          <button className={view === 'status' ? 'on' : ''} onClick={() => setView('status')}>{tr('运行状态')}</button>
         </div>
-        <div className="seg w-only" role="tablist" title="平面地图和 3D 漫游之间切换，人站在同一个地方">
-          <button className={dim === '2d' || dim === 'to2d' ? 'on' : ''} onClick={go2d}>平面</button>
-          <button className={dim === '3d' || dim === 'to3d' ? 'on' : ''} onClick={() => go3d()}>3D 漫游</button>
+        <div className="seg w-only" role="tablist" title={tr('平面地图和 3D 漫游之间切换，人站在同一个地方')}>
+          <button className={dim === '2d' || dim === 'to2d' ? 'on' : ''} onClick={go2d}>{tr('平面')}</button>
+          <button className={dim === '3d' || dim === 'to3d' ? 'on' : ''} onClick={() => go3d()}>{tr('3D 漫游')}</button>
         </div>
         {hud && <div className="hud-quiet">
-          <span><b>{hud.lines.running}</b> 个项目在跑</span>
-          <span>本周 <b>${hud.bank.week.toFixed(2)}</b></span>
+          <span><b>{hud.lines.running}</b> {tr('个项目在跑')}</span>
+          <span>{tr('本周')} <b>${hud.bank.week.toFixed(2)}</b></span>
         </div>}
         <div className="hud-r">
-          {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? '没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板；仓库和印刷厂的 pi 用 pi 自己的设置' : hud.model}>
-            {!online ? '连接断开' : hud.offline ? '离线模式' : hud.provider}</span>}
-          <button className="btn hud-gear" title="设置（,）" aria-label="设置" onClick={() => setSettingsOpen(true)}><Gear />设置</button>
-          <button className="btn" onClick={() => chatOpen ? setChatOpen(false) : openChat()}>对话</button>
+          {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? tr('没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板；仓库和印刷厂的 pi 用 pi 自己的设置') : hud.model}>
+            {!online ? tr('连接断开') : hud.offline ? tr('离线模式') : hud.provider}</span>}
+          <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={() => setSettingsOpen(true)}><Gear />{tr('设置')}</button>
+          <button className="btn" onClick={() => chatOpen ? setChatOpen(false) : openChat()}>{tr('对话')}</button>
         </div>
       </header>
 
@@ -277,15 +278,15 @@ export function App() {
             <div key={r.id} className="rn" style={{ ['--i' as string]: i }} data-open={r.mill_id ?? r.building} data-line={r.id}>
               <div>
                 <b>#{r.seq} {r.title}</b>
-                <div className="rn-row">{r.status === 'waiting' ? '等你决定' : r.status === 'paused' ? '已暂停' : r.stage}<div className="bar"><i style={{ width: `${r.pct}%` }} /></div></div>
+                <div className="rn-row">{r.status === 'waiting' ? tr('等你决定') : r.status === 'paused' ? tr('已暂停') : r.stage}<div className="bar"><i style={{ width: `${r.pct}%` }} /></div></div>
               </div>
             </div>
           ))}
         </aside>
       )}
 
-      <button className="newidea btn pri w-only" onClick={() => openChat({ kind: 'idea' }, true)}><Item k="egg" />放入一颗新 idea</button>
-      {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走动 · 到门口按 <kbd>E</kbd> 进去 · 也可以直接点建筑</div>}
+      <button className="newidea btn pri w-only" onClick={() => openChat({ kind: 'idea' }, true)}><Item k="egg" />{tr('放入一颗新 idea')}</button>
+      {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('走动 · 到门口按')} <kbd>E</kbd> {tr('进去 · 也可以直接点建筑')}</div>}
 
       <Drawer open={chatOpen} tab={tab} onTab={setTab} onClose={() => setChatOpen(false)} messages={messages} trace={trace}
         lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer} focusKey={focusKey}

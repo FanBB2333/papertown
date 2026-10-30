@@ -8,7 +8,7 @@ declare module '@design/theme.js' {
 
 declare module '@design/sprites.js' {
   export const DISTRICTS: Record<string, { name: string; en: string; dir: string; color: string }>;
-  export const BUILDINGS: Record<string, { name: string; rep: string; tech: string; district: string; accent: string; w: number; d: number; h: number; later?: boolean;
+  export const BUILDINGS: Record<string, { name: string; en?: string; rep: string; tech: string; district: string; accent: string; w: number; d: number; h: number; later?: boolean;
     draw(p: Pen, o?: Record<string, unknown>): void }>;
   export const PROPS: Record<string, { name: string; w: number; d: number; draw(p: Pen): void }>;
   export function iso(x: number, y: number, z?: number): [number, number];
