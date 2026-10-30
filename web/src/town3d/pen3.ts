@@ -258,14 +258,25 @@ export class Pen3 extends Pen {
     return this;
   }
 
+  // how far out from its wall a face sits: one laid over another (a sign's stripe on the
+  // sign) a little further, or the two fight for the same depth and flicker; text stays in front
+  private laid = new Map<string, number[][]>();
+  private out(wall: string, a0: number, a1: number, z0: number, z1: number) {
+    const on = this.laid.get(wall) ?? [];
+    const level = on.reduce((n, f) => (f[0] < a1 && a0 < f[1] && f[2] < z1 && z0 < f[3] ? Math.max(n, f[4] + 1) : n), 0);
+    on.push([a0, a1, z0, z1, level]);
+    this.laid.set(wall, on);
+    return (0.012 + Math.min(level, 2) * 0.003) / this.k;
+  }
+
   override winL(Y: number, x0: number, z0: number, w: number, h: number, m = 'm-win') {
-    const W = this.W.bind(this), y = Y + 0.012 / this.k;
+    const W = this.W.bind(this), y = Y + this.out(`L${Y}`, x0, x0 + w, z0, z0 + h);
     this.face([W(x0, y, z0), W(x0 + w, y, z0), W(x0 + w, y, z0 + h), W(x0, y, z0 + h)], matOf(m));
     return this;
   }
 
   override winR(X: number, y0: number, z0: number, w: number, h: number, m = 'm-win') {
-    const W = this.W.bind(this), x = X + 0.012 / this.k;
+    const W = this.W.bind(this), x = X + this.out(`R${X}`, y0, y0 + w, z0, z0 + h);
     this.face([W(x, y0, z0), W(x, y0 + w, z0), W(x, y0 + w, z0 + h), W(x, y0, z0 + h)], matOf(m));
     return this;
   }
