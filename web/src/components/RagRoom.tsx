@@ -1,0 +1,110 @@
+// The library as the town's RAG: what is in it, how retrieval runs (how many papers a search
+// returns, how many full-text candidates it scores, vectors or keyword coverage), a bench to
+// try a query and see why each paper came back, and the shelves themselves.
+
+import { useEffect, useState } from 'react';
+import { api, type RagOpts, type RagResult, type RagView } from '../api';
+import type { RoomActions } from './Interior';
+import { LibraryShelf } from './Papers';
+import '../config-rooms.css';
+import { tr } from '../i18n';
+
+interface Props extends RoomActions { tick: number }
+
+const SOURCES: Record<string, string> = { seed: tr('种子论文'), arxiv: tr('arXiv 码头'), sample: tr('样例'), manual: tr('手动导入') };
+
+export function RagRoom(p: Props) {
+  const [v, setV] = useState<RagView | null>(null);
+  const [opts, setOpts] = useState<RagOpts | null>(null);
+  const [q, setQ] = useState('');
+  const [res, setRes] = useState<RagResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { api.rag().then(r => { setV(r); setOpts(r.opts); }).catch(e => p.toast((e as Error).message)); }, [p.tick]);
+
+  async function save() {
+    if (!opts) return;
+    try {
+      const r = await api.ragSet(opts);
+      setV(r); setOpts(r.opts);
+      p.toast(tr('检索设置已保存，员工下一次检索就按这个来'));
+    } catch (e) {
+      p.toast((e as Error).message);
+    }
+  }
+
+  async function search() {
+    if (!q.trim()) return;
+    setBusy(true);
+    try { setRes(await api.ragSearch(q.trim())); } catch (e) { p.toast((e as Error).message); } finally { setBusy(false); }
+  }
+
+  if (!v || !opts) return <div className="room-empty"><p>{tr('正在清点馆藏…')}</p></div>;
+  const dirty = JSON.stringify(opts) !== JSON.stringify(v.opts);
+
+  return (
+    <div className="room-solo">
+      <div className="rag-stats">
+        <div><b>{v.stats.papers}</b><span>{tr('篇馆藏')}</span></div>
+        {Object.entries(v.stats.sources).map(([k, n]) => <div key={k}><b>{n}</b><span>{SOURCES[k] ?? k}</span></div>)}
+        <div><b>{v.stats.terms}</b><span>{tr('个索引词')}</span></div>
+        <div><b>{v.stats.vectors}</b><span>{tr('条向量')}</span></div>
+      </div>
+
+      <div className="rag-grid">
+        <section className="pnl-s rag-opts">
+          <h4>{tr('检索怎么跑')}</h4>
+          <p className="muted small">{v.index}{tr('。孵化场查重、造纸厂找 baseline、印刷厂找引用，都走这一套。')}</p>
+          <label className="field">{tr('默认返回几篇')} <b>{opts.top_k}</b>
+            <input type="range" min={v.limits.top_k[0]} max={v.limits.top_k[1]} value={opts.top_k} onChange={e => setOpts({ ...opts, top_k: +e.target.value })} />
+          </label>
+          <label className="field">{tr('全文召回多少篇候选再打分')} <b>{opts.candidates}</b>
+            <input type="range" min={v.limits.candidates[0]} max={v.limits.candidates[1]} step={5} value={opts.candidates} onChange={e => setOpts({ ...opts, candidates: +e.target.value })} />
+          </label>
+          <label className={`check${v.embed.configured ? '' : ' off'}`}>
+            <input type="checkbox" checked={opts.vectors && v.embed.configured} disabled={!v.embed.configured} onChange={e => setOpts({ ...opts, vectors: e.target.checked })} />
+            <span>{tr('用向量排序候选')}
+              <small className="muted">{v.embed.configured ? `${v.embed.model ?? ''}${v.embed.host ? ` @ ${v.embed.host}` : ''}` : tr('没有配 embeddings 接口（PAPERTOWN_EMBED_*），现在按关键词覆盖率排序')}</small>
+            </span>
+          </label>
+          <div className="btns">
+            <button className="btn pri" disabled={!dirty} onClick={save}>{tr('保存')}</button>
+            {dirty && <button className="btn" onClick={() => setOpts(v.opts)}>{tr('还原')}</button>}
+          </div>
+        </section>
+
+        <section className="pnl-s rag-bench">
+          <h4>{tr('试一下检索')}</h4>
+          <div className="rag-q">
+            <input className="shelf-q" value={q} placeholder={tr('中文也行：稀疏注意力的 KV cache 压缩')} onChange={e => setQ(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) search(); }} />
+            <button className="btn pri" disabled={busy || !q.trim()} onClick={search}>{busy ? tr('检索中…') : tr('检索')}</button>
+          </div>
+          {res && (
+            <>
+              <p className="muted small">
+                {res.method === 'embedding' ? tr('向量排序') : tr('关键词覆盖率排序')} {tr('· 检索词：')}{res.terms.map(t => <code key={t}>{t}</code>)}
+                {res.expanded !== res.query && <> {tr('· 扩展成「')}{res.expanded}{tr('」')}</>}
+              </p>
+              <ol className="rag-hits">
+                {res.hits.map((h, i) => (
+                  <li key={h.paper_id} style={{ ['--i' as string]: i }}>
+                    <span className="rag-sim" title={tr('相似度')}><i style={{ ['--v' as string]: Math.max(0, Math.min(1, h.similarity ?? 0)) }} />{(h.similarity ?? 0).toFixed(2)}</span>
+                    <div>
+                      <a href={h.url} target="_blank" rel="noreferrer"><b>{h.title}</b></a>
+                      <span className="muted small">{h.year} · {h.authors}</span>
+                      {h.matched?.length > 0 && <span className="rag-terms">{h.matched.map(t => <em key={t}>{t}</em>)}</span>}
+                    </div>
+                  </li>
+                ))}
+                {!res.hits.length && <p className="muted small">{tr('没有找到。换几个英文关键词试试。')}</p>}
+              </ol>
+            </>
+          )}
+        </section>
+      </div>
+
+      <LibraryShelf tick={p.tick} />
+    </div>
+  );
+}

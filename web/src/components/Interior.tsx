@@ -2,7 +2,9 @@
 // own: the mill is the base camp for every project, the farm runs and watches the
 // experiments, the press and the depot each keep one pi agent per project. Each of them
 // opens on its shop floor (Floor: every paper's lane and the agents working it) and has
-// the full details one switch away. The other buildings show their production sheet.
+// the full details one switch away. Three more are where the town is configured: the
+// skill academy (skim), the MCP exchange and the library's RAG. The other buildings show
+// their production sheet.
 
 import { useState } from 'react';
 import { BUILDINGS } from '@design/sprites.js';
@@ -11,8 +13,11 @@ import { Sprite } from '../art';
 import { AgentRoom } from './AgentRoom';
 import { FarmRoom } from './FarmRoom';
 import { Floor, type CoreType } from './Floor';
+import { McpRoom } from './McpRoom';
 import { MillRoom } from './MillRoom';
+import { RagRoom } from './RagRoom';
 import { Sheet } from './Sheet';
+import { SkillRoom } from './SkillRoom';
 import { tr } from '../i18n';
 
 export interface RoomActions {
@@ -42,14 +47,39 @@ const ROOMS: Record<string, { title: string; sub: string }> = {
   depot: { title: tr('仓库'), sub: tr('每个项目一个写代码的 agent（Paseo 或本机 pi）：写代码、跑测试，再把实验提交到农场') },
 };
 
+// the configuration rooms: one view each, no shop floor
+const CONFIG: Record<string, { title: string; sub: string }> = {
+  academy: { title: tr('技能学堂'), sub: tr('用 skim 给每个项目、每段对话配 skill：全局 → 项目 → 对话，窄的一层覆盖宽的') },
+  exchange: { title: tr('接线局'), sub: tr('小镇接的每个 MCP server：接通、停用、重连，看它们给员工哪些工具') },
+  library: { title: tr('图书馆'), sub: tr('小镇的 RAG：馆藏、检索设置，以及试一下检索') },
+};
+
 export function Interior(p: Props) {
   const pl = p.placements.find(x => x.id === p.id) ?? p.placements.find(x => x.type === p.id);
   const type = pl?.type ?? p.id;
   const room = ROOMS[type];
+  const conf = CONFIG[type];
   // opened for one project (from the running list, another room): straight to its details
   const [view, setView] = useState<'floor' | 'detail'>(p.focus ? 'detail' : 'floor');
   const [picked, setPicked] = useState<string | null>(null);
 
+  if (conf) {
+    return (
+      <div className={`interior in-${type} m-${p.motion}`} role="dialog" aria-modal="true" style={{ ['--accent' as string]: pl?.accent ?? BUILDINGS[type]?.accent }}>
+        <header className="in-head">
+          <button className="in-back" onClick={p.onClose}><span aria-hidden>←</span> {tr('回到小镇')} <kbd>Esc</kbd></button>
+          <div className="in-title">
+            <span className="in-art"><Sprite type={type} label={pl?.label} accent={pl?.accent} /></span>
+            <div><h1>{conf.title}</h1><p>{conf.sub}</p></div>
+          </div>
+          <div className="in-tools"><button className="btn" onClick={() => p.onAsk(pl?.id ?? type, conf.title)}>{tr('问问这里的员工')}</button></div>
+        </header>
+        <div className="in-body">
+          {type === 'academy' ? <SkillRoom {...p} /> : type === 'exchange' ? <McpRoom {...p} /> : <RagRoom {...p} />}
+        </div>
+      </div>
+    );
+  }
   if (!room) {
     return (
       <div className={`interior in-sheet m-${p.motion}`} role="dialog" aria-modal="true">

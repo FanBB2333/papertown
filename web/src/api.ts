@@ -143,6 +143,45 @@ export interface GpuStatus {
 export interface Backend { id: string; name: string; ready: boolean; note: string; active: number }
 export interface JobBoard { jobs: Job[]; backends: Backend[]; plant: Hud['plant'] }
 
+// skim: skills layered per project and conversation, like git config (global → project → session)
+export type SkimScope = 'global' | 'project' | 'session';
+export interface SkimSetting { key: string; value: string; scope: SkimScope; file: string; line: number }
+export interface SkimScopeInfo { scope: SkimScope; file: string; exists: boolean; settings: SkimSetting[] }
+export interface SkimSkill {
+  name: string; description?: string; enabled: boolean; in_store: boolean; path?: string;
+  scope?: SkimScope | 'env'; origin?: string; // what decided it
+}
+export interface SkimResolution {
+  env: string; env_scope?: SkimScope | 'active'; env_origin?: string; env_missing?: boolean;
+  scopes: SkimScopeInfo[]; skills: SkimSkill[];
+}
+export interface SkimStatus {
+  ok: boolean; note: string; bin: string | null; active_env: string | null;
+  store: { name: string; description?: string; version?: string; path: string }[];
+  envs: { name: string; skills: string[]; active: boolean }[];
+  global: SkimScopeInfo | null;
+  lines: { id: string; seq: number; title: string; status: string; agents: { id: string; role: AgentRole; status: AgentStatus; runtime: string | null; model: string | null }[] }[];
+}
+// the town's own workers' skills (server/skills), hot-swapped
+export interface TownSkill { name: string; description: string; roles: string[]; allowed_tools: string[]; references: string[]; scripts: string[] }
+
+// the MCP exchange
+export interface McpServer {
+  name: string; source: 'builtin' | 'file' | 'town'; command: string; args: string[]; env: string[]; cwd: string | null;
+  enabled: boolean; state: 'ok' | 'error' | 'connecting' | 'off'; error: string | null; tools: { name: string; description: string }[];
+}
+export interface McpView { servers: McpServer[]; town_file: string; config_file: string | null; self: any }
+
+// the library's retrieval
+export interface RagOpts { top_k: number; candidates: number; vectors: boolean }
+export interface RagView {
+  stats: { papers: number; sources: Record<string, number>; vectors: number; terms: number };
+  opts: RagOpts; limits: Record<'top_k' | 'candidates', [number, number]>; index: string;
+  embed: { configured: boolean; model: string | null; host: string | null };
+}
+export interface RagHit extends PaperCard { matched: string[] }
+export interface RagResult { query: string; expanded: string; terms: string[]; method: 'coverage' | 'embedding'; hits: RagHit[] }
+
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, {
     method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined,
@@ -167,6 +206,20 @@ export const api = {
   ask: (text: string, building: string) => call<{ ok: boolean }>('POST', '/api/chat', { text, building }),
   jobs: (lineId?: string) => call<JobBoard>('GET', `/api/jobs${lineId ? `?line_id=${lineId}` : ''}`),
   job: (id: string) => call<Job>('GET', `/api/jobs/${id}?tail=400`),
+  townSkills: () => call<TownSkill[]>('GET', '/api/skills'),
+  skim: (fresh = false) => call<SkimStatus>('GET', `/api/skim${fresh ? '?fresh=1' : ''}`),
+  resolve: (lineId?: string | null, agentId?: string | null) =>
+    call<SkimResolution>('GET', `/api/skim/resolve?${new URLSearchParams({ ...(lineId ? { line_id: lineId } : {}), ...(agentId ? { agent_id: agentId } : {}) })}`),
+  skimSet: (scope: SkimScope, key: string, value: string | null, lineId?: string | null, agentId?: string | null) =>
+    call<SkimResolution>('POST', '/api/skim/config', { scope, key, value, line_id: lineId ?? null, agent_id: agentId ?? null }),
+  mcp: () => call<McpView>('GET', '/api/mcp'),
+  mcpAdd: (o: { name: string; command: string; args: string[]; env: Record<string, string> }) => call<McpView>('POST', '/api/mcp/servers', o),
+  mcpToggle: (name: string, enabled: boolean) => call<McpView>('POST', `/api/mcp/servers/${name}/toggle`, { enabled }),
+  mcpRestart: (name: string) => call<McpView>('POST', `/api/mcp/servers/${name}/restart`),
+  mcpRemove: (name: string) => call<McpView>('DELETE', `/api/mcp/servers/${name}`),
+  rag: () => call<RagView>('GET', '/api/rag'),
+  ragSet: (o: Partial<RagOpts>) => call<RagView>('POST', '/api/rag', o),
+  ragSearch: (q: string, k?: number) => call<RagResult>('GET', `/api/rag/search?${new URLSearchParams({ q, ...(k ? { k: String(k) } : {}) })}`),
   gpus: (fresh = false) => call<GpuStatus>('GET', `/api/gpus${fresh ? '?fresh=1' : ''}`),
   cancelJob: (id: string) => call<Job>('POST', `/api/jobs/${id}/cancel`),
   roster: (role: AgentRole) => call<Roster>('GET', `/api/agents?role=${role}`),

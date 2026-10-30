@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, fileUrl, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
+import { ConvSkills } from './SkillRoom';
 import { tr } from '../i18n';
 
 interface Props extends RoomActions {
@@ -240,6 +241,7 @@ function Aside({ agent, role, line, onOpen, children }: { agent: Agent; role: Ag
   return (
     <aside className="room-aside">
       {children}
+      <ConvSkills lineId={agent.line_id} agentId={agent.id} onOpen={onOpen} />
       {role === 'coder' && (
         <div className="pnl-s">
           <h4>{tr('提交到农场的实验')}</h4>
