@@ -22,6 +22,7 @@ from .llm import make_provider
 from .market import Market
 from .mcp_hub import McpHub
 from .nvidb import Nvidb
+from .skim import Skim
 from .pipeline import Pipeline
 from .press import Press
 from .skills import SkillRegistry
@@ -54,6 +55,7 @@ class Town:
         self.mcp = McpHub(self)
         self.pipeline = Pipeline(self)
         self.linked = Linked(self)
+        self.skim = Skim(self)
         self._register_tools()
         if not self.library.count():
             self.seed_library()
@@ -178,6 +180,9 @@ class Town:
         elif role == "writer":
             files = [n for n in ("main.tex", "refs.bib", "main.pdf") if (self.press.dir(line_id) / n).exists()]
             out += ["", "## 论文目录", "已有：" + ("、".join(files) if files else "还没有文件")]
+        agent = self.agents.get(f"{role}-{line_id}") if role in ("coder", "writer") else None
+        if agent:
+            out += self.skim.brief(agent)
         return "\n".join(out)
 
     @staticmethod

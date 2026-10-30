@@ -20,14 +20,14 @@ if TYPE_CHECKING:
 TECH = {
     "mill": "Skills + agent 编队", "farm": "Skill · 电厂接口", "press": "Skill · latexmk", "market": "组织编译 · ROI 升降级",
     "power": "nvidb · GPU 队列（只读）", "power_sim": "模拟 GPU 后端", "dock_arxiv": "MCP · arXiv", "library": "RAG · BM25 + 覆盖率",
-    "genealogy": "知识图谱 · 相近 / 引用", "depot": "RAG · 仓库文档",
+    "genealogy": "知识图谱 · 相近 / 引用", "depot": "RAG · 仓库文档", "academy": "skim · 分层 skill 配置",
 }
 # The four buildings the main map is about; they are labelled and highlighted, the rest recede.
 CORE = {"mill", "farm", "press", "depot"}
 
 # Buildings backed by working code. The rest are scenery for now and say so.
 LIVE = {"dock_arxiv", "customs", "hatchery", "mill", "farm", "press", "qa", "depot", "library", "genealogy",
-        "market", "cityhall", "bank", "newspaper", "power_sim", "power"}
+        "market", "cityhall", "bank", "newspaper", "power_sim", "power", "academy"}
 
 
 def st(name: str, out: str, *team: str) -> dict:
@@ -84,6 +84,9 @@ CATALOG: dict[str, dict] = {
                 "skills": [], "tools": ["library.search", "library.get"], "from": [["customs", "notes"]],
                 "to": [["hatchery", "notes"], ["mill", "notes"], ["press", "notes"]],
                 "real": "RAG 主库：SQLite FTS5 做 BM25 召回，再按关键词覆盖率（或配置的 embedding 余弦）排序；中文 idea 先经过术语表扩展成英文检索词。"},
+    "academy": {"stations": [st("开课", "notes"), st("排课表", "notes"), st("发教材", "notes"), st("上岗", "notes")],
+                "skills": [], "tools": [], "from": [["market", "notes"]], "to": [["depot", "notes"], ["press", "notes"]],
+                "real": "用 skim 管理 skill：skill 都在 skim 的全局仓库（~/.skim/store），配置像 git config 一样分三层，窄的覆盖宽的——全局（~/.skim/skimconfig）、项目（Papertown 里这个项目的 .skim/config）、对话（~/.skim/sessions/papertown-<员工>.config）。算出来的 skill 链接进员工的 .papertown/skills，简报里列出每个 SKILL.md 的路径。"},
     "genealogy": {"stations": [st("抽关系", "notes"), st("连边", "notes"), st("查族谱", "notes", "scout"), st("出报告", "notes")],
                   "skills": [], "tools": ["genealogy.expand"], "from": [["library", "notes"]], "to": [["hatchery", "notes"]],
                   "real": "论文关系图：默认是入馆时算出的相近关系；用 `papertown ingest --refs` 可以从 Semantic Scholar 补上真实引用。"},
@@ -219,6 +222,9 @@ class World:
             return f"项目 #{active['seq']}「{active['title']}」"
         if t == "library":
             return f"馆藏 {town.library.count()} 篇"
+        if t == "academy":
+            sk = town.skim.status()
+            return f"skim · 仓库里 {len(sk['store'])} 个 skill · {len(sk['envs'])} 个环境" if sk["ok"] else f"skim 未接入：{sk['note']}"
         if t == "customs":
             return f"已放行 {town.library.count()} 篇"
         if t == "dock_arxiv":

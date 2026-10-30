@@ -20,11 +20,20 @@ from .agents import AgentError, ROLES
 from .config import Settings
 from .farm import FarmError, summarize
 from .pipeline import LineError
+from .skim import SkimError
 from .town import Town
 
 FILES = {"main.tex", "refs.bib", "main.pdf", "paper.zip"}
 ASK_ROLE = {"hatchery": "hatcher", "mill": "designer", "farm": "experimenter", "power_sim": "experimenter", "press": "writer",
             "qa": "reviewer", "depot": "keeper", "workshop": "keeper", "logistics": "keeper", "dock_github": "keeper"}
+
+
+class SkimIn(BaseModel):
+    scope: str  # global | project | session
+    key: str = Field(min_length=3, max_length=200)
+    value: str | None = None  # None unsets the key
+    line_id: str | None = None
+    agent_id: str | None = None
 
 
 class IdeaIn(BaseModel):
@@ -431,6 +440,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def skills():
         town.skills.refresh()
         return [s.summary() for s in town.skills.all()]
+
+    # ---------- the skill academy: skim, layered per project and conversation ----------
+
+    @app.get("/api/skim")
+    def skim_status(fresh: bool = False):
+        st = town.skim.status(fresh)
+        agents = {a["id"]: a for a in town.db.q("select id, line_id, role, status, runtime, model from agents where role in ('coder', 'writer')")}
+        lines = [{"id": ln["id"], "seq": ln["seq"], "title": ln["title"], "status": ln["status"],
+                  "agents": [agents[f"{r}-{ln['id']}"] for r in ("coder", "writer") if f"{r}-{ln['id']}" in agents]}
+                 for ln in town.db.q("select id, seq, title, status from lines where status != 'dropped' order by seq desc")]
+        return st | {"lines": lines}
+
+    @app.get("/api/skim/resolve")
+    def skim_resolve(line_id: str | None = None, agent_id: str | None = None):
+        try:
+            return town.skim.resolve(line_id, agent_id)
+        except SkimError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @app.post("/api/skim/config")
+    def skim_config(body: SkimIn):
+        try:
+            town.skim.set(body.scope, body.key, body.value, body.line_id, body.agent_id)
+            town.skim.apply_all(None if body.scope == "global" else body.line_id)
+            return town.skim.resolve(body.line_id, body.agent_id)
+        except SkimError as e:
+            raise HTTPException(400, str(e)) from e
 
     @app.get("/api/workers")
     def workers():
