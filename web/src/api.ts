@@ -128,7 +128,17 @@ export interface NvJob {
   progress: string | null; submitter: string | null; workdir: string | null; command: string; notes: string; held: boolean;
   created_at: string | null; started_at: string | null; finished_at: string | null; elapsed_s: number | null;
   exit_code: number | null; last_error: string;
+  // where it may go and what it waits for (older readings leave these out)
+  pool?: string | null; lane_seq?: number | null; node_constraint?: string | null; gpu_constraint?: number[]; gpus?: number;
+  priority?: number; depends_on?: number[]; held_reason?: string | null; gpu_mem_mb?: number | null; max_runtime_s?: number | null;
+  progress_at?: string | null;
 }
+// a lane: one GPU (or a few) and the order it runs its jobs in; running and queued are job ids, in that order
+export interface NvLane {
+  name: string; node: string; gpu_ids: number[]; paused: boolean; concurrency: number; runner_up: boolean | null; blocked: string | null;
+  running: number[]; queued: number[];
+}
+export interface NvPool { name: string; members: { node: string; gpus: number[] }[] }
 export interface GpuProc { user: string | null; name: string; mem_mb: number; managed: boolean; job_id: number | null; job_name: string | null }
 export interface Gpu {
   index: number; name: string; mem_total_mb: number; mem_used_mb: number; free_mb: number; util_percent: number;
@@ -137,7 +147,7 @@ export interface Gpu {
 }
 export interface GpuNode { name: string; state: string; enabled: boolean; last_seen: string | null; last_error: string | null; gpus: Gpu[] }
 export interface GpuStatus {
-  ok: boolean; note: string; at: string | null; ticked?: string | null; nodes: GpuNode[]; jobs: NvJob[];
+  ok: boolean; note: string; at: string | null; ticked?: string | null; nodes: GpuNode[]; jobs: NvJob[]; lanes?: NvLane[]; pools?: NvPool[];
   summary: { nodes: number; up: number; gpus: number; idle: number; room: number; free_mb: number; total_mb: number } | null;
   counts: Record<string, number>; alerts: number;
 }

@@ -24,6 +24,10 @@ QUEUE = {
              {"id": 8, "name": "eval", "state": "pending", "workdir": "/home/me/repos/proj-code", "submitter": "me"},
              {"id": 9, "name": "someone-else", "state": "running", "workdir": "/data/other", "submitter": "x"}],
     "held": [], "recent": [{"id": 6, "name": "proj-smoke", "state": "completed", "workdir": None, "submitter": "codex:proj"}],
+    "lanes": [{"name": "box:1", "node": "box", "gpu_ids": [1], "paused": False, "concurrency": 1, "runner_up": True, "blocked": None,
+               "running": [{"id": 7, "name": "train", "state": "running"}],
+               "queued": [{"id": 10, "name": "sweep", "state": "pending", "lane": "box:1", "lane_seq": 2000, "vram_mb": 8192}]},
+              {"name": "old:0", "node": "old", "gpu_ids": [0], "running": [], "queued": []}],
 }
 
 
@@ -64,6 +68,9 @@ def test_gpus_and_a_linked_project(tmp_path):
         assert g["ok"] and g["summary"] == {"nodes": 1, "up": 1, "gpus": 2, "idle": 1, "room": 1, "free_mb": 27000, "total_mb": 49128}
         assert [x["state"] for x in g["nodes"][0]["gpus"]] == ["idle", "full"] and g["nodes"][0]["gpus"][0]["name"] == "RTX 4090"
         assert "hostname" not in g["nodes"][0] and all("env" not in j for j in g["jobs"])
+        # the lanes of the machines shown, and the jobs waiting in them even when the job list leaves them out
+        assert [(ln["name"], ln["running"], ln["queued"]) for ln in g["lanes"]] == [("box:1", [7], [10])]
+        assert next(j for j in g["jobs"] if j["id"] == 10)["lane"] == "box:1" and g["pools"] == []
         nv = next(b for b in c.get("/api/jobs").json()["backends"] if b["id"] == "nvidb")
         assert nv["ready"] and "2 张卡" in nv["note"]
         assert "1 张空闲" in c.get("/api/buildings/power").json()["job"]

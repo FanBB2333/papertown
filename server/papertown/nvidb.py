@@ -1,7 +1,8 @@
 """The GPUs on your own machines, read from nvidb's job queue. Read only.
 
-nvidb keeps every node's cards, what runs on them and its queue of jobs in one SQLite
-file, kept fresh by its keeper. Papertown reads it with `nvidb queue status --json
+nvidb keeps every node's cards, what runs on them, its queue of jobs and the lanes they
+wait in (a lane: one GPU, or a few, and the order it runs its jobs) in one SQLite file,
+kept fresh by its keeper. Papertown reads it with `nvidb queue status --json
 --no-tick`, which never contacts the nodes itself, at most every few seconds, and shows
 it on the farm and at the power plant. Nothing is submitted, cancelled or acknowledged
 from here; jobs are still submitted with `nvidb job submit`.
@@ -50,7 +51,18 @@ def _job(j: dict) -> dict:
         "notes": (j.get("notes") or "")[:400], "held": bool(j.get("held")), "created_at": j.get("created_at"),
         "started_at": j.get("started_at"), "finished_at": j.get("finished_at"), "elapsed_s": j.get("elapsed_s"),
         "exit_code": j.get("exit_code"), "last_error": (j.get("last_error") or "")[:400],
+        # where it may go: a lane, a pool, or any card that fits; what it waits for
+        "pool": j.get("pool"), "lane_seq": j.get("lane_seq"), "node_constraint": j.get("node_constraint"),
+        "gpu_constraint": j.get("gpu_constraint") or [], "gpus": j.get("gpus", 1), "priority": j.get("priority") or 0,
+        "depends_on": j.get("depends_on") or [], "held_reason": j.get("held_reason"), "gpu_mem_mb": j.get("gpu_mem_mb"),
+        "max_runtime_s": j.get("max_runtime_s"), "progress_at": j.get("progress_at"),
     }
+
+
+def _lane(ln: dict) -> dict:
+    return {"name": ln["name"], "node": ln.get("node"), "gpu_ids": ln.get("gpu_ids") or [], "paused": bool(ln.get("paused")),
+            "concurrency": ln.get("concurrency") or 1, "runner_up": ln.get("runner_up"), "blocked": ln.get("blocked"),
+            "running": [j["id"] for j in ln.get("running") or []], "queued": [j["id"] for j in ln.get("queued") or []]}  # in running order
 
 
 class Nvidb:
@@ -62,7 +74,8 @@ class Nvidb:
         self._last: dict | None = None
 
     def _off(self, note: str) -> dict:
-        return {"ok": False, "note": note, "at": None, "nodes": [], "jobs": [], "summary": None, "counts": {}, "alerts": 0}
+        return {"ok": False, "note": note, "at": None, "nodes": [], "jobs": [], "lanes": [], "pools": [], "summary": None, "counts": {},
+                "alerts": 0}
 
     def status(self, fresh: bool = False) -> dict:
         if not self.s.nvidb:
@@ -91,16 +104,22 @@ class Nvidb:
             nodes.append({"name": n["name"], "state": n.get("state"), "enabled": n.get("enabled", True), "last_seen": n.get("last_seen"),
                           "last_error": n.get("last_error"), "gpus": [_gpu(g) for g in n.get("gpus") or []]})
         jobs, seen = [], set()
-        for j in (d.get("jobs") or []) + (d.get("held") or []) + (d.get("recent") or []):
+        names = {n["name"] for n in nodes}
+        lanes = [ln for ln in d.get("lanes") or [] if ln.get("node") in names]
+        for j in ((d.get("jobs") or []) + (d.get("held") or []) + (d.get("recent") or [])
+                  + [j for ln in lanes for j in (ln.get("running") or []) + (ln.get("queued") or [])]):
             if j["id"] not in seen:
                 seen.add(j["id"])
                 jobs.append(_job(j))
+        pools = [{"name": p["name"], "members": [{"node": m["node"], "gpus": [g["index"] for g in m.get("gpus") or []]}
+                                                 for m in p.get("members") or [] if m.get("node") in names]}
+                 for p in d.get("pools") or []]
         gpus = [g for n in nodes if n["state"] == "up" for g in n["gpus"]]
         summary = {"nodes": len(nodes), "up": sum(1 for n in nodes if n["state"] == "up"), "gpus": len(gpus),
                    "idle": sum(1 for g in gpus if g["state"] == "idle"), "room": sum(1 for g in gpus if g["state"] != "full"),
                    "free_mb": sum(g["free_mb"] for g in gpus), "total_mb": sum(g["mem_total_mb"] for g in gpus)}
         return {"ok": True, "note": "", "at": d.get("generated_at"), "ticked": d.get("last_tick_at"), "nodes": nodes, "jobs": jobs,
-                "summary": summary, "counts": d.get("counts") or {}, "alerts": d.get("open_alerts") or 0}
+                "lanes": [_lane(ln) for ln in lanes], "pools": pools, "summary": summary, "counts": d.get("counts") or {}, "alerts": d.get("open_alerts") or 0}
 
     def jobs_matching(self, patterns: list[str]) -> list[dict]:
         """Jobs whose working directory, name or submitter mentions one of the patterns."""

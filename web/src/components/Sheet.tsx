@@ -20,6 +20,7 @@ interface Props {
   onHatch: (lineId: string) => void;
   onResume: (lineId: string) => void;
   onAdjust: (lineId: string) => void;
+  focus?: string | null; // at the power plant: `node:<name>` opens that machine
 }
 
 const STAGE_SKILLS: Record<string, string[]> = {
@@ -246,7 +247,7 @@ export function Sheet(p: Props) {
             </div>
           </section>
           {s.type === 'library' && <LibraryShelf tick={p.tick} />}
-          {s.type === 'power' && <GpuBoard />}
+          {s.type === 'power' && <GpuBoard focus={p.focus} />}
         </>
       )}
     </div>

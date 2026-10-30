@@ -83,7 +83,7 @@ export function Interior(p: Props) {
   if (!room) {
     return (
       <div className={`interior in-sheet m-${p.motion}`} role="dialog" aria-modal="true">
-        <Sheet id={p.id} tick={p.tick} placements={p.placements} onClose={p.onClose} onOpen={p.onOpen}
+        <Sheet id={p.id} tick={p.tick} placements={p.placements} focus={p.focus} onClose={p.onClose} onOpen={p.onOpen}
           onAsk={p.onAsk} onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} />
       </div>
     );
