@@ -85,6 +85,37 @@ GUIDE = {
 """,
 }
 
+# A project linked in from your own repositories: the agent works in the repository itself
+# and gets this guide with its brief, since nothing is written into the repo. The brief is
+# already in that first message, so reading it again is optional; `pt` needs to reach the
+# Papertown server, which a sandbox without network (Codex's default) does not allow.
+LINKED_GUIDE = {
+    "coder": """# Papertown · 代码员工
+
+你是 Papertown 里项目 #{seq}「{title}」的代码 agent。这个项目是从本机接入的：工作目录 `{code}` 就是用户自己的代码仓库，改动都是真的。
+
+- 项目简报附在这份说明后面，里面有仓库现状和最近的提交；以后想看最新的，{brief}。
+- 动手前先看 `git status` 和最近的提交，弄清楚做到哪一步了。只改和任务有关的文件，不要动用户还没提交的改动；commit、push 之前先问用户。
+- 要 GPU 或要跑很久的实验，用用户的 nvidb 队列提交（`nvidb job submit`，写清 `--vram` 和 `--note`），不要用 ssh 直接起任务。实验农场按工作目录和任务名认出这个项目的任务。
+- 回复用中文，简短说明你做了什么、下一步是什么。
+""",
+    "writer": """# Papertown · 写作员工
+
+你是 Papertown 里项目 #{seq}「{title}」的写作 agent。这个项目是从本机接入的：工作目录 `{paper}` 就是用户自己的论文仓库（LaTeX），改动都是真的。
+
+- 项目简报附在这份说明后面，里面有论文的章节和仓库现状；以后想看最新的，{brief}。
+- 主文件是 `{main}`，章节可能在它 `\\input` 的文件里，参考文献在仓库里的 .bib 文件。在已有内容上改，不要换模板、不要重排结构。
+- 动手前先看 `git status`。只改和任务有关的文件，不要动用户还没提交的改动；commit、push 之前先问用户。
+- 只写有依据的内容：数字和结论来自代码仓库 `{code}` 里的实验结果，找不到依据的地方留 TODO，不要编。
+- 需要编译时用 `latexmk -pdf -interaction=nonstopmode {main}`，编译产物不要提交。
+- 回复用中文，简短说明改了哪些部分。
+""",
+}
+LINKED_BRIEF = {
+    "pi": "用 `papertown_project` 工具读",
+    "paseo": "运行 `.papertown/pt brief`（它要连本机的 Papertown 服务，在 Codex 这类不开网络的沙箱里会被拦下；这一步不是必需的，被拦下就跳过）",
+}
+
 
 class AgentError(Exception):
     pass
@@ -234,10 +265,9 @@ class Agents:
         """Write the role's guide where the agent reads it; returns the text. In a linked
         repository the repo's own AGENTS.md and CLAUDE.md are left alone: the guide goes into
         Papertown's directory and reaches the agent with its brief instead."""
-        line = self.db.one("select * from lines where id = ?", a["line_id"])
         cwd = Path(a["cwd"])
         cwd.mkdir(parents=True, exist_ok=True)
-        text = GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS[runtime])
+        text = self._guide_text(a, runtime)
         home = self._home(a["line_id"], a["role"])
         (home / "AGENTS.md").write_text(text, encoding="utf-8")
         if runtime == "paseo":
@@ -245,6 +275,23 @@ class Agents:
                 (cwd / "CLAUDE.md").write_text(text, encoding="utf-8")  # Claude Code reads this one
             self._tools(a)
         return text
+
+    def _guide_text(self, a: dict, runtime: str) -> str:
+        line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
+        info = self.town.linked.summary(a["line_id"]) if self.town.linked.of(a["line_id"]) else None
+        if not info:
+            return GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS[runtime])
+        code, paper = info.get("code") or {}, info.get("paper") or {}
+        return LINKED_GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], brief=LINKED_BRIEF[runtime],
+                                              code=code.get("path") or "（没有接代码仓库）", paper=paper.get("path") or "（没有接论文仓库）",
+                                              main=paper.get("main") or "main.tex")
+
+    def _linked_intro(self, a: dict, runtime: str) -> str:
+        """A linked project's first message: the guide, then the brief."""
+        guide = self._guide_text(a, runtime)
+        if runtime == "paseo":
+            guide = guide.replace(".papertown/pt", str(self._tools(a)))
+        return guide + "\n\n这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
 
     def _tools(self, a: dict) -> Path:
         """`.papertown/pt` in the role's own directory, with who it speaks for in link.json, for
@@ -317,11 +364,9 @@ class Agents:
         if not st["ok"]:
             raise AgentError(st["note"])
         line = self.db.one("select * from lines where id = ?", a["line_id"])
-        guide = self._guide(a, "paseo")
+        self._guide(a, "paseo")
         if self.town.linked.of(a["line_id"]):
-            pt = self._tools(a)
-            prompt = (guide.replace(".papertown/pt", str(pt)) + "\n\n这是项目简报，先读一遍，再说说你打算怎么开始：\n\n"
-                      + self.town.brief(a["line_id"], a["role"]))
+            prompt = self._linked_intro(a, "paseo")
         else:
             prompt = "这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
         try:
@@ -530,11 +575,10 @@ class Agents:
         a = self.get(agent_id)
         if not a:
             raise AgentError("没有这个员工")
+        if self.town.linked.of(a["line_id"]):  # in a linked repo the guide is not in AGENTS.md: send it along
+            return self._linked_intro(a, "paseo" if a.get("runtime") == "paseo" else "pi")
         text = self.town.brief(a["line_id"], a["role"])
         if a.get("runtime") != "paseo":
-            if self.town.linked.of(a["line_id"]):  # in a linked repo the guide is not in AGENTS.md: send it along
-                line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
-                text = GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS["pi"]) + "\n\n" + text
             return "这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + text
         pt = self._tools(a)
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])

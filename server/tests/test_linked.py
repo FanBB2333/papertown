@@ -95,7 +95,8 @@ def test_gpus_and_a_linked_project(tmp_path):
         pt = town.agents._tools(a)
         assert (code / "AGENTS.md").read_text() == "the repo's own rules\n" and not (code / "CLAUDE.md").exists()
         assert not (code / ".papertown").exists() and pt.is_relative_to(s.projects_dir)
-        assert "工作目录就是仓库本身" in town.agents.brief(a["id"])
+        intro = town.agents.brief(a["id"])  # the linked guide, not the pipeline's: no draft method, nvidb for the GPUs
+        assert "工作目录就是仓库本身" in intro and "nvidb job submit" in intro and "方法草案" not in intro
         assert subprocess.run(["git", "-C", str(code), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
         assert town.linked.sync() == []  # a second start adds nothing
 
