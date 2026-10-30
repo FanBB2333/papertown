@@ -7,7 +7,7 @@
 //   pi's slash commands typed here run in pi (the ones that need its terminal UI open there).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, fileUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
+import { api, fileUrl, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
 import { tr } from '../i18n';
@@ -259,7 +259,15 @@ function Aside({ agent, role, line, onOpen, children }: { agent: Agent; role: Ag
           {repos.map(x => <div key={x.id} className="repo"><b>{x.label}</b><span className="muted small">{x.desc}</span></div>)}
         </div>
       )}
-      {role === 'writer' && (
+      {role === 'writer' && line?.linked?.paper && (
+        <div className="pnl-s">
+          <h4>{tr('稿子')}</h4>
+          <p className="muted small path">{line.linked.paper.path}{line.linked.paper.main ? ` · ${line.linked.paper.main}` : ''}</p>
+          {line.linked.paper.pdf ? <div className="btns"><a className="btn pri" href={linkedPdfUrl(line.id)} target="_blank" rel="noreferrer">{tr('看 PDF')}</a></div>
+            : <p className="muted small">{tr('论文仓库里还没有编译好的 PDF。')}</p>}
+        </div>
+      )}
+      {role === 'writer' && !line?.linked?.paper && (
         <div className="pnl-s">
           <h4>{tr('稿子')}</h4>
           {!files.length && <p className="muted small">{tr('印刷厂目录里还没有文件。')}</p>}
