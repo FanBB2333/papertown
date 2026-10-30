@@ -10,10 +10,12 @@ small CS glossary first (bilingual query expansion).
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import threading
 from collections import Counter
+from pathlib import Path
 from typing import Callable, Iterable
 
 import numpy as np
@@ -103,13 +105,49 @@ class Embedder:
         return v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-9)
 
 
+# how retrieval runs, set in the library building: how many papers a search returns by
+# default, how many full-text candidates it scores, and whether vectors rank them when an
+# embeddings endpoint is configured
+RAG_DEFAULTS = {"top_k": 8, "candidates": 40, "vectors": True}
+RAG_LIMITS = {"top_k": (1, 30), "candidates": (5, 200)}
+
+
 class Library:
-    def __init__(self, db: DB, embedder: Embedder | None = None):
+    def __init__(self, db: DB, embedder: Embedder | None = None, opts_file: Path | None = None):
         self.db = db
         self.embedder = embedder
         self._df: Counter | None = None
         self._n = 0
         self._lock = threading.Lock()
+        self.opts_file = opts_file
+        self.opts = dict(RAG_DEFAULTS)
+        try:
+            saved = json.loads(opts_file.read_text(encoding="utf-8")) if opts_file and opts_file.exists() else {}
+            self.opts.update({k: v for k, v in saved.items() if k in RAG_DEFAULTS})
+        except ValueError:
+            pass
+
+    def set_opts(self, **kw) -> dict:
+        for k, v in kw.items():
+            if k not in RAG_DEFAULTS or v is None:
+                continue
+            if k in RAG_LIMITS:
+                lo, hi = RAG_LIMITS[k]
+                v = max(lo, min(hi, int(v)))
+            self.opts[k] = bool(v) if k == "vectors" else v
+        if self.opts_file:
+            self.opts_file.parent.mkdir(parents=True, exist_ok=True)
+            self.opts_file.write_text(json.dumps(self.opts), encoding="utf-8")
+        return self.opts
+
+    @property
+    def vectors(self) -> Embedder | None:
+        return self.embedder if self.opts["vectors"] else None
+
+    def stats(self) -> dict:
+        by = {r["source"] or "?": r["n"] for r in self.db.q("select source, count(*) n from papers group by source")}
+        return {"papers": self.count(), "sources": by, "vectors": self.db.val("select count(*) from paper_vecs") or 0,
+                "terms": len(self._stats()[0])}
 
     # ---------- statistics ----------
 
@@ -189,15 +227,16 @@ class Library:
                " where papers_fts match ?" + (" and p.published >= ?" if since else "") + " order by rank limit ?")
         return self.db.q(sql, match, *([since] if since else []), limit)
 
-    def search(self, query: str, top_k: int = 8, since: str | None = None, exclude: set[str] | None = None) -> dict:
+    def search(self, query: str, top_k: int | None = None, since: str | None = None, exclude: set[str] | None = None) -> dict:
+        top_k = top_k or self.opts["top_k"]
         q_en = expand(query)
         terms = list(dict.fromkeys(tokens(q_en)))
-        cands = [c for c in self._fts(terms, 40, since) if not exclude or c["arxiv_id"] not in exclude]
+        cands = [c for c in self._fts(terms, self.opts["candidates"], since) if not exclude or c["arxiv_id"] not in exclude]
         method = "coverage"
         sims: dict[int, float] = {}
-        if self.embedder and cands:
+        if self.vectors and cands:
             try:
-                qv = self.embedder([q_en or query])[0]
+                qv = self.vectors([q_en or query])[0]
                 rows = {r["paper_id"]: np.frombuffer(r["vec"], dtype=np.float32)
                         for r in self.db.q(f"select * from paper_vecs where paper_id in ({','.join('?' * len(cands))})", *[c["id"] for c in cands])}
                 sims = {pid: float(v @ qv) for pid, v in rows.items()}
@@ -217,9 +256,9 @@ class Library:
         terms = list(dict.fromkeys(tokens(expand(query))))
         papers = self.get(list(dict.fromkeys(arxiv_ids)))
         sims: dict[int, float] = {}
-        if self.embedder and papers:
+        if self.vectors and papers:
             try:
-                qv = self.embedder([expand(query) or query])[0]
+                qv = self.vectors([expand(query) or query])[0]
                 rows = self.db.q(f"select * from paper_vecs where paper_id in ({','.join('?' * len(papers))})", *[p["id"] for p in papers])
                 sims = {r["paper_id"]: float(np.frombuffer(r["vec"], dtype=np.float32) @ qv) for r in rows}
             except Exception:

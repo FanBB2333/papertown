@@ -17,8 +17,10 @@ from pydantic import BaseModel, Field
 
 from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
-from .config import Settings
+from .config import SERVER_DIR, Settings
+from .library import RAG_LIMITS
 from .farm import FarmError, summarize
+from .mcp_hub import McpError
 from .pipeline import LineError
 from .skim import SkimError
 from .town import Town
@@ -34,6 +36,23 @@ class SkimIn(BaseModel):
     value: str | None = None  # None unsets the key
     line_id: str | None = None
     agent_id: str | None = None
+
+
+class McpServerIn(BaseModel):
+    name: str
+    command: str
+    args: list[str] = []
+    env: dict[str, str] = {}
+
+
+class ToggleIn(BaseModel):
+    enabled: bool
+
+
+class RagIn(BaseModel):
+    top_k: int | None = None
+    candidates: int | None = None
+    vectors: bool | None = None
 
 
 class IdeaIn(BaseModel):
@@ -467,6 +486,72 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return town.skim.resolve(body.line_id, body.agent_id)
         except SkimError as e:
             raise HTTPException(400, str(e)) from e
+
+    # ---------- the MCP exchange ----------
+
+    def mcp_view():
+        return {"servers": town.mcp.info(), "town_file": str(town.mcp.town_file), "config_file": town.s.mcp_config or None,
+                "self": {"mcpServers": {"papertown": {"command": "uv", "args": ["--directory", str(SERVER_DIR), "run", "papertown", "mcp"]}}}}
+
+    @app.get("/api/mcp")
+    def mcp_status():
+        return mcp_view()
+
+    @app.post("/api/mcp/servers")
+    def mcp_add(body: McpServerIn):
+        try:
+            town.mcp.add(body.name, body.command, body.args, body.env)
+        except McpError as e:
+            raise HTTPException(400, str(e)) from e
+        return mcp_view()
+
+    @app.post("/api/mcp/servers/{name}/toggle")
+    def mcp_toggle(name: str, body: ToggleIn):
+        try:
+            town.mcp.toggle(name, body.enabled)
+        except McpError as e:
+            raise HTTPException(400, str(e)) from e
+        return mcp_view()
+
+    @app.post("/api/mcp/servers/{name}/restart")
+    def mcp_restart(name: str):
+        if name not in town.mcp.servers():
+            raise HTTPException(400, "这个 MCP server 没有启用")
+        town.mcp.restart(name)
+        return mcp_view()
+
+    @app.delete("/api/mcp/servers/{name}")
+    def mcp_remove(name: str):
+        try:
+            town.mcp.remove(name)
+        except McpError as e:
+            raise HTTPException(400, str(e)) from e
+        return mcp_view()
+
+    # ---------- the library as the RAG room ----------
+
+    def rag_view():
+        from urllib.parse import urlparse
+        lib = town.library
+        return {"stats": lib.stats(), "opts": lib.opts, "limits": {k: list(v) for k, v in RAG_LIMITS.items()},
+                "index": "SQLite FTS5 · BM25 召回 + 关键词覆盖率打分",
+                "embed": {"configured": lib.embedder is not None, "model": town.s.embed_model or None,
+                          "host": urlparse(town.s.embed_base_url).netloc or None}}
+
+    @app.get("/api/rag")
+    def rag_status():
+        return rag_view()
+
+    @app.post("/api/rag")
+    def rag_set(body: RagIn):
+        town.library.set_opts(**body.model_dump())
+        return rag_view()
+
+    @app.get("/api/rag/search")
+    def rag_search(q: str, k: int | None = None):
+        if not q.strip():
+            raise HTTPException(400, "输入要检索的内容")
+        return town.library.search(q, k)
 
     @app.get("/api/workers")
     def workers():

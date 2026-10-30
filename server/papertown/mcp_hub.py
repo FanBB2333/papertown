@@ -2,9 +2,15 @@
 are listed and registered for the agents as `<server>_<tool>` (shown as server.tool in the
 trace, kind MCP).
 
-Default servers: the arXiv dock (ports/arxiv_server.py). More can be added with
-PAPERTOWN_MCP_CONFIG pointing at a JSON file in the Claude Desktop format:
-    {"mcpServers": {"github": {"command": "...", "args": [...], "env": {...}}}}
+Servers come from three places, shown in the MCP exchange building:
+- built in: the arXiv dock (ports/arxiv_server.py), unless PAPERTOWN_ARXIV=0;
+- PAPERTOWN_MCP_CONFIG, a JSON file in the Claude Desktop format
+      {"mcpServers": {"github": {"command": "...", "args": [...], "env": {...}}}};
+- added in the town: mcp.json in the data directory, same format, plus a "disabled" list
+  that switches off servers from any of the three.
+Each can be connected, switched off or restarted while the town runs. Values in env may
+name environment variables ("${GITHUB_TOKEN}"), so keys stay in ~/.secrets.zsh and out of
+the file.
 
 The MCP client is async; it lives on its own event loop thread and the (threaded)
 pipelines call into it with run_coroutine_threadsafe.
@@ -15,8 +21,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 import threading
+from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -27,6 +35,12 @@ from .tools import Tool, ToolCtx
 
 if TYPE_CHECKING:
     from .town import Town
+
+NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,31}$")
+
+
+class McpError(Exception):
+    pass
 
 
 def _decode(result) -> Any:
@@ -46,57 +60,180 @@ class McpHub:
         self.loop: asyncio.AbstractEventLoop | None = None
         self.clients: dict[str, Client] = {}
         self.status: dict[str, dict] = {}
+        self.tools_of: dict[str, list[dict]] = {}  # each server's tools: name and description
         self.registered: dict[str, list[str]] = {}
         self.after: dict[str, Callable[[ToolCtx, dict, Any], Any]] = {}  # post-processing per api tool name
         self._stop: asyncio.Event | None = None
+        self._stops: dict[str, asyncio.Event] = {}
+        self._running: dict[str, Future] = {}
         self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
 
-    def servers(self) -> dict[str, dict]:
+    # ---------- configuration ----------
+
+    @property
+    def town_file(self) -> Path:
+        return self.town.s.data_dir / "mcp.json"
+
+    def _town_config(self) -> dict:
+        try:
+            d = json.loads(self.town_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            d = {}
+        return {"mcpServers": d.get("mcpServers") or {}, "disabled": d.get("disabled") or []}
+
+    def _save_town(self, d: dict) -> None:
+        self.town_file.parent.mkdir(parents=True, exist_ok=True)
+        self.town_file.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def catalog(self) -> dict[str, dict]:
+        """Every server the town knows, with where it is configured and whether it is on."""
         out: dict[str, dict] = {}
         if self.town.s.arxiv_port:
-            out["arxiv"] = {"command": sys.executable, "args": ["-m", "papertown.ports.arxiv_server"], "cwd": str(SERVER_DIR)}
+            out["arxiv"] = {"command": sys.executable, "args": ["-m", "papertown.ports.arxiv_server"], "cwd": str(SERVER_DIR),
+                            "source": "builtin"}
         if self.town.s.mcp_config and Path(self.town.s.mcp_config).exists():
-            out.update(json.loads(Path(self.town.s.mcp_config).read_text()).get("mcpServers", {}))
+            try:
+                for n, cfg in json.loads(Path(self.town.s.mcp_config).read_text()).get("mcpServers", {}).items():
+                    out[n] = {**cfg, "source": "file"}
+            except ValueError:
+                pass
+        town = self._town_config()
+        for n, cfg in town["mcpServers"].items():
+            out.setdefault(n, {**cfg, "source": "town"})
+        for n, cfg in out.items():
+            cfg["enabled"] = n not in town["disabled"] and not cfg.get("disabled")
         return out
 
-    def start(self, timeout: float = 20) -> None:
-        servers = self.servers()
-        if not servers:
-            return
-        ready = threading.Event()
-        self._thread = threading.Thread(target=self._run, args=(servers, ready), daemon=True, name="mcp-hub")
-        self._thread.start()
-        ready.wait(timeout)
+    def servers(self) -> dict[str, dict]:
+        return {n: cfg for n, cfg in self.catalog().items() if cfg["enabled"]}
 
-    def _run(self, servers: dict, ready: threading.Event) -> None:
+    def info(self) -> list[dict]:
+        """The servers as the exchange shows them; env values are never sent, only names."""
+        out = []
+        for n, cfg in self.catalog().items():
+            st = self.status.get(n) or {}
+            state = "off" if not cfg["enabled"] else "ok" if st.get("ok") else "error" if st.get("ok") is False else "connecting"
+            out.append({"name": n, "source": cfg["source"], "command": cfg.get("command", ""), "args": cfg.get("args") or [],
+                        "env": sorted((cfg.get("env") or {}).keys()), "cwd": cfg.get("cwd"), "enabled": cfg["enabled"],
+                        "state": state, "error": st.get("error"), "tools": self.tools_of.get(n, []) if state == "ok" else []})
+        return out
+
+    def add(self, name: str, command: str, args: list[str], env: dict[str, str]) -> None:
+        """Add or change a server of the town's own, and connect it."""
+        if not NAME.match(name):
+            raise McpError("名字只能用字母、数字、- 和 _，以字母开头")
+        if not command.strip():
+            raise McpError("要填启动命令")
+        cat = self.catalog()
+        if name in cat and cat[name]["source"] != "town":
+            raise McpError(f"{name} 是{'内置的' if cat[name]['source'] == 'builtin' else ' PAPERTOWN_MCP_CONFIG 里的'}，在这里不能改")
+        with self._lock:
+            d = self._town_config()
+            old = (d["mcpServers"].get(name) or {}).get("env") or {}
+            env = {k: v if v != "" or k not in old else old[k] for k, v in env.items()}  # values are never shown, so a blank keeps one
+            d["mcpServers"][name] = {"command": command.strip(), "args": [a for a in args if a != ""],
+                                     **({"env": env} if env else {})}
+            self._save_town(d)
+        self.restart(name)
+
+    def remove(self, name: str) -> None:
+        cat = self.catalog()
+        if name not in cat:
+            raise McpError("没有这个 MCP server")
+        if cat[name]["source"] != "town":
+            raise McpError("只有在小镇里添加的才能删；别的可以停用")
+        self.disconnect(name)
+        with self._lock:
+            d = self._town_config()
+            d["mcpServers"].pop(name, None)
+            d["disabled"] = [x for x in d["disabled"] if x != name]
+            self._save_town(d)
+        self.status.pop(name, None)
+
+    def toggle(self, name: str, enabled: bool) -> None:
+        if name not in self.catalog():
+            raise McpError("没有这个 MCP server")
+        with self._lock:
+            d = self._town_config()
+            d["disabled"] = [x for x in d["disabled"] if x != name] + ([] if enabled else [name])
+            self._save_town(d)
+        if enabled:
+            self.restart(name)
+        else:
+            self.disconnect(name)
+            self.status.pop(name, None)
+
+    # ---------- running ----------
+
+    def start(self, timeout: float = 20) -> None:
+        ready = threading.Event()
+        self._thread = threading.Thread(target=self._run, args=(ready,), daemon=True, name="mcp-hub")
+        self._thread.start()
+        ready.wait(5)
+        servers = self.servers()
+        for n, cfg in servers.items():
+            self.connect(n, cfg)
+        deadline = timeout  # wait for the first connections, so the ports' tools are there
+        while deadline > 0 and not all(n in self.status and self.status[n].get("ok") is not None for n in servers):
+            threading.Event().wait(0.05)
+            deadline -= 0.05
+
+    def _run(self, ready: threading.Event) -> None:
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self._stop = asyncio.Event()
+        self.loop.call_soon(ready.set)
+        self.loop.run_until_complete(self._stop.wait())
+        pending = [f for f in asyncio.all_tasks(self.loop)]
+        if pending:
+            self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
-        async def main():
-            pending = [asyncio.create_task(self._serve(n, cfg)) for n, cfg in servers.items()]
-            while not all(n in self.status for n in servers):
-                await asyncio.sleep(0.05)
-            ready.set()
-            await asyncio.gather(*pending, return_exceptions=True)
+    def connect(self, name: str, cfg: dict) -> None:
+        if not self.loop:
+            return
+        self.status[name] = {"ok": None}
+        self._running[name] = asyncio.run_coroutine_threadsafe(self._serve(name, cfg), self.loop)
 
-        self.loop.run_until_complete(main())
+    def disconnect(self, name: str, timeout: float = 8) -> None:
+        stop, fut = self._stops.get(name), self._running.pop(name, None)
+        if stop and self.loop:
+            self.loop.call_soon_threadsafe(stop.set)
+        if fut:
+            try:
+                fut.result(timeout)
+            except Exception:
+                pass
+
+    def restart(self, name: str) -> None:
+        self.disconnect(name)
+        cfg = self.servers().get(name)
+        if cfg:
+            self.connect(name, cfg)
 
     async def _serve(self, name: str, cfg: dict) -> None:
-        params = StdioServerParameters(command=cfg["command"], args=cfg.get("args", []),
-                                       env={**os.environ, **cfg.get("env", {})}, cwd=cfg.get("cwd"))
+        stop = self._stops[name] = asyncio.Event()
+        env = {**os.environ, **{k: os.path.expandvars(str(v)) for k, v in (cfg.get("env") or {}).items()}}
+        params = StdioServerParameters(command=cfg["command"], args=cfg.get("args", []), env=env, cwd=cfg.get("cwd"))
         try:
             async with Client(params, read_timeout_seconds=60) as client:
-                listed = await client.list_tools()
+                listed = await asyncio.wait_for(client.list_tools(), 60)
                 self.clients[name] = client
                 for t in listed.tools:
                     self._register(name, t)
+                self.tools_of[name] = [{"name": t.name, "description": (t.description or "").strip()[:400]} for t in listed.tools]
                 self.status[name] = {"ok": True, "tools": [t.name for t in listed.tools]}
-                await self._stop.wait()
+                waits = [asyncio.ensure_future(stop.wait()), asyncio.ensure_future(self._stop.wait())]
+                await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
+                for w in waits:
+                    w.cancel()
         except Exception as e:  # a port that fails to start must not take the town down
-            self.status[name] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+            self.status[name] = {"ok": False, "error": f"{type(e).__name__}: {e}"[:400]}
         finally:
             self.clients.pop(name, None)
+            self.tools_of.pop(name, None)
+            if self._stops.get(name) is stop:
+                self._stops.pop(name, None)
             for api in self.registered.pop(name, []):
                 self.town.tools.remove(api)
 
@@ -128,4 +265,4 @@ class McpHub:
         if self.loop and self._stop:
             self.loop.call_soon_threadsafe(self._stop.set)
         if self._thread:
-            self._thread.join(5)
+            self._thread.join(8)

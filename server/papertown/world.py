@@ -20,14 +20,14 @@ if TYPE_CHECKING:
 TECH = {
     "mill": "Skills + agent 编队", "farm": "Skill · 电厂接口", "press": "Skill · latexmk", "market": "组织编译 · ROI 升降级",
     "power": "nvidb · GPU 队列（只读）", "power_sim": "模拟 GPU 后端", "dock_arxiv": "MCP · arXiv", "library": "RAG · BM25 + 覆盖率",
-    "genealogy": "知识图谱 · 相近 / 引用", "depot": "RAG · 仓库文档", "academy": "skim · 分层 skill 配置",
+    "genealogy": "知识图谱 · 相近 / 引用", "depot": "RAG · 仓库文档", "academy": "skim · 分层 skill 配置", "exchange": "MCP · 工具接线",
 }
 # The four buildings the main map is about; they are labelled and highlighted, the rest recede.
 CORE = {"mill", "farm", "press", "depot"}
 
 # Buildings backed by working code. The rest are scenery for now and say so.
 LIVE = {"dock_arxiv", "customs", "hatchery", "mill", "farm", "press", "qa", "depot", "library", "genealogy",
-        "market", "cityhall", "bank", "newspaper", "power_sim", "power", "academy"}
+        "market", "cityhall", "bank", "newspaper", "power_sim", "power", "academy", "exchange"}
 
 
 def st(name: str, out: str, *team: str) -> dict:
@@ -87,6 +87,9 @@ CATALOG: dict[str, dict] = {
     "academy": {"stations": [st("开课", "notes"), st("排课表", "notes"), st("发教材", "notes"), st("上岗", "notes")],
                 "skills": [], "tools": [], "from": [["market", "notes"]], "to": [["depot", "notes"], ["press", "notes"]],
                 "real": "用 skim 管理 skill：skill 都在 skim 的全局仓库（~/.skim/store），配置像 git config 一样分三层，窄的覆盖宽的——全局（~/.skim/skimconfig）、项目（Papertown 里这个项目的 .skim/config）、对话（~/.skim/sessions/papertown-<员工>.config）。算出来的 skill 链接进员工的 .papertown/skills，简报里列出每个 SKILL.md 的路径。"},
+    "exchange": {"stations": [st("登记线路", "notes"), st("接通", "energy"), st("转接", "notes"), st("挂断", "notes")],
+                 "skills": [], "tools": [], "from": [], "to": [["hatchery", "notes"], ["dock_arxiv", "notes"]],
+                 "real": "小镇的 MCP 总机：内置的 arXiv 码头、PAPERTOWN_MCP_CONFIG 里的，加上在这里添加的（数据目录的 mcp.json），每个 server 用 stdio 拉起，工具注册给员工，名字是 server.tool。可以随时接通、停用、重连；env 里写 ${变量名}，密钥留在 ~/.secrets.zsh。"},
     "genealogy": {"stations": [st("抽关系", "notes"), st("连边", "notes"), st("查族谱", "notes", "scout"), st("出报告", "notes")],
                   "skills": [], "tools": ["genealogy.expand"], "from": [["library", "notes"]], "to": [["hatchery", "notes"]],
                   "real": "论文关系图：默认是入馆时算出的相近关系；用 `papertown ingest --refs` 可以从 Semantic Scholar 补上真实引用。"},
@@ -225,6 +228,9 @@ class World:
         if t == "academy":
             sk = town.skim.status()
             return f"skim · 仓库里 {len(sk['store'])} 个 skill · {len(sk['envs'])} 个环境" if sk["ok"] else f"skim 未接入：{sk['note']}"
+        if t == "exchange":
+            info = town.mcp.info()
+            return f"{sum(1 for x in info if x['state'] == 'ok')}/{len(info)} 条线接通 · {sum(len(x['tools']) for x in info)} 个工具"
         if t == "customs":
             return f"已放行 {town.library.count()} 篇"
         if t == "dock_arxiv":

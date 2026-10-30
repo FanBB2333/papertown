@@ -1,8 +1,13 @@
-"""The skill academy: skills layered per project and conversation with skim."""
+"""The three configuration buildings: the skill academy (skim), the MCP exchange and the
+library's RAG settings."""
 
+import json
 import os
 import shutil
 import subprocess
+import sys
+import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +15,68 @@ from fastapi.testclient import TestClient
 from papertown.api import create_app
 
 from .conftest import make_settings
+
+ECHO = '''from mcp.server.mcpserver import MCPServer
+server = MCPServer("echo")
+
+@server.tool()
+def echo(text: str) -> str:
+    """Say it back."""
+    return text
+
+if __name__ == "__main__":
+    server.run()
+'''
+
+
+def wait_for(c, name, state, timeout=30):
+    end = time.time() + timeout
+    while time.time() < end:
+        s = next((x for x in c.get("/api/mcp").json()["servers"] if x["name"] == name), None)
+        if s and s["state"] == state:
+            return s
+        time.sleep(0.2)
+    raise AssertionError(f"{name} never got to {state}: {s}")
+
+
+def test_mcp_servers_are_added_switched_and_removed(tmp_path, monkeypatch):
+    script = tmp_path / "echo_server.py"
+    script.write_text(ECHO)
+    monkeypatch.setenv("ECHO_TOKEN", "from-the-environment")
+    app = create_app(make_settings(tmp_path))
+    with TestClient(app) as c:
+        town = app.state.town
+        r = c.post("/api/mcp/servers", json={"name": "echo", "command": sys.executable, "args": [str(script)], "env": {"TOKEN": "${ECHO_TOKEN}"}})
+        assert r.status_code == 200
+        s = wait_for(c, "echo", "ok")
+        assert s["source"] == "town" and s["env"] == ["TOKEN"] and s["tools"] == [{"name": "echo", "description": "Say it back."}]
+        assert "from-the-environment" not in r.text  # only the names of env entries are sent
+        assert town.mcp.call("echo", "echo", {"text": "hi"}) == "hi"
+        saved = json.loads((tmp_path / "var" / "mcp.json").read_text())
+        assert saved["mcpServers"]["echo"]["env"] == {"TOKEN": "${ECHO_TOKEN}"}
+
+        c.post("/api/mcp/servers/echo/toggle", json={"enabled": False})
+        assert wait_for(c, "echo", "off")["tools"] == [] and "echo_echo" not in town.tools.names()
+        c.post("/api/mcp/servers/echo/toggle", json={"enabled": True})
+        wait_for(c, "echo", "ok")
+
+        assert c.post("/api/mcp/servers", json={"name": "1bad", "command": "x"}).status_code == 400
+        assert c.delete("/api/mcp/servers/echo").status_code == 200
+        assert all(x["name"] != "echo" for x in c.get("/api/mcp").json()["servers"])
+        assert "exchange" in [p["type"] for p in c.get("/api/world").json()["placements"]]
+
+
+def test_rag_settings_bound_and_persist(tmp_path):
+    s = make_settings(tmp_path)
+    with TestClient(create_app(s)) as c:
+        v = c.post("/api/rag", json={"top_k": 99, "candidates": 3}).json()
+        assert v["opts"]["top_k"] == 30 and v["opts"]["candidates"] == 5 and v["embed"]["configured"] is False
+        hits = c.get("/api/rag/search", params={"q": "sparse attention"}).json()
+        assert hits["method"] == "coverage" and len(hits["hits"]) <= 30
+        assert c.get("/api/rag/search", params={"q": " "}).status_code == 400
+    with TestClient(create_app(s)) as c:  # read back after a restart
+        assert c.get("/api/rag").json()["opts"]["top_k"] == 30
+
 
 SKIM = os.environ.get("PAPERTOWN_TEST_SKIM") or shutil.which("skim")
 

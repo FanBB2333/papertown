@@ -40,7 +40,7 @@ class Town:
         self.skills = SkillRegistry(self.s.skills_dir)
         self.provider = make_provider(self.s)
         embedder = Embedder(self.s.embed_base_url, self.s.embed_api_key, self.s.embed_model) if self.s.embed_model else None
-        self.library = Library(self.db, embedder)
+        self.library = Library(self.db, embedder, self.s.data_dir / "rag.json")
         self.genealogy = Genealogy(self.db, self.library)
         self.depots = Depots(self.db)
         self.bank = Bank(self.db, self.bus, self.s.weekly_budget)
@@ -217,11 +217,11 @@ class Town:
         register_skill_tools(reg)
 
         def library_search(ctx: ToolCtx, a: dict):
-            return self.library.search(a["query"], int(a.get("top_k") or 8), a.get("since"))
+            return self.library.search(a["query"], int(a.get("top_k") or 0) or None, a.get("since"))
 
         reg.add(Tool("library_search", "library.search", "RAG",
                      "检索图书馆（论文库，英文）。返回标题、摘要片段和与 query 的相似度 similarity（0~1）。",
-                     obj(["query"], query=s("英文关键词或短语"), top_k=n("返回几篇，默认 8"), since=s("只看这个日期之后的，如 2025-01-01")),
+                     obj(["query"], query=s("英文关键词或短语"), top_k=n("返回几篇，默认按图书馆里的设置"), since=s("只看这个日期之后的，如 2025-01-01")),
                      library_search, lambda v: f"命中 {len(v['hits'])} 篇（{v['method']}）", arg="query"))
 
         def paper_get(ctx: ToolCtx, a: dict):
