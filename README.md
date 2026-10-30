@@ -13,7 +13,9 @@
 
 顶栏的「平面 | 3D 漫游」把同一座小镇切到 3D，用第一人称在里面走。镜头先停在地图的同一个角度，再落到你站的地方；回到平面时从你头顶升回地图的视角，人还站在原处。3D 里鼠标像第一人称游戏那样锁在画面中间：移动鼠标转视角，WASD 走、Shift 跑、←/→ 转身，准星对准建筑点一下或按 E 进去（站在门口时 E 也能进），M 回到平面，Esc 放开鼠标，再点一下画面继续。鼠标放开时，右下角的小地图点一下就过去，点建筑就到它门口。3D 小镇由同一份建筑画稿（`design/src/sprites.js`）生成，three.js 只在第一次打开 3D 时加载。地址后面加 `#3d` 直接进 3D。画面右下角是你的手，像方块游戏里那样握着一支铅笔：走路时跟着摆，转头时稍微落后一点，点击时挥一下。
 
-顶栏的「设置」（或按 <kbd>,</kbd>）打开完整的设置页：动画（完整 / 柔和）、纸纹浓淡、打开时先看平面还是 3D；平面地图的顺滑缩放、滚轮速度、建筑名字显示多少；3D 的鼠标灵敏度、上下反转、视野、手、走路晃动、画质（低画质不画阴影）、建筑名字和小地图；小镇员工用的模型；Paseo 和本机 pi 的连接状态；展示模式的样例项目；以及全部快捷键。这些设置存在浏览器里，模型的切换只在这次运行里有效。
+顶栏的「设置」（或按 <kbd>,</kbd>）打开完整的设置页：界面语言（English / 简体中文 / 繁體中文，默认 English）、动画（完整 / 柔和）、纸纹浓淡、打开时先看平面还是 3D；平面地图的顺滑缩放、滚轮速度、建筑名字显示多少；3D 的鼠标灵敏度、上下反转、视野、手、走路晃动、画质（低画质不画阴影）、建筑名字和小地图；小镇员工用的模型；Paseo 和本机 pi 的连接状态；展示模式的样例项目；以及全部快捷键。这些设置存在浏览器里，模型的切换只在这次运行里有效。
+
+界面文字在源码里写的是简体中文。前端自己的文字用 `tr('…')` 包起来，英文在 `web/src/i18n/en.json` 里按中文查；服务器发来的文字（建筑名、工序、状态、提示）在 `web/src/api.ts` 收到时用同一本词典翻译，带变量的句子按 `{0}`、`{1}` 模板匹配。繁体用 OpenCC 从简体转换（台湾用语）。员工写的内容（对话、草稿、论文）不翻译，繁体模式下只转字形。新加的文字跑一下 `cd web && pnpm i18n:missing`，列出还没有英文的 `tr()` 字符串；服务器新加的句子要手动写进 `en.json`。
 
 ```
 assets/   建筑素材与 manifest（design/src/sprites.js 生成）
@@ -72,6 +74,7 @@ uv run papertown demo "让 VLA 模型用结构化的场景图做长程规划"
 | `PAPERTOWN_SAMPLES=0` | 离线模式下不自动放入样例项目 |
 | `PAPERTOWN_NVIDB=0`、`PAPERTOWN_NVIDB_BIN` | 关掉 nvidb 显卡读取；nvidb 的路径（默认在 PATH 上找） |
 | `PAPERTOWN_PROJECTS` | 本地项目清单的位置，默认数据目录下的 `projects.json` |
+| `PAPERTOWN_SKIM_BIN` | skim 的路径（默认在 PATH 上找），技能学堂用它按项目、按对话配置 skill |
 
 完整列表见 [`.env.example`](.env.example) 和 `server/papertown/config.py`。
 
@@ -115,6 +118,32 @@ uv run papertown demo "让 VLA 模型用结构化的场景图做长程规划"
 - 这条线不走流水线，也不花预算；前四道工序记为已完成，写作工序在有论文仓库时记为进行中。
 
 两个仓库 Papertown 只读：git 命令带 `--no-optional-locks`，不往里写任何文件。给这样的项目配的代码员工和写作员工会直接在仓库里工作，改动是真的；它们的说明（`AGENTS.md`）和 `pt` 工具放在 Papertown 自己的项目目录里，简报会提醒它们先看 `git status`、提交和推送前问你。
+
+## 技能学堂、接线局和图书馆：小镇的配置
+
+小镇中央广场上的两座建筑和图书馆是配置用的房间，点进去就能改，改完立刻生效。
+
+### 技能学堂（skills，用 skim）
+
+[skim](https://github.com/FanBB2333/skim) 把本机所有 skill 收在一个仓库里（`~/.skim/store`，第一次用先 `skim init`）。技能学堂按项目、按对话配置用哪些 skill，配置像 `git config` 一样分三层，窄的一层覆盖宽的：
+
+| 层 | 文件 | 管什么 |
+| --- | --- | --- |
+| 全局 | `~/.skim/skimconfig` | 本机所有项目和对话 |
+| 项目 | `server/var/projects/<项目>/.skim/config` | 这个项目里的每段对话（接入的本地项目也放在这里，不写进你的仓库） |
+| 对话 | `~/.skim/sessions/papertown-<员工>.config` | 只管这一个员工 |
+
+每一层可以选一个起始环境（`core.env`，比如 skim init 建的 `base`），再逐个打开或关掉 skill（`skill.<名字>.enabled`）；在这一层没说的沿用上一层。房间里每个 skill 都标着是哪一层定的，右边列出三层的文件内容，和 `skim config --list --show-origin` 一样。算出来的 skill 链接进员工的 `.papertown/skills/`，简报里会列出每个 `SKILL.md` 的路径，Claude Code、Codex、pi 都按这个读。仓库和印刷厂的员工房间右侧有「这段对话的 skill」。
+
+同样的配置也能在终端里改：`skim config --project --project-dir server/var/projects/line_1 skill.<名字>.enabled true`、`skim resolve --project-dir … --session-id papertown-coder-line_1`。
+
+### 接线局（MCP）
+
+小镇接的每个 MCP server 是一条线：内置的 arXiv 码头、`PAPERTOWN_MCP_CONFIG` 里的，以及在这里添加的（存在数据目录的 `mcp.json`，Claude Desktop 的格式）。每条线显示接通状态和它给员工的工具，可以随时停用、重连；在这里添加的还能修改和删除。环境变量写成 `${变量名}`，启动时从环境里取，密钥不落进文件。房间右侧有把 Papertown 自己作为 MCP server 接到别的 agent 上的配置。
+
+### 图书馆（RAG）
+
+馆藏统计、检索设置和试检索台：默认返回几篇、全文召回多少篇候选再打分、配了 embeddings 时是否用向量排序（存在数据目录的 `rag.json`）。试检索会显示检索词怎么扩展、每篇按什么排的、命中了哪些词。
 
 ## 仓库和印刷厂里的员工
 
