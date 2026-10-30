@@ -114,6 +114,24 @@ export class Pen3 extends Pen {
     this.geom(g, m);
   }
 
+  // a box in three's own units and axes (y up), for the parts that exist only in 3D
+  block(x: number, y: number, z: number, w: number, h: number, d: number, m: string | null, ink = true) {
+    const c: V3[] = [[x, y, z], [x + w, y, z], [x + w, y, z + d], [x, y, z + d], [x, y + h, z], [x + w, y + h, z], [x + w, y + h, z + d], [x, y + h, z + d]];
+    for (const f of [[0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1], [3, 2, 6, 7], [0, 3, 7, 4], [1, 5, 6, 2]]) this.face(f.map(i => c[i]), m, false);
+    if (ink) for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) this.edge(c[a], c[b]);
+  }
+
+  // a round bar from a to b: pipes, rails, legs, rollers
+  tube(a: V3, b: V3, r: number, m: string, seg = 14, ink = false) {
+    const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length();
+    if (len < 1e-6) return;
+    const g = new THREE.CylinderGeometry(r, r, len, seg);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+    this.geom(g, m);
+    if (ink) this.edge(a, b);
+  }
+
   // ---------- the Pen's calls ----------
 
   override poly(pts: number[][], cls: string) {

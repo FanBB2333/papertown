@@ -1,6 +1,6 @@
 // You, walking the town: a small figure on the map moved with WASD or the arrow keys.
 // It cannot walk through buildings or into the sea, the camera follows it, and next
-// to a building a hint offers E (or Enter / Space) to go inside.
+// to a building a hint offers F (or E / Enter / Space) to go inside, as F does in 3D.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { iso } from '@design/sprites.js';
@@ -157,7 +157,7 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
       if (!opts.current.active || typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       const d = KEYS[e.code];
       if (d) { keys.current.add(d); e.preventDefault(); return; }
-      if ((e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') && nearRef.current) {
+      if (['KeyF', 'KeyE', 'Enter', 'Space'].includes(e.code) && nearRef.current) {
         e.preventDefault();
         keys.current.clear();
         opts.current.onEnter(nearRef.current.id);

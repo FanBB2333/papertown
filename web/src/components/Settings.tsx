@@ -115,6 +115,9 @@ function Walk({ s }: { s: S }) {
       <Row label={tr('建筑名字')} desc={tr('悬在建筑上方的名字')}>
         <Toggle value={s.tags3d} onChange={set('tags3d')} />
       </Row>
+      <Row label={tr('全屏漫游')} desc={tr('进入 3D 时自动全屏；开着面板时 Esc 先关面板，没有面板时退出全屏；再点画面继续时回到全屏')}>
+        <Toggle value={s.fullscreen3d} onChange={set('fullscreen3d')} />
+      </Row>
       <Row label={tr('小地图')} desc={tr('右下角的小地图，点一下就过去')}>
         <Toggle value={s.minimap} onChange={set('minimap')} />
       </Row>
@@ -204,9 +207,12 @@ function Demo({ hud }: { hud: Hud | null }) {
 }
 
 const KEYS: [string, string][] = [
-  [tr('W A S D / 方向键'), tr('走动（3D 里 ←/→ 转身）')], ['Shift', tr('3D 里跑')], [tr('E / Enter / 空格'), tr('进门口或准星对着的建筑')],
-  [tr('鼠标'), tr('3D 里转视角；平面上拖动地图、滚轮缩放')], [tr('点击'), tr('平面上进建筑；3D 里进准星对着的建筑')],
-  ['M', tr('3D 里回到平面')], ['Esc', tr('放开鼠标 / 关闭对话 / 回到小镇 / 关闭设置')], [',', tr('打开设置')],
+  [tr('W A S D / 方向键'), tr('走动（3D 里 ←/→ 转身）')], ['Shift', tr('3D 里跑')],
+  [tr('空格'), tr('3D 里跳；连按两下起飞或落地，飞行时按住上升')], ['Ctrl / C', tr('3D 里下蹲，蹲着走到边上不会掉下去；飞行时下降')],
+  ['F', tr('进门口或准星对着的建筑；在建筑里打开准星对着的设备')],
+  [tr('鼠标'), tr('3D 里转视角；平面上拖动地图、滚轮缩放')], [tr('点击'), tr('平面上进建筑；3D 里和 F 一样')],
+  ['V', tr('3D 里切换第一 / 第三人称')], ['T', tr('3D 里切换白天 / 夜晚')],
+  ['M', tr('3D 里回到平面')], ['Esc', tr('放开鼠标（全屏时同时退出全屏）/ 关闭对话 / 回到小镇 / 关闭设置')], [',', tr('打开设置')],
 ];
 
 export function SettingsPanel({ open, hud, onClose }: { open: boolean; hud: Hud | null; onClose: () => void }) {

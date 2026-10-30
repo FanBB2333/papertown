@@ -46,7 +46,7 @@ declare module '@design/sprites.js' {
   }
   export function handDrawn(on?: boolean): void;
   export const ITEMS: Record<string, { name: string }>;
-  export const WORKERS: Record<string, { name: string }>;
+  export const WORKERS: Record<string, { name: string; rep: string; accent: string; mark: string }>;
   export function spriteSVG(type: string, o?: { label?: string | null; accent?: string | null }): { html: string };
   export function itemSVG(key: string): string;
   export function workerSVG(key: string): string;

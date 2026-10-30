@@ -21,6 +21,7 @@ export interface Settings {
   hand: boolean; // your hand and pencil in view
   bob: boolean; // the view sways a little as you walk
   quality: 'low' | 'mid' | 'high';
+  fullscreen3d: boolean; // the walk goes full screen
   tags3d: boolean; // building names over the town
   minimap: boolean;
 }
@@ -28,7 +29,7 @@ export interface Settings {
 export const DEFAULTS: Settings = {
   motion: 'full', grain: 0.5, start: '2d',
   smoothMap: true, zoomSpeed: 1, mapLabels: 'key', walkHint: true,
-  sensitivity: 1, invertY: false, fov: 68, hand: true, bob: true, quality: 'high', tags3d: true, minimap: true,
+  sensitivity: 1, invertY: false, fov: 68, hand: true, bob: true, quality: 'high', fullscreen3d: true, tags3d: true, minimap: true,
 };
 
 const KEY = 'pt-settings';

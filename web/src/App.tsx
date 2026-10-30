@@ -16,6 +16,7 @@ import { StatusView } from './components/StatusView';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { getSettings, useSettings } from './settings';
 import { DEMO } from './demo';
+import { enterFull, holdEscape, leaveFull } from './fullscreen';
 import { tr } from './i18n';
 
 const Town3D = lazy(() => import('./components/Town3D'));
@@ -189,6 +190,9 @@ export function App() {
     return () => removeEventListener('keydown', key);
   }, [sheet, chatOpen, settingsOpen, leaveRoom]);
 
+  // over the 3D walk in full screen, Esc closes what is open before it leaves full screen
+  useEffect(() => holdEscape(dim === '3d' && (!!sheet || chatOpen || settingsOpen)), [dim, sheet, chatOpen, settingsOpen]);
+
   // anything with data-open opens that building (stations, goods, list rows); data-line picks the project
   function onRootClick(e: React.MouseEvent) {
     const t = e.target as Element;
@@ -203,7 +207,10 @@ export function App() {
   // which the browser requires); from a link there is no click, and the town asks for one
   const go3d = useCallback((lock = true) => {
     if (dim !== '2d') return;
-    if (lock) (root.current?.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => {});
+    if (lock) {
+      enterFull();
+      (root.current?.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => {});
+    }
     setChatOpen(false); // the chat and the settings belong to the view they were opened in
     setSettingsOpen(false);
     setFrom3d(mapApi.current?.view() ?? null);
@@ -212,6 +219,7 @@ export function App() {
   }, [dim]);
   const go2d = useCallback(() => {
     if (dim !== '3d') return;
+    leaveFull();
     setChatOpen(false);
     setSettingsOpen(false);
     setDim('to2d');
@@ -243,11 +251,11 @@ export function App() {
         <Suspense fallback={null}>
           <Town3D placements={world.placements} notes={notes} phase={PHASE[dim]} from={from3d}
             active={walking && dim === '3d'}
-            onOpen={(id, at) => openRoom(id, null, at)}
+            onOpen={(id, at, line) => openRoom(id, line ?? null, at)}
             onCovered={() => setDim(d => d === 'to3d' ? '3d' : d)}
             onLeft={v => { mapApi.current?.setView(v); setDim('2d'); }}
             onLeave={go2d}
-            onFail={msg => { push(msg); setWant3d(false); setDim('2d'); }} />
+            onFail={msg => { push(msg); leaveFull(); setWant3d(false); setDim('2d'); }} />
         </Suspense>
       )}
       <StatusView tick={tick} active={view === 'status'} />
@@ -289,7 +297,7 @@ export function App() {
       )}
 
       <button className="newidea btn pri w-only" onClick={() => openChat({ kind: 'idea' }, true)}><Item k="egg" />{tr('放入一颗新 idea')}</button>
-      {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('走动 · 到门口按')} <kbd>E</kbd> {tr('进去 · 也可以直接点建筑')}</div>}
+      {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('走动 · 到门口按')} <kbd>F</kbd> {tr('进去 · 也可以直接点建筑')}</div>}
 
       <Drawer open={chatOpen} tab={tab} onTab={setTab} onClose={() => setChatOpen(false)} messages={messages} trace={trace}
         lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer} focusKey={focusKey}
