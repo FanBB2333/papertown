@@ -9,7 +9,8 @@
  *   - pi.on(...) events are batched and posted to the server
  *   - messages typed in the app are long-polled from the server and injected with
  *     pi.sendUserMessage(), as a follow-up while pi is busy
- *   - pi.registerTool() adds the Papertown tools (project brief; job submission for coders)
+ *   - pi.registerTool() adds the Papertown tools (project brief; job submission for coders;
+ *     for the console's assistant: the page you look at, reading, asking, showing and doing)
  *   - the model, thinking level, session and context usage are reported as `state`, and
  *     slash commands typed in the app arrive as `cmd`: the ones pi's extension API can do
  *     (model, thinking, compact, new, clone, name, session, reload) run here; extension
@@ -380,6 +381,105 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		send({ t: "bye" });
 		await flush();
 	});
+
+	// the console's assistant: the page you are looking at, any endpoint to read, and asking you,
+	// showing you and doing for you (each action waits for you to allow it in the sidebar)
+	if (ROLE === "assistant") {
+		const text = (t: string, details?: unknown) => ({ content: [{ type: "text" as const, text: t }], details });
+		pi.registerTool({
+			name: "papertown_page",
+			label: "The user's page",
+			description:
+				"What the user is looking at in the Papertown console right now: the project, the panel with its settings and what is open, what they pointed at, where each part of the panel's data comes from (files, nvidb commands, Papertown endpoints) and the text the panel shows.",
+			parameters: Type.Object({}),
+			async execute() {
+				const r = await call("/page");
+				return text(r.text, r);
+			},
+		});
+		pi.registerTool({
+			name: "papertown_get",
+			label: "Read Papertown",
+			description:
+				"GET one of Papertown's endpoints and return its JSON, e.g. /api/lines/line_6, /api/jobs?line_id=line_6, /api/gpus or /api/lines/line_6/data. Read only.",
+			parameters: Type.Object({ path: Type.String({ description: "The endpoint, starting with /api/" }) }),
+			async execute(_id, params) {
+				if (!params.path.startsWith("/api/")) throw new Error("path must start with /api/");
+				const r = await fetch(SERVER + params.path, { signal: AbortSignal.timeout(30000) });
+				const body = await r.text();
+				if (!r.ok) throw new Error(`Papertown ${r.status}: ${clip(body, 300)}`);
+				return text(clip(body, 40000));
+			},
+		});
+		pi.registerTool({
+			name: "papertown_brief",
+			label: "Project brief",
+			description: "A project's brief: its idea, method draft, experiments and results, review feedback and the state of its repositories. Defaults to the project on the user's screen.",
+			parameters: Type.Object({ line: Type.Optional(Type.String({ description: "The project, as line_6 or #6" })) }),
+			async execute(_id, params) {
+				const r = await call(`/brief${params.line ? `?line=${encodeURIComponent(params.line)}` : ""}`);
+				return text(r.text, r);
+			},
+		});
+		pi.registerTool({
+			name: "papertown_ask",
+			label: "Ask the user",
+			description:
+				"Ask the user something in the sidebar: give choices to click, or set point to ask them to click the part of the page they mean. Their answer comes as the next message; end your turn after asking.",
+			parameters: Type.Object({
+				question: Type.String(),
+				choices: Type.Optional(Type.Array(Type.String())),
+				point: Type.Optional(Type.Boolean({ description: "Ask them to point at the page" })),
+			}),
+			async execute(_id, params) {
+				const r = await call("/ask", { method: "POST", body: JSON.stringify(params) });
+				return text(r.text, r);
+			},
+		});
+		pi.registerTool({
+			name: "papertown_show",
+			label: "Show the user",
+			description:
+				"Open something in the user's console or light up part of the page: mod opens a panel (overview, survey, code, exp, data, paper, agents, skills, mcp, rag), line a project, file a file in the code panel (code:path or code:path:line), job a job's details in the experiments panel, ref a part of the page (refs are listed in papertown_page).",
+			parameters: Type.Object({
+				mod: Type.Optional(Type.String()),
+				line: Type.Optional(Type.String()),
+				file: Type.Optional(Type.String()),
+				job: Type.Optional(Type.String()),
+				ref: Type.Optional(Type.String()),
+			}),
+			async execute(_id, params) {
+				const r = await call("/show", { method: "POST", body: JSON.stringify(params) });
+				return text(r.text, r);
+			},
+		});
+		pi.registerTool({
+			name: "papertown_actions",
+			label: "What can be done",
+			description: "The actions papertown_do can ask for, with their arguments.",
+			parameters: Type.Object({}),
+			async execute() {
+				const r = await call("/actions");
+				return text(r.text, r);
+			},
+		});
+		pi.registerTool({
+			name: "papertown_do",
+			label: "Ask to do",
+			description:
+				"Ask to do something in the town (see papertown_actions). It waits in the sidebar until the user allows or denies it; the outcome comes back as an <event> message. End your turn after asking.",
+			parameters: Type.Object({
+				action: Type.String({ description: "e.g. job.cancel" }),
+				args: Type.Optional(Type.Record(Type.String(), Type.Any())),
+				why: Type.String({ description: "Why, in a sentence the user reads on the card" }),
+			}),
+			async execute(_id, params) {
+				const r = await call("/act", { method: "POST", body: JSON.stringify({ ...params, args: params.args ?? {} }) });
+				return text(r.text, r);
+			},
+		});
+		return;
+	}
 
 	pi.registerTool({
 		name: "papertown_project",

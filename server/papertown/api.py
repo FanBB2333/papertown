@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
+from .assistant import ID as ASSISTANT, ActError
 from .config import SERVER_DIR, Settings
 from .library import RAG_LIMITS
 from .farm import FarmError, summarize
@@ -118,6 +119,40 @@ class JobIn(BaseModel):
 
 class BridgeIn(BaseModel):
     events: list[dict]
+
+
+class PageIn(BaseModel):
+    page: dict
+
+
+class AssistantSayIn(BaseModel):
+    text: str = Field(min_length=1, max_length=20000)
+    page: dict | None = None
+
+
+class DecideIn(BaseModel):
+    allow: bool
+
+
+class AskIn(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    choices: list[str] = []
+    point: bool = False
+
+
+class ShowIn(BaseModel):
+    mod: str | None = None
+    line: str | None = None
+    file: str | None = None
+    job: str | None = None
+    ref: str | None = None
+    note: str | None = None
+
+
+class ActIn(BaseModel):
+    action: str = Field(min_length=1, max_length=40)
+    args: dict = {}
+    why: str = ""
 
 
 def job_text(j: dict, log: str = "") -> str:
@@ -464,6 +499,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         agents(town.agents.abort, agent_id)
         return {"ok": True}
 
+    # ---------- the console's assistant, in the sidebar ----------
+
+    def assistant(fn, *args):
+        try:
+            return fn(*args)
+        except (AgentError, ActError) as e:
+            raise HTTPException(400, str(e)) from e
+
+    @app.get("/api/assistant")
+    def assistant_view():
+        return town.assistant.view()
+
+    @app.post("/api/assistant/page")
+    def assistant_page(body: PageIn):
+        town.assistant.set_page(body.page)
+        return {"ok": True}
+
+    @app.post("/api/assistant/say")
+    def assistant_say(body: AssistantSayIn):
+        return assistant(town.assistant.say, body.text, body.page)
+
+    @app.post("/api/assistant/acts/{event_id}")
+    def assistant_decide(event_id: int, body: DecideIn):
+        return assistant(town.assistant.decide, event_id, body.allow)
+
+    @app.post("/api/assistant/new")
+    def assistant_new():
+        return assistant(town.assistant.reset)
+
     # ---------- the bridge inside each pi ----------
 
     def bridged(agent_id: str, token: str | None) -> dict:
@@ -487,9 +551,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"messages": town.agents.take(agent_id)}
 
     @app.get("/api/bridge/{agent_id}/brief")
-    def bridge_brief(agent_id: str, x_papertown_token: str | None = Header(default=None)):
+    def bridge_brief(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
+        if a["role"] == ASSISTANT:  # no project of its own: the one named, else the one on your screen
+            return {"text": assistant(town.assistant.brief, line)}
         return {"text": town.brief(a["line_id"], a["role"])}
+
+    def helper(agent_id: str, token: str | None) -> dict:
+        a = bridged(agent_id, token)
+        if a["role"] != ASSISTANT:
+            raise HTTPException(403, "只有小助手能用")
+        return a
+
+    @app.get("/api/bridge/{agent_id}/page")
+    def bridge_page(agent_id: str, x_papertown_token: str | None = Header(default=None)):
+        helper(agent_id, x_papertown_token)
+        return {"text": town.assistant.page_text()}
+
+    @app.get("/api/bridge/{agent_id}/actions")
+    def bridge_actions(agent_id: str, x_papertown_token: str | None = Header(default=None)):
+        helper(agent_id, x_papertown_token)
+        return {"text": town.assistant.actions_text()}
+
+    @app.post("/api/bridge/{agent_id}/ask")
+    def bridge_ask(agent_id: str, body: AskIn, x_papertown_token: str | None = Header(default=None)):
+        helper(agent_id, x_papertown_token)
+        town.assistant.ask(body.question, body.choices, body.point)
+        return {"text": "已经在侧边栏里问了用户。他的回答会作为下一条消息发来，先结束这一轮。"}
+
+    @app.post("/api/bridge/{agent_id}/show")
+    def bridge_show(agent_id: str, body: ShowIn, x_papertown_token: str | None = Header(default=None)):
+        helper(agent_id, x_papertown_token)
+        t = assistant(town.assistant.show, body.model_dump())
+        return {"text": "已经在用户的页面上打开：" + "，".join(f"{k} {v}" for k, v in t.items())}
+
+    @app.post("/api/bridge/{agent_id}/act")
+    def bridge_act(agent_id: str, body: ActIn, x_papertown_token: str | None = Header(default=None)):
+        helper(agent_id, x_papertown_token)
+        e = assistant(town.assistant.propose, body.action, body.args, body.why)
+        return {"id": e["id"], "text": f"已经请用户确认「{e['data']['title']}」。他点了允许或拒绝之后，结果会作为一条 <event> 消息发给你；先告诉他你请求了什么，然后结束这一轮。"}
 
     @app.post("/api/bridge/{agent_id}/jobs")
     def bridge_submit(agent_id: str, body: JobIn, x_papertown_token: str | None = Header(default=None)):

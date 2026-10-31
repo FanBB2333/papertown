@@ -1,6 +1,7 @@
 """Agents with a terminal of their own: one pi per project in the depot (writes the code,
-tests it, submits experiments) and one in the press (writes the paper). The farm has a
-built-in monitor per project instead (farm.py), which needs no model.
+tests it, submits experiments) and one in the press (writes the paper), and the console's
+assistant in the sidebar (assistant.py), one for the whole town. The farm has a built-in
+monitor per project instead (farm.py), which needs no model.
 
 An agent runs in one of two places:
 
@@ -42,8 +43,10 @@ ROLES = {
     "coder": {"building": "depot", "name": "代码员工", "title": "写代码的 agent"},
     "writer": {"building": "press", "name": "写作员工", "title": "写论文的 agent"},
     "monitor": {"building": "farm", "name": "看田员", "title": "看实验进度的员工"},
+    "assistant": {"building": "console", "name": "小助手", "title": "中控屏侧边栏里帮你看页面、办事的 agent"},
 }
-PI_ROLES = ("coder", "writer")
+PI_ROLES = ("coder", "writer")  # one per project
+CHAT_ROLES = (*PI_ROLES, "assistant")  # the ones you talk to
 
 # pi's built-in commands that open its terminal UI (selectors, login, clipboard): typed into tmux
 TUI_COMMANDS = {"settings", "scoped-models", "export", "import", "share", "bug", "changelog", "hotkeys",
@@ -188,7 +191,7 @@ class Agents:
         return out
 
     def ensure(self, line_id: str, role: str) -> dict:
-        if role not in ROLES:
+        if role not in ROLES or role == "assistant":
             raise AgentError(f"没有这个岗位：{role}")
         line = self.db.one("select * from lines where id = ?", line_id)
         if not line:
@@ -204,7 +207,9 @@ class Agents:
         self._publish(agent_id)
         return self.get(agent_id)
 
-    def _workdir(self, line_id: str, role: str) -> Path | None:
+    def _workdir(self, line_id: str | None, role: str) -> Path | None:
+        if role == "assistant":
+            return self.town.assistant.dir
         linked = self.town.linked.workdir(line_id, role)  # a project of your own: its repository itself
         if linked:
             return linked
@@ -217,10 +222,10 @@ class Agents:
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    def _home(self, line_id: str, role: str) -> Path:
+    def _home(self, line_id: str | None, role: str) -> Path:
         """Where Papertown keeps an agent's own files (its guide, the pt tool). That is its
         working directory, except in a linked repository, which Papertown does not write into."""
-        if self.town.linked.workdir(line_id, role):
+        if role != "assistant" and self.town.linked.workdir(line_id, role):
             d = self.s.projects_dir / line_id / role
             d.mkdir(parents=True, exist_ok=True)
             return d
@@ -244,6 +249,20 @@ class Agents:
         row["id"] = self.db.insert("agent_events", row)
         self.town.bus.publish("agent_event", event=row)
         return row
+
+    def record(self, agent_id: str, kind: str, data: dict) -> dict:
+        """An event of the agent's own kind: the assistant's questions and requests."""
+        return self._event(agent_id, kind, data)
+
+    def amend(self, event_id: int, data: dict) -> dict:
+        self.db.update("agent_events", {"id": event_id}, data=data)
+        row = self.db.one("select * from agent_events where id = ?", event_id)
+        self.town.bus.publish("agent_event", event=row)
+        return row
+
+    def detach(self, agent_id: str) -> None:
+        """Set an agent's Paseo conversation aside (it stays in Paseo); the next start makes another."""
+        self._set(agent_id, runtime=None, ext_id=None, status="stopped", model=None)
 
     def events(self, agent_id: str, after: int = 0, limit: int = 400) -> list[dict]:
         rows = self.db.q("select * from agent_events where agent_id = ? and id > ? order by id desc limit ?", agent_id, after, limit)
@@ -277,6 +296,8 @@ class Agents:
         return text
 
     def _guide_text(self, a: dict, runtime: str) -> str:
+        if a["role"] == "assistant":
+            return self.town.assistant.guide(runtime)
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
         info = self.town.linked.summary(a["line_id"]) if self.town.linked.of(a["line_id"]) else None
         if not info:
@@ -303,12 +324,14 @@ class Agents:
         link = tools / "link.json"
         link.write_text(json.dumps({"url": self.s.url, "agent": a["id"], "token": a["token"]}), encoding="utf-8")
         link.chmod(0o600)
+        if a["role"] == "assistant":
+            self.town.assistant.tools(tools)
         return tools / "pt"
 
     def start(self, agent_id: str, runtime: str | None = None, provider: str | None = None,
               model: str | None = None, thinking: str | None = None) -> dict:
         a = self.get(agent_id)
-        if not a or a["role"] not in PI_ROLES:
+        if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")
         if (runtime or a.get("runtime")) == "paseo":
             return self._start_paseo(a, provider, model, thinking)
@@ -317,6 +340,8 @@ class Agents:
         if self.alive(a):
             return self.public(a)
         self._guide(a, "pi")
+        if a["role"] == "assistant":
+            self._tools(a)  # its page and its list of actions sit next to pt
         cwd = Path(a["cwd"])
         sessions = self.s.data_dir / "agents" / agent_id
         sessions.mkdir(parents=True, exist_ok=True)
@@ -363,22 +388,27 @@ class Agents:
         st = self.paseo.status(fresh=True)
         if not st["ok"]:
             raise AgentError(st["note"])
-        line = self.db.one("select * from lines where id = ?", a["line_id"])
         self._guide(a, "paseo")
-        if self.town.linked.of(a["line_id"]):
-            prompt = self._linked_intro(a, "paseo")
+        if a["role"] == "assistant":
+            title, prompt = "Papertown · 小助手", self.town.assistant.intro()
         else:
-            prompt = "这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
+            line = self.db.one("select * from lines where id = ?", a["line_id"])
+            title = f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}"
+            if self.town.linked.of(a["line_id"]):
+                prompt = self._linked_intro(a, "paseo")
+            else:
+                prompt = "这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
         try:
             r = self.paseo.create(
-                title=f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}", provider=provider, model=model,
+                title=title, provider=provider, model=model,
                 thinking=thinking, cwd=Path(a["cwd"]), prompt=prompt,
-                labels={"papertown": "1", "papertown.agent": a["id"], "papertown.line": a["line_id"], "papertown.role": a["role"]},
+                labels={"papertown": "1", "papertown.agent": a["id"], "papertown.line": a["line_id"] or "-", "papertown.role": a["role"]},
                 env={"PAPERTOWN_URL": self.s.url, "PAPERTOWN_AGENT": a["id"], "PAPERTOWN_AGENT_TOKEN": a["token"], "PAPERTOWN_AGENT_ROLE": a["role"]})
         except PaseoError as e:
             raise AgentError(str(e)) from e
         self._set(a["id"], runtime="paseo", ext_id=r["agentId"], status="working", model="/".join(x for x in (provider, model) if x))
-        self._event(a["id"], "note", {"text": f"在 Paseo 里启动了 {provider}{f' · {model}' if model else ''}，并发了项目简报。"})
+        sent = "说明" if a["role"] == "assistant" else "项目简报"
+        self._event(a["id"], "note", {"text": f"在 Paseo 里启动了 {provider}{f' · {model}' if model else ''}，并发了{sent}。"})
         self.watch()
         return self.public(self.get(a["id"]))
 
@@ -486,7 +516,7 @@ class Agents:
         return self.public(self.get(agent_id))
 
     def reconcile(self) -> None:
-        for a in self.db.q("select * from agents where role in ('coder', 'writer') and status != 'stopped' and coalesce(runtime, 'pi') = 'pi'"):
+        for a in self.db.q("select * from agents where role in ('coder', 'writer', 'assistant') and status != 'stopped' and coalesce(runtime, 'pi') = 'pi'"):
             if not self.alive(a):
                 self.db.update("agents", {"id": a["id"]}, status="stopped", updated_at=now())
         self.watch()
@@ -498,7 +528,7 @@ class Agents:
 
     def say(self, agent_id: str, text: str) -> dict:
         a = self.get(agent_id)
-        if not a or a["role"] not in PI_ROLES:
+        if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")
         text = text.strip()
         if not text:
@@ -575,6 +605,8 @@ class Agents:
         a = self.get(agent_id)
         if not a:
             raise AgentError("没有这个员工")
+        if a["role"] == "assistant":
+            raise AgentError("小助手不跟着某个项目，没有项目简报")
         if self.town.linked.of(a["line_id"]):  # in a linked repo the guide is not in AGENTS.md: send it along
             return self._linked_intro(a, "paseo" if a.get("runtime") == "paseo" else "pi")
         text = self.town.brief(a["line_id"], a["role"])
@@ -645,7 +677,8 @@ class Agents:
         cost = float(usage.get("cost") or 0)
         self.db.insert("ledger", {"ts": now(), "run_id": None, "line_id": a["line_id"], "provider": "pi", "model": model,
                                   "tokens_in": int(usage.get("input") or 0), "tokens_out": int(usage.get("output") or 0), "cost": cost})
-        self.db.x("update lines set spent = spent + ? where id = ?", cost, a["line_id"])
+        if a["line_id"]:  # the assistant belongs to no project
+            self.db.x("update lines set spent = spent + ? where id = ?", cost, a["line_id"])
         self.db.update("agents", {"id": agent_id}, cost=(a["cost"] or 0) + cost)
         self.town.bus.publish("bank", **self.town.bank.summary())
 

@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from .agents import Agents
+from .assistant import Assistant
 from .bank import Bank
 from .compute import Job, SimulatedPlant
 from .config import PROVIDERS, Settings
@@ -52,6 +53,7 @@ class Town:
         self.world = World(self)
         self.farm = Farm(self)
         self.agents = Agents(self)
+        self.assistant = Assistant(self)
         self.tools = ToolRegistry()
         self.mcp = McpHub(self)
         self.pipeline = Pipeline(self)
@@ -71,8 +73,10 @@ class Town:
         samples.maybe_seed(self)
         self.linked.sync()
         self.nvidb.start()
+        self.assistant.start()
 
     def stop(self) -> None:
+        self.assistant.stop()
         self.nvidb.stop()
         self.mcp.stop()
 
