@@ -70,8 +70,10 @@ class Town:
         self.mcp.start()
         samples.maybe_seed(self)
         self.linked.sync()
+        self.nvidb.start()
 
     def stop(self) -> None:
+        self.nvidb.stop()
         self.mcp.stop()
 
     # ---------- the town's own model ----------

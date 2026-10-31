@@ -85,6 +85,8 @@ class Settings:
     # nvidb's GPU queue, read only: the cards on your machines and their jobs ("0" turns it off)
     nvidb: bool = field(default_factory=lambda: _env("PAPERTOWN_NVIDB", "1") != "0")
     nvidb_bin: str = field(default_factory=lambda: _env("PAPERTOWN_NVIDB_BIN"))
+    # seconds between the main process's readings of it, in the background
+    nvidb_poll: float = field(default_factory=lambda: float(_env("PAPERTOWN_NVIDB_POLL", "10") or 10))
     # skim, the skill manager: skills layered per project and per conversation (see skim.py)
     skim_bin: str = field(default_factory=lambda: _env("PAPERTOWN_SKIM_BIN"))
     # your own projects, linked in from local repos (see linked.py); default: projects.json in the data dir

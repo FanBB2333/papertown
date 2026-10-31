@@ -31,12 +31,38 @@ QUEUE = {
 }
 
 
+# the queue's database further back: a live job again (the live reading wins), an old run of the project
+# found by its command, with a result and a secret in its environment, and someone else's
+HISTORY = [
+    {"id": 7, "name": "train", "state": "pending", "workdir": "/home/me/repos/proj-code"},
+    {"id": 3, "name": "ablation", "state": "completed", "node": "box", "gpu_ids": [0], "workdir": None, "submitter": "codex:x",
+     "command": "cd /home/me/repos/proj-code && python ablate.py", "result": {"acc": 0.91}, "env": {"SECRET": "x"},
+     "notes": "drop the local search", "elapsed_s": 120.0, "exit_code": 0,
+     "events": [{"id": 1, "ts": "2026-10-29T00:00:00+00:00", "kind": "job_started", "node": "box", "message": "pid 1 on GPU 0", "data": {}}]},
+    {"id": 2, "name": "other", "state": "failed", "workdir": "/data/other", "command": "python x.py"},
+]
+
+
 def fake_nvidb(tmp):
-    data = tmp / "queue.json"
+    data, hist = tmp / "queue.json", tmp / "history.json"
     data.write_text(json.dumps(QUEUE))
+    hist.write_text(json.dumps(HISTORY))
     exe = tmp / "nvidb"
-    exe.write_text(f"#!{sys.executable}\nimport sys\nassert sys.argv[1:] == ['queue', 'status', '--json', '--no-tick'], sys.argv\n"
-                   f"print(open({str(data)!r}).read())\n")
+    exe.write_text(f"""#!{sys.executable}
+import json, sys
+a = sys.argv[1:]
+hist = json.load(open({str(hist)!r}))
+if a == ['queue', 'status', '--json', '--no-tick']:
+    print(open({str(data)!r}).read())
+elif a[:4] == ['job', 'ls', '--json', '--no-tick'] and a[4] == '-n':
+    print(json.dumps({{'jobs': hist}}))
+elif a[:2] == ['job', 'show'] and a[3:] == ['--json', '--no-tick']:
+    j = next((x for x in hist if x['id'] == int(a[2])), None)
+    print(json.dumps(j or {{'error': 'no such job'}}))
+    sys.exit(0 if j else 1)
+else:
+    sys.exit('not a read: ' + ' '.join(a))
+""")
     exe.chmod(0o755)
     return exe
 
@@ -68,6 +94,11 @@ def test_gpus_and_a_linked_project(tmp_path):
         assert g["ok"] and g["summary"] == {"nodes": 1, "up": 1, "gpus": 2, "idle": 1, "room": 1, "free_mb": 27000, "total_mb": 49128}
         assert [x["state"] for x in g["nodes"][0]["gpus"]] == ["idle", "full"] and g["nodes"][0]["gpus"][0]["name"] == "RTX 4090"
         assert "hostname" not in g["nodes"][0] and all("env" not in j for j in g["jobs"])
+        # read in the background every few seconds: each card's trend, and since when each process has been seen
+        busy = g["nodes"][0]["gpus"][1]
+        assert g["poll_s"] == 10 and g["polled_at"] and busy["trend"][-1][1:] == [97, 20000]
+        assert busy["procs"] == [{"pid": 1, "user": "me", "name": "python", "mem_mb": 20000, "managed": True, "job_id": 7,
+                                  "job_name": "train", "seen_since": busy["procs"][0]["seen_since"], "earlier": True}]
         # the lanes of the machines shown, and the jobs waiting in them even when the job list leaves them out
         assert [(ln["name"], ln["running"], ln["queued"]) for ln in g["lanes"]] == [("box:1", [7], [10])]
         assert next(j for j in g["jobs"] if j["id"] == 10)["lane"] == "box:1" and g["pools"] == []
@@ -84,8 +115,16 @@ def test_gpus_and_a_linked_project(tmp_path):
         exp = next(x for x in line["stages"] if x["key"] == "exp")
         assert exp["status"] == "run" and "1 个在跑" in exp["note"]  # train and eval by workdir, proj-smoke by submitter
         board = c.get("/api/jobs", params={"line_id": line["id"]}).json()["jobs"]
-        assert {j["name"]: (j["status"], j["progress"]) for j in board} == {"train": ("running", 30), "eval": ("queued", 0), "proj-smoke": ("done", 100)}
+        assert {j["name"]: (j["status"], j["progress"]) for j in board} == {
+            "train": ("running", 30), "eval": ("queued", 0), "proj-smoke": ("done", 100), "ablation": ("done", 100)}
         assert c.get("/api/jobs/nvidb-7").json()["cwd"] == "/home/me/repos/proj-code"
+        # one job in full, with its events but never its environment; the run's result reaches the data
+        j = c.get("/api/nvidb/jobs/3").json()
+        assert j["result"] == {"acc": 0.91} and j["events"][0]["kind"] == "job_started" and "ablate.py" in j["command"]
+        assert "env" not in j and "SECRET" not in json.dumps(j)
+        assert c.get("/api/nvidb/jobs/99").status_code == 404
+        runs = c.get(f"/api/lines/{line['id']}/data").json()["runs"]
+        assert [(r["name"], r["result"]) for r in runs if r["result"]] == [("ablation", {"acc": 0.91})]
 
         refs = c.get(f"/api/lines/{line['id']}/papers").json()["references"]
         assert [(r["title"], r["url"]) for r in refs] == [("Merging Things", "https://arxiv.org/abs/2501.01234"),

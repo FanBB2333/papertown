@@ -267,5 +267,5 @@ class Workspace:
                                   else "raw" if any(x in ("data", "datasets") for x in parts) else "other",
                                   "mtime": (root / f["path"]).stat().st_mtime})
             files.sort(key=lambda f: -f["mtime"])
-        return {"meta": meta, "results": results, "runs": runs[:60], "files": files[:300]}
+        return {"meta": meta, "results": results, "runs": runs[:200], "files": files[:300]}
 

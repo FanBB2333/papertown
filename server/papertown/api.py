@@ -339,6 +339,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def gpus(fresh: bool = False):
         return town.nvidb.status(fresh)
 
+    @app.get("/api/nvidb/jobs/{job_id}")
+    def nvidb_job(job_id: int):
+        j = town.nvidb.show(job_id)
+        if not j:
+            raise HTTPException(404, "nvidb 里没有这个任务")
+        return j
+
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str, tail: int = 200):
         if job_id.startswith("nvidb-"):  # one of a linked project's jobs in nvidb's queue
