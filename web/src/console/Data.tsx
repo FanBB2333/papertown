@@ -1,22 +1,31 @@
-// The data panel: what the experiments were set up with (datasets, baselines, metrics, seeds),
-// the results they came to, each run's own result from nvidb, and the data files in the
-// repository, which open here as tables.
+// The data panel. What the experiments were set up with, in one line; the results, one small
+// chart per metric with ours picked out; what each nvidb run handed back, as cards, and one
+// measure across runs; the repository's result files, where files of the same name in
+// sibling folders (one per run or configuration) line up as one table, shaded by value and
+// sorted by any column; every file opening as a table; and every run, sortable.
 
-import { useMemo, useState } from 'react';
-import { api, type LineData } from '../api';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { api, type DataRun, type LineData } from '../api';
 import { tr } from '../i18n';
+import { Bars, StateTag, Tip, fmtNum, stOf, useTip, when } from './charts';
 import { Icon } from './icons';
-import { ago, base, bytes, dur, ext, useFetch } from './util';
+import { JobDrawer } from './JobDrawer';
+import { ago, base, bytes, dur, ext, flat, headlines, useFetch } from './util';
 
-interface Props { lineId: string; tick: number }
+interface Props { lineId: string; tick: number; onOpenFile: (path: string) => void }
 
 const KIND_NAME: Record<string, string> = { processed: tr('处理好的结果'), raw: tr('原始数据'), other: tr('其他') };
+const SETTING = /^(config|args|params|hparams|settings|cfg)\./i;
+const SCORE = /(overall|score|acc|pass@|f1|bleu|rouge|exact|mean|avg|win|success|reward|auc|recall|precision)/i;
 
 export function Data(p: Props) {
   const d = useFetch(() => api.data(p.lineId), p.lineId, p.tick);
-  const [pick, setPick] = useState<string | null>(null);
+  const [job, setJob] = useState<string | null>(null);
+  const [file, setFile] = useState<string | null>(null);
   if (!d.data) return <div className="cm-page"><p className="muted">{d.err || tr('加载中…')}</p></div>;
   const { meta, results, runs, files } = d.data;
+  const withResult = runs.filter(r => r.result && typeof r.result === 'object');
   const none = !results && !runs.length && !files.length && !meta.datasets.length;
   return (
     <div className="cm-page data">
@@ -24,101 +33,313 @@ export function Data(p: Props) {
         <p>{tr('方法设计定下数据集和指标，实验跑完后结果会出现在这里；代码仓库里的 results/、outputs/ 等目录也会列出来。')}</p></div>}
 
       {(meta.datasets.length > 0 || meta.metrics.length > 0) && (
-        <section className="cs meta">
-          <h3>{tr('元数据')}</h3>
-          <dl className="meta-kv">
-            {meta.datasets.length > 0 && <><dt>{tr('数据集')}</dt><dd>{[...new Set(meta.datasets)].map(x => <span key={x} className="chip">{x}</span>)}</dd></>}
-            {meta.baselines.length > 0 && <><dt>Baseline</dt><dd>{meta.baselines.map(x => <span key={x} className="chip">{x}</span>)}</dd></>}
-            {meta.metrics.length > 0 && <><dt>{tr('指标')}</dt><dd>{meta.metrics.map(x => <span key={x} className="chip">{x}</span>)}</dd></>}
-            <dt>{tr('规模')}</dt><dd className="small">{[meta.seeds != null && tr('{0} 个种子', meta.seeds), meta.gpu_hours != null && tr('约 {0} GPU 小时', meta.gpu_hours), meta.backend].filter(Boolean).join(' · ') || '—'}</dd>
-          </dl>
-        </section>
+        <div className="meta-line">
+          {meta.datasets.length > 0 && <span><em>{tr('数据集')}</em>{[...new Set(meta.datasets)].map(x => <span key={x} className="chip">{x}</span>)}</span>}
+          {meta.baselines.length > 0 && <span><em>Baseline</em>{meta.baselines.map(x => <span key={x} className="chip">{x}</span>)}</span>}
+          <span><em>{tr('规模')}</em>{[meta.seeds != null && tr('{0} 个种子', meta.seeds), meta.gpu_hours != null && tr('约 {0} GPU 小时', meta.gpu_hours), meta.backend].filter(Boolean).join(' · ') || '—'}</span>
+        </div>
       )}
 
       {results && <Results r={results} />}
+      {withResult.length > 0 && <RunResults runs={withResult} onOpen={setJob} />}
+      {files.length > 0 && <Files lineId={p.lineId} files={files} onOpen={setFile} />}
+      {runs.length > 0 && <Runs runs={runs} onOpen={setJob} />}
 
-      {runs.length > 0 && (
-        <section className="cs">
-          <h3>{tr('运行记录 · {0}', runs.length)}</h3>
-          <table className="ctab">
-            <thead><tr><th>{tr('任务')}</th><th>{tr('状态')}</th><th>{tr('在哪')}</th><th>{tr('用时')}</th><th>{tr('结束')}</th><th>{tr('结果')}</th></tr></thead>
-            <tbody>{runs.map(r => (
-              <tr key={r.id}>
-                <td><b>{r.name}</b></td>
-                <td><span className={`pst pst-${r.state === 'completed' ? 'done' : r.state === 'failed' ? 'failed' : 'running'}`}>{r.state}{r.exit_code ? ` · ${r.exit_code}` : ''}</span></td>
-                <td className="muted">{r.where ?? '—'}</td>
-                <td>{dur(r.elapsed_s)}</td>
-                <td className="muted">{ago(r.finished_at)}</td>
-                <td>{r.result ? <Json v={r.result} small /> : <span className="muted">—</span>}</td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </section>
-      )}
-
-      {files.length > 0 && (
-        <section className="cs">
-          <h3>{tr('数据文件 · {0}', files.length)}</h3>
-          <div className="dfiles">
-            <div className="df-list">
-              {(['processed', 'raw', 'other'] as const).map(k => {
-                const fs = files.filter(f => f.kind === k);
-                return fs.length > 0 && (
-                  <div key={k} className="df-group">
-                    <span className="ide-t">{KIND_NAME[k]} · {fs.length}</span>
-                    {fs.slice(0, 200).map(f => (
-                      <button key={f.path} className={`df${pick === f.path ? ' on' : ''}`} onClick={() => setPick(f.path)} title={f.path}>
-                        <span className="df-p">{f.path}</span><span className="muted small">{bytes(f.size)} · {ago(f.mtime)}</span>
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="df-view">
-              {pick ? <Preview key={pick} lineId={p.lineId} path={pick} /> : <div className="fv-note"><Icon n="table" size={28} /><p className="muted small">{tr('挑一个文件，CSV 和 JSON 会排成表。')}</p></div>}
-            </div>
-          </div>
-        </section>
-      )}
+      {job && <JobDrawer id={job} onClose={() => setJob(null)} onJob={setJob} />}
+      {file && <FileSheet lineId={p.lineId} path={file} onClose={() => setFile(null)} onCode={() => { const f = file; setFile(null); p.onOpenFile(f); }} />}
     </div>
   );
 }
 
+// ---------- results: one small chart per metric, ours against the best baseline ----------
+
 function Results({ r }: { r: NonNullable<LineData['results']> }) {
-  // each metric's column scaled to its own best, for the bars
-  const max = r.metrics.map((_, i) => Math.max(...r.rows.map(x => Math.abs(x.values[i] ?? 0)), 1e-9));
-  const best = r.metrics.map((_, i) => Math.max(...r.rows.map(x => x.values[i] ?? -Infinity)));
   return (
     <section className="cs">
-      <div className="cs-h"><h3>{tr('结果')}</h3>{r.simulated && <span className="chip warn">{tr('模拟结果，不是真实实验')}</span>}</div>
-      <table className="ctab res">
-        <thead><tr><th>{tr('方法')}</th>{r.metrics.map(m => <th key={m}>{m}</th>)}</tr></thead>
-        <tbody>{r.rows.map((x, ri) => (
-          <tr key={x.method} className={x.ours ? 'ours' : ''} style={{ ['--i' as string]: ri }}>
-            <td>{x.method}{x.ours && <span className="chip pri">{tr('我们')}</span>}</td>
-            {x.values.map((v, i) => (
-              <td key={i} className={v === best[i] ? 'best' : ''}>
-                <span className="rbar"><i style={{ ['--v' as string]: Math.abs(v) / max[i] }} /></span>{v}
-              </td>
-            ))}
-          </tr>
-        ))}</tbody>
-      </table>
+      <div className="cs-h"><span className="cs-ic"><Icon n="spark" size={15} /></span><h3>{tr('结果')}</h3>{r.simulated && <span className="chip warn">{tr('模拟结果，不是真实实验')}</span>}
+        <span className="muted small">{tr('每个指标一张图，从高到低；橙色是我们的方法')}</span></div>
+      <div className="sm-grid">
+        {r.metrics.map((m, i) => {
+          const ours = r.rows.find(x => x.ours)?.values[i];
+          const best = Math.max(...r.rows.filter(x => !x.ours).map(x => x.values[i]));
+          const delta = ours != null && Number.isFinite(best) ? ours - best : null;
+          return (
+            <div key={m} className="sm" style={{ ['--i' as string]: i }}>
+              <h4 title={m}>{m}</h4>
+              {delta != null && <p className={`sm-d ${delta >= 0 ? 'up' : 'down'}`}>{delta >= 0 ? '▲' : '▼'} {delta >= 0 ? tr('比最好的 baseline 高 {0}', fmtNum(delta)) : tr('比最好的 baseline 低 {0}', fmtNum(-delta))}</p>}
+              <Bars bars={r.rows.map(x => ({ id: x.method, label: x.method, v: x.values[i], hi: x.ours, sub: m })).sort((a, b) => b.v - a.v)} />
+            </div>
+          );
+        })}
+      </div>
       {r.analysis && <p className="small res-note">{r.analysis}</p>}
       {(r.concerns?.length ?? 0) > 0 && <ul className="concerns">{r.concerns!.map(c => <li key={c}>{c}</li>)}</ul>}
     </section>
   );
 }
 
-function Json({ v, small }: { v: unknown; small?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const s = JSON.stringify(v, null, 2);
-  if (small && !open) return <button className="lnk" onClick={() => setOpen(true)}>{s.length > 60 ? `${s.replace(/\s+/g, ' ').slice(0, 56)}…` : s.replace(/\s+/g, ' ')}</button>;
-  return <pre className="json" onClick={() => small && setOpen(false)}>{s.length > 20000 ? `${s.slice(0, 20000)}\n…` : s}</pre>;
+// ---------- what each run handed back ----------
+
+function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) => void }) {
+  // the measures more than one run reports, to line them up
+  const shared = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const r of runs) for (const [k, v] of flat(r.result)) if (typeof v === 'number' && !SETTING.test(k)) n.set(k, (n.get(k) ?? 0) + 1);
+    return [...n].filter(([, c]) => c >= 2).map(([k]) => k).sort((a, b) => Number(SCORE.test(b)) - Number(SCORE.test(a)));
+  }, [runs]);
+  const [pick, setPick] = useState<string | null>(null);
+  return (
+    <section className="cs">
+      <div className="cs-h"><span className="cs-ic"><Icon n="flask" size={15} /></span><h3>{tr('运行结果 · {0}', runs.length)}</h3><span className="muted small">{tr('nvidb 任务交回的 result.json；点一张卡看全部')}</span></div>
+      <div className="rcards">
+        {runs.map((r, i) => {
+          const h = headlines(r.result, 4);
+          return (
+            <button key={r.id} className={`rc s-${stOf(r.state)}`} style={{ ['--i' as string]: Math.min(i, 10) }} onClick={() => onOpen(r.id)}>
+              <span className="rc-h"><StateTag s={stOf(r.state)} /><span className="muted small">{ago(r.finished_at)}</span></span>
+              <b className="rc-n" title={r.name}>{r.name}</b>
+              {h.length ? <span className="rc-m">{h.map(x => <span key={x.k}><strong>{fmtNum(x.v)}</strong><em title={x.k}>{x.name}</em></span>)}</span>
+                : '_truncated' in (r.result as object) ? <span className="muted small rc-s">{tr('结果太长，nvidb 只交回了前一部分；点开看')}</span>
+                  : <span className="muted small rc-s">{JSON.stringify(r.result).slice(0, 120)}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {shared.length > 0 && (
+        <div className="rc-cmp">
+          <span className="ide-t">{tr('按一个指标对比')}</span>
+          <div className="chips">{shared.slice(0, 16).map(s => <button key={s} className={`chip pick${pick === s ? ' on' : ''}`} onClick={() => setPick(x => (x === s ? null : s))}>{s}</button>)}</div>
+          {pick && <Bars onPick={onOpen} bars={runs.map(r => ({ id: r.id, label: r.name, v: flat(r.result).find(([x]) => x === pick)?.[1] as number, sub: pick }))
+            .filter(b => typeof b.v === 'number').sort((a, b) => b.v - a.v)} />}
+        </div>
+      )}
+    </section>
+  );
 }
 
-// a CSV line into its cells, quotes and all
+// ---------- the result files ----------
+
+type DFile = LineData['files'][number];
+interface Family { key: string; members: { path: string; tag: string }[] }
+
+// files that differ in one folder only: the same output, once per run or configuration
+function families(files: DFile[]): Family[] {
+  const m = new Map<string, { path: string; tag: string }[]>();
+  for (const f of files) {
+    if (!/\.jsonl?$/i.test(f.path)) continue;
+    const parts = f.path.split('/');
+    for (let i = 0; i < parts.length - 1; i++) {
+      const key = parts.map((x, k) => (k === i ? '*' : x)).join('/');
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push({ path: f.path, tag: parts[i] });
+    }
+  }
+  return [...m].filter(([, ms]) => ms.length >= 3).map(([key, members]) => ({ key, members }))
+    .sort((a, b) => b.members.length - a.members.length).slice(0, 12);
+}
+
+function Files({ lineId, files, onOpen }: { lineId: string; files: DFile[]; onOpen: (path: string) => void }) {
+  const fams = useMemo(() => families(files), [files]);
+  const [fam, setFam] = useState<string | null>(fams[0]?.key ?? null);
+  const [kind, setKind] = useState<string>('all');
+  const [q, setQ] = useState('');
+  const [sortBy, setSortBy] = useState<'mtime' | 'name' | 'size'>('mtime');
+  const [shut, setShut] = useState<Set<string>>(new Set());
+  const cur = fams.find(f => f.key === fam);
+
+  const needle = q.trim().toLowerCase();
+  const dirs = useMemo(() => {
+    const shown = files.filter(f => (kind === 'all' || f.kind === kind) && (!needle || f.path.toLowerCase().includes(needle)));
+    const m = new Map<string, DFile[]>();
+    for (const f of shown) { const d = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '.'; m.set(d, [...(m.get(d) ?? []), f]); }
+    const order = (a: DFile, b: DFile) => (sortBy === 'name' ? a.path.localeCompare(b.path) : sortBy === 'size' ? b.size - a.size : b.mtime - a.mtime);
+    return [...m].map(([d, fs]) => [d, fs.sort(order)] as const).sort((a, b) => (sortBy === 'name' ? a[0].localeCompare(b[0]) : order(a[1][0], b[1][0])));
+  }, [files, kind, needle, sortBy]);
+
+  return (
+    <section className="cs">
+      <div className="cs-h"><span className="cs-ic"><Icon n="folder" size={15} /></span><h3>{tr('结果文件 · {0}', files.length)}</h3><span className="muted small">{tr('代码仓库里 results/、outputs/ 等目录下的数据')}</span></div>
+      {fams.length > 0 && <>
+        <div className="fam-pick">
+          <span className="ide-t">{tr('同名文件对比')}</span>
+          <div className="chips">{fams.map(f => (
+            <button key={f.key} className={`chip pick${fam === f.key ? ' on' : ''}`} onClick={() => setFam(x => (x === f.key ? null : f.key))} title={f.key}>
+              <span>{f.key.split('/').slice(-3).map((s, i) => <span key={i} className={s === '*' ? 'star' : ''}>{i ? '/' : ''}{s}</span>)}</span><em>{f.members.length}</em>
+            </button>
+          ))}</div>
+        </div>
+        {cur && <Compare key={cur.key} lineId={lineId} fam={cur} onOpen={onOpen} />}
+      </>}
+      <div className="fb">
+        <div className="fb-bar">
+          <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('按路径筛选')} value={q} onChange={e => setQ(e.target.value)} /></label>
+          <div className="seg mini">{['all', 'processed', 'raw', 'other'].filter(k => k === 'all' || files.some(f => f.kind === k)).map(k => (
+            <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>{k === 'all' ? tr('全部') : KIND_NAME[k]}</button>))}</div>
+          <select className="fb-sort" value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)} aria-label={tr('排序')}>
+            <option value="mtime">{tr('最近修改')}</option><option value="name">{tr('名称')}</option><option value="size">{tr('大小')}</option>
+          </select>
+        </div>
+        <div className="fb-list">
+          {dirs.map(([d, fs]) => {
+            const closed = shut.has(d);
+            return (
+              <div key={d} className="fb-dir">
+                <button className={`fb-dh${closed ? '' : ' open'}`} onClick={() => setShut(s => { const x = new Set(s); if (x.has(d)) x.delete(d); else x.add(d); return x; })}>
+                  <Icon n="chevron" size={12} className="tr-chev" /><Icon n="folder" size={14} /><span>{d}</span><em>{fs.length}</em>
+                </button>
+                {!closed && fs.map(f => (
+                  <button key={f.path} className="fb-f" onClick={() => onOpen(f.path)} title={f.path}>
+                    <span>{base(f.path)}</span><span className="muted small">{bytes(f.size)}</span><span className="muted small">{ago(f.mtime)}</span>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+          {!dirs.length && <p className="muted small">{tr('没有匹配的文件。')}</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// a JSON file's text as a record; a JSONL file's last record
+function parse(text: string, path: string): unknown {
+  try {
+    if (ext(path) === 'jsonl') { const ls = text.trim().split('\n'); return JSON.parse(ls[ls.length - 1]); }
+    return JSON.parse(text);
+  } catch { return null; }
+}
+
+// the same file from each folder, side by side: one row per folder, one column per measure
+function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen: (path: string) => void }) {
+  const [docs, setDocs] = useState<Map<string, unknown>>(new Map());
+  const [done, setDone] = useState(0);
+  const [cols, setCols] = useState<string[] | null>(null);
+  const [sort, setSort] = useState<{ k: string; up: boolean } | null>(null);
+  const [focus, setFocus] = useState<string | null>(null);
+  const { tip, show, hide } = useTip();
+  const members = fam.members.slice(0, 40);
+
+  useEffect(() => {
+    let live = true;
+    const todo = [...members];
+    const work = async () => {
+      for (let m = todo.shift(); m; m = todo.shift()) {
+        const path = m.path;
+        const f = await api.wsFile(lineId, 'code', path).catch(() => null);
+        if (!live) return;
+        const v = f?.text ? parse(f.text, path) : null;
+        setDocs(d => new Map(d).set(path, v));
+        setDone(n => n + 1);
+      }
+    };
+    Promise.all([work(), work(), work(), work(), work(), work()]);
+    return () => { live = false; };
+  }, [fam.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const table = useMemo(() => {
+    const rows = members.map(m => ({ ...m, vals: new Map(flat(docs.get(m.path)).filter((e): e is [string, number] => typeof e[1] === 'number')) }));
+    const seen = new Map<string, Set<number>>();
+    for (const r of rows) for (const [k, v] of r.vals) { if (!seen.has(k)) seen.set(k, new Set()); seen.get(k)!.add(v); }
+    // measures most rows have and that differ between them; the settings come last
+    const keys = [...seen].filter(([k, vs]) => vs.size > 1 && rows.filter(r => r.vals.has(k)).length >= Math.max(2, rows.length / 2)).map(([k]) => k)
+      .sort((a, b) => (Number(SETTING.test(a)) - Number(SETTING.test(b))) || (Number(SCORE.test(b)) - Number(SCORE.test(a))));
+    return { rows, keys };
+  }, [docs, fam.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shownCols = (cols ?? table.keys.filter(k => !SETTING.test(k)).slice(0, 8)).filter(k => table.keys.includes(k));
+  const range = new Map(shownCols.map(k => {
+    const vs = table.rows.map(r => r.vals.get(k)).filter((v): v is number => v != null);
+    return [k, [Math.min(...vs), Math.max(...vs)]] as const;
+  }));
+  const rows = sort ? [...table.rows].sort((a, b) => ((a.vals.get(sort.k) ?? -Infinity) - (b.vals.get(sort.k) ?? -Infinity)) * (sort.up ? 1 : -1)) : table.rows;
+  const toggle = (k: string) => setCols(c => { const now = c ?? shownCols; return now.includes(k) ? now.filter(x => x !== k) : [...now, k]; });
+  const short = (k: string) => k.split('.').slice(-2).join('.');
+
+  return (
+    <div className="cmp">
+      {done < members.length && <div className="cmp-load"><i style={{ width: `${(100 * done) / members.length}%` }} /><span className="muted small">{tr('读取 {0}/{1}', done, members.length)}</span></div>}
+      {table.keys.length > 0 && (
+        <details className="cmp-cols">
+          <summary>{tr('列：{0}/{1}', shownCols.length, table.keys.length)}</summary>
+          <div className="chips">{table.keys.map(k => <button key={k} className={`chip pick${shownCols.includes(k) ? ' on' : ''}${SETTING.test(k) ? ' set' : ''}`} onClick={() => toggle(k)}>{k}</button>)}</div>
+        </details>
+      )}
+      {focus && (
+        <div className="cmp-chart">
+          <span className="ide-t">{focus}<button className="lnk" onClick={() => setFocus(null)}>{tr('收起')}</button></span>
+          <Bars onPick={path => onOpen(path)} bars={table.rows.filter(r => r.vals.has(focus)).map(r => ({ id: r.path, label: r.tag, v: r.vals.get(focus)!, sub: focus }))
+            .sort((a, b) => b.v - a.v)} />
+        </div>
+      )}
+      {shownCols.length > 0 ? (
+        <div className="grid-wrap cmp-wrap">
+          <table className="ctab cmp-t">
+            <thead><tr>
+              <th className="cmp-tag">{tr('文件夹')}</th>
+              {shownCols.map(k => (
+                <th key={k} title={`${k}\n${tr('点一下排序，再点一下换方向；双击画成条形图')}`}
+                  className={`sortable num${sort?.k === k ? ` on ${sort.up ? 'up' : 'down'}` : ''}${focus === k ? ' focus' : ''}`}
+                  onClick={() => setSort(s => ({ k, up: s?.k === k ? !s.up : false }))} onDoubleClick={() => setFocus(k)}>{short(k)}</th>
+              ))}
+            </tr></thead>
+            <tbody>{rows.map(r => (
+              <tr key={r.path} onClick={() => onOpen(r.path)}>
+                <td className="cmp-tag mono" title={r.path}>{r.tag}</td>
+                {shownCols.map(k => {
+                  const v = r.vals.get(k);
+                  const [lo, hi] = range.get(k)!;
+                  const h = v == null || hi === lo ? 0 : (v - lo) / (hi - lo);
+                  return (
+                    <td key={k} className={`num heat${v === hi && hi !== lo ? ' best' : ''}`} style={{ ['--h' as string]: h }}
+                      onPointerMove={e => v != null && show(e, { title: r.tag, rows: [{ v: fmtNum(v), k }], foot: r.path })} onPointerLeave={hide}>
+                      {v == null ? '—' : fmtNum(v)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : done >= members.length && <p className="muted small">{tr('这些文件里没有在各个文件夹之间不同的数值。')}</p>}
+      <p className="muted small cmp-hint">{tr('颜色越深数值越大（每列各自比较）· 点表头排序 · 双击表头画成条形图 · 点一行打开那个文件')}</p>
+      <Tip tip={tip} />
+    </div>
+  );
+}
+
+// ---------- every run ----------
+
+function Runs({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) => void }) {
+  const [sort, setSort] = useState<{ k: 'name' | 'st' | 'end' | 'dur'; up: boolean }>({ k: 'end', up: false });
+  const [all, setAll] = useState(false);
+  const key = (r: DataRun): string | number => (sort.k === 'name' ? r.name : sort.k === 'st' ? r.state : sort.k === 'end' ? (r.finished_at ?? '') : (r.elapsed_s ?? 0));
+  const sorted = [...runs].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * (sort.up ? 1 : -1); });
+  const th = (k: typeof sort.k, label: string) => (
+    <th className={`sortable${sort.k === k ? ` on ${sort.up ? 'up' : 'down'}` : ''}`} onClick={() => setSort(s => ({ k, up: s.k === k ? !s.up : k === 'name' }))}>{label}</th>
+  );
+  return (
+    <section className="cs">
+      <div className="cs-h"><span className="cs-ic"><Icon n="table" size={15} /></span><h3>{tr('运行记录 · {0}', runs.length)}</h3></div>
+      <table className="ctab xt">
+        <thead><tr>{th('name', tr('任务'))}{th('st', tr('状态'))}<th>{tr('在哪')}</th>{th('dur', tr('用时'))}{th('end', tr('结束'))}<th>{tr('结果')}</th></tr></thead>
+        <tbody>{sorted.slice(0, all ? 400 : 12).map(r => (
+          <tr key={r.id} className={`s-${stOf(r.state)}`} onClick={() => onOpen(r.id)}>
+            <td><b className="xt-n">{r.name}</b></td>
+            <td><StateTag s={stOf(r.state)} />{r.exit_code ? <span className="muted small"> · exit {r.exit_code}</span> : null}</td>
+            <td className="muted">{r.where ?? '—'}</td>
+            <td>{dur(r.elapsed_s)}</td>
+            <td className="muted">{r.finished_at ? when(Date.parse(r.finished_at)) : '—'}</td>
+            <td className="xt-res">{headlines(r.result, 2).map(x => <span key={x.k} title={x.k}><i>{x.name}</i><b>{fmtNum(x.v)}</b></span>)}</td>
+          </tr>
+        ))}</tbody>
+      </table>
+      {runs.length > 12 && <button className="btn xt-more" onClick={() => setAll(a => !a)}>{all ? tr('收起') : tr('显示全部 {0} 个', runs.length)}</button>}
+    </section>
+  );
+}
+
+// ---------- one file, as a table when it is one ----------
+
 function cells(line: string, sep: string) {
   const out: string[] = [];
   let cur = '', q = false;
@@ -133,65 +354,98 @@ function cells(line: string, sep: string) {
   return out;
 }
 
-// a record's values with the keys that lead to them, "a.b.c"; null when it holds lists of records
-function leaves(v: object, pre = '', out: string[][] = [], depth = 0): string[][] | null {
-  for (const [k, x] of Object.entries(v)) {
-    const key = pre ? `${pre}.${k}` : k;
-    if (x && typeof x === 'object' && !Array.isArray(x) && depth < 4) { if (!leaves(x, key, out, depth + 1)) return null; }
-    else if (Array.isArray(x) && x.some(y => y && typeof y === 'object')) return null;
-    else out.push([key, typeof x === 'number' && !Number.isInteger(x) ? String(+x.toFixed(6)) : Array.isArray(x) ? JSON.stringify(x) : String(x)]);
+function toGrid(text: string, path: string): { head: string[]; rows: string[][]; more: number } | null {
+  const e = ext(path);
+  if (e === 'csv' || e === 'tsv') {
+    const sep = e === 'tsv' ? '\t' : ',';
+    const ls = text.split(/\r?\n/).filter(Boolean);
+    return { head: cells(ls[0] ?? '', sep), rows: ls.slice(1, 2001).map(l => cells(l, sep)), more: Math.max(0, ls.length - 2001) };
   }
-  return out;
+  if (e !== 'json' && e !== 'jsonl') return null;
+  let v: unknown;
+  try { v = e === 'jsonl' ? text.split('\n').filter(Boolean).map(l => JSON.parse(l)) : JSON.parse(text); } catch { return null; }
+  if (Array.isArray(v) && v.length && v.every(x => x && typeof x === 'object' && !Array.isArray(x))) {
+    const recs = v as Record<string, unknown>[];
+    const head = [...new Set(recs.flatMap(x => Object.keys(x)))].slice(0, 20);
+    const show = (x: unknown) => (x == null ? '' : typeof x === 'object' ? JSON.stringify(x) : String(x));
+    return { head, rows: recs.slice(0, 2000).map(x => head.map(h => show(x[h]))), more: Math.max(0, recs.length - 2000) };
+  }
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    return { head: [tr('键'), tr('值')], rows: flat(v).map(([k, x]) => [k, typeof x === 'object' ? JSON.stringify(x) : String(x)]), more: 0 };
+  }
+  return null;
 }
 
-function Grid({ head, rows }: { head: string[]; rows: string[][] }) {
-  return (
-    <div className="grid-wrap">
-      <table className="ctab grid">
-        <thead><tr>{head.map((h, i) => <th key={i}>{h}</th>)}</tr></thead>
-        <tbody>{rows.map((r, i) => <tr key={i}>{head.map((_, k) => <td key={k}>{r[k] ?? ''}</td>)}</tr>)}</tbody>
-      </table>
-    </div>
+function FileSheet({ lineId, path, onClose, onCode }: { lineId: string; path: string; onClose: () => void; onCode: () => void }) {
+  const f = useFetch(() => api.wsFile(lineId, 'code', path), path);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); onClose(); } };
+    addEventListener('keydown', key, true);
+    return () => removeEventListener('keydown', key, true);
+  }, [onClose]);
+  const grid = useMemo(() => (f.data?.text != null ? toGrid(f.data.text, path) : null), [f.data, path]);
+  const host = document.querySelector('.p-console');
+  if (!host) return null;
+  return createPortal(
+    <>
+      <div className="jd-back" onClick={onClose} />
+      <aside className="jd wide" role="dialog" aria-label={path}>
+        <header className="jd-h">
+          <div className="jd-t"><h3>{base(path)}</h3><span className="muted small mono">{path}{f.data ? ` · ${bytes(f.data.size)}` : ''}</span></div>
+          <div className="jd-nav">
+            <button className="btn jd-btn" onClick={onCode}><Icon n="code" size={14} />{tr('在代码仓库中打开')}</button>
+            <button className="ib" title={copied ? tr('已复制') : tr('复制路径')} onClick={() => navigator.clipboard?.writeText(path).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); })}>
+              <Icon n={copied ? 'save' : 'file'} size={15} /></button>
+            <button className="ib" onClick={onClose} title={tr('关闭（Esc）')}><Icon n="close" size={16} /></button>
+          </div>
+        </header>
+        <div className="jd-body">
+          {f.err ? <p className="warn-box small">{f.err}</p>
+            : !f.data ? <p className="muted small">{tr('读取中…')}</p>
+              : f.data.binary || f.data.too_big ? <p className="muted small">{f.data.binary ? tr('二进制文件（{0}），这里不能打开。', bytes(f.data.size)) : tr('文件太大（{0}），请在本地打开。', bytes(f.data.size))}</p>
+                : grid ? <Sheet {...grid} /> : <pre className="json">{(f.data.text ?? '').slice(0, 40000)}</pre>}
+        </div>
+      </aside>
+    </>,
+    host,
   );
 }
 
-function Preview({ lineId, path }: { lineId: string; path: string }) {
-  const f = useFetch(() => api.wsFile(lineId, 'code', path), path);
-  const view = useMemo(() => {
-    const t = f.data?.text;
-    if (t == null) return null;
-    const e = ext(path);
-    if (e === 'csv' || e === 'tsv') {
-      const ls = t.split(/\r?\n/).filter(Boolean);
-      const sep = e === 'tsv' ? '\t' : ',';
-      return { grid: { head: cells(ls[0] ?? '', sep), rows: ls.slice(1, 301).map(l => cells(l, sep)) }, more: Math.max(0, ls.length - 301) };
-    }
-    if (e === 'json' || e === 'jsonl') {
-      try {
-        const v = e === 'jsonl' ? t.split('\n').filter(Boolean).map(l => JSON.parse(l)) : JSON.parse(t);
-        const rows = Array.isArray(v) ? v : null;
-        if (rows?.length && rows.every(x => x && typeof x === 'object' && !Array.isArray(x))) {
-          const head = [...new Set(rows.flatMap(x => Object.keys(x)))].slice(0, 14);
-          const show = (x: unknown) => (x == null ? '' : typeof x === 'object' ? JSON.stringify(x) : String(x));
-          return { grid: { head, rows: rows.slice(0, 300).map(x => head.map(h => show(x[h]))) }, more: Math.max(0, rows.length - 300) };
-        }
-        // a record, nested or not, reads best as two columns: each value under its dotted key
-        const flat = v && typeof v === 'object' && !Array.isArray(v) ? leaves(v) : null;
-        if (flat && flat.length <= 400) return { grid: { head: [tr('键'), tr('值')], rows: flat }, more: 0 };
-        return { json: v };
-      } catch { return { text: t }; }
-    }
-    return { text: t };
-  }, [f.data, path]);
+// a table to read: filter the rows, sort by a column, numbers right-aligned with a bar of their size
+function Sheet({ head, rows, more }: { head: string[]; rows: string[][]; more: number }) {
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState<{ k: number; up: boolean } | null>(null);
+  const isNum = head.map((_, c) => rows.length > 0 && rows.slice(0, 200).every(r => !r[c] || !Number.isNaN(Number(r[c]))) && rows.some(r => !!r[c]));
+  const top = head.map((_, c) => (isNum[c] ? Math.max(...rows.map(r => Math.abs(Number(r[c]) || 0)), 1e-12) : 0));
+  const needle = q.trim().toLowerCase();
+  let shown = needle ? rows.filter(r => r.some(x => x?.toLowerCase().includes(needle))) : rows;
+  if (sort) shown = [...shown].sort((a, b) => {
+    const x = isNum[sort.k] ? Number(a[sort.k]) : a[sort.k], y = isNum[sort.k] ? Number(b[sort.k]) : b[sort.k];
+    return (x < y ? -1 : x > y ? 1 : 0) * (sort.up ? 1 : -1);
+  });
   return (
-    <div className="pv">
-      <div className="pv-h"><b>{base(path)}</b><span className="muted small">{path}</span></div>
-      {f.err ? <p className="warn-box small">{f.err}</p>
-        : !f.data ? <p className="muted small">{tr('读取中…')}</p>
-          : f.data.binary || f.data.too_big ? <p className="muted small">{f.data.binary ? tr('二进制文件（{0}），这里不能打开。', bytes(f.data.size)) : tr('文件太大（{0}），请在本地打开。', bytes(f.data.size))}</p>
-            : view?.grid ? <><Grid {...view.grid} />{view.more > 0 && <p className="muted small">{tr('只显示前 300 行，还有 {0} 行。', view.more)}</p>}</>
-              : view?.json !== undefined ? <Json v={view.json} />
-                : <pre className="json">{(view?.text ?? '').slice(0, 20000)}</pre>}
+    <div className="sheet">
+      <div className="fb-bar">
+        <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('在表里找')} value={q} onChange={e => setQ(e.target.value)} /></label>
+        <span className="muted small">{tr('{0} 行', shown.length)}{more ? ` · ${tr('只读了前面的，还有 {0} 行', more)}` : ''}</span>
+      </div>
+      <div className="grid-wrap">
+        <table className="ctab grid">
+          <thead><tr>{head.map((h, c) => (
+            <th key={c} className={`sortable${isNum[c] ? ' num' : ''}${sort?.k === c ? ` on ${sort.up ? 'up' : 'down'}` : ''}`}
+              onClick={() => setSort(s => ({ k: c, up: s?.k === c ? !s.up : !isNum[c] }))}>{h}</th>
+          ))}</tr></thead>
+          <tbody>{shown.slice(0, 600).map((r, i) => (
+            <tr key={i}>{head.map((_, c) => (
+              <td key={c} className={isNum[c] ? 'num' : ''}>
+                {isNum[c] && r[c] ? <><span className="rbar"><i style={{ ['--v' as string]: Math.abs(Number(r[c])) / top[c] }} /></span>{fmtNum(Number(r[c]))}</> : r[c] ?? ''}
+              </td>
+            ))}</tr>
+          ))}</tbody>
+        </table>
+      </div>
+      {shown.length > 600 && <p className="muted small">{tr('只显示前 600 行，用上面的搜索缩小范围。')}</p>}
     </div>
   );
 }

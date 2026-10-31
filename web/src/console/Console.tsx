@@ -87,6 +87,7 @@ export function Console(p: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   const [role, setRole] = useState<'coder' | 'writer'>('coder');
+  const [reveal, setReveal] = useState<{ path: string; n: number } | null>(null); // a file to open in the code panel
   const [hist, setHist] = useState<{ back: [string, ModId][]; fwd: [string, ModId][] }>({ back: [], fwd: [] });
   const dirty = useRef({ code: 0, paper: 0 });
   const searchRef = useRef<HTMLInputElement>(null);
@@ -105,7 +106,7 @@ export function Console(p: Props) {
 
   // the panels that keep their state while another is shown: their editors, open files and edits
   const [kept, setKept] = useState<Set<ModId>>(new Set());
-  useEffect(() => setKept(new Set()), [id]);
+  useEffect(() => { setKept(new Set()); setReveal(null); }, [id]);
   useEffect(() => { if (mod === 'code' || mod === 'paper') setKept(k => (k.has(mod) ? k : new Set([...k, mod]))); }, [mod, id]);
 
   const unsaved = () => dirty.current.code + dirty.current.paper;
@@ -233,7 +234,7 @@ export function Console(p: Props) {
                 onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)} />
                 : mod === 'survey' ? <Survey line={line} tick={p.tick} onHatch={p.onHatch} onAdjust={p.onAdjust} />
                   : mod === 'exp' ? <Experiments lineId={id} tick={p.tick} onData={() => go({ mod: 'data' })} />
-                    : mod === 'data' ? <Data lineId={id} tick={p.tick} />
+                    : mod === 'data' ? <Data lineId={id} tick={p.tick} onOpenFile={path => { setReveal(r => ({ path, n: (r?.n ?? 0) + 1 })); go({ mod: 'code' }); }} />
                       : mod === 'agents' ? (
                         <div className="cm-agents">
                           <div className="cm-sub">
@@ -253,7 +254,7 @@ export function Console(p: Props) {
           )}
           {kept.has('code') && (
             <section className={`cm-mod bleed${mod === 'code' ? ' on' : ''}`} style={{ ['--dir' as string]: dir }}>
-              <Code lineId={id} info={ws.data} tick={p.tick} toast={p.toast} onDirty={n => { dirty.current.code = n; }} onAgents={() => { setRole('coder'); go({ mod: 'agents' }); }} />
+              <Code lineId={id} info={ws.data} tick={p.tick} toast={p.toast} reveal={reveal} onDirty={n => { dirty.current.code = n; }} onAgents={() => { setRole('coder'); go({ mod: 'agents' }); }} />
             </section>
           )}
           {kept.has('paper') && (

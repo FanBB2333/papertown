@@ -1,161 +1,193 @@
-// The experiments panel: what this project has running and how far it has got, what runs
-// next (each GPU's lane in nvidb, in running order, with this project's jobs picked out),
-// what finished lately, and the GPUs themselves. Read only, like the rest of nvidb here.
+// The experiments panel. One row of filters scopes everything under it (the time range, the
+// state, a search); then the counts, which filter too when clicked; what to look at first (the
+// newest results, what runs now, the newest failures); a timeline of the project's jobs on each
+// GPU (drag across it to look closer, double-click to step back); the cluster, live (Cluster.tsx);
+// and the jobs themselves, as a table, cards, a board, groups or a grid (JobViews.tsx). Each
+// state keeps its colour everywhere, as a mark and as a wash behind its row. Any job opens in
+// full, and ←/→ walk the list it was opened from. Read only.
 
-import { useMemo, useState } from 'react';
-import { api, type Job, type NvJob, type NvLane } from '../api';
-import { GpuBoard, gb } from '../components/Gpus';
+import { useEffect, useMemo, useState } from 'react';
+import { api, type Job } from '../api';
+import { GpuBoard } from '../components/Gpus';
 import { tr } from '../i18n';
+import { Gantt, Legend, ST, elapsed, fmtNum, when, type GJob, type St } from './charts';
+import { Cluster } from './Cluster';
 import { Icon } from './icons';
-import { ago, dur, useFetch } from './util';
+import { JobDrawer } from './JobDrawer';
+import { JobViews } from './JobViews';
+import { endOf, placeOf, resOf, startOf, stj, t } from './jobs';
+import { ago, headline, headlines, lastLine, pctOf, useFetch } from './util';
 
 interface Props { lineId: string; tick: number; onData: () => void }
 
-const JOB_ST: Record<string, string> = { queued: tr('排队'), running: tr('运行中'), done: tr('完成'), failed: tr('失败'), cancelled: tr('已取消') };
-
-// a job's result, as its first few numbers
-function brief(r: unknown): [string, string][] {
-  if (!r || typeof r !== 'object') return [];
-  return Object.entries(r as Record<string, unknown>).filter(([, v]) => typeof v === 'number' || (typeof v === 'string' && v.length < 24))
-    .slice(0, 4).map(([k, v]) => [k, typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(3)) : String(v)]);
-}
+type Range = '1d' | '7d' | '30d' | 'all';
+const SPAN: Record<Exclude<Range, 'all'>, number> = { '1d': 864e5, '7d': 7 * 864e5, '30d': 30 * 864e5 };
+const RANGES: [Range, string][] = [['1d', tr('24 小时')], ['7d', tr('7 天')], ['30d', tr('30 天')], ['all', tr('全部')]];
+const STATES: St[] = ['running', 'queued', 'done', 'failed', 'cancelled'];
 
 export function Experiments(p: Props) {
-  const board = useFetch(() => api.jobs(p.lineId), p.lineId, p.tick);
-  const gpus = useFetch(() => api.gpus(), 'gpus', p.tick, 400);
-  const [scope, setScope] = useState<'mine' | 'all'>('mine');
+  const [beat, setBeat] = useState(0);
+  useEffect(() => { const i = setInterval(() => setBeat(b => b + 1), 15000); return () => clearInterval(i); }, []);
+  const board = useFetch(() => api.jobs(p.lineId), p.lineId, p.tick + beat);
+  const [range, setRange] = useState<Range>('7d');
+  const [zoom, setZoom] = useState<[number, number] | null>(null);
+  const [st, setSt] = useState<St | null>(null);
+  const [q, setQ] = useState('');
+  // the job open in full, and the list it was opened from, for ←/→
+  const [open, setOpenAt] = useState<{ id: string; list: string[] } | null>(null);
+  const openIn = (list: string[]) => (id: string) => setOpenAt({ id, list });
+  const now = Date.now();
+
   const jobs = board.data?.jobs ?? [];
-  const g = gpus.data;
+  const [r0, r1] = useMemo((): [number, number] => {
+    if (range !== 'all') return [now - SPAN[range], now + SPAN[range] * 0.02];
+    const first = Math.min(...jobs.map(j => startOf(j)).filter(Number.isFinite), now - 864e5);
+    return [first, now + (now - first) * 0.02];
+  }, [range, jobs.length, Math.floor(now / 60000)]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setZoom(null), [range]);
+  const [d0, d1] = zoom ?? [r0, r1];
 
-  const mine = useMemo(() => new Set(jobs.map(j => j.nvidb?.id).filter((x): x is number => x != null)), [jobs]);
-  const nv = useMemo(() => new Map((g?.jobs ?? []).map(j => [j.id, j])), [g]);
-  const running = jobs.filter(j => j.status === 'running');
-  const queued = jobs.filter(j => j.status === 'queued');
-  const ended = jobs.filter(j => !['running', 'queued'].includes(j.status))
-    .sort((a, b) => (b.ended_at ?? b.created_at).localeCompare(a.ended_at ?? a.created_at)).slice(0, 8);
-  const failed = jobs.filter(j => j.status === 'failed').length;
+  // the range scopes everything below it; the state and the search scope the timeline and the table
+  const inRange = jobs.filter(j => {
+    const s = stj(j);
+    if (s === 'queued' || s === 'running') return true;
+    const e = endOf(j), b = startOf(j);
+    return (Number.isFinite(e) ? e : t(j.created_at)) >= d0 && (Number.isFinite(b) ? b : t(j.created_at)) <= d1;
+  });
+  const needle = q.trim().toLowerCase();
+  const shown = inRange.filter(j => (!st || stj(j) === st)
+    && (!needle || `${j.id} ${j.name} ${j.nvidb?.notes ?? ''} ${placeOf(j)}`.toLowerCase().includes(needle)));
+  const count = (s: St) => inRange.filter(j => stj(j) === s).length;
+  const gpuHours = inRange.reduce((a, j) => {
+    const b = startOf(j), cards = j.nvidb ? j.nvidb.gpu_ids.length : 0;
+    if (!Number.isFinite(b) || !cards) return a;
+    const e = Number.isFinite(endOf(j)) ? endOf(j) : now;
+    return a + Math.max(0, Math.min(e, d1) - Math.max(b, d0)) * cards / 3600e3;
+  }, 0);
 
-  // the lanes worth showing: with this project's jobs in them, or every busy one
-  const only = scope === 'mine' && mine.size > 0;
-  const lanes = (g?.lanes ?? []).filter(l => l.running.length + l.queued.length > 0 && (!only || [...l.running, ...l.queued].some(id => mine.has(id))));
-  const inLane = new Set((g?.lanes ?? []).flatMap(l => [...l.running, ...l.queued]));
-  const loose = (g?.jobs ?? []).filter(j => j.state === 'pending' && !inLane.has(j.id) && (!only || mine.has(j.id)));
+  const gjobs: GJob[] = shown.filter(j => Number.isFinite(startOf(j))).map(j => {
+    const s = stj(j), e = endOf(j);
+    const res = headline(j.nvidb?.result ?? j.result, 2);
+    return {
+      id: j.id, name: j.name, st: s, row: placeOf(j), start: startOf(j), end: s === 'running' ? null : Number.isFinite(e) ? e : startOf(j) + 60e3,
+      tip: [{ v: ST[s].label, k: tr('状态'), key: ST[s].c }, { v: elapsed(j.nvidb?.elapsed_s ?? (Number.isFinite(e) ? (e - startOf(j)) / 1000 : null)), k: tr('用时') },
+        { v: `${when(startOf(j))} → ${Number.isFinite(e) ? when(e) : tr('现在')}`, k: '' }, { v: placeOf(j), k: tr('在哪') },
+        ...res.map(([k, v]) => ({ v: fmtNum(v), k }))],
+    };
+  });
+
+  const at = open ? open.list.indexOf(open.id) : -1;
 
   return (
     <div className="cm-page exp">
+      <div className="xf">
+        <div className="seg mini" role="tablist" aria-label={tr('时间范围')}>
+          {RANGES.map(([k, name]) => <button key={k} className={range === k && !zoom ? 'on' : ''} onClick={() => { setRange(k); setZoom(null); }}>{name}</button>)}
+        </div>
+        {zoom && <button className="xf-zoom" onClick={() => setZoom(null)}>{when(d0)} – {when(d1)}<Icon n="close" size={12} /></button>}
+        <div className="xf-st">
+          {STATES.map(s => (
+            <button key={s} className={st === s ? 'on' : ''} onClick={() => setSt(x => (x === s ? null : s))} style={{ ['--c' as string]: ST[s].c }}>
+              <i className={ST[s].hollow ? 'hollow' : ''} />{ST[s].label}<span>{count(s)}</span>
+            </button>
+          ))}
+        </div>
+        <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('搜任务名、编号、说明')} value={q} onChange={e => setQ(e.target.value)} /></label>
+      </div>
+
       <div className="tiles">
-        <Tile n={running.length} label={tr('在跑')} tone="brand" />
-        <Tile n={queued.length} label={tr('排队')} />
-        <Tile n={jobs.filter(j => j.status === 'done').length} label={tr('完成')} tone="ok" />
-        <Tile n={failed} label={tr('失败')} tone={failed ? 'bad' : undefined} />
-        {g?.ok && g.summary && <Tile n={`${g.summary.idle}/${g.summary.gpus}`} label={tr('张卡空闲 · {0} 台机器在线', g.summary.up)} wide />}
+        {(['running', 'queued', 'done', 'failed'] as St[]).map(s => (
+          <button key={s} className={`tile pick st s-${s}${st === s ? ' on' : ''}${count(s) ? '' : ' zero'}`} onClick={() => setSt(x => (x === s ? null : s))}>
+            <b>{count(s)}</b><span><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>
+          </button>
+        ))}
+        <div className="tile gh"><b>{gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours)}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时（这段时间）')}</span></div>
       </div>
       {board.err && <p className="warn-box small">{board.err}</p>}
 
-      <section className="cs">
-        <h3>{tr('正在跑')}</h3>
-        {running.length ? <div className="xr-list">{running.map((j, i) => <Running key={j.id} j={j} i={i} />)}</div>
-          : <p className="muted small">{jobs.length ? tr('这个项目眼下没有在跑的任务。') : tr('这个项目还没有实验任务。代码员工会把实验提交到 nvidb（或者模拟电厂），到时候进度就在这里。')}</p>}
-      </section>
+      <Focus jobs={inRange} onOpen={(id, list) => setOpenAt({ id, list })} />
 
       <section className="cs">
         <div className="cs-h">
-          <h3>{tr('接下来')}</h3>
-          {mine.size > 0 && <div className="seg mini" role="tablist">
-            <button className={scope === 'mine' ? 'on' : ''} onClick={() => setScope('mine')}>{tr('这个项目')}</button>
-            <button className={scope === 'all' ? 'on' : ''} onClick={() => setScope('all')}>{tr('整个队列')}</button>
-          </div>}
+          <span className="cs-ic"><Icon n="clock" size={15} /></span><h3>{tr('时间线')}</h3>
+          <Legend states={['running', 'done', 'failed', 'cancelled']} />
+          <span className="muted small">{tr('拖动框选放大 · 双击还原 · 点一个任务看详情')}</span>
         </div>
-        {!g ? <p className="muted small">{tr('正在读 nvidb…')}</p>
-          : !g.ok ? <p className="muted small">{g.note}</p>
-            : <>
-              {queued.filter(j => !j.nvidb).length > 0 && <p className="small">{tr('另有 {0} 个任务在{1}排队。', queued.filter(j => !j.nvidb).length, board.data?.plant.name ?? '')}</p>}
-              {lanes.length ? <div className="xq-lanes">{lanes.map((l, i) => <Lane key={l.name} l={l} i={i} nv={nv} mine={mine} />)}</div>
-                : !loose.length && <p className="muted small">{only ? tr('这个项目的任务都不在队列里了。') : tr('nvidb 的队列是空的：没有在跑、也没有排着的任务。')}</p>}
-              {loose.length > 0 && (
-                <div className="loose">
-                  <h4>{tr('还没分到卡的任务')}</h4>
-                  {loose.slice(0, 12).map(j => (
-                    <div key={j.id} className={`lj${mine.has(j.id) ? ' mine' : ''}`}>
-                      <b>#{j.id} {j.name}</b>
-                      <span className="muted small">{[j.pool && tr('池 {0}', j.pool), j.node_constraint && tr('限 {0}', j.node_constraint), j.vram_mb ? gb(j.vram_mb) : null,
-                        j.depends_on?.length ? tr('等 {0}', j.depends_on.map(x => `#${x}`).join(' ')) : null].filter(Boolean).join(' · ')}</span>
-                      {j.held && <span className="pst pst-paused">{j.held_reason ?? tr('挂起')}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>}
+        {gjobs.length ? <Gantt jobs={gjobs} domain={[d0, d1]} now={now} onZoom={setZoom} onPick={openIn([...gjobs].sort((a, b) => a.start - b.start).map(x => x.id))} />
+          : <p className="muted small">{jobs.length ? tr('这段时间里没有符合条件的任务。换一个时间范围试试。') : tr('这个项目还没有实验任务。代码员工会把实验提交到 nvidb（或者模拟电厂），到时候进度就在这里。')}</p>}
       </section>
 
-      <section className="cs">
-        <div className="cs-h"><h3>{tr('最近结束')}</h3>{ended.length > 0 && <button className="lnk" onClick={p.onData}>{tr('结果和数据')} →</button>}</div>
-        {ended.length ? (
-          <div className="xe-list">
-            {ended.map((j, i) => (
-              <div key={j.id} className={`xe st-${j.status}`} style={{ ['--i' as string]: i }}>
-                <span className="xe-dot" />
-                <b title={j.command ?? ''}>{j.name}</b>
-                <span className="muted small">{JOB_ST[j.status]}{j.nvidb?.exit_code != null && j.status === 'failed' ? ` · exit ${j.nvidb.exit_code}` : ''} · {ago(j.ended_at ?? j.created_at)}</span>
-                <span className="xe-res">{brief(j.result ?? j.nvidb?.result).map(([k, v]) => <span key={k} className="chip"><i>{k}</i> {v}</span>)}</span>
-              </div>
-            ))}
-          </div>
-        ) : <p className="muted small">{tr('还没有跑完的任务。')}</p>}
-      </section>
+      <Cluster mine={new Set(jobs.map(j => j.nvidb?.id).filter((x): x is number => x != null))} onOpen={openIn([])} />
+
+      <JobViews jobs={shown} open={open?.id ?? null} onOpen={(id, list) => setOpenAt({ id, list })} onData={p.onData} />
 
       <details className="cs fold">
-        <summary><Icon n="gpu" size={16} />{tr('全部显卡和机器')}</summary>
+        <summary><Icon n="gpu" size={16} />{tr('机器详情：每张卡上的进程')}</summary>
         <GpuBoard />
       </details>
+
+      {open && <JobDrawer id={open.id} onClose={() => setOpenAt(null)} onJob={id => setOpenAt(o => ({ id, list: o?.list ?? [] }))}
+        nav={at >= 0 ? { prev: open.list[at - 1], next: open.list[at + 1] } : undefined} />}
     </div>
   );
 }
 
-function Tile({ n, label, tone, wide }: { n: number | string; label: string; tone?: string; wide?: boolean }) {
-  return <div className={`tile${tone ? ` t-${tone}` : ''}${wide ? ' wide' : ''}`}><b>{n}</b><span>{label}</span></div>;
-}
+// ---------- what to look at first ----------
 
-function Running({ j, i }: { j: Job; i: number }) {
-  const n = j.nvidb;
-  const where = n ? [n.node, n.gpu_ids.length ? `GPU ${n.gpu_ids.join(',')}` : null].filter(Boolean).join(' · ') : j.backend;
+// Three short columns, each in its state's colour: the newest results with their numbers, what
+// runs or waits now with its progress, and the newest failures with the line that says why.
+function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list: string[]) => void }) {
+  const fin = (j: Job) => (Number.isFinite(endOf(j)) ? endOf(j) : 0);
+  const withRes = jobs.filter(j => stj(j) === 'done' && headline(resOf(j), 1).length).sort((a, b) => fin(b) - fin(a));
+  const live = jobs.filter(j => stj(j) === 'running' || stj(j) === 'queued').sort((a, b) => +(stj(a) !== 'running') - +(stj(b) !== 'running') || startOf(b) - startOf(a));
+  const failed = jobs.filter(j => stj(j) === 'failed').sort((a, b) => fin(b) - fin(a));
+  if (!withRes.length && !live.length && !failed.length) return null;
+  const list = [...withRes.slice(0, 3), ...live.slice(0, 3), ...failed.slice(0, 3)].map(j => j.id);
+  const onOpen = (id: string) => open(id, list);
+  const head = (s: St, name: string, n: number) => <h4><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{name}<span>{n}</span></h4>;
+  const when_ = (j: Job) => ago(j.nvidb?.finished_at ?? j.ended_at ?? j.nvidb?.started_at ?? j.started_at);
   return (
-    <div className="xr" style={{ ['--i' as string]: i }}>
-      <div className="xr-top"><b>{j.name}</b><span className="muted small">{where}</span></div>
-      <div className="bar xr-bar"><i style={{ width: `${Math.max(2, j.progress)}%` }} /></div>
-      <div className="xr-foot muted small">
-        <span>{j.progress}%</span>
-        {n?.progress && <span className="xr-line" title={n.progress}>{n.progress}</span>}
-        <span>{n?.elapsed_s != null ? dur(n.elapsed_s) : ago(j.started_at)}</span>
-        {n?.vram_mb ? <span>{gb(n.vram_mb)}</span> : null}
+    <section className="focus">
+      <div className="focus-h"><span className="cs-ic"><Icon n="eye" size={15} /></span><h3>{tr('先看这里')}</h3><span className="muted small">{tr('这段时间里最新的结果、正在跑的和最近的失败')}</span></div>
+      <div className="focus-g">
+        {withRes.length > 0 && (
+          <div className="fc s-done">
+            {head('done', tr('最新结果'), withRes.length)}
+            {withRes.slice(0, 3).map(j => (
+              <button key={j.id} className="fc-j" onClick={() => onOpen(j.id)}>
+                <span className="fc-t"><b title={j.name}>{j.name}</b><em>{when_(j)}</em></span>
+                <span className="fc-m">{headlines(resOf(j), 3).map(h => <span key={h.k} title={h.k}><strong>{fmtNum(h.v)}</strong><em>{h.name}</em></span>)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {live.length > 0 && (
+          <div className="fc s-running">
+            {head('running', tr('在跑和排队'), live.length)}
+            {live.slice(0, 3).map(j => {
+              const run = stj(j) === 'running', pct = run ? pctOf(j.nvidb?.progress) : null;
+              return (
+                <button key={j.id} className="fc-j" onClick={() => onOpen(j.id)}>
+                  <span className="fc-t"><b title={j.name}>{j.name}</b><em>{run ? elapsed(j.nvidb?.elapsed_s ?? null) : ST.queued.label}</em></span>
+                  {pct != null && <span className="fc-bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></span>}
+                  <span className="fc-s mono">{j.nvidb?.progress || placeOf(j)}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {failed.length > 0 && (
+          <div className="fc s-failed">
+            {head('failed', tr('最近失败'), failed.length)}
+            {failed.slice(0, 3).map(j => (
+              <button key={j.id} className="fc-j" onClick={() => onOpen(j.id)}>
+                <span className="fc-t"><b title={j.name}>{j.name}</b><em>{when_(j)}</em></span>
+                <span className="fc-s mono" title={j.nvidb?.last_error}>{lastLine(j.nvidb?.last_error) || (j.nvidb?.exit_code != null ? tr('退出码 {0}', j.nvidb.exit_code) : tr('没有留下出错信息'))}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
-  );
-}
-
-function Lane({ l, i, nv, mine }: { l: NvLane; i: number; nv: Map<number, NvJob>; mine: Set<number> }) {
-  const seq = [...l.running.map(id => ({ id, run: true })), ...l.queued.map(id => ({ id, run: false }))];
-  return (
-    <div className="xq-lane" style={{ ['--i' as string]: i }}>
-      <div className="xq-h">
-        <b>{l.name}</b>
-        {l.paused && <span className="pst pst-paused">{tr('已暂停')}</span>}
-        {l.blocked && <span className="pst pst-failed" title={l.blocked}>{tr('卡住了')}</span>}
-        <span className="muted small">{tr('{0} 个排着', l.queued.length)}</span>
-      </div>
-      <div className="xq-seq">
-        {seq.map(({ id, run }, k) => {
-          const j = nv.get(id);
-          return (
-            <span key={id} className={`lj-chip${run ? ' run' : ''}${mine.has(id) ? ' mine' : ''}`} style={{ ['--k' as string]: k }}
-              title={j ? `${j.name}\n${j.submitter ?? ''}${j.notes ? `\n${j.notes}` : ''}` : `#${id}`}>
-              {run && <i className="lj-pulse" />}
-              <em>{run ? tr('在跑') : tr('第 {0}', k - l.running.length + 1)}</em>
-              <b>#{id}</b>{j && <span>{j.name}</span>}
-            </span>
-          );
-        })}
-      </div>
-    </div>
+    </section>
   );
 }

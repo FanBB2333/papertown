@@ -8,7 +8,7 @@ import { api, type Gpu, type GpuNode, type GpuStatus, type NvJob, type NvLane } 
 import '../gpus.css';
 import { tr } from '../i18n';
 
-const POLL = 10_000;
+const POLL = 5_000; // the server reads nvidb in the background; this only picks up its latest reading
 const STATE: Record<Gpu['state'], string> = { idle: tr('空闲'), room: tr('有空'), full: tr('满') };
 
 export const gb = (mb: number) => mb >= 10240 ? `${Math.round(mb / 1024)}G` : `${(mb / 1024).toFixed(1)}G`;
@@ -19,16 +19,28 @@ function ago(ts: string | null | undefined) {
   return s < 60 ? tr('{0} 秒前', Math.round(s)) : s < 3600 ? tr('{0} 分钟前', Math.floor(s / 60)) : tr('{0} 小时前', Math.floor(s / 3600));
 }
 
-// one reading every few seconds while the page is visible
+// One reading for the whole page, every few seconds while it is visible, shared by every view
+// that shows the cards, so they never disagree. refreshGpus() asks nvidb again at once.
+let last: GpuStatus | null = null;
+let timer = 0;
+const subs = new Set<(g: GpuStatus) => void>();
+const deal = (g: GpuStatus) => { last = g; subs.forEach(f => f(g)); };
+const read = () => { if (!document.hidden) api.gpus().then(deal).catch(() => {}); };
+export const refreshGpus = () => api.gpus(true).then(deal).catch(() => {});
+
 export function useGpus() {
-  const [g, setG] = useState<GpuStatus | null>(null);
+  const [g, setG] = useState<GpuStatus | null>(last);
   useEffect(() => {
-    let live = true;
-    const read = () => { if (!document.hidden) api.gpus().then(x => live && setG(x)).catch(() => {}); };
-    read();
-    const t = setInterval(read, POLL);
-    document.addEventListener('visibilitychange', read);
-    return () => { live = false; clearInterval(t); document.removeEventListener('visibilitychange', read); };
+    subs.add(setG);
+    if (subs.size === 1) {
+      read();
+      timer = window.setInterval(read, POLL);
+      document.addEventListener('visibilitychange', read);
+    } else if (last) setG(last);
+    return () => {
+      subs.delete(setG);
+      if (!subs.size) { clearInterval(timer); document.removeEventListener('visibilitychange', read); }
+    };
   }, []);
   return g;
 }
@@ -93,12 +105,9 @@ function Head({ g, onFresh }: { g: GpuStatus; onFresh?: () => void }) {
 // the whole board: for the farm's details and the power plant. focus `node:<name>` (or
 // `node:<name>/<gpu>`) opens that machine straight away, as its cabinet in the 3D walk does
 export function GpuBoard({ focus }: { focus?: string | null }) {
-  const polled = useGpus();
-  const [fresh, setFresh] = useState<GpuStatus | null>(null);
-  useEffect(() => setFresh(null), [polled]);
+  const g = useGpus();
   const want = /^node:(.+?)(?:\/(\d+))?$/.exec(focus ?? '');
   const [open, setOpen] = useState<{ name: string; gpu: number | null } | null>(want ? { name: want[1], gpu: want[2] ? +want[2] : null } : null);
-  const g = fresh ?? polled;
   if (!g) return <section className="gpus"><p className="muted small">{tr('正在读 nvidb…')}</p></section>;
   if (!g.ok) return <section className="gpus off"><h4>{tr('显卡 · nvidb')}</h4><p className="muted small">{g.note}</p></section>;
   const node = open && g.nodes.find(n => n.name === open.name);
@@ -106,7 +115,7 @@ export function GpuBoard({ focus }: { focus?: string | null }) {
   return (
     <section className="gpus">
       <h4>{tr('显卡 · 本机能用的 GPU')}</h4>
-      <Head g={g} onFresh={() => api.gpus(true).then(setFresh).catch(() => {})} />
+      <Head g={g} onFresh={refreshGpus} />
       <div className="nodes">
         {g.nodes.map(n => (
           <div key={n.name} className={`node${n.state === 'up' ? '' : ' down'}`}>
@@ -156,6 +165,13 @@ const JOB_ST: Record<string, [string, string]> = {
   failed: [tr('失败'), 'pst-failed'], lost: [tr('丢失'), 'pst-failed'], timeout: [tr('超时'), 'pst-failed'], cancelled: [tr('已取消'), ''],
 };
 const span = (s: number) => s < 90 ? tr('{0} 秒', Math.round(s)) : s < 5400 ? tr('{0} 分钟', Math.round(s / 60)) : tr('{0} 小时', (s / 3600).toFixed(1));
+// how long a process the queue did not start has been on its card: nvidb does not record when it
+// started, so this counts from when Papertown first saw it, "at least" when it was already there then
+export function seenFor(p: { seen_since?: string; earlier?: boolean }) {
+  if (!p.seen_since) return '';
+  const s = Math.max(0, (Date.now() - Date.parse(p.seen_since)) / 1000);
+  return p.earlier ? tr('至少 {0}', span(s)) : span(s);
+}
 
 // what runs and waits on a machine, for its card on the board
 function nodeLine(g: GpuStatus, n: GpuNode) {
@@ -284,7 +300,7 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
                 <div>
                   <h6>{tr('正在跑')}</h6>
                   {now.map(j => <JobRow key={j.id} j={j} />)}
-                  {other.map((p, k) => <div key={k} className="nd-proc"><span>{p.user ?? '?'} · {p.name}</span><span className="muted">{gb(p.mem_mb)} · {tr('不是队列的')}</span></div>)}
+                  {other.map((p, k) => <div key={k} className="nd-proc"><span>{p.user ?? '?'} · {p.name}</span><span className="muted">{gb(p.mem_mb)} · {tr('不是队列的')}{p.seen_since ? ` · ${seenFor(p)}` : ''}</span></div>)}
                   {!now.length && !other.length && <p className="muted small">{tr('没有任务')}</p>}
                 </div>
                 <div>

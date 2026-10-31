@@ -133,21 +133,31 @@ export interface NvJob {
   priority?: number; depends_on?: number[]; held_reason?: string | null; gpu_mem_mb?: number | null; max_runtime_s?: number | null;
   progress_at?: string | null;
 }
+// one nvidb job in full, as `nvidb job show` tells it (its environment left out)
+export interface NvJobFull extends NvJob {
+  tags: string[]; attempt: number | null; events: { ts: string; kind: string; node: string | null; message: string }[];
+}
 // a lane: one GPU (or a few) and the order it runs its jobs in; running and queued are job ids, in that order
 export interface NvLane {
   name: string; node: string; gpu_ids: number[]; paused: boolean; concurrency: number; runner_up: boolean | null; blocked: string | null;
   running: number[]; queued: number[];
 }
 export interface NvPool { name: string; members: { node: string; gpus: number[] }[] }
-export interface GpuProc { user: string | null; name: string; mem_mb: number; managed: boolean; job_id: number | null; job_name: string | null }
+// a process on a card; seen_since: when Papertown first saw it, earlier: it was already there then (its start is earlier still)
+export interface GpuProc {
+  pid: number | null; user: string | null; name: string; mem_mb: number; managed: boolean; job_id: number | null; job_name: string | null;
+  seen_since?: string; earlier?: boolean;
+}
 export interface Gpu {
   index: number; name: string; mem_total_mb: number; mem_used_mb: number; free_mb: number; util_percent: number;
   temperature_c: number | null; queue_mem_mb: number; external_mem_mb: number; reserved_mb: number; attribution: string | null;
   state: 'idle' | 'room' | 'full'; procs: GpuProc[];
+  updated_at?: string | null; trend?: [number, number, number][]; // [epoch s, util %, memory used MB], the last hour
 }
-export interface GpuNode { name: string; state: string; enabled: boolean; last_seen: string | null; last_error: string | null; gpus: Gpu[] }
+export interface GpuNode { name: string; state: string; enabled: boolean; last_seen: string | null; probed_at?: string | null; last_error: string | null; gpus: Gpu[] }
 export interface GpuStatus {
   ok: boolean; note: string; at: string | null; ticked?: string | null; nodes: GpuNode[]; jobs: NvJob[]; lanes?: NvLane[]; pools?: NvPool[];
+  polled_at?: string; poll_s?: number; // when Papertown last read nvidb, and how often it does
   summary: { nodes: number; up: number; gpus: number; idle: number; room: number; free_mb: number; total_mb: number } | null;
   counts: Record<string, number>; alerts: number;
 }
@@ -279,6 +289,7 @@ export const api = {
   wsDiff: (lineId: string, root: WsRoot, path: string) => call<{ path: string; diff: string }>('GET', `/api/lines/${lineId}/ws/${root}/diff?${new URLSearchParams({ path })}`),
   compile: (lineId: string) => call<Compiled>('POST', `/api/lines/${lineId}/ws/paper/compile`),
   data: (lineId: string) => call<LineData>('GET', `/api/lines/${lineId}/data`),
+  nvJob: (id: number) => call<NvJobFull>('GET', `/api/nvidb/jobs/${id}`),
 };
 
 export const fileUrl = (lineId: string, name: string) => (DEMO ? demoFile(lineId, name) : `/api/lines/${lineId}/files/${name}`);

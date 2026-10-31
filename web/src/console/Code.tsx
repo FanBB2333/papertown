@@ -9,7 +9,10 @@ import { tr } from '../i18n';
 import { FileView, Tabs, Tree, langOf, useFiles } from './files';
 import { Icon } from './icons';
 
-interface Props { lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void }
+interface Props {
+  lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void;
+  reveal?: { path: string; n: number } | null; // asked from another panel: open this file
+}
 
 export function Code(p: Props) {
   const place = p.info?.code;
@@ -44,6 +47,7 @@ function Repo(p: Props) {
     if (readme) f.show(readme.path);
   }, [files.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setDiff(null), [f.cur]);
+  useEffect(() => { if (p.reveal) f.show(p.reveal.path); }, [p.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cur = f.now;
   const st = cur ? f.status.get(cur.path) : undefined;
