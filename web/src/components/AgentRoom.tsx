@@ -642,7 +642,7 @@ export function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent
 // a pi tool call, paired with its result, as a tool trail shows it
 export const piTool = ({ ev, end }: Item) => ({ name: ev.data.name as string, arg: toolArg(ev.data.args), st: (!end ? 'run' : end.data.error ? 'bad' : 'ok') as ToolSt });
 
-function Entry({ ev, end }: Item) {
+export function Entry({ ev, end }: Item) {
   const d = ev.data ?? {};
   if (ev.kind === 'user' && d.cmd) {
     return <div className="msg-u cmd"><code>{d.text}</code><span className="meta">{tr('命令')}{d.delivered ? '' : tr(' · 发送中')}</span></div>;
@@ -651,7 +651,7 @@ function Entry({ ev, end }: Item) {
     return (
       <div className="msg-u">
         <Text text={d.text} />
-        <span className="meta">{d.origin === 'terminal' ? tr('终端') : tr('网页')}{d.origin === 'web' ? (d.delivered ? (d.queued ? tr(' · 已排队') : tr(' · 已送达')) : tr(' · 发送中')) : ''}</span>
+        <span className="meta">{d.origin === 'terminal' ? tr('终端') : tr('网页')}{d.origin === 'web' ? (d.delivered ? (d.queued ? tr(' · 已排队') : d.steered ? tr(' · 已插话') : tr(' · 已送达')) : d.held ? tr(' · 排队中') : tr(' · 发送中')) : ''}</span>
       </div>
     );
   }

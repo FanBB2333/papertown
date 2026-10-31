@@ -126,6 +126,16 @@ export interface PaperCard {
 export interface Shelf { total: number; topics: { label: string; n: number }[]; papers: PaperCard[] }
 
 export interface ProjectRef { id: string; seq: number; title: string; status: string; stage: string }
+// what a department is doing: the projects at it, the staff agents and jobs in it, who answers there
+export interface DeptAgent extends Pick<Agent, 'id' | 'role' | 'name' | 'status' | 'runtime' | 'line_id' | 'model' | 'started' | 'cost' | 'updated_at'> {
+  seq: number | null; last: { kind: string; text: string } | null;
+}
+export interface Department {
+  id: string; type: string; name: string; district: string; color: string; state: 'busy' | 'wait' | 'idle' | 'off'; job: string;
+  lines: (ProjectRef & { pct: number })[]; agents: DeptAgent[]; jobs: Pick<Job, 'id' | 'name' | 'status' | 'progress' | 'line_id' | 'backend'>[];
+  gpus: { total: number; idle: number; running: number } | null; worker: WorkerRef | null;
+}
+export type SayMode = 'steer' | 'queue';
 export interface RosterRow { line: ProjectRef; agent: Agent | null }
 export interface Roster { roster: RosterRow[]; available: { ok: boolean; note: string; pi: string | null; tmux: string | null } }
 
@@ -258,6 +268,7 @@ export const api = {
   messages: () => call<Message[]>('GET', '/api/messages?limit=120'),
   trace: () => call<TraceRow[]>('GET', '/api/trace?limit=80'),
   status: () => call<any>('GET', '/api/status'),
+  departments: () => call<Department[]>('GET', '/api/departments'),
   idea: (text: string, budget: number) => call<Line>('POST', '/api/ideas', { text, budget }),
   hatch: (id: string) => call<Line>('POST', `/api/lines/${id}/hatch`),
   adjust: (id: string, text: string) => call<Line>('POST', `/api/lines/${id}/adjust`, { text }),
@@ -297,7 +308,7 @@ export const api = {
   papersOf: (lineId: string) => call<{ survey: PaperCard[]; references: PaperCard[] }>('GET', `/api/lines/${lineId}/papers`),
   setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
-  say: (id: string, text: string) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text }),
+  say: (id: string, text: string, mode?: SayMode) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text, ...(mode ? { mode } : {}) }),
   brief: (id: string) => call<AgentEvent>('POST', `/api/agents/${id}/brief`),
   abort: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/abort`),
   ws: (lineId: string) => call<WsInfo>('GET', `/api/lines/${lineId}/ws`),

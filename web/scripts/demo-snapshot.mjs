@@ -48,7 +48,7 @@ async function get(url, key = null) {
 
 const world = await get('/api/world');
 const lines = await get('/api/lines');
-for (const u of ['/api/messages?limit=120', '/api/trace?limit=80', '/api/status', '/api/skills', '/api/skim', '/api/skim?fresh=1',
+for (const u of ['/api/messages?limit=120', '/api/trace?limit=80', '/api/status', '/api/departments', '/api/skills', '/api/skim', '/api/skim?fresh=1',
   '/api/skim/resolve', '/api/mcp', '/api/rag', '/api/gpus', '/api/gpus?fresh=1', '/api/paseo', '/api/paseo/conversations', '/api/llm',
   '/api/agents?role=coder', '/api/agents?role=writer', '/api/agents?role=monitor']) await get(u);
 await get('/api/library?limit=5000', 'library_all');

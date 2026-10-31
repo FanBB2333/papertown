@@ -24,15 +24,10 @@
 .rn-empty { margin: 4px; }
 .running { max-height: calc(100% - 330px); overflow-y: auto; }
 
-/* drawer */
+/* chat */
 .msg.bot.err { border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
 .msg .sugg { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
 .msg .btns a.btn { text-decoration: none; }
-.mode { display: flex; align-items: center; gap: 6px; padding: 8px 14px 0; border-top: var(--pborder); }
-.mode + .composer { border-top: 0; }
-.mode .bench-x { margin-left: 0; padding: 0 4px; font-size: 18px; }
-.composer .budget { padding: 7px 6px; border: var(--pborder); border-radius: calc(var(--radius) * .8); background: var(--bg); color: var(--ink); font: 12.5px var(--font); }
-.composer .btn[disabled] { opacity: .6; cursor: default; }
 .line-pick { width: 100%; margin-bottom: 10px; padding: 6px 8px; border: var(--pborder); border-radius: 8px; background: var(--bg); font: 13px var(--font); color: var(--ink); }
 .trace-rows .tr { padding: 3px 0; border-bottom: 1px dashed var(--line); }
 

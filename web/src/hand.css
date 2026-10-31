@@ -32,13 +32,13 @@ body.proto-page { background: #f4eee2; }
 .theme-sketch :is(code, pre, kbd, .code) { font-family: ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0; }
 
 /* ---------- drawn boxes ---------- */
-.theme-sketch :is(.pnl, .pnl-s, .proj, .mon, .backend, .tally > div, .io, .stn, .running, .ptip, .p-drawer) {
+.theme-sketch :is(.pnl, .pnl-s, .proj, .mon, .backend, .tally > div, .io, .stn, .running, .ptip) {
   border-color: transparent !important; background-color: var(--panel);
   background-image: var(--box-a); background-size: 100% 100%; background-repeat: no-repeat;
 }
 .theme-sketch :is(.proj, .mon, .job, .stn):nth-child(3n + 1) { background-image: var(--box-b); }
 .theme-sketch :is(.proj, .mon, .job, .stn):nth-child(3n + 2) { background-image: var(--box-c); }
-.theme-sketch :is(.pnl, .pnl-s, .running, .p-drawer, .ptip) { box-shadow: var(--pshadow); }
+.theme-sketch :is(.pnl, .pnl-s, .running, .ptip) { box-shadow: var(--pshadow); }
 .theme-sketch :is(.proj, .mon, .job, .backend, .tally > div, .stn, .io) { box-shadow: none; }
 
 /* small things get a pen line with uneven corners instead of a stretched box */
@@ -64,7 +64,7 @@ body.proto-page { background: #f4eee2; }
 .theme-sketch kbd { border: 1px solid var(--ink-c); border-radius: 5px 6px 4px 6px / 6px 4px 6px 5px; padding: 0 5px; background: var(--panel); font-size: 11px; }
 
 .theme-sketch :is(textarea, input, select) { font-family: var(--font); }
-.theme-sketch .chat-compose textarea, .theme-sketch .p-drawer textarea {
+.theme-sketch .chat-compose textarea {
   border-color: transparent; background: var(--panel) var(--box-a) center / 100% 100% no-repeat;
 }
 .theme-sketch .chat-compose textarea:focus { box-shadow: none; background-image: var(--box-brand); }
@@ -102,8 +102,6 @@ body.proto-page { background: #f4eee2; }
 .theme-sketch .rn { padding: 8px 10px; border-radius: 8px; animation: rise-in .5s var(--out) both; animation-delay: calc(var(--i, 0) * 50ms); transition: background-color .2s; }
 .theme-sketch .rn b { font-size: 13.5px; }
 
-.theme-sketch.la .newidea { bottom: 22px; left: 18px; font-size: 15px; padding: 9px 18px 9px 10px; border-radius: 16px; }
-.theme-sketch.la .newidea:hover { transform: translateY(-2px) rotate(-1deg); }
 
 .walk-hint {
   position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 5; pointer-events: none;
@@ -159,8 +157,8 @@ body.proto-page { background: #f4eee2; }
 /* ---------- going inside ---------- */
 .theme-sketch .p-world { transform-origin: var(--ox, 50%) var(--oy, 50%); transition: transform .9s var(--out); }
 .theme-sketch.in-room .p-world { transform: scale(1.14); }
-.theme-sketch :is(.hud, .running, .newidea, .walk-hint, .zoom-ctl) { transition: opacity .5s var(--out), transform .6s var(--spring); }
-.theme-sketch.in-room :is(.running, .newidea, .zoom-ctl) { opacity: 0; pointer-events: none; }
+.theme-sketch :is(.hud, .running, .walk-hint, .zoom-ctl) { transition: opacity .5s var(--out), transform .6s var(--spring); }
+.theme-sketch.in-room :is(.running, .zoom-ctl) { opacity: 0; pointer-events: none; }
 .theme-sketch.chat-open .running { opacity: 0; transform: translateX(20px); pointer-events: none; }
 
 .theme-sketch .interior { z-index: 40; animation: none; }
@@ -206,7 +204,6 @@ body.proto-page { background: #f4eee2; }
 .theme-sketch .lc .line .belt { opacity: .5; }
 
 /* ---------- everything else that moves ---------- */
-.theme-sketch .p-drawer { z-index: 60; transition: transform .7s var(--spring); }
 .theme-sketch .toasts { z-index: 95; }
 .theme-sketch .toast { padding: 9px 18px; font-size: 13.5px; background: var(--panel); box-shadow: var(--pshadow); animation: toast-in .6s var(--spring-pop) both; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-12px) scale(.96); } }

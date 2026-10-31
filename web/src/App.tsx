@@ -1,7 +1,7 @@
 // Papertown: the console is home for anyone who would rather click than walk: every project
 // and everything the town does, as panels. The world map is the same town, walked as a small
-// figure. Chat slides in from the side (B), a building opens full screen from the inside (C),
-// and the status view (D) sits beside the world. The town can be walked in 3D too, through
+// figure. The chat waits at the bottom of every page (B), a building opens full screen from the
+// inside (C), and the status view (D) sits beside the world. The town can be walked in 3D too, through
 // your own eyes; the camera flies between the map's view and yours, so either hands over to
 // the other.
 //
@@ -10,9 +10,9 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
-import { Item, Logo } from './art';
+import { Logo } from './art';
 import { DemoWelcome, RepoLink } from './components/Demo';
-import { Drawer, type Composer, type Tab } from './components/Drawer';
+import { Chat, type Composer, type Tab } from './components/Chat';
 import { Interior } from './components/Interior';
 import { SettingsPanel } from './components/Settings';
 import { StatusView } from './components/StatusView';
@@ -303,7 +303,8 @@ export function App() {
             {!online ? tr('连接断开') : DEMO ? tr('静态演示') : hud.offline ? tr('离线模式') : hud.provider}</span>}
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={() => setSettingsOpen(true)}><Gear />{tr('设置')}</button>
-          <button className="btn" onClick={() => chatOpen ? setChatOpen(false) : openChat()}>{tr('对话')}</button>
+          <button className={`btn${chatOpen ? ' on' : ''}`} title={tr('指挥小镇的员工，看各部门在做什么（/ 直接开始写）')}
+            onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('对话')}</button>
         </div>
       </header>
 
@@ -320,13 +321,12 @@ export function App() {
         </aside>
       )}
 
-      <button className="newidea btn pri w-only" onClick={() => openChat({ kind: 'idea' }, true)}><Item k="egg" />{tr('放入一颗新 idea')}</button>
       {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('走动 · 到门口按')} <kbd>F</kbd> {tr('进去 · 也可以直接点建筑')}</div>}
 
-      <Drawer open={chatOpen} tab={tab} onTab={setTab} onClose={() => setChatOpen(false)} messages={messages} trace={trace}
-        lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer} focusKey={focusKey}
-        busy={busy} onSend={onSend} onOpen={id => openRoom(id)}
-        onHatch={id => act(() => api.hatch(id))} />
+      <Chat view={view} open={chatOpen} setOpen={setChatOpen} away={!!sheet || (view === 'world' && dim !== '2d')} tab={tab} onTab={setTab}
+        messages={messages} trace={trace} lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer}
+        focusKey={focusKey} busy={busy} tick={tick} onSend={onSend} onRoom={(id, lineId) => openRoom(id, lineId)} toast={push}
+        onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))} />
 
       {sheet && (
         <Interior key={`${sheet}:${swap}`} id={sheet} focus={focus} tick={tick} placements={world?.placements ?? []} lines={lines}

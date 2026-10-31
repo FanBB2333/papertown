@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'react';
 import { api, listen, type Hud, type Llm, type PaseoInfo, type Roster } from '../api';
 import { DEFAULTS, resetSettings, setSettings, useSettings, type Settings as S } from '../settings';
-import { LlmForm } from './Drawer';
+import { LlmForm } from './Chat';
 import '../settings.css';
 import { LANG, LANGS, setLang, tr } from '../i18n';
 
@@ -213,6 +213,7 @@ const KEYS: [string, string][] = [
   [tr('鼠标'), tr('3D 里转视角；平面上拖动地图、滚轮缩放')], [tr('点击'), tr('平面上进建筑；3D 里和 F 一样')],
   ['V', tr('3D 里切换第一 / 第三人称')], ['T', tr('3D 里切换白天 / 夜晚')],
   ['M', tr('3D 里回到平面')], ['Esc', tr('放开鼠标（全屏时同时退出全屏）/ 关闭对话 / 回到小镇 / 关闭设置')], [',', tr('打开设置')],
+  ['/', tr('在底部的对话框里开始写')], ['@', tr('对话框里换收件人：部门或员工')],
   ['⌘K', tr('中控屏里换项目')], ['⌘J', tr('中控屏里打开或收起小助手')], ['1 … 9, 0', tr('中控屏里切换左边的面板')], ['⌘S / ⌘↵', tr('中控屏的编辑器里保存 / 重新编译论文')],
 ];
 

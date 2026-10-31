@@ -1,0 +1,247 @@
+/* The chat at the bottom of every page: one line to write in that opens upward into the
+   conversation, the departments along its top. Drawn like the other panels; while you write,
+   the closed box is drawn in the brand colour. In the console it keeps a band of its own under
+   the panel column, so nothing there is ever hidden behind it. */
+
+.dock {
+  --dk-w: 680px;
+  position: absolute; left: 50%; bottom: 18px; z-index: 60; width: min(var(--dk-w), calc(var(--dk-room, 100%) - 28px));
+  transform: translateX(-50%); transition: width .55s var(--spring), opacity .4s var(--out), transform .55s var(--spring);
+}
+.dock.open { --dk-w: 780px; }
+.dock.away:not(.open) { opacity: 0; transform: translate(-50%, 28px); pointer-events: none; }
+.proto[data-mode=console] .dock { bottom: 10px; }
+.proto[data-mode=console] .cm { padding-bottom: 64px; }
+.proto[data-mode=console] .cm::after { content: ''; position: absolute; left: 0; right: 0; bottom: 64px; height: 1px; background: var(--line); pointer-events: none; }
+.proto .p-status { padding-bottom: 100px; }
+.proto .walk-hint { bottom: 92px; }
+.pt-hint { bottom: 84px; }
+.dock .ic { width: 18px; height: 18px; }
+
+.dk-shell {
+  position: relative; display: flex; flex-direction: column; border-radius: 18px; background: var(--panel);
+  box-shadow: 0 22px 46px -24px rgba(60, 38, 18, .6), 0 4px 12px -8px rgba(60, 38, 18, .3);
+}
+.theme-sketch .dk-shell { background: var(--panel) var(--box-a) center / 100% 100% no-repeat; }
+.theme-sketch .dock:not(.open) .dk-shell:focus-within { background-image: var(--box-brand); }
+
+/* opening: the panel grows from nothing above the line you write in */
+.dk-grow { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .5s var(--out); }
+.dock.open .dk-grow { grid-template-rows: 1fr; }
+.dk-panel { min-height: 0; overflow: hidden; }
+.dk-in { height: min(560px, calc(100vh - var(--hud-h, 62px) - 150px)); display: flex; flex-direction: column; opacity: 0; transition: opacity .2s var(--out); }
+.dock.open .dk-in { opacity: 1; transition: opacity .35s var(--out) .1s; }
+
+/* its top: what to look at, the town's model, folding it away */
+.dk-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 10px 10px 0 12px; }
+.dk-tabs { display: flex; gap: 2px; }
+.dk-tabs button {
+  position: relative; padding: 4px 9px 8px; border: 0; background: none; font: 15px var(--head); color: var(--muted); cursor: pointer;
+  transition: color .25s var(--out);
+}
+.dk-tabs button::after {
+  content: ''; position: absolute; left: 7px; right: 7px; bottom: 0; height: 7px; background: var(--rule-brand) center / 100% 100% no-repeat;
+  transform: scaleX(0); transform-origin: left; transition: transform .55s var(--spring);
+}
+.dk-tabs button:hover, .dk-tabs button.on { color: var(--ink); }
+.dk-tabs button.on::after { transform: scaleX(1); }
+.dk-head .llm-switch { margin-left: auto; }
+.dk-x {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; background: none;
+  color: var(--muted); cursor: pointer; transition: background-color .2s var(--out), color .2s;
+}
+.dk-x:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+
+/* every department and what it is doing; the edge in its district's colour, as on the map */
+.dk-depts {
+  flex: none; display: flex; gap: 6px; padding: 10px 14px 12px; overflow-x: auto; scrollbar-width: none;
+  mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent);
+}
+.dk-depts::-webkit-scrollbar { display: none; }
+.dk-chip {
+  --dc: var(--muted);
+  flex: none; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 86px; max-width: 170px; padding: 6px 12px 7px 13px;
+  border: 0; border-radius: 10px; background: color-mix(in srgb, var(--ink) 4%, transparent); box-shadow: inset 3px 0 0 color-mix(in srgb, var(--dc) 85%, transparent);
+  font: inherit; text-align: left; cursor: pointer; animation: rise-in .45s var(--out) both; animation-delay: calc(var(--i, 0) * 28ms);
+  transition: background-color .2s var(--out), box-shadow .2s, transform .45s var(--spring);
+}
+.dk-chip:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); transform: translateY(-1px); }
+.dk-chip:active { transform: scale(.97); transition-duration: .1s; }
+.dk-chip b { display: flex; align-items: center; gap: 6px; font: 14px var(--head); color: var(--ink); white-space: nowrap; }
+.dk-chip span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--muted); }
+.dk-chip.s-wait span { color: var(--warn); }
+.dk-chip.s-busy span { color: color-mix(in srgb, var(--brand) 85%, var(--ink)); }
+.dk-chip.on {
+  background: color-mix(in srgb, var(--dc) 13%, var(--panel));
+  box-shadow: inset 3px 0 0 var(--dc), inset 0 0 0 1px color-mix(in srgb, var(--dc) 45%, transparent);
+}
+
+/* a department's state: at work beats, waiting for you is amber, idle is a grey dot, not connected an empty ring */
+.dk-st { width: 7px; height: 7px; border-radius: 50%; flex: none; background: color-mix(in srgb, var(--ink) 20%, transparent); }
+.dk-st.s-busy { background: var(--brand); animation: dk-beat 2s var(--in-out) infinite; }
+.dk-st.s-wait { background: var(--warn); }
+.dk-st.s-off { background: none; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 28%, transparent); }
+@keyframes dk-beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 50%, transparent); } 70%, 100% { box-shadow: 0 0 0 5px transparent; } }
+.dk-sw { --dc: var(--muted); width: 10px; height: 10px; flex: none; border-radius: 3px; background: var(--dc); }
+
+/* the conversation */
+.dk-body {
+  position: relative; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 16px 16px; border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.dk-body > * { flex: none; }
+.dock .pane-pad { flex: none; padding: 0; overflow: visible; }
+.dock .msg { font-size: 13.5px; line-height: 1.65; animation: rise-in .35s var(--out) both; }
+.dock :is(.msg.mine, .msg-u) {
+  align-self: flex-end; max-width: 82%; padding: 8px 13px; border: 0; border-radius: 16px 16px 6px 16px;
+  background: color-mix(in srgb, var(--brand) 13%, var(--panel)); color: var(--ink); font-size: 13.5px;
+}
+.dock :is(.msg.bot, .msg-a) {
+  align-self: flex-start; max-width: 94%; padding: 10px 14px; border: 1.2px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 16px 18px 17px 6px / 17px 16px 18px 6px; background: var(--panel);
+}
+.dock .msg.bot.err { border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+.dock .msg-u.held { background: color-mix(in srgb, var(--warn) 13%, var(--panel)); }
+.dock :is(.trail, .ask, .tool) { max-width: 94%; }
+.dk-hint { margin: 2px; font-size: 13px; line-height: 1.65; color: var(--muted); }
+.dk-asks { display: flex; flex-wrap: wrap; gap: 6px; }
+.dk-asks button {
+  padding: 5px 12px; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); font: 12.5px var(--font); color: var(--ink);
+  cursor: pointer; transition: border-color .2s, background-color .2s, transform .45s var(--spring);
+}
+.dk-asks button:hover { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); background: color-mix(in srgb, var(--brand) 6%, var(--panel)); transform: translateY(-1px); }
+
+/* a department you talk to: what it is doing, who is at work in it, who answers there */
+.dk-dept {
+  --dc: var(--muted);
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 12px 16px; border-radius: 14px;
+  background: color-mix(in srgb, var(--dc) 6%, var(--panel)); box-shadow: inset 3px 0 0 var(--dc), inset 0 0 0 1px color-mix(in srgb, var(--dc) 20%, transparent);
+  animation: rise-in .4s var(--out) both;
+}
+.dk-dept header { display: flex; align-items: center; gap: 8px; }
+.dk-dept h4 { margin: 0; font: 18px var(--head); color: var(--ink); }
+.dk-district { font-size: 12px; color: var(--muted); }
+.dk-job { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.dk-op {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; margin-left: auto; padding: 0 8px 0 10px; border: 0; border-radius: 8px; background: none;
+  font: 12.5px var(--font); color: var(--muted); white-space: nowrap; cursor: pointer; transition: background-color .2s var(--out), color .2s;
+}
+.dk-op + .dk-op { margin-left: 0; }
+.dk-op:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.dk-op .ic { width: 14px; height: 14px; }
+.dock .ic.fill path { fill: currentColor; }
+.dk-rows { display: flex; flex-direction: column; gap: 1px; margin: 0 -6px; }
+.dk-row { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 3px 6px; border-radius: 8px; transition: background-color .2s var(--out); }
+.dk-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.dk-row > .dot { width: 8px; height: 8px; }
+.dk-rt {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; padding: 0; border: 0; background: none; font: 13px var(--font);
+  color: var(--ink); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.dk-rt b { flex: none; font-weight: 600; }
+.dk-rt em { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-style: normal; color: var(--muted); }
+.dk-rs { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.dk-ra { flex: none; display: flex; gap: 6px; }
+.theme-sketch .dk-ra .btn { padding: 1px 11px; font-size: 12.5px; }
+.dk-ld { width: 8px; height: 8px; flex: none; border-radius: 50%; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+.dk-ld:is(.d-running, .d-hatching, .j-running) { background: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); }
+.dk-ld.d-waiting { background: var(--warn); }
+.dk-ld.d-paused { background: color-mix(in srgb, var(--warn) 50%, var(--muted)); }
+.dk-ld.d-linked { background: var(--ok); }
+.dk-ld.j-queued { background: none; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 35%, transparent); }
+.dk-more { margin: 2px 6px 0; font-size: 12px; color: var(--muted); }
+.dk-asker { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; color: var(--muted); }
+.dk-asker .ava { width: 24px; height: 24px; flex: none; }
+
+/* a project's agent you talk to */
+.dk-ahead {
+  position: sticky; top: -12px; z-index: 2; display: flex; align-items: center; gap: 10px; margin: -12px -16px 0; padding: 10px 10px 10px 18px;
+  background: color-mix(in srgb, var(--ink) 3%, var(--panel)); border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.dk-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dk-who b { font: 15px var(--head); color: var(--ink); }
+.dk-who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+
+/* the line you write in */
+.dk-bar { position: relative; flex: none; display: flex; align-items: flex-end; gap: 6px; padding: 8px; }
+.dock.open .dk-bar { border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
+.dk-to {
+  flex: none; display: inline-flex; align-items: center; gap: 7px; max-width: 210px; height: 36px; padding: 0 8px 0 9px; border: 0; border-radius: 11px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent); font: 14.5px var(--head); color: var(--ink); cursor: pointer;
+  transition: background-color .2s var(--out), transform .45s var(--spring);
+}
+.dk-to:hover, .dk-to.on { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.dk-to:active { transform: scale(.96); transition-duration: .1s; }
+.dk-to b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+.dk-to .sp-svg, .dk-mi .sp-svg { width: 24px; height: 24px; margin: -4px -3px -4px -4px; }
+.dk-to > .ic:not(:last-child), .dk-mi > .ic { width: 16px; height: 16px; color: var(--brand); }
+.dk-to > .ic:last-child { width: 14px; height: 14px; color: var(--muted); transition: transform .3s var(--out); }
+.dk-to.on > .ic:last-child { transform: rotate(180deg); }
+.dk-bar textarea {
+  flex: 1; min-width: 0; height: 36px; max-height: 132px; margin: 0; padding: 8px 4px; border: 0; outline: none; resize: none; background: none;
+  font: 14.5px/1.4 var(--font); color: var(--ink);
+}
+.dk-bar textarea::placeholder { color: color-mix(in srgb, var(--muted) 85%, transparent); }
+.dk-bar textarea:placeholder-shown { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.dk-kbd { flex: none; align-self: center; margin-right: 2px; }
+.dk-bar:focus-within .dk-kbd { display: none; }
+.dk-budget {
+  flex: none; height: 36px; padding: 0 4px; border: 0; border-radius: 10px; background: none; font: 13px var(--font); color: var(--muted); cursor: pointer;
+  transition: background-color .2s, color .2s;
+}
+.dk-budget:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+.dk-mode { flex: none; align-self: center; display: flex; padding: 2px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 6%, transparent); animation: dk-pop .25s var(--out) both; }
+.dk-mode button {
+  height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: none; font: 12.5px var(--font); color: var(--muted); cursor: pointer;
+  transition: background-color .2s var(--out), color .2s, box-shadow .2s;
+}
+.dk-mode button:hover { color: var(--ink); }
+.dk-mode button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(60, 40, 20, .2); }
+.dk-stop, .dk-send {
+  flex: none; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
+  transition: background-color .2s, color .2s, transform .45s var(--spring);
+}
+.dk-stop { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); animation: dk-pop .25s var(--out) both; }
+.dk-stop:hover { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+.dk-stop .ic { width: 15px; height: 15px; }
+.dk-send { background: var(--brand); color: #fff; }
+.dk-send .ic { stroke-width: 2.2; }
+.dk-send:hover:not([disabled]) { transform: scale(1.07); }
+.dk-send:active:not([disabled]) { transform: scale(.92); transition-duration: .1s; }
+.dk-send[disabled] { background: color-mix(in srgb, var(--ink) 9%, transparent); color: color-mix(in srgb, var(--ink) 35%, transparent); cursor: default; }
+
+/* the lights in the closed box */
+.dk-lights {
+  flex: none; display: inline-flex; align-items: center; gap: 7px; max-width: 230px; height: 36px; padding: 0 8px 0 10px; border: 0; border-radius: 11px;
+  background: none; font: 12.5px var(--font); color: var(--muted); cursor: pointer; transition: background-color .2s var(--out), color .2s;
+}
+.dk-lights:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+.dk-lights.wait { color: var(--warn); }
+.dk-dots { display: inline-flex; gap: 4px; }
+.dk-ll { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dk-bar:focus-within .dk-ll { display: none; }
+.dk-lights > .ic { width: 14px; height: 14px; transform: rotate(180deg); }
+
+/* whom you write to: the chip's menu, or @ at the start of the line */
+.dk-menu {
+  position: absolute; left: 6px; bottom: calc(100% + 8px); z-index: 3; width: min(380px, calc(100% - 12px)); max-height: min(380px, 56vh); overflow-y: auto;
+  padding: 6px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: 0 20px 44px -18px rgba(50, 32, 16, .5);
+  transform-origin: bottom left; animation: dk-pop .22s var(--out) both;
+}
+@keyframes dk-pop { from { opacity: 0; transform: translateY(6px) scale(.97); } }
+.dk-menu h6 { margin: 8px 10px 3px; font: 600 11px var(--font); letter-spacing: .05em; color: var(--muted); }
+.dk-menu h6:first-child { margin-top: 4px; }
+.dk-mi {
+  display: flex; align-items: center; gap: 9px; width: 100%; min-height: 34px; padding: 4px 10px; border: 0; border-radius: 9px; background: none;
+  font: 13.5px var(--font); color: var(--ink); text-align: left; cursor: pointer;
+}
+.dk-mi.on { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.dk-mi > .dot { width: 8px; height: 8px; margin: 0 1px; }
+.dk-mi b { flex: none; font-weight: 500; }
+.dk-mi span { min-width: 0; margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.dk-none { margin: 10px; font-size: 12.5px; color: var(--muted); }
+
+@media (max-width: 720px) {
+  .dk-ll, .dk-kbd { display: none; }
+  .dk-to { max-width: 130px; }
+}
