@@ -4,14 +4,17 @@ It runs the way the depot's and the press's agents do (pi in tmux, or Paseo); wh
 particular to it is here:
 
 - The page. Each message from the sidebar starts with what you are looking at: the project,
-  the panel with its settings and what is open, and what you pointed at. The latest is also
-  kept in .papertown/page.md in its directory, with where every part of that panel comes
-  from (files, nvidb commands, Papertown endpoints) and the text the panel shows.
+  the panel with its settings and what is open, what you pointed at and the text you had
+  selected. The latest is also kept in .papertown/page.md in its directory, with where every
+  part of that panel comes from (files, nvidb commands, Papertown endpoints) and the text the
+  panel shows.
 - Asking. It can ask you something, with choices, or ask you to point at the page.
 - Showing. It can open a panel, a file or a job for you and light up a part of the page.
 - Doing. It proposes actions from a fixed list (submit or cancel a farm job, hatch, resume,
   adjust, message an employee, compile a paper, switch a skill or an MCP server). Each one
   waits in the sidebar until you allow it, and what came of it is sent back to the assistant.
+- Earlier conversations. A new conversation sets the Paseo one aside; the sidebar lists those
+  (named by the first thing asked in each) and can go back to one.
 
 Its tools reach the server over HTTP. Codex runs commands in a sandbox without network, so
 `pt` then writes the same request as a file in the assistant's directory, which the server
@@ -29,6 +32,7 @@ from typing import TYPE_CHECKING, Callable
 
 from .agents import ROLES, AgentError
 from .db import now
+from .paseo import PaseoError
 from .workspace import WsError
 
 if TYPE_CHECKING:
@@ -38,6 +42,7 @@ ID = "assistant"
 MODS = {"overview": "概览", "survey": "调研", "code": "代码仓库", "exp": "实验", "data": "数据", "paper": "论文",
         "agents": "员工", "skills": "Skills", "mcp": "MCP", "rag": "图书馆"}
 TEXT_MAX = 8000  # of the panel's own text
+SELECTION_MAX = 2000  # of the text you had selected
 REFS_MAX = 80
 OPEN = urllib.request.build_opener(urllib.request.ProxyHandler({})).open  # to this server itself, never through a proxy
 
@@ -218,6 +223,7 @@ class Assistant:
             "refs": [{"ref": clip(r.get("ref"), 80), "label": clip(r.get("label"), 80)} for r in (p.get("refs") or [])[:REFS_MAX]
                      if isinstance(r, dict) and r.get("ref")],
             "text": str(p.get("text") or "")[:TEXT_MAX],
+            "selection": str(p.get("selection") or "").strip()[:SELECTION_MAX],
         }
 
     def header(self, p: dict) -> str:
@@ -227,6 +233,9 @@ class Assistant:
         out = ["<page>", f"在看：{project}{p.get('mod_name') or '中控屏'}" + (f"（{st}）" if st else "")]
         if p.get("focus"):
             out.append("指着：" + _pointed(p["focus"]))
+        if p.get("selection"):
+            n = p["selection"].count("\n") + 1
+            out.append(f"选中：「{clip(p['selection'], 120)}」" + (f"（{n} 行，全文在 page.md）" if n > 1 else ""))
         return "\n".join([*out, "详细：.papertown/page.md", "</page>"])
 
     def _page_md(self, p: dict) -> str:
@@ -242,6 +251,8 @@ class Assistant:
             out.append("- 用户指着：" + _pointed(f))
             if f.get("text") and f.get("text") != f.get("label"):
                 out.append(f"  - 那一块写着：{f['text']}")
+        if p.get("selection"):
+            out += ["- 用户在页面上选中了这段文字：", "", "```text", p["selection"], "```"]
         out += ["", "## 这一页的数据从哪来", "", *[f"- {x}" for x in self._sources(p["mod"], ln["id"] if ln else None)]]
         if p["refs"]:
             out += ["", "## 页面上能亮给他看的地方（show 的 ref）", "", *[f"- `{r['ref']}` {r['label']}" for r in p["refs"]]]
@@ -315,6 +326,8 @@ class Assistant:
             raise AgentError("先启动小助手")
         p = self.set_page(page) if page else self.page
         self._close_asks(text)
+        if a.get("runtime") == "paseo" and a.get("ext_id"):
+            self._name(a["ext_id"], text)
         return self.town.agents.say(ID, f"{self.header(p)}\n\n{text.strip()}" if p else text)
 
     def brief(self, line: str | None) -> str:
@@ -480,6 +493,51 @@ class Assistant:
         elif a.get("runtime") == "pi" and self.town.agents.alive(a):
             self.town.agents.say(ID, "/new")
         self._close_asks()
+        return self.town.agents.public(self.row())
+
+    # ---------- earlier conversations ----------
+
+    def _names(self) -> dict[str, str]:
+        try:
+            return json.loads((self.dir / "conversations.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _name(self, ext_id: str, text: str) -> None:
+        """The first thing asked in a conversation, as its name among the earlier ones."""
+        names = self._names()
+        if ext_id not in names:
+            names[ext_id] = clip(text, 60)
+            (self.dir / "conversations.json").write_text(json.dumps(names, ensure_ascii=False, indent=1), encoding="utf-8")
+
+    def _mine(self) -> list[dict]:
+        try:
+            convs = self.town.agents.paseo.conversations()
+        except PaseoError:
+            return []
+        return [c for c in convs if (c.get("labels") or {}).get("papertown.role") == ID]
+
+    def history(self) -> list[dict]:
+        """Its conversations in Paseo, the latest first; pi keeps its sessions to itself."""
+        cur, names = self.row().get("ext_id"), self._names()
+        out = [{"id": c["id"], "title": names.get(c["id"]), "model": "/".join(x for x in (c["provider"], c.get("model")) if x),
+                "at": c.get("last_user") or c.get("updated") or c.get("created"), "current": c["id"] == cur} for c in self._mine()]
+        return sorted(out, key=lambda x: x["at"] or "", reverse=True)
+
+    def resume(self, ext_id: str) -> dict:
+        """Go back to an earlier conversation; the one open now is set aside as a new one would."""
+        conv = next((c for c in self._mine() if c["id"] == ext_id), None)
+        if not conv:
+            raise AgentError("Paseo 里没有这段对话了")
+        a = self.row()
+        if a.get("ext_id") != ext_id:
+            if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "working":
+                try:
+                    self.town.agents.abort(ID)
+                except AgentError:
+                    pass
+            self._close_asks()
+            self.town.agents.attach(ID, conv)
         return self.town.agents.public(self.row())
 
     # ---------- the relay, for a sandbox without network ----------

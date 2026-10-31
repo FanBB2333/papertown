@@ -134,6 +134,10 @@ class DecideIn(BaseModel):
     allow: bool
 
 
+class ResumeIn(BaseModel):
+    id: str = Field(min_length=1, max_length=120)
+
+
 class AskIn(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     choices: list[str] = []
@@ -529,6 +533,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/assistant/new")
     def assistant_new():
         return assistant(town.assistant.reset)
+
+    @app.get("/api/assistant/history")
+    def assistant_history():
+        return {"conversations": town.assistant.history()}
+
+    @app.post("/api/assistant/resume")
+    def assistant_resume(body: ResumeIn):
+        return assistant(town.assistant.resume, body.id)
 
     # ---------- the bridge inside each pi ----------
 

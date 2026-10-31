@@ -264,6 +264,12 @@ class Agents:
         """Set an agent's Paseo conversation aside (it stays in Paseo); the next start makes another."""
         self._set(agent_id, runtime=None, ext_id=None, status="stopped", model=None)
 
+    def attach(self, agent_id: str, conv: dict) -> None:
+        """Take a Paseo conversation (back) as the agent's own: detach's other half."""
+        model = "/".join(x for x in (conv["provider"], conv.get("model")) if x)
+        self._set(agent_id, runtime="paseo", ext_id=conv["id"], model=model, status=PASEO_STATUS.get(conv["status"], "idle"))
+        self.watch()
+
     def events(self, agent_id: str, after: int = 0, limit: int = 400) -> list[dict]:
         rows = self.db.q("select * from agent_events where agent_id = ? and id > ? order by id desc limit ?", agent_id, after, limit)
         return rows[::-1]

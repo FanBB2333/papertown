@@ -85,8 +85,25 @@ def test_the_assistant_reads_the_page_and_asks_before_it_acts(tmp_path):
         assert c.post(f"/api/assistant/acts/{r['id']}", json={"allow": False}).json()["data"]["status"] == "denied"
         assert len(town.pipeline.lines()) == 1
 
+        # what you had selected goes with the message, in full in page.md
+        c.post("/api/assistant/say", json={"text": "这段对吗", "page": page | {"selection": "loss = a + b\nreturn loss"}})
+        said = town.agents.events("assistant")[-1]["data"]["text"]
+        assert "选中：「loss = a + b return loss」（2 行" in said and "return loss\n```" in (home / ".papertown" / "page.md").read_text()
+
         # a new conversation sets Paseo's aside; the next start makes another
+        first = town.agents.get("assistant")["ext_id"]
         assert c.post("/api/assistant/new").json()["started"] is False
+
+        # the earlier ones are listed by the first thing asked in each, and it can go back to one
+        convs = [{"id": first, "provider": "pi", "model": "m1", "status": "idle", "labels": {"papertown.role": "assistant"}, "last_user": "2026-10-31T10:00:00Z"},
+                 {"id": "other", "provider": "codex", "model": "m2", "status": "idle", "labels": {"papertown.role": "coder"}, "last_user": "2026-10-31T11:00:00Z"}]
+        town.agents.paseo.conversations = lambda: convs
+        h = c.get("/api/assistant/history").json()["conversations"]
+        assert [x["id"] for x in h] == [first] and h[0]["title"] == "这个任务怎么了" and not h[0]["current"]
+        assert c.post("/api/assistant/resume", json={"id": "other"}).status_code == 400  # not the assistant's
+        back = c.post("/api/assistant/resume", json={"id": first}).json()
+        assert back["ext_id"] == first and back["runtime"] == "paseo" and back["model"] == "pi/m1"
+        assert c.get("/api/assistant/history").json()["conversations"][0]["current"]
 
 
 def test_pt_goes_through_files_when_the_sandbox_has_no_network(tmp_path):
