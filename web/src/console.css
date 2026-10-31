@@ -1101,6 +1101,20 @@ td.heat.best { font-weight: 700; }
 .room-agents.desk > :is(.warn-box, p) { grid-column: 1 / -1; margin: 12px 18px; }
 .room-agents.desk:has(> .hire) { grid-template-columns: minmax(0, 1fr); }
 
+/* panels follow their own width, which the assistant's sidebar takes from as much as the window does */
+.p-console .cm-mod { container: panel / inline-size; }
+@container panel (max-width: 1080px) {
+  .room-config { grid-template-columns: 250px minmax(0, 1fr); }
+  .room-config .room-aside { display: none; }
+  .ov-parts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container panel (max-width: 820px) {
+  .room-config { grid-template-columns: 210px minmax(0, 1fr); }
+  .ide { grid-template-columns: 190px minmax(0, 1fr); }
+  .tex-files { display: none; }
+  .sv-cards { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* a narrower window: the path bar keeps its places and drops its words */
 @media (max-width: 1320px) {
   .crumb.home .crumb-l, .fb-wl, .fb-side span, .rail-keys, .fb-q kbd { display: none; }
@@ -1110,8 +1124,6 @@ td.heat.best { font-weight: 700; }
   .fb-q { width: 170px; }
 }
 @media (max-width: 1100px) {
-  .ov-parts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sv-cards { grid-template-columns: minmax(0, 1fr); }
   .fb-q { width: 32px; padding: 0 8px; cursor: pointer; }
   .fb-q input::placeholder { color: transparent; }
   .fb-q:focus-within { width: 220px; }
@@ -1119,8 +1131,6 @@ td.heat.best { font-weight: 700; }
 @media (max-width: 860px) {
   .cdrawer { width: 58px; }
   .cdrawer :is(.cd-name, h6) { opacity: 0; }
-  .ide { grid-template-columns: 190px minmax(0, 1fr); }
-  .tex-files { display: none; }
   .fb-new span { display: none; }
   .ov-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 14px; }
   .ov-steps::before, .ov-steps::after { display: none; }
