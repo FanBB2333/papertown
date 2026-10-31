@@ -13,7 +13,7 @@ import type { RoomActions } from '../components/Interior';
 import { AGENT_STATUS } from '../components/MillRoom';
 import { tr, trx } from '../i18n';
 import { Icon } from './icons';
-import { describe, onPageChange, onSelect, pickable, snapshot, usePlace } from './page';
+import { describe, onPageChange, onSelect, pickable, snapshot, usePlace, type Selected } from './page';
 import { ago } from './util';
 
 const ID = 'assistant';
@@ -38,7 +38,7 @@ const ASK_SEL = [tr('解释一下这段'), tr('这段有什么问题？')];
 
 // a message as it went out: the page it was written on, then your words; or a note from the town.
 // Paseo drops the <start> mark from a conversation's first prompt, so its opening words mark it too.
-type Said = { text: string; where?: string; pointed?: string; selected?: string; event?: string };
+type Said = { text: string; where?: string; pointed?: string; selected?: string; selectedAt?: string; event?: string };
 export function parse(t: string): Said {
   if (/^(<start>|你是 Papertown 中控屏的小助手)/.test(t)) return { text: '', event: tr('小助手启动了，先读了一遍它的说明。') };
   const ev = /^<event>\n?([\s\S]*?)\n?<\/event>\s*$/.exec(t);
@@ -48,7 +48,7 @@ export function parse(t: string): Said {
   const lines = pg[1].split('\n'), get = (k: string) => lines.find(l => l.startsWith(k))?.slice(k.length);
   return {
     text: t.slice(pg[0].length), where: get('在看：')?.replace(/（.*）$/, ''), pointed: get('指着：')?.split('〔')[0],
-    selected: get('选中：')?.replace(/（\d+ 行，全文在 page\.md）$/, '').replace(/^「([\s\S]*)」$/, '$1'),
+    selected: get('选中：')?.replace(/（\d+ 行，全文在 page\.md）$/, '').replace(/^「([\s\S]*)」$/, '$1'), selectedAt: get('选中的地方：')?.split(/〔|，在「/)[0],
   };
 }
 
@@ -129,8 +129,8 @@ interface Side {
   toast: (text: string) => void;
   focus: Focus | null;
   setFocus: (f: Focus | null) => void;
-  sel: string;
-  setSel: (s: string) => void;
+  sel: Selected | null;
+  setSel: (s: Selected | null) => void;
   pointing: boolean;
   point: (then: (f: Focus) => void) => void;
   unpoint: () => void;
@@ -142,15 +142,15 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
   const [err, setErr] = useState('');
   const [bump, setBump] = useState(0);
   const [focus, setFocusState] = useState<Focus | null>(null);
-  const [sel, setSelState] = useState('');
+  const [sel, setSelState] = useState<Selected | null>(null);
   const [pointing, setPointing] = useState<((f: Focus) => void) | null>(null);
   const [history, setHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   const [w, setW] = useState(() => { try { return Number(localStorage.getItem(WIDTH)) || 400; } catch { return 400; } });
-  const focusRef = useRef<Focus | null>(null), selRef = useRef('');
-  const last = useRef<{ focus: Focus | null; sel: string }>({ focus: null, sel: '' }); // what went with your last message
+  const focusRef = useRef<Focus | null>(null), selRef = useRef<Selected | null>(null);
+  const last = useRef<{ focus: Focus | null; sel: Selected | null }>({ focus: null, sel: null }); // what went with your last message
   const setFocus = (f: Focus | null) => { focusRef.current = f; setFocusState(f); };
-  const setSel = (s: string) => { selRef.current = s; setSelState(s); };
+  const setSel = (s: Selected | null) => { selRef.current = s; setSelState(s); };
   const place = usePlace();
   const toast = actions.toast;
   const reload = () => setBump(b => b + 1);
@@ -173,10 +173,10 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
   // what you point at and select belongs to the page it is on: moving on drops it
   useEffect(() => {
     setFocus(null);
-    setSel('');
-    last.current = { focus: null, sel: '' };
+    setSel(null);
+    last.current = { focus: null, sel: null };
   }, [place.line?.id, place.mod]);
-  useEffect(() => onSelect(t => setSel(t.length > 1 ? t : '')), []);
+  useEffect(() => onSelect(setSel), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // page.md follows you while it runs: the page you are on, a moment after you move, with what
   // went along with your last message until you move on
@@ -186,7 +186,7 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
     let t = 0;
     const sync = () => {
       clearTimeout(t);
-      t = window.setTimeout(() => api.assistantPage(snapshot(focusRef.current ?? last.current.focus, selRef.current || last.current.sel)).catch(() => {}), 1500);
+      t = window.setTimeout(() => api.assistantPage(snapshot(focusRef.current ?? last.current.focus, selRef.current ?? last.current.sel)).catch(() => {}), 1500);
     };
     sync();
     const off = onPageChange(sync);
@@ -200,7 +200,7 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
         const f = focusRef.current, s = selRef.current;
         last.current = { focus: f, sel: s };
         setFocus(null);
-        setSel('');
+        setSel(null);
         await api.assistantSay(text, snapshot(f, s));
       }
       return true;
@@ -380,14 +380,14 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
 
 // one of your messages: what went along with it in small type, then your words
 function YouMsg({ r }: { r: YouRow }) {
-  const { where, pointed, selected } = r.ctx;
+  const { where, pointed, selected, selectedAt } = r.ctx;
   return (
     <div className="as-you">
       {(where || pointed || selected) && (
         <div className="as-said">
           {where && <span title={trx(where)}><Icon n="eye" size={11} /><i>{trx(where)}</i></span>}
           {pointed && <span className="on" title={trx(pointed)}><Icon n="target" size={11} /><i>{trx(pointed)}</i></span>}
-          {selected && <span className="on" title={selected}><Icon n="quote" size={11} /><i>{selected}</i></span>}
+          {selected && <span className="on" title={selected}><Icon n="quote" size={11} /><i>{selected}{selectedAt && <em> · {trx(selectedAt)}</em>}</i></span>}
         </div>
       )}
       <UserMsg text={r.text} />
@@ -440,7 +440,7 @@ function Composer({ agent, side, onSubmit }: { agent: Agent; side: Side; onSubmi
   const { focus, sel } = side;
   const working = agent.status === 'working', typed = !!text.trim();
   const hints = typed ? null : sel ? ASK_SEL : focus ? ASK_AT : null;
-  const lines = sel.split('\n').length;
+  const lines = sel ? sel.text.split('\n').length : 0;
 
   // the box grows with what you write, up to about eight lines
   useLayoutEffect(() => {
@@ -468,8 +468,8 @@ function Composer({ agent, side, onSubmit }: { agent: Agent; side: Side; onSubmi
               <button onClick={() => side.setFocus(null)} aria-label={tr('不指了')}><Icon n="close" size={10} /></button></span>
           )}
           {sel && (
-            <span className="as-pill on" title={sel}><Icon n="quote" size={12} /><b>{sel.replace(/\s+/g, ' ')}</b>{lines > 1 && <em>{tr('{0} 行文字', lines)}</em>}
-              <button onClick={() => side.setSel('')} aria-label={tr('不带这段')}><Icon n="close" size={10} /></button></span>
+            <span className="as-pill on" title={sel.at ? `${sel.text}\n· ${sel.at.label}` : sel.text}><Icon n="quote" size={12} /><b>{sel.text.replace(/\s+/g, ' ')}</b>{lines > 1 && <em>{tr('{0} 行文字', lines)}</em>}
+              <button onClick={() => side.setSel(null)} aria-label={tr('不带这段')}><Icon n="close" size={10} /></button></span>
           )}
         </div>
         <textarea ref={box} rows={1} value={text}

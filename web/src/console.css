@@ -1210,6 +1210,7 @@ td.heat.best { font-weight: 700; }
 .as-said i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: normal; }
 .as-said .ic { flex: none; width: 13px; height: 13px; }
 .as-said .on { color: var(--brand); }
+.as-said em { font-style: normal; color: var(--muted); }
 .as-meta { font-size: 11px; color: var(--muted); }
 
 /* its replies sit on the sidebar, not in boxes */

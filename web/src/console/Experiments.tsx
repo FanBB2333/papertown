@@ -106,11 +106,13 @@ export function Experiments(p: Props) {
 
       <div className="tiles">
         {STATES.map(s => (
-          <button key={s} className={`tile pick st s-${s}${st === s ? ' on' : ''}${count(s) ? '' : ' zero'}`} onClick={() => setSt(x => (x === s ? null : s))}>
+          <button key={s} className={`tile pick st s-${s}${st === s ? ' on' : ''}${count(s) ? '' : ' zero'}`} onClick={() => setSt(x => (x === s ? null : s))}
+            data-ref={`count:${s}`} data-ref-label={`${ST[s].label} ${count(s)}`}>
             <b>{count(s)}</b><span><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>
           </button>
         ))}
-        <div className="tile gh" title={tr('这段时间里这个项目的任务占卡的时长，按卡数累加')}><b>{gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours)}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时')}</span></div>
+        <div className="tile gh" title={tr('这段时间里这个项目的任务占卡的时长，按卡数累加')} data-ref="count:gpu-hours"
+          data-ref-label={`${tr('GPU 小时')} ${gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours)}`}><b>{gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours)}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时')}</span></div>
       </div>
       {board.err && <p className="warn-box small">{board.err}</p>}
 

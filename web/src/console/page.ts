@@ -42,11 +42,21 @@ export function usePanelNote(mod: string, part: string, note: Note) {
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const squash = (s: string) => s.replace(/[ \t ]+/g, ' ').replace(/\s*\n[\s\n]*/g, '\n').trim();
 const panel = () => document.querySelector<HTMLElement>('.p-console .cm-mod.on');
-const first = (s: string) => s.split('\n').find(Boolean) ?? '';
+const textOf = (el: Element) => (el as HTMLElement).innerText ?? el.textContent ?? '';
+const worded = (s: string) => /\p{L}/u.test(s);
+
+// a part's name: its first line, or as many first lines as it takes to say something in words
+// ("11", then "已取消")
+function nameOf(text: string) {
+  const lines = text.split('\n').filter(Boolean);
+  let n = 1;
+  while (n < Math.min(lines.length, 4) && !worded(lines.slice(0, n).join(''))) n++;
+  return clip(lines.slice(0, n).join(' '), 80);
+}
 
 function labelOf(el: Element) {
   const h = el as HTMLElement;
-  return clip(first(squash(h.dataset?.refLabel || h.getAttribute('aria-label') || (h.innerText ?? h.textContent ?? ''))), 80);
+  return nameOf(squash(h.dataset?.refLabel || h.getAttribute('aria-label') || textOf(h)));
 }
 
 // the heading of the part of the panel an element sits in
@@ -60,18 +70,27 @@ function whereOf(el: Element): string | undefined {
   return undefined;
 }
 
-// what pointing lands on: the nearest part that stands for something, else the block it is in
+// what pointing lands on: the nearest part that stands for something, else the block it is in.
+// A bare number or sign says nothing on its own, so it takes the part around it that has words.
 const BLOCK = 'button, a, li, tr, th, td, figure, pre, p, h2, h3, h4, h5, label, [role=button], .card, .pnl';
-export const pickable = (el: Element) => el.closest('[data-ref]') ?? el.closest(BLOCK) ?? el;
+const EDGE = '.cm-mod, .jd, .p-console, .asst';
+export function pickable(target: Element) {
+  let el = target.closest('[data-ref]') ?? target.closest(BLOCK) ?? target;
+  for (let i = 0; i < 4 && !worded(textOf(el)) && el.parentElement && !el.parentElement.matches(EDGE); i++) el = el.parentElement;
+  return el;
+}
 
 export function describe(target: Element): Focus {
   const el = pickable(target), ref = el.getAttribute('data-ref') ?? undefined;
-  const text = clip(squash((el as HTMLElement).innerText ?? el.textContent ?? ''), 400);
-  return { ref, label: ref ? labelOf(el) : clip(first(text), 80) || el.tagName.toLowerCase(), where: whereOf(el), text };
+  const text = clip(squash(textOf(el)), 400);
+  return { ref, label: ref ? labelOf(el) : nameOf(text) || el.tagName.toLowerCase(), where: whereOf(el), text };
 }
 
+// text you selected, and the part of the page it is in
+export interface Selected { text: string; at: Focus | null }
+
 // everything the sidebar tells the assistant, with the message or when you move
-export function snapshot(focus: Focus | null, selection = ''): PageCtx {
+export function snapshot(focus: Focus | null, sel: Selected | null = null): PageCtx {
   const p = panel();
   const state: Record<string, string> = {};
   for (const n of notes.get(at.mod)?.values() ?? []) {
@@ -87,17 +106,21 @@ export function snapshot(focus: Focus | null, selection = ''): PageCtx {
   }
   // code and the paper are files the assistant reads itself; elsewhere the page's text helps
   const text = p && !['code', 'paper'].includes(at.mod) ? clip(squash(p.innerText), 8000) : '';
-  return { line: at.line, mod: at.mod, mod_name: at.name, state, focus, refs, text, ...(selection ? { selection } : {}) };
+  return { line: at.line, mod: at.mod, mod_name: at.name, state, focus, refs, text, ...(sel?.text ? { selection: sel.text, selection_at: sel.at } : {}) };
 }
 
-// text you select in the console (not in the sidebar), now and as you select it; '' once you
-// clear it there. Moving into the sidebar to write keeps it.
-export function onSelect(fn: (text: string) => void) {
+// text you select in the console (not in the sidebar), now and as you select it, with the part
+// of the page a short one is in ("11" in "已取消 11"); null once you clear it there. Moving into
+// the sidebar to write keeps it.
+export function onSelect(fn: (sel: Selected | null) => void) {
   const on = () => {
     const s = getSelection();
     const n = s?.anchorNode instanceof Element ? s.anchorNode : s?.anchorNode?.parentElement;
     if (!s || !n?.closest('.p-console') || n.closest('.asst')) return;
-    fn(s.isCollapsed ? '' : s.toString().trim().slice(0, 4000));
+    const text = s.isCollapsed ? '' : s.toString().trim().slice(0, 4000);
+    if (text.length < 2) return fn(null);
+    const c = s.getRangeAt(0).commonAncestorContainer, el = c instanceof Element ? c : c.parentElement;
+    fn({ text, at: el && text.length < 200 ? describe(el) : null });
   };
   on();
   document.addEventListener('selectionchange', on);

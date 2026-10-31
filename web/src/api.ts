@@ -110,7 +110,7 @@ export interface Focus { ref?: string; label: string; where?: string; text?: str
 export interface PageCtx {
   line: { id: string; seq: number; title: string } | null; mod: string; mod_name: string;
   state: Record<string, string>; focus: Focus | null; refs: { ref: string; label: string }[]; text: string;
-  selection?: string; // text you selected on the page
+  selection?: string; selection_at?: Focus | null; // text you selected on the page, and the part it is in
 }
 // one of the assistant's conversations in Paseo, named by the first thing asked in it
 export interface AssistantConv { id: string; title: string | null; model: string; at: string | null; current: boolean }
