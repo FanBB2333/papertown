@@ -453,7 +453,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, str(e)) from e
         linked = {a["ext_id"]: f"#{a['seq']} 的{ROLES[a['role']]['name']}" for a in town.db.q(
             "select a.ext_id, a.role, l.seq from agents a join lines l on l.id = a.line_id where a.runtime = 'paseo' and a.ext_id is not null")}
-        return {"conversations": [c | {"linked": linked.get(c["id"])} for c in rows]}
+        # the console's assistant is no project's to take, nor are the conversations it set aside
+        mine = [c for c in rows if (c.get("labels") or {}).get("papertown.role") != ASSISTANT]
+        return {"conversations": [c | {"linked": linked.get(c["id"])} for c in mine]}
 
     @app.post("/api/agents/{agent_id}/open")
     def agent_open_desktop(agent_id: str):
