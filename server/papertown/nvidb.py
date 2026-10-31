@@ -56,7 +56,15 @@ def _job(j: dict) -> dict:
         "gpu_constraint": j.get("gpu_constraint") or [], "gpus": j.get("gpus", 1), "priority": j.get("priority") or 0,
         "depends_on": j.get("depends_on") or [], "held_reason": j.get("held_reason"), "gpu_mem_mb": j.get("gpu_mem_mb"),
         "max_runtime_s": j.get("max_runtime_s"), "progress_at": j.get("progress_at"),
+        "result": _result(j.get("result")),  # what a finished job handed back in result.json
     }
+
+
+def _result(r):
+    if r is None:
+        return None
+    s = json.dumps(r, ensure_ascii=False)
+    return r if len(s) <= 6000 else {"_truncated": s[:6000]}
 
 
 def _lane(ln: dict) -> dict:

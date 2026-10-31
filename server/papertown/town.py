@@ -28,6 +28,7 @@ from .press import Press
 from .skills import SkillRegistry
 from .tools import Tool, ToolCtx, ToolError, ToolRegistry, arr, n, obj, register_skill_tools, s
 from .world import World
+from .workspace import Workspace
 
 SEED = Path(__file__).parent / "data" / "seed_papers.jsonl"
 
@@ -55,6 +56,7 @@ class Town:
         self.mcp = McpHub(self)
         self.pipeline = Pipeline(self)
         self.linked = Linked(self)
+        self.workspace = Workspace(self)
         self.skim = Skim(self)
         self._register_tools()
         if not self.library.count():

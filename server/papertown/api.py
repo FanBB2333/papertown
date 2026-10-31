@@ -24,6 +24,7 @@ from .mcp_hub import McpError
 from .pipeline import LineError
 from .skim import SkimError
 from .town import Town
+from .workspace import WsError
 
 FILES = {"main.tex", "refs.bib", "main.pdf", "paper.zip"}
 ASK_ROLE = {"hatchery": "hatcher", "mill": "designer", "farm": "experimenter", "power_sim": "experimenter", "press": "writer",
@@ -97,6 +98,11 @@ class LlmIn(BaseModel):
     model_strong: str | None = None
     model_cheap: str | None = None
     effort: str | None = None
+
+
+class SaveIn(BaseModel):
+    path: str
+    text: str
 
 
 class SayIn(BaseModel):
@@ -209,6 +215,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not p:
             raise HTTPException(404, "这个项目的论文还没有编译好的 PDF")
         return FileResponse(p, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{p.name}"'})
+
+    # ---------- a project's files and data, for the console ----------
+
+    def ws(fn, *args):
+        try:
+            return fn(*args)
+        except WsError as e:
+            raise HTTPException(e.status, str(e)) from e
+
+    @app.get("/api/lines/{line_id}/ws")
+    def ws_info(line_id: str):
+        return ws(town.workspace.info, line_id)
+
+    @app.get("/api/lines/{line_id}/ws/{root}/tree")
+    def ws_tree(line_id: str, root: str):
+        return ws(town.workspace.tree, line_id, root)
+
+    @app.get("/api/lines/{line_id}/ws/{root}/file")
+    def ws_read(line_id: str, root: str, path: str):
+        return ws(town.workspace.read, line_id, root, path)
+
+    @app.put("/api/lines/{line_id}/ws/{root}/file")
+    def ws_save(line_id: str, root: str, body: SaveIn):
+        return ws(town.workspace.save, line_id, root, body.path, body.text)
+
+    @app.get("/api/lines/{line_id}/ws/{root}/diff")
+    def ws_diff(line_id: str, root: str, path: str):
+        return ws(town.workspace.diff, line_id, root, path)
+
+    @app.post("/api/lines/{line_id}/ws/paper/compile")
+    def ws_compile(line_id: str):
+        return ws(town.workspace.compile, line_id)
+
+    @app.get("/api/lines/{line_id}/ws/paper/pdf")
+    def ws_pdf(line_id: str):
+        p = ws(town.workspace.pdf, line_id)
+        if not p:
+            raise HTTPException(404, "这篇论文还没有编译好的 PDF")
+        return FileResponse(p, media_type="application/pdf", headers={"Cache-Control": "no-store", "Content-Disposition": f'inline; filename="{p.name}"'})
+
+    @app.get("/api/lines/{line_id}/data")
+    def line_data(line_id: str):
+        return ws(town.workspace.data, line_id)
 
     @app.get("/api/library")
     def library(q: str = "", topic: str = "", limit: int = 60):
