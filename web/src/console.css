@@ -491,8 +491,11 @@ li.more:hover { color: var(--brand); }
 .ctip-t { display: block; margin-bottom: 4px; font-size: 12.5px; overflow-wrap: anywhere; }
 .ctip-r { display: flex; align-items: baseline; gap: 7px; line-height: 1.55; }
 .ctip-r i { flex: none; width: 10px; height: 2.5px; border-radius: 2px; align-self: center; }
-.ctip-r strong { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ctip-r span { color: var(--muted); }
+.ctip-r strong {
+  flex: 0 1 auto; min-width: 0; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+.ctip-r span { flex: none; max-width: 45%; color: var(--muted); }
 .ctip-f { margin: 5px 0 0; padding-top: 5px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
 .stag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; }
 .stag i { width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font: 700 9px var(--font); font-style: normal; color: #fff; background: var(--c); }
