@@ -50,7 +50,7 @@ function labelOf(el: Element) {
 }
 
 // the heading of the part of the panel an element sits in
-const HEAD = ':scope > :is(h2, h3, h4, h5, header, legend, .cs-h, .cm-head, .sec-h)';
+const HEAD = ':scope > :is(h2, h3, h4, h5, header, legend, .cs-h, .sec-h)';
 function whereOf(el: Element): string | undefined {
   const top = panel()?.parentElement;
   for (let n = el.parentElement; n && n !== top; n = n.parentElement) {

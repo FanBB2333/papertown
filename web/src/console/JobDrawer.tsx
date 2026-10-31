@@ -86,17 +86,9 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
           <div className="jd-t">
             <span className="jd-id">
               <span className={`jd-pill${ST[st].hollow ? ' hollow' : ''}`}><i>{ST[st].sign}</i>{ST[st].label}</span>
-              <span className="muted small">{nvId != null ? `nvidb #${nvId}` : id}{nv?.submitter ? ` · ${nv.submitter}` : ''}</span>
+              <span className="muted small">{[nvId != null ? `nvidb #${nvId}` : id, nv?.submitter, ended && ago(ended)].filter(Boolean).join(' · ')}</span>
             </span>
             <h3 title={name}>{name}</h3>
-            {loaded && (
-              <span className="jd-kv">
-                {where && <span><Icon n="gpu" size={13} />{where}</span>}
-                {took != null && <span><Icon n="clock" size={13} />{dur(took)}{st === 'running' ? ` · ${tr('还在跑')}` : ''}</span>}
-                {exit != null && <span className={exit ? 'bad' : ''}>{tr('退出码 {0}', exit)}</span>}
-                {ended && <span className="muted">{ago(ended)}</span>}
-              </span>
-            )}
           </div>
           <div className="jd-nav">
             <button className="ib" disabled={!nav?.prev} onClick={() => nav?.prev && onJob(nav.prev)} title={tr('上一个（←）')}><Icon n="left" size={16} /></button>

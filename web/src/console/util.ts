@@ -12,6 +12,7 @@ export function useFetch<T>(fn: () => Promise<T>, id: string, tick = 0, delay = 
   fnRef.current = fn;
   const mine = s.id === id;
   useEffect(() => {
+    if (!id) return; // nothing to ask for yet (a project still loading)
     let live = true;
     const t = setTimeout(() => fnRef.current().then(
       data => { if (live) setS({ id, data, err: '' }); },
@@ -20,6 +21,18 @@ export function useFetch<T>(fn: () => Promise<T>, id: string, tick = 0, delay = 
     return () => { live = false; clearTimeout(t); };
   }, [id, tick, bump]); // eslint-disable-line react-hooks/exhaustive-deps
   return { data: mine ? s.data : null, err: mine ? s.err : '', loading: !mine, reload: () => setBump(b => b + 1) };
+}
+
+// whether a media query holds, kept up to date
+export function useMedia(query: string) {
+  const [on, setOn] = useState(() => matchMedia(query).matches);
+  useEffect(() => {
+    const m = matchMedia(query), f = () => setOn(m.matches);
+    f();
+    m.addEventListener('change', f);
+    return () => m.removeEventListener('change', f);
+  }, [query]);
+  return on;
 }
 
 export function bytes(n: number) {

@@ -115,8 +115,15 @@
 .rag-stats div { display: flex; flex-direction: column; align-items: center; min-width: 92px; padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); animation: rise-in .45s var(--out) both; }
 .rag-stats b { font: 700 20px var(--head); }
 .rag-stats span { font-size: 11.5px; color: var(--muted); }
-.rag-grid { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 14px; align-items: start; }
-.rag-opts { display: flex; flex-direction: column; gap: 12px; }
+.rag-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
+.rag-opts { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; padding-bottom: 12px; }
+.rag-opts > summary { display: flex; align-items: baseline; gap: 12px; cursor: pointer; list-style: none; }
+.rag-opts > summary::-webkit-details-marker { display: none; }
+.rag-opts > summary h4 { margin: 0; }
+.rag-opts > summary::after { content: '⌄'; margin-left: auto; color: var(--muted); transition: transform .35s var(--out); }
+.rag-opts[open] > summary::after { transform: rotate(180deg); }
+.rag-opts[open] > :not(summary) { animation: rise-in .35s var(--out) both; }
+.rag-opts:not([open]) { gap: 0; }
 .rag-opts .field b { color: var(--ink); margin-left: 6px; }
 .rag-opts input[type=range] { width: 100%; accent-color: var(--accent, var(--brand)); }
 .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; }

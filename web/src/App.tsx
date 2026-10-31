@@ -61,6 +61,7 @@ export function App() {
   const [consoleUp, setConsoleUp] = useState(view === 'console'); // mounted once shown, and kept
   const [world, setWorld] = useState<WorldState | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
+  const [linesIn, setLinesIn] = useState(false); // the first list has come: until then "no projects" would be a guess
   const [messages, setMessages] = useState<Message[]>([]);
   const [trace, setTrace] = useState<TraceRow[]>([]);
   const [chatOpen, setChatOpen] = useState(hp.has('chat'));
@@ -90,13 +91,13 @@ export function App() {
     clearTimeout(refresh.current);
     refresh.current = window.setTimeout(() => {
       api.world().then(setWorld).catch(() => {});
-      api.lines().then(setLines).catch(() => {});
+      api.lines().then(ls => { setLines(ls); setLinesIn(true); }).catch(() => {});
     }, 200);
   }, []);
 
   useEffect(() => {
     api.world().then(setWorld).catch(e => push(tr('连不上服务器：{0}', e.message)));
-    api.lines().then(setLines).catch(() => {});
+    api.lines().then(ls => { setLines(ls); setLinesIn(true); }).catch(() => {});
     api.messages().then(setMessages).catch(() => {});
     api.trace().then(setTrace).catch(() => {});
   }, [push]);
@@ -275,7 +276,7 @@ export function App() {
       )}
       <StatusView tick={tick} active={view === 'status'} />
       {consoleUp && (
-        <Console active={view === 'console'} lines={lines} placements={world?.placements ?? []} tick={tick} toast={push}
+        <Console active={view === 'console'} lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
           onRoom={(id, lineId) => openRoom(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
           onAsk={(id, name) => openChat({ kind: 'ask', building: id, name }, true)}
           onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}

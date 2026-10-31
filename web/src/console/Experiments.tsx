@@ -1,5 +1,6 @@
-// The experiments panel. One row of filters scopes everything under it (the time range, the
-// state, a search); then the counts, which filter too when clicked; what to look at first (the
+// The experiments panel. One row of filters scopes everything under it (the time range and a
+// search, and the state picked from the counts below, shown there while you scroll); then the
+// counts, one tile a state, which filter when clicked; what to look at first (the
 // newest results, what runs now, the newest failures); a timeline of the project's jobs on each
 // GPU (drag across it to look closer, double-click to step back); the cluster, live (Cluster.tsx);
 // and the jobs themselves, as a table, cards, a board, groups or a grid (JobViews.tsx). Each
@@ -8,7 +9,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Job } from '../api';
-import { GpuBoard } from '../components/Gpus';
 import { tr } from '../i18n';
 import { Gantt, Legend, ST, elapsed, fmtNum, when, type GJob, type St } from './charts';
 import { Cluster } from './Cluster';
@@ -96,23 +96,21 @@ export function Experiments(p: Props) {
           {RANGES.map(([k, name]) => <button key={k} className={range === k && !zoom ? 'on' : ''} onClick={() => { setRange(k); setZoom(null); }}>{name}</button>)}
         </div>
         {zoom && <button className="xf-zoom" onClick={() => setZoom(null)}>{when(d0)} – {when(d1)}<Icon n="close" size={12} /></button>}
-        <div className="xf-st">
-          {STATES.map(s => (
-            <button key={s} className={st === s ? 'on' : ''} onClick={() => setSt(x => (x === s ? null : s))} style={{ ['--c' as string]: ST[s].c }}>
-              <i className={ST[s].hollow ? 'hollow' : ''} />{ST[s].label}<span>{count(s)}</span>
-            </button>
-          ))}
-        </div>
+        {st && (
+          <button className="xf-zoom xf-pick" onClick={() => setSt(null)} style={{ ['--c' as string]: ST[st].c }} title={tr('不再只看这个状态')}>
+            <i className={ST[st].hollow ? 'hollow' : ''} />{tr('只看{0}', ST[st].label)}<Icon n="close" size={12} />
+          </button>
+        )}
         <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('搜任务名、编号、说明')} value={q} onChange={e => setQ(e.target.value)} /></label>
       </div>
 
       <div className="tiles">
-        {(['running', 'queued', 'done', 'failed'] as St[]).map(s => (
+        {STATES.map(s => (
           <button key={s} className={`tile pick st s-${s}${st === s ? ' on' : ''}${count(s) ? '' : ' zero'}`} onClick={() => setSt(x => (x === s ? null : s))}>
             <b>{count(s)}</b><span><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>
           </button>
         ))}
-        <div className="tile gh"><b>{gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours)}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时（这段时间）')}</span></div>
+        <div className="tile gh" title={tr('这段时间里这个项目的任务占卡的时长，按卡数累加')}><b>{gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours)}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时')}</span></div>
       </div>
       {board.err && <p className="warn-box small">{board.err}</p>}
 
@@ -131,11 +129,6 @@ export function Experiments(p: Props) {
       <Cluster mine={new Set(jobs.map(j => j.nvidb?.id).filter((x): x is number => x != null))} onOpen={openIn([])} />
 
       <JobViews jobs={shown} open={open?.id ?? null} onOpen={(id, list) => setOpenAt({ id, list })} onData={p.onData} />
-
-      <details className="cs fold">
-        <summary><Icon n="gpu" size={16} />{tr('机器详情：每张卡上的进程')}</summary>
-        <GpuBoard />
-      </details>
 
       {open && <JobDrawer id={open.id} onClose={() => setOpenAt(null)} onJob={id => setOpenAt(o => ({ id, list: o?.list ?? [] }))}
         nav={at >= 0 ? { prev: open.list[at - 1], next: open.list[at + 1] } : undefined} />}
@@ -159,7 +152,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
   const when_ = (j: Job) => ago(j.nvidb?.finished_at ?? j.ended_at ?? j.nvidb?.started_at ?? j.started_at);
   return (
     <section className="focus">
-      <div className="focus-h"><span className="cs-ic"><Icon n="eye" size={15} /></span><h3>{tr('先看这里')}</h3><span className="muted small">{tr('这段时间里最新的结果、正在跑的和最近的失败')}</span></div>
+      <div className="focus-h"><span className="cs-ic"><Icon n="eye" size={15} /></span><h3>{tr('先看这里')}</h3></div>
       <div className="focus-g">
         {withRes.length > 0 && (
           <div className="fc s-done">

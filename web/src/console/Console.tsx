@@ -26,7 +26,7 @@ import { Overview, STAGE_MOD } from './Overview';
 import { flash, setPlace, usePanelNote } from './page';
 import { Paper } from './Paper';
 import { Survey } from './Survey';
-import { revealX, useFetch } from './util';
+import { revealX, useFetch, useMedia } from './util';
 import '../console.css';
 
 export type ModId = 'overview' | 'survey' | 'code' | 'exp' | 'data' | 'paper' | 'agents' | 'skills' | 'mcp' | 'rag';
@@ -73,6 +73,7 @@ function remembered(): { line?: string; mod?: ModId; narrow?: boolean; side?: bo
 interface Props extends Omit<RoomActions, 'onOpen'> {
   active: boolean;
   lines: Line[];
+  ready: boolean; // the list of projects has loaded
   placements: Placement[];
   tick: number;
   onRoom: (id: string, lineId?: string | null) => void; // a building's own room, over the console
@@ -105,8 +106,11 @@ export function Console(p: Props) {
   const line = full.data ?? null;
 
   useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify({ line: cur?.id, mod, narrow, side })); } catch { /* private mode */ }
-  }, [cur?.id, mod, narrow, side]);
+    if (!cur) return; // still loading: keep the project remembered last time
+    try { localStorage.setItem(KEY, JSON.stringify({ line: cur.id, mod, narrow, side })); } catch { /* private mode */ }
+  }, [cur?.id, mod, narrow, side]); // eslint-disable-line react-hooks/exhaustive-deps
+  // a narrow window with the assistant open folds the drawer to its icons, to leave the panel room
+  const squeezed = useMedia('(max-width: 1320px)') && side;
   useEffect(() => setPlace(cur ? { id: cur.id, seq: cur.seq, title: cur.title } : null, mod, MODS.find(m => m.id === mod)!.name), [cur?.id, cur?.title, mod]); // eslint-disable-line react-hooks/exhaustive-deps
   usePanelNote('agents', 'role', { 员工: mod === 'agents' ? (role === 'coder' ? '代码员工' : '写作员工') : null });
 
@@ -194,6 +198,7 @@ export function Console(p: Props) {
   const waiting = lines.filter(needsYou).length;
   const pick = (l: Line, m?: ModId) => { go({ line: l.id, mod: m }); setTimeout(() => setRail(false), 160); };
 
+  if (!cur && !p.ready) return <main className="p-console"><p className="cm-loading muted">{tr('加载中…')}</p></main>;
   if (!cur) return (
     <main className="p-console">
       <div className="cm-empty first">
@@ -213,8 +218,8 @@ export function Console(p: Props) {
           <button className="ib" disabled={!hist.fwd.length} onClick={fwd} title={tr('前进')}><Icon n="right" size={16} /></button>
         </div>
         <nav className="fb-path" aria-label={tr('位置')}>
-          <button className="crumb" onClick={() => { setRailTab('projects'); setFilter('all'); setRail(r => !r); }}>
-            <Icon n="folder" size={16} />{tr('全部项目')}
+          <button className="crumb home" onClick={() => { setRailTab('projects'); setFilter('all'); setRail(r => !r); }} title={tr('全部项目')}>
+            <Icon n="folder" size={16} /><span className="crumb-l">{tr('全部项目')}</span>
           </button>
           <Icon n="chevron" size={13} className="fb-sep" />
           <button className={`crumb cur${rail ? ' open' : ''}`} onClick={() => setRail(r => !r)} title={tr('换一个项目（⌘K）')}>
@@ -226,8 +231,8 @@ export function Console(p: Props) {
         </nav>
         <div className="fb-r">
           {waiting > 0 && (
-            <button className="fb-wait" onClick={() => { setRailTab('projects'); setFilter('you'); setRail(true); }}>
-              <i />{tr('{0} 个项目等你', waiting)}
+            <button className="fb-wait" onClick={() => { setRailTab('projects'); setFilter('you'); setRail(true); }} title={tr('{0} 个项目等你', waiting)}>
+              <i /><span className="fb-wl">{tr('{0} 个项目等你', waiting)}</span><b className="fb-wn">{waiting}</b>
             </button>
           )}
           <label className="fb-q">
@@ -237,8 +242,8 @@ export function Console(p: Props) {
             <kbd>⌘K</kbd>
           </label>
           <button className="btn pri fb-new" onClick={p.onIdea}><Icon n="plus" size={14} />{tr('新 idea')}</button>
-          <button className={`ib fb-side${side ? ' on' : ''}`} onClick={() => setSide(o => !o)} title={side ? tr('收起小助手') : tr('小助手：问这一页的事，请它帮你办')}
-            aria-pressed={side}><Icon n="chat" size={17} /></button>
+          <button className={`fb-side${side ? ' on' : ''}`} onClick={() => setSide(o => !o)} title={side ? tr('收起小助手') : tr('小助手：问这一页的事，请它帮你办')}
+            aria-pressed={side}><Icon n="chat" size={16} /><span>{tr('小助手')}</span></button>
         </div>
       </div>
 
@@ -247,11 +252,10 @@ export function Console(p: Props) {
         onPick={pick} onIdea={() => { setRail(false); p.onIdea(); }} onClose={() => setRail(false)} />
 
       <div className="cbody">
-        <Drawer mod={mod} narrow={narrow} setNarrow={setNarrow} line={line} code={ws.data?.code?.dirty ?? 0} onPick={m => go({ mod: m })} />
+        <Drawer mod={mod} narrow={narrow || squeezed} locked={squeezed} setNarrow={setNarrow} line={line} code={ws.data?.code?.dirty ?? 0} onPick={m => go({ mod: m })} />
         <div className="cm" key={id}>
           {!kept.has(mod) && (
             <section className={`cm-mod on${BLEED.has(mod) ? ' bleed' : ''}`} key={mod} style={{ ['--dir' as string]: dir }}>
-              {!BLEED.has(mod) && <header className="cm-head"><h2>{here.name}</h2><p>{here.sub}</p></header>}
               {mod === 'overview' ? <Overview line={line} info={ws.data} tick={p.tick} placements={p.placements} go={m => go({ mod: m })}
                 onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)} />
                 : mod === 'survey' ? <Survey line={line} tick={p.tick} onHatch={p.onHatch} onAdjust={p.onAdjust} />
@@ -293,8 +297,8 @@ export function Console(p: Props) {
 
 // ---------- the module drawer ----------
 
-function Drawer({ mod, narrow, setNarrow, line, code, onPick }: {
-  mod: ModId; narrow: boolean; setNarrow: (f: (n: boolean) => boolean) => void; line: Line | null; code: number; onPick: (m: ModId) => void;
+function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
+  mod: ModId; narrow: boolean; locked: boolean; setNarrow: (f: (n: boolean) => boolean) => void; line: Line | null; code: number; onPick: (m: ModId) => void;
 }) {
   const box = useRef<HTMLElement>(null);
   const [pill, setPill] = useState<{ y: number; h: number } | null>(null);
@@ -329,9 +333,9 @@ function Drawer({ mod, narrow, setNarrow, line, code, onPick }: {
       <h6>{tr('小镇配置')}</h6>
       {MODS.filter(m => m.town).map((m, i) => item(m, i + 7))}
       <span className="sp" />
-      <button className="cd-fold" onClick={() => setNarrow(n => !n)} title={narrow ? tr('展开') : tr('收起')}>
+      {!locked && <button className="cd-fold" onClick={() => setNarrow(n => !n)} title={narrow ? tr('展开') : tr('收起')}>
         <Icon n={narrow ? 'right' : 'left'} size={15} /><span className="cd-name">{tr('收起')}</span>
-      </button>
+      </button>}
     </nav>
   );
 }

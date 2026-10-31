@@ -1,6 +1,7 @@
-// The library as the town's RAG: what is in it, how retrieval runs (how many papers a search
-// returns, how many full-text candidates it scores, vectors or keyword coverage), a bench to
-// try a query and see why each paper came back, and the shelves themselves.
+// The library as the town's RAG: what is in it, a bench to try a query and see why each paper
+// came back, how retrieval runs (how many papers a search returns, how many full-text candidates
+// it scores, vectors or keyword coverage; folded to one line, as it is seldom changed), and the
+// shelves themselves.
 
 import { useEffect, useState } from 'react';
 import { api, type RagOpts, type RagResult, type RagView } from '../api';
@@ -52,27 +53,6 @@ export function RagRoom(p: Props) {
       </div>
 
       <div className="rag-grid">
-        <section className="pnl-s rag-opts">
-          <h4>{tr('检索怎么跑')}</h4>
-          <p className="muted small">{v.index}{tr('。孵化场查重、造纸厂找 baseline、印刷厂找引用，都走这一套。')}</p>
-          <label className="field">{tr('默认返回几篇')} <b>{opts.top_k}</b>
-            <input type="range" min={v.limits.top_k[0]} max={v.limits.top_k[1]} value={opts.top_k} onChange={e => setOpts({ ...opts, top_k: +e.target.value })} />
-          </label>
-          <label className="field">{tr('全文召回多少篇候选再打分')} <b>{opts.candidates}</b>
-            <input type="range" min={v.limits.candidates[0]} max={v.limits.candidates[1]} step={5} value={opts.candidates} onChange={e => setOpts({ ...opts, candidates: +e.target.value })} />
-          </label>
-          <label className={`check${v.embed.configured ? '' : ' off'}`}>
-            <input type="checkbox" checked={opts.vectors && v.embed.configured} disabled={!v.embed.configured} onChange={e => setOpts({ ...opts, vectors: e.target.checked })} />
-            <span>{tr('用向量排序候选')}
-              <small className="muted">{v.embed.configured ? `${v.embed.model ?? ''}${v.embed.host ? ` @ ${v.embed.host}` : ''}` : tr('没有配 embeddings 接口（PAPERTOWN_EMBED_*），现在按关键词覆盖率排序')}</small>
-            </span>
-          </label>
-          <div className="btns">
-            <button className="btn pri" disabled={!dirty} onClick={save}>{tr('保存')}</button>
-            {dirty && <button className="btn" onClick={() => setOpts(v.opts)}>{tr('还原')}</button>}
-          </div>
-        </section>
-
         <section className="pnl-s rag-bench">
           <h4>{tr('试一下检索')}</h4>
           <div className="rag-q">
@@ -102,6 +82,31 @@ export function RagRoom(p: Props) {
             </>
           )}
         </section>
+        <details className="pnl-s rag-opts" open={dirty || undefined}>
+          <summary>
+            <h4>{tr('检索怎么跑')}</h4>
+            <span className="muted small">{tr('返回 {0} 篇 · 召回 {1} 篇候选再打分 · {2}', v.opts.top_k, v.opts.candidates,
+              v.opts.vectors && v.embed.configured ? tr('向量排序') : tr('关键词覆盖率排序'))}</span>
+          </summary>
+          <p className="muted small">{v.index}{tr('。孵化场查重、造纸厂找 baseline、印刷厂找引用，都走这一套。')}</p>
+          <label className="field">{tr('默认返回几篇')} <b>{opts.top_k}</b>
+            <input type="range" min={v.limits.top_k[0]} max={v.limits.top_k[1]} value={opts.top_k} onChange={e => setOpts({ ...opts, top_k: +e.target.value })} />
+          </label>
+          <label className="field">{tr('全文召回多少篇候选再打分')} <b>{opts.candidates}</b>
+            <input type="range" min={v.limits.candidates[0]} max={v.limits.candidates[1]} step={5} value={opts.candidates} onChange={e => setOpts({ ...opts, candidates: +e.target.value })} />
+          </label>
+          <label className={`check${v.embed.configured ? '' : ' off'}`}>
+            <input type="checkbox" checked={opts.vectors && v.embed.configured} disabled={!v.embed.configured} onChange={e => setOpts({ ...opts, vectors: e.target.checked })} />
+            <span>{tr('用向量排序候选')}
+              <small className="muted">{v.embed.configured ? `${v.embed.model ?? ''}${v.embed.host ? ` @ ${v.embed.host}` : ''}` : tr('没有配 embeddings 接口（PAPERTOWN_EMBED_*），现在按关键词覆盖率排序')}</small>
+            </span>
+          </label>
+          <div className="btns">
+            <button className="btn pri" disabled={!dirty} onClick={save}>{tr('保存')}</button>
+            {dirty && <button className="btn" onClick={() => setOpts(v.opts)}>{tr('还原')}</button>}
+          </div>
+        </details>
+
       </div>
 
       <LibraryShelf tick={p.tick} />

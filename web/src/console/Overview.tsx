@@ -27,6 +27,7 @@ export function Overview(p: Props) {
   const h = l.outputs?.hatch;
   const exp = l.stages.find(s => s.key === 'exp');
   const typeOf = (id: string) => p.placements.find(x => x.id === id)?.type ?? id;
+  const money = (v: number) => (v > 0 && v < 0.01 ? '<$0.01' : `$${v.toFixed(2)}`);
 
   const ask = l.status === 'waiting' ? { t: tr('查重报告出来了，等你决定'), d: gist(h?.summary, 80) || tr('看过调研后，决定立项还是调整 idea。'), btns: <>
     <button className="btn pri" onClick={() => p.onHatch(l.id)}>{tr('孵化并立项')}</button>
@@ -39,9 +40,9 @@ export function Overview(p: Props) {
 
   const parts: { m: ModId; icon: IconName; t: string; v: string; s?: string }[] = [
     { m: 'survey', icon: 'lens', t: tr('调研'), v: h?.verdict ?? (l.linked?.paper?.title ? tr('本地项目') : '—'), s: h ? tr('最接近 {0} 篇', h.similar?.length ?? 0) : undefined },
-    { m: 'code', icon: 'code', t: tr('代码仓库'), v: p.info?.code ? p.info.code.name : tr('还没有'), s: p.info?.code ? [p.info.code.branch, p.info.code.dirty ? tr('{0} 处改动', p.info.code.dirty) : tr('无改动')].filter(Boolean).join(' · ') : undefined },
+    { m: 'code', icon: 'code', t: tr('代码仓库'), v: p.info?.code ? p.info.code.name : tr('暂无'), s: p.info?.code ? [p.info.code.branch, p.info.code.dirty ? tr('{0} 处改动', p.info.code.dirty) : tr('无改动')].filter(Boolean).join(' · ') : undefined },
     { m: 'exp', icon: 'flask', t: tr('实验'), v: exp ? { done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('还没开始') }[exp.status] : '—', s: exp?.note ? gist(exp.note, 36) : undefined },
-    { m: 'paper', icon: 'doc', t: tr('论文'), v: p.info?.paper ? p.info.paper.main ?? p.info.paper.name : tr('还没有'), s: p.info?.paper ? (p.info.paper.pdf ? tr('有 PDF') : tr('还没编译')) : undefined },
+    { m: 'paper', icon: 'doc', t: tr('论文'), v: p.info?.paper ? p.info.paper.main ?? p.info.paper.name : tr('暂无'), s: p.info?.paper ? (p.info.paper.pdf ? tr('有 PDF') : tr('还没编译')) : undefined },
   ];
 
   return (
@@ -64,14 +65,23 @@ export function Overview(p: Props) {
       )}
 
       <section className="cs">
-        <div className="cs-h"><h3>{tr('研究进度')}</h3><span className="muted small">{tr('{0}/{1} 站完成', done, l.stages.length)}</span></div>
+        <div className="cs-h">
+          <h3>{tr('研究进度')}</h3>
+          <span className="muted small">{tr('{0}/{1} 站完成', done, l.stages.length)}</span>
+          {!l.linked && (
+            <span className="ov-spend small" title={tr('预算')}>
+              {tr('已花 {0} / {1}', money(l.spent), money(l.budget))}
+              <i className="bar"><i style={{ width: `${Math.min(100, (100 * l.spent) / Math.max(l.budget, 1e-9))}%` }} /></i>
+            </span>
+          )}
+        </div>
         <ol className="ov-steps" style={{ ['--done' as string]: done, ['--n' as string]: l.stages.length }}>
           {l.stages.map((s, i) => (
             <li key={s.key} className={`ov-step s-${s.status}`} style={{ ['--i' as string]: i }} data-ref={`stage:${s.key}`} data-ref-label={`${tr('工序')} ${s.name}`}>
               <button onClick={() => p.go(STAGE_MOD[s.key] ?? 'overview')} title={s.note ?? s.out}>
                 <span className="ov-dot">{s.status === 'done' ? '✓' : i + 1}</span>
                 <b>{s.name}</b>
-                <span className="muted small">{s.status === 'run' ? `${s.pct}%` : s.status === 'wait' ? tr('等你') : s.out}</span>
+                <span className="muted small">{s.status === 'run' ? `${s.pct}%` : s.status === 'wait' ? tr('等你') : '\u00a0'}</span>
               </button>
             </li>
           ))}
@@ -89,13 +99,6 @@ export function Overview(p: Props) {
           </button>
         ))}
       </div>
-
-      {!l.linked && (
-        <section className="cs ov-budget">
-          <div className="cs-h"><h3>{tr('预算')}</h3><span className="small">${l.spent.toFixed(4)} / ${l.budget.toFixed(2)}</span></div>
-          <div className="bar"><i style={{ width: `${Math.min(100, (100 * l.spent) / Math.max(l.budget, 1e-9))}%` }} /></div>
-        </section>
-      )}
 
       <details className="cs fold">
         <summary><Icon n="table" size={16} />{tr('完整工序明细')}</summary>

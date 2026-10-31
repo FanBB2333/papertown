@@ -2,17 +2,18 @@
 // chart per metric with ours picked out; what each nvidb run handed back, as cards, and one
 // measure across runs; the repository's result files, where files of the same name in
 // sibling folders (one per run or configuration) line up as one table, shaded by value and
-// sorted by any column; every file opening as a table; and every run, sortable.
+// sorted by any column; and every file opening as a table. The runs themselves, finished or
+// not, are listed in the experiments panel.
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type DataRun, type LineData } from '../api';
 import { tr } from '../i18n';
-import { Bars, StateTag, Tip, fmtNum, stOf, useTip, when } from './charts';
+import { Bars, StateTag, Tip, fmtNum, stOf, useTip } from './charts';
 import { Icon } from './icons';
 import { JobDrawer } from './JobDrawer';
 import { usePanelNote } from './page';
-import { ago, base, bytes, dur, ext, flat, headlines, useFetch } from './util';
+import { ago, base, bytes, ext, flat, headlines, useFetch } from './util';
 
 interface Props { lineId: string; tick: number; onOpenFile: (path: string) => void }
 
@@ -45,7 +46,6 @@ export function Data(p: Props) {
       {results && <Results r={results} />}
       {withResult.length > 0 && <RunResults runs={withResult} onOpen={setJob} />}
       {files.length > 0 && <Files lineId={p.lineId} files={files} onOpen={setFile} />}
-      {runs.length > 0 && <Runs runs={runs} onOpen={setJob} />}
 
       {job && <JobDrawer id={job} onClose={() => setJob(null)} onJob={setJob} />}
       {file && <FileSheet lineId={p.lineId} path={file} onClose={() => setFile(null)} onCode={() => { const f = file; setFile(null); p.onOpenFile(f); }} />}
@@ -312,35 +312,6 @@ function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen:
 }
 
 // ---------- every run ----------
-
-function Runs({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) => void }) {
-  const [sort, setSort] = useState<{ k: 'name' | 'st' | 'end' | 'dur'; up: boolean }>({ k: 'end', up: false });
-  const [all, setAll] = useState(false);
-  const key = (r: DataRun): string | number => (sort.k === 'name' ? r.name : sort.k === 'st' ? r.state : sort.k === 'end' ? (r.finished_at ?? '') : (r.elapsed_s ?? 0));
-  const sorted = [...runs].sort((a, b) => { const x = key(a), y = key(b); return (x < y ? -1 : x > y ? 1 : 0) * (sort.up ? 1 : -1); });
-  const th = (k: typeof sort.k, label: string) => (
-    <th className={`sortable${sort.k === k ? ` on ${sort.up ? 'up' : 'down'}` : ''}`} onClick={() => setSort(s => ({ k, up: s.k === k ? !s.up : k === 'name' }))}>{label}</th>
-  );
-  return (
-    <section className="cs">
-      <div className="cs-h"><span className="cs-ic"><Icon n="table" size={15} /></span><h3>{tr('运行记录 · {0}', runs.length)}</h3></div>
-      <table className="ctab xt">
-        <thead><tr>{th('name', tr('任务'))}{th('st', tr('状态'))}<th>{tr('在哪')}</th>{th('dur', tr('用时'))}{th('end', tr('结束'))}<th>{tr('结果')}</th></tr></thead>
-        <tbody>{sorted.slice(0, all ? 400 : 12).map(r => (
-          <tr key={r.id} className={`s-${stOf(r.state)}`} onClick={() => onOpen(r.id)} data-ref={`job:${r.id}`} data-ref-label={`${tr('任务')} ${r.name}`}>
-            <td><b className="xt-n">{r.name}</b></td>
-            <td><StateTag s={stOf(r.state)} />{r.exit_code ? <span className="muted small"> · exit {r.exit_code}</span> : null}</td>
-            <td className="muted">{r.where ?? '—'}</td>
-            <td>{dur(r.elapsed_s)}</td>
-            <td className="muted">{r.finished_at ? when(Date.parse(r.finished_at)) : '—'}</td>
-            <td className="xt-res">{headlines(r.result, 2).map(x => <span key={x.k} title={x.k}><i>{x.name}</i><b>{fmtNum(x.v)}</b></span>)}</td>
-          </tr>
-        ))}</tbody>
-      </table>
-      {runs.length > 12 && <button className="btn xt-more" onClick={() => setAll(a => !a)}>{all ? tr('收起') : tr('显示全部 {0} 个', runs.length)}</button>}
-    </section>
-  );
-}
 
 // ---------- one file, as a table when it is one ----------
 

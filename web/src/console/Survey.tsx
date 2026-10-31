@@ -1,7 +1,8 @@
 // The survey panel, for reading from above: the hatchery's verdict in one line, the gaps, the
 // suggestions and the risks as a few short points each (any of them opens to its full text),
-// the closest work as bars, the method at a glance, and the reading list as one table.
-// A local project that never went through the hatchery shows its paper's own summary.
+// the method at a glance, and the reading list as one table, the closest work first with its
+// similarity as a bar. A local project that never went through the hatchery shows its paper's
+// own summary.
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Line, type PaperCard } from '../api';
@@ -11,7 +12,16 @@ import { gist, points, useFetch } from './util';
 
 interface Props { line: Line | null; tick: number; onHatch: (id: string) => void; onAdjust: (id: string) => void }
 
-const TONE: Record<string, string> = { 可孵化: 'ok', 需调整: 'warn', 已被做过: 'bad' };
+// the verdict arrives in the page's language
+const tone = (verdict: string) => ({ [tr('可孵化')]: 'ok', [tr('需调整')]: 'warn', [tr('已被做过')]: 'bad' } as Record<string, string>)[verdict] ?? 'warn';
+
+// the hatchery's one-line summary without the verdict it starts with, which sits beside it
+function besides(summary: string, verdict: string) {
+  const s = (summary ?? '').trim();
+  if (!s.startsWith(verdict)) return s;
+  const rest = s.slice(verdict.length).trim().replace(/^[：:，,。.\s]+/, '').replace(/^[（(]([^（）()]*)[）)]/, '$1');
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
 
 // a short point that opens to its whole text
 function Point({ text, n = 64, i }: { text: string; n?: number; i: number }) {
@@ -45,12 +55,11 @@ export function Survey(p: Props) {
   return (
     <div className="cm-page survey">
       {h ? (
-        <section className={`sv-tldr t-${TONE[h.verdict] ?? 'warn'}`}>
+        <section className={`sv-tldr t-${tone(h.verdict)}`}>
           <span className="sv-verdict">{h.verdict}</span>
           <div>
-            <p className="sv-line">{gist(h.summary, 70) || gist(h.gap, 70)}</p>
-            <span className="muted small">{[h.candidates?.length && tr('查了 {0} 篇候选', h.candidates.length), h.sources?.library != null && tr('图书馆 {0}', h.sources.library),
-              h.sources?.arxiv != null && `arXiv ${h.sources.arxiv}`, h.similar?.[0] && tr('最高相似度 {0}', Number(h.similar[0].similarity).toFixed(2))].filter(Boolean).join(' · ')}</span>
+            <p className="sv-line">{gist(besides(h.summary, h.verdict), 70) || gist(h.gap, 70)}</p>
+            <span className="muted small">{[h.sources?.library != null && tr('图书馆 {0}', h.sources.library), h.sources?.arxiv != null && `arXiv ${h.sources.arxiv}`].filter(Boolean).join(' · ')}</span>
           </div>
           {l.status === 'waiting' && <div className="sv-act">
             <button className="btn pri" onClick={() => p.onHatch(l.id)}>{tr('孵化并立项')}</button>
@@ -90,7 +99,7 @@ export function Survey(p: Props) {
         </section>
       )}
 
-      {(h?.similar?.length ?? 0) > 0 && (
+      {(h?.similar?.length ?? 0) > 0 && papers.data && !papers.data.survey.length && (
         <section className="cs">
           <h3>{tr('最接近的工作')}</h3>
           <ol className="sv-sim">
@@ -121,13 +130,15 @@ export function Survey(p: Props) {
         </section>
       )}
 
-      {papers.data && (papers.data.survey.length > 0 || papers.data.references.length > 0) && <Reading got={papers.data} />}
+      {papers.data && (papers.data.survey.length > 0 || papers.data.references.length > 0) && (
+        <Reading got={papers.data} why={Object.fromEntries((h?.similar ?? []).map((x: any) => [x.paper_id, x.note]))} />
+      )}
     </div>
   );
 }
 
 // every paper the project read or cites, one row each, searchable
-function Reading({ got }: { got: { survey: PaperCard[]; references: PaperCard[] } }) {
+function Reading({ got, why }: { got: { survey: PaperCard[]; references: PaperCard[] }; why: Record<string, string | undefined> }) {
   const [tab, setTab] = useState<'survey' | 'references'>(got.survey.length ? 'survey' : 'references');
   const [q, setQ] = useState('');
   useEffect(() => { if (tab === 'survey' && !got.survey.length) setTab('references'); }, [got, tab]);
@@ -150,10 +161,14 @@ function Reading({ got }: { got: { survey: PaperCard[]; references: PaperCard[] 
         <thead><tr><th>{tr('标题')}</th><th>{tr('年份')}</th><th>{tr('方向')}</th>{tab === 'survey' && <th>{tr('相似度')}</th>}</tr></thead>
         <tbody>{shown.slice(0, 80).map(x => (
           <tr key={x.paper_id} className={x.closest ? 'ours' : ''}>
-            <td><a href={x.url} target="_blank" rel="noreferrer">{x.title}</a><span className="muted small sv-au">{gist(x.authors, 40)}</span></td>
+            <td><a href={x.url} target="_blank" rel="noreferrer">{x.title}</a>
+              <span className="muted small sv-au">{[gist(x.authors, 40), tab === 'survey' && x.closest && gist(why[x.paper_id], 60)].filter(Boolean).join(' · ')}</span></td>
             <td className="muted">{x.year}</td>
             <td>{x.topic && <span className="chip">{x.topic}</span>}</td>
-            {tab === 'survey' && <td>{x.similarity != null ? x.similarity.toFixed(2) : '—'}</td>}
+            {tab === 'survey' && (
+              <td className="sv-simc">{x.similarity != null
+                ? <><span className="sv-bar" style={{ ['--v' as string]: Math.max(0, Math.min(1, x.similarity)) }}><i /></span>{x.similarity.toFixed(2)}</> : '—'}</td>
+            )}
           </tr>
         ))}</tbody>
       </table>

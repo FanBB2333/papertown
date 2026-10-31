@@ -306,7 +306,7 @@
  "张卡": "GPUs",
  "还有空": "with room",
  "可排显存": "VRAM available",
- "在跑": "running",
+ "在跑": "Running",
  "台在线 ·": "online · updated",
  "更新": "",
  " · {0} 条告警没确认": " · {0} unacknowledged {0|alert|alerts}",
@@ -1905,5 +1905,12 @@
  "编译出的 PDF": "The compiled PDF",
  "在 Paseo 桌面端打开：命令、模型切换和完整的对话": "Open in the Paseo desktop app: commands, switching models and the whole conversation",
  "小助手启动了，先读了一遍它的说明。": "The assistant started and read its instructions first.",
- "新对话：可以换一个模型重新开始": "New conversation: start again, with another model if you like"
+ "新对话：可以换一个模型重新开始": "New conversation: start again, with another model if you like",
+ "不再只看这个状态": "Show every state again",
+ "只看{0}": "Only {0}",
+ "暂无": "None yet",
+ "已花 {0} / {1}": "Spent {0} of {1}",
+ "GPU 小时": "GPU hours",
+ "这段时间里这个项目的任务占卡的时长，按卡数累加": "How long this project's jobs held GPUs in this period, counted per card",
+ "返回 {0} 篇 · 召回 {1} 篇候选再打分 · {2}": "Returns {0} · scores {1} full-text candidates · {2}"
 }
