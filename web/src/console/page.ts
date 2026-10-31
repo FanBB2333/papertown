@@ -1,0 +1,105 @@
+// What the console shows, for the assistant in the sidebar. The console says which project and
+// panel are open; each panel says what it has set and what it has open (usePanelNote); what
+// you point at is read off the page itself. Parts of the page that stand for something carry a
+// data-ref ("job:nvidb-4860", "gpu:406:1", "file:code:src/train.py") and, when their text is
+// not a good name, a data-ref-label; pointing takes the nearest of those, or else the block
+// under the mouse and the heading over it.
+
+import { useEffect, useSyncExternalStore } from 'react';
+import type { Focus, PageCtx } from '../api';
+
+type Note = Record<string, string | number | boolean | null | undefined>;
+
+let at: { line: PageCtx['line']; mod: string; name: string } = { line: null, mod: '', name: '' };
+const notes = new Map<string, Map<string, Note>>(); // panel -> part of it -> what it says
+const subs = new Set<() => void>();
+const changed = () => subs.forEach(f => f());
+
+export function onPageChange(fn: () => void) {
+  subs.add(fn);
+  return () => { subs.delete(fn); };
+}
+
+export function setPlace(line: PageCtx['line'], mod: string, name: string) {
+  if (at.line?.id === line?.id && at.mod === mod && at.name === name) return;
+  at = { line, mod, name };
+  changed();
+}
+export const usePlace = () => useSyncExternalStore(onPageChange, () => at);
+
+// a panel's settings and what it has open, in words the assistant reads ("时间范围": "7 天")
+export function usePanelNote(mod: string, part: string, note: Note) {
+  const key = JSON.stringify(note);
+  useEffect(() => {
+    const m = notes.get(mod) ?? new Map<string, Note>();
+    m.set(part, note);
+    notes.set(mod, m);
+    changed();
+  }, [mod, part, key]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { notes.get(mod)?.delete(part); changed(); }, [mod, part]);
+}
+
+const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+const squash = (s: string) => s.replace(/[ \t ]+/g, ' ').replace(/\s*\n[\s\n]*/g, '\n').trim();
+const panel = () => document.querySelector<HTMLElement>('.p-console .cm-mod.on');
+const first = (s: string) => s.split('\n').find(Boolean) ?? '';
+
+function labelOf(el: Element) {
+  const h = el as HTMLElement;
+  return clip(first(squash(h.dataset?.refLabel || h.getAttribute('aria-label') || (h.innerText ?? h.textContent ?? ''))), 80);
+}
+
+// the heading of the part of the panel an element sits in
+const HEAD = ':scope > :is(h2, h3, h4, h5, header, legend, .cs-h, .cm-head, .sec-h)';
+function whereOf(el: Element): string | undefined {
+  const top = panel()?.parentElement;
+  for (let n = el.parentElement; n && n !== top; n = n.parentElement) {
+    const h = n.querySelector<HTMLElement>(HEAD);
+    if (h && !h.contains(el)) return clip(squash(h.innerText).replace(/\n/g, ' ').replace(/^[^\p{L}\p{N}]+/u, '').replace(/\s+\d+$/, ''), 40) || undefined;
+  }
+  return undefined;
+}
+
+// what pointing lands on: the nearest part that stands for something, else the block it is in
+const BLOCK = 'button, a, li, tr, th, td, figure, pre, p, h2, h3, h4, h5, label, [role=button], .card, .pnl';
+export const pickable = (el: Element) => el.closest('[data-ref]') ?? el.closest(BLOCK) ?? el;
+
+export function describe(target: Element): Focus {
+  const el = pickable(target), ref = el.getAttribute('data-ref') ?? undefined;
+  const text = clip(squash((el as HTMLElement).innerText ?? el.textContent ?? ''), 400);
+  return { ref, label: ref ? labelOf(el) : clip(first(text), 80) || el.tagName.toLowerCase(), where: whereOf(el), text };
+}
+
+// everything the sidebar tells the assistant, with the message or when you move
+export function snapshot(focus: Focus | null): PageCtx {
+  const p = panel();
+  const state: Record<string, string> = {};
+  for (const n of notes.get(at.mod)?.values() ?? []) {
+    for (const [k, v] of Object.entries(n)) if (v !== null && v !== undefined && v !== '' && v !== false) state[k] = String(v);
+  }
+  const seen = new Set<string>(), refs: PageCtx['refs'] = [];
+  for (const el of p?.querySelectorAll('[data-ref]') ?? []) {
+    const ref = el.getAttribute('data-ref')!;
+    if (seen.has(ref)) continue;
+    seen.add(ref);
+    refs.push({ ref, label: labelOf(el) });
+    if (refs.length >= 80) break;
+  }
+  // code and the paper are files the assistant reads itself; elsewhere the page's text helps
+  const text = p && !['code', 'paper'].includes(at.mod) ? clip(squash(p.innerText), 8000) : '';
+  return { line: at.line, mod: at.mod, mod_name: at.name, state, focus, refs, text };
+}
+
+// light up a part of the page the assistant talks about, once it has rendered
+export function flash(ref: string, tries = 24) {
+  const el = document.querySelector(`.p-console [data-ref="${CSS.escape(ref)}"]`);
+  if (!el) {
+    if (tries > 0) setTimeout(() => flash(ref, tries - 1), 150);
+    return;
+  }
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.classList.remove('pt-flash');
+  void (el as HTMLElement).offsetWidth;
+  el.classList.add('pt-flash');
+  setTimeout(() => el.classList.remove('pt-flash'), 2600);
+}

@@ -11,6 +11,7 @@ import { gb, refreshGpus, useGpus } from '../components/Gpus';
 import { tr } from '../i18n';
 import { Meter, SPARK, ST, Spark, Tip, useNow, useTip, when, type St } from './charts';
 import { Icon } from './icons';
+import { usePanelNote } from './page';
 import { dur, pctOf } from './util';
 
 interface Props { mine: Set<number>; onOpen: (id: string) => void }
@@ -59,6 +60,7 @@ export function Cluster({ mine, onOpen }: Props) {
   const [view, setView] = useState<'cards' | 'people'>(() => { try { return localStorage.getItem('papertown.exp.cluster') === 'people' ? 'people' : 'cards'; } catch { return 'cards'; } });
   const pick = (v: 'cards' | 'people') => { setView(v); try { localStorage.setItem('papertown.exp.cluster', v); } catch { /* private mode */ } };
   const [onlyMine, setOnlyMine] = useState(false);
+  usePanelNote('exp', 'gpus', { GPU与队列: view === 'people' ? '按使用者看' : '按卡看', 只看这个项目: onlyMine ? '是' : null });
   const [hover, setHover] = useState<number | null>(null);
   const tip = useTip();
   const byId = useMemo(() => new Map((g?.jobs ?? []).map(j => [j.id, j])), [g]);
@@ -155,7 +157,8 @@ function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
               {Number.isFinite(p) && <span className="cl-age muted small">{tr('{0}读的', secsAgo(now - p))}</span>}
             </button>
             {!closed && rows.map(({ x, occ, queued }, i) => (
-              <div key={x.index} className={`cl-row${occ.length || queued.length ? '' : ' idle'}${occ.some(o => o.job && mine.has(o.job.id)) ? ' has-mine' : ''}`} style={{ ['--i' as string]: i }}>
+              <div key={x.index} className={`cl-row${occ.length || queued.length ? '' : ' idle'}${occ.some(o => o.job && mine.has(o.job.id)) ? ' has-mine' : ''}`} style={{ ['--i' as string]: i }}
+                data-ref={`gpu:${n.name}:${x.index}`} data-ref-label={`${n.name} · GPU ${x.index}`}>
                 <div className="cl-gpu">
                   <div className="cl-gh">
                     <b>GPU {x.index}</b><span className="muted small" title={x.name}>{x.name}</span>
@@ -215,6 +218,7 @@ function OccRow({ o, ctx, where }: { o: Occ; ctx: Ctx; where?: boolean }) {
   return (
     <button className={`cl-o ${o.kind === 'job' ? 'from-q' : 'outside'}${ours ? ' mine' : ''}${j && lit && !lit.has(j.id) ? ' dim' : ''}${j && lit?.has(j.id) && j.id !== hover ? ' rel' : ''}`}
       onClick={j ? () => onOpen(`nvidb-${j.id}`) : undefined} aria-disabled={!j}
+      data-ref={j ? `job:nvidb-${j.id}` : `proc:${o.node}:${o.gpu}:${o.key}`} data-ref-label={j ? `${tr('任务')} #${j.id} ${j.name}` : `${o.user} · ${o.what}`}
       onPointerEnter={() => j && setHover(j.id)}
       onPointerMove={e => tip.show(e, { title: j ? `#${j.id} ${j.name}` : `${o.what}`, rows, foot: j?.notes ? j.notes.slice(0, 160) : j ? undefined
         : `${tr('不是从队列启动的，Papertown 只能看到它占着卡')}${o.atLeast ? tr('；nvidb 不记它的开始时间，≥ 表示 Papertown 开始看时它已经在了') : ''}` })}

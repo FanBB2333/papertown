@@ -1122,3 +1122,105 @@ td.heat.best { font-weight: 700; }
   .ov-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 14px; }
   .ov-steps::before, .ov-steps::after { display: none; }
 }
+
+/* ---------- the assistant, in a sidebar on the right ---------- */
+.fb-side.on { color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent); }
+.asst {
+  position: relative; flex: none; max-width: 60vw; display: flex; flex-direction: column; min-height: 0;
+  background: var(--panel); border-left: 1px solid var(--line); animation: asst-in .45s var(--out) both;
+}
+@keyframes asst-in { from { opacity: 0; transform: translateX(18px); } }
+.as-grip { position: absolute; left: -3px; top: 0; bottom: 0; z-index: 3; width: 6px; cursor: col-resize; transition: background .2s; }
+.as-grip:hover, .pt-resizing .as-grip { background: color-mix(in srgb, var(--brand) 28%, transparent); }
+.pt-resizing { cursor: col-resize; user-select: none; }
+.pt-resizing iframe { pointer-events: none; }
+
+.as-start { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 0 16px 16px; overflow-y: auto; }
+.as-top { display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 0 -16px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--line); }
+.as-lead { margin: 0; font-size: 13px; line-height: 1.65; color: var(--muted); }
+.as-start .hire-card { padding: 14px; gap: 8px; }
+.as-start .hire-card h3 { font-size: 15px; }
+
+.as-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.as-chat > .room-main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.asst .chat-head { flex-wrap: wrap; gap: 6px 8px; min-height: 48px; padding: 7px 10px 7px 14px; }
+.asst .chat-head .btns { gap: 4px; flex-wrap: wrap; align-items: center; }
+.asst .chat-head .btn { padding: 4px 9px; font-size: 12px; }
+.asst .chat-who { min-width: 0; }
+.asst .chat-who span { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asst .pi-switch { order: 3; width: 100%; margin: 0; }
+.asst .transcript { padding: 14px 14px 10px; gap: 8px; }
+.asst .msg-u, .asst .msg-a { max-width: 94%; padding: 8px 12px; font-size: 13.5px; }
+.asst .tool, .asst .trail { max-width: 100%; }
+.asst .chat-compose { gap: 8px; padding: 6px 12px 12px; border-top: 0; }
+.asst .chat-compose textarea { font-size: 13.5px; }
+
+/* the page you are on and what you point at, over the box you write in */
+.as-bar { display: flex; flex-direction: column; gap: 7px; padding: 9px 12px 2px; border-top: 1px solid var(--line); }
+.as-at { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.as-point {
+  flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px dashed color-mix(in srgb, var(--brand) 55%, var(--line));
+  border-radius: 999px; background: none; font: 12px var(--font); color: var(--brand); cursor: pointer; transition: background .2s, border-color .2s;
+}
+.as-point:hover { background: color-mix(in srgb, var(--brand) 8%, transparent); }
+.as-point.on { border-style: solid; background: color-mix(in srgb, var(--brand) 14%, transparent); }
+.as-here { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.as-chip {
+  min-width: 0; display: inline-flex; align-items: center; gap: 6px; padding: 3px 3px 3px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 12%, var(--panel)); font-size: 12px; animation: pop .3s var(--spring-pop) both;
+}
+.as-chip b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.as-chip em { flex: none; font-style: normal; color: var(--muted); }
+.as-chip button { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.as-chip button:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); }
+.as-quick { display: flex; flex-wrap: wrap; gap: 6px; animation: fade .3s var(--out) both; }
+.as-quick button {
+  padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft); font: 12px var(--font); color: var(--ink);
+  cursor: pointer; transition: border-color .2s, background .2s;
+}
+.as-quick button:hover { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 7%, var(--panel)); }
+
+/* your messages carry the page they were written on, quietly above the words */
+.as-said .as-ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin-bottom: 3px; font-size: 11px; color: var(--muted); }
+.as-said .as-ctx em { display: inline-flex; align-items: center; gap: 3px; font-style: normal; color: var(--brand); }
+.as-ev { align-self: stretch; display: flex; align-items: flex-start; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--soft); font-size: 12.5px; color: var(--muted); animation: fade .3s var(--out) both; }
+.as-ev p { margin: 0; line-height: 1.55; }
+.as-ev .ic { flex: none; margin-top: 3px; }
+
+/* its question for you, and what it asked to do */
+.as-card { align-self: stretch; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); animation: rise-in .35s var(--out) both; }
+.as-card p { margin: 0; font-size: 13px; line-height: 1.55; }
+.as-k { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
+.as-ask { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); background: color-mix(in srgb, var(--brand) 6%, var(--panel)); }
+.as-ask .as-k { color: var(--brand); }
+.as-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.as-choices .btn { padding: 4px 11px; font-size: 12.5px; }
+.as-act.st-pending { border-color: color-mix(in srgb, #d0743a 50%, var(--line)); background: color-mix(in srgb, #d0743a 7%, var(--panel)); }
+.as-act.st-pending .as-k { color: #b45f29; }
+.as-act.st-done .as-k { color: var(--ok); }
+.as-act.st-failed .as-k { color: var(--bad); }
+
+/* pointing at the page: what is under the mouse is outlined and named */
+.pt-pointing, .pt-pointing * { cursor: crosshair !important; }
+.pt-pointer { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+.pt-box { position: fixed; border: 2px solid var(--brand); border-radius: 8px; background: color-mix(in srgb, var(--brand) 7%, transparent); transition: left .12s var(--out), top .12s var(--out), width .12s var(--out), height .12s var(--out); }
+.pt-box span {
+  position: absolute; left: -2px; bottom: calc(100% + 4px); max-width: 360px; padding: 2px 8px; border-radius: 6px; background: var(--brand);
+  color: #fff; font: 600 12px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pt-box span.below { bottom: auto; top: calc(100% + 4px); }
+.pt-hint {
+  position: fixed; left: 50%; bottom: 22px; padding: 7px 14px; border-radius: 999px; background: var(--ink); color: var(--panel); font-size: 12.5px;
+  box-shadow: 0 10px 30px rgba(40, 28, 16, .25); animation: fade-up .3s var(--out) both; transform: translateX(-50%);
+}
+.pt-hint kbd { color: inherit; background: none; border-color: color-mix(in srgb, var(--panel) 40%, transparent); }
+
+/* what the assistant lights up for you */
+.pt-flash { animation: pt-flash 2.4s var(--out); }
+@keyframes pt-flash { 0%, 55% { box-shadow: 0 0 0 2px var(--brand), 0 0 0 7px color-mix(in srgb, var(--brand) 22%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+g.pt-flash { animation: none; }
+g.pt-flash > rect:not(.g-pad) { animation: pt-flash-svg 2.4s var(--out); }
+@keyframes pt-flash-svg { 0%, 55% { stroke: var(--ink); stroke-width: 3px; } }
+
+/* a job's drawer opens beside the sidebar, not under it */
+.jd-back, .jd { right: var(--asst-w, 0px); }

@@ -4,11 +4,12 @@
 // town's configuration run down the left, and the one picked fills the right: the survey to
 // read, the code and the paper to edit, the experiments and their data, the project's agents,
 // the skills, MCP servers and library. The town, 2D or 3D, is the same work walked through.
+// The assistant opens in a sidebar on the right and is told what you are looking at.
 //
 //   #view=console&line=line_2&m=paper   — open a project's panel directly
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, type Line, type Placement } from '../api';
+import { api, listen, type Line, type Placement, type ShowTarget } from '../api';
 import { AgentDesk } from '../components/AgentRoom';
 import type { RoomActions } from '../components/Interior';
 import { McpRoom } from '../components/McpRoom';
@@ -16,11 +17,13 @@ import { STATUS } from '../components/MillRoom';
 import { RagRoom } from '../components/RagRoom';
 import { SkillRoom } from '../components/SkillRoom';
 import { tr } from '../i18n';
+import { Assistant } from './Assistant';
 import { Code } from './Code';
 import { Data } from './Data';
 import { Experiments } from './Experiments';
 import { Icon, type IconName } from './icons';
 import { Overview, STAGE_MOD } from './Overview';
+import { flash, setPlace, usePanelNote } from './page';
 import { Paper } from './Paper';
 import { Survey } from './Survey';
 import { revealX, useFetch } from './util';
@@ -63,7 +66,7 @@ const needsYou = FILTERS[2][2];
 const hasPaper = (l: Line) => !!l.linked?.paper || l.files.includes('main.tex');
 
 const KEY = 'pt-console';
-function remembered(): { line?: string; mod?: ModId; narrow?: boolean } {
+function remembered(): { line?: string; mod?: ModId; narrow?: boolean; side?: boolean } {
   try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
 
@@ -81,13 +84,14 @@ export function Console(p: Props) {
   const [want, setWant] = useState<string | null>(hp.get('line') ?? first.line ?? null);
   const [mod, setMod] = useState<ModId>(isMod(hp.get('m')) ? hp.get('m') as ModId : first.mod ?? 'overview');
   const [narrow, setNarrow] = useState(!!first.narrow);
+  const [side, setSide] = useState(!!first.side); // the assistant's sidebar
   const [dir, setDir] = useState(1);
   const [rail, setRail] = useState(false);
   const [railTab, setRailTab] = useState<'projects' | 'papers'>('projects');
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   const [role, setRole] = useState<'coder' | 'writer'>('coder');
-  const [reveal, setReveal] = useState<{ path: string; n: number } | null>(null); // a file to open in the code panel
+  const [reveal, setReveal] = useState<{ path: string; line?: number; n: number } | null>(null); // a file to open in the code panel
   const [hist, setHist] = useState<{ back: [string, ModId][]; fwd: [string, ModId][] }>({ back: [], fwd: [] });
   const dirty = useRef({ code: 0, paper: 0 });
   const searchRef = useRef<HTMLInputElement>(null);
@@ -101,8 +105,10 @@ export function Console(p: Props) {
   const line = full.data ?? null;
 
   useEffect(() => {
-    try { localStorage.setItem(KEY, JSON.stringify({ line: cur?.id, mod, narrow })); } catch { /* private mode */ }
-  }, [cur?.id, mod, narrow]);
+    try { localStorage.setItem(KEY, JSON.stringify({ line: cur?.id, mod, narrow, side })); } catch { /* private mode */ }
+  }, [cur?.id, mod, narrow, side]);
+  useEffect(() => setPlace(cur ? { id: cur.id, seq: cur.seq, title: cur.title } : null, mod, MODS.find(m => m.id === mod)!.name), [cur?.id, cur?.title, mod]); // eslint-disable-line react-hooks/exhaustive-deps
+  usePanelNote('agents', 'role', { 员工: mod === 'agents' ? (role === 'coder' ? '代码员工' : '写作员工') : null });
 
   // the panels that keep their state while another is shown: their editors, open files and edits
   const [kept, setKept] = useState<Set<ModId>>(new Set());
@@ -138,6 +144,20 @@ export function Console(p: Props) {
     setHist(h => ({ back: [...h.back, [id, mod]], fwd: h.fwd.slice(1) }));
     go({ line: next[0], mod: next[1] }, false);
   };
+
+  // what the assistant opens for you: a panel, a file at a line, a job's details, a part of the page lit up
+  useEffect(() => listen(e => {
+    if (e.type !== 'assistant_show') return;
+    const t: ShowTarget = e.target ?? {};
+    const job = t.job && /^\d+$/.test(t.job) ? `nvidb-${t.job}` : t.job;
+    const [root, path, ln] = t.file ? (/^(code|paper):(.+?)(?::(\d+))?$/.exec(t.file) ?? []).slice(1) : [];
+    const m = isMod(t.mod) ? t.mod : job ? 'exp' : root === 'paper' ? 'paper' : root ? 'code' : undefined;
+    go({ line: t.line, mod: m });
+    if (root === 'code' && path) setReveal(r => ({ path, line: ln ? Number(ln) : undefined, n: (r?.n ?? 0) + 1 }));
+    if (job) setTimeout(() => dispatchEvent(new CustomEvent('pt-open-job', { detail: job })), 80);
+    const ref = t.ref ?? (job ? `job:${job}` : path ? `file:${root}:${path}` : undefined);
+    if (ref) setTimeout(() => flash(ref), 200);
+  }), [go]);
 
   // a building asked for from inside a panel: its panel here when there is one, else its room
   const typeOf = (bid: string) => p.placements.find(x => x.id === bid)?.type ?? bid;
@@ -217,6 +237,8 @@ export function Console(p: Props) {
             <kbd>⌘K</kbd>
           </label>
           <button className="btn pri fb-new" onClick={p.onIdea}><Icon n="plus" size={14} />{tr('新 idea')}</button>
+          <button className={`ib fb-side${side ? ' on' : ''}`} onClick={() => setSide(o => !o)} title={side ? tr('收起小助手') : tr('小助手：问这一页的事，请它帮你办')}
+            aria-pressed={side}><Icon n="chat" size={17} /></button>
         </div>
       </div>
 
@@ -263,6 +285,7 @@ export function Console(p: Props) {
             </section>
           )}
         </div>
+        {side && <Assistant actions={actions} onClose={() => setSide(false)} />}
       </div>
     </main>
   );

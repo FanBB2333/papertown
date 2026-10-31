@@ -189,6 +189,7 @@ export function Gantt({ jobs, domain, onZoom, onPick, now }: {
             const s = ST[j.st];
             return (
               <g key={j.id} className={`g-bar s-${j.st}${j.mine === false ? ' other' : ''}`} transform={`translate(${a} ${b.y + GAP + k * (TRACK + GAP)})`}
+                data-ref={`job:${j.id}`} data-ref-label={`${tr('任务')} ${j.name}`}
                 onPointerMove={ev => show(ev, { title: j.name, rows: j.tip, foot: tr('点开看详情') })} onPointerLeave={hide}
                 onClick={() => onPick(j.id)} tabIndex={0} onKeyDown={ev => { if (ev.key === 'Enter') onPick(j.id); }}>
                 <rect className="g-pad" x={-3} y={-2} width={w + 6} height={TRACK + 4} />

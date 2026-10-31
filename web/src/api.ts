@@ -62,10 +62,10 @@ export interface Sheet {
   active_line?: string | null;
 }
 
-export type AgentRole = 'coder' | 'writer' | 'monitor';
+export type AgentRole = 'coder' | 'writer' | 'monitor' | 'assistant';
 export type AgentStatus = 'stopped' | 'starting' | 'idle' | 'working' | 'error' | 'watching';
 
-export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note'; data: any }
+export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act'; data: any }
 
 export interface ModelRef { provider: string; id: string; name: string; reasoning: boolean; contextWindow: number | null }
 
@@ -79,7 +79,7 @@ export interface PiState {
 }
 
 export interface Agent {
-  id: string; line_id: string; role: AgentRole; status: AgentStatus; tmux: string | null; cwd: string | null;
+  id: string; line_id: string | null; role: AgentRole; status: AgentStatus; tmux: string | null; cwd: string | null;
   model: string | null; cost: number; attach: string | null; name: string; last: AgentEvent | null; updated_at: string;
   runtime: 'pi' | 'paseo'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
 }
@@ -102,6 +102,17 @@ export interface PaseoConversation {
 export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
 export interface PaseoPermission { id: string; name: string; title: string | null; arg: string }
 export interface StartOpts { runtime?: 'pi' | 'paseo'; provider?: string; model?: string; thinking?: string }
+
+// the console's assistant: its agent, the question it is asking you, what it asked to do
+export interface AssistantView { agent: Agent; asks: AgentEvent[]; acts: AgentEvent[]; actions: Record<string, { what: string; args: string }> }
+// what you point at on the page, and what the sidebar tells the assistant you are looking at
+export interface Focus { ref?: string; label: string; where?: string; text?: string }
+export interface PageCtx {
+  line: { id: string; seq: number; title: string } | null; mod: string; mod_name: string;
+  state: Record<string, string>; focus: Focus | null; refs: { ref: string; label: string }[]; text: string;
+}
+// what the assistant opens for you or lights up
+export interface ShowTarget { mod?: string; line?: string; file?: string; job?: string; ref?: string }
 
 // a paper in the library, as the cards on its shelves show it
 export interface PaperCard {
@@ -290,6 +301,11 @@ export const api = {
   compile: (lineId: string) => call<Compiled>('POST', `/api/lines/${lineId}/ws/paper/compile`),
   data: (lineId: string) => call<LineData>('GET', `/api/lines/${lineId}/data`),
   nvJob: (id: number) => call<NvJobFull>('GET', `/api/nvidb/jobs/${id}`),
+  assistant: () => call<AssistantView>('GET', '/api/assistant'),
+  assistantPage: (page: PageCtx) => call<{ ok: boolean }>('POST', '/api/assistant/page', { page }),
+  assistantSay: (text: string, page: PageCtx | null) => call<AgentEvent>('POST', '/api/assistant/say', { text, page }),
+  assistantNew: () => call<Agent>('POST', '/api/assistant/new'),
+  decide: (id: number, allow: boolean) => call<AgentEvent>('POST', `/api/assistant/acts/${id}`, { allow }),
 };
 
 export const fileUrl = (lineId: string, name: string) => (DEMO ? demoFile(lineId, name) : `/api/lines/${lineId}/files/${name}`);
@@ -313,7 +329,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; } // the demo is a snapshot: nothing happens live
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data));
     onEvent(e);

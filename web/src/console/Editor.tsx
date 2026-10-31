@@ -29,7 +29,8 @@ interface Props {
   onChange?: (id: string, text: string) => void;
   onSave?: () => void;
   onRun?: () => void;
-  onCursor?: (line: number, col: number) => void;
+  onCursor?: (line: number, col: number, picked: string) => void; // picked: the selected text, if any
+  goto?: { line: number; n: number } | null; // asked from outside: put the cursor on this line
 }
 
 const ext = (path: string) => path.slice(path.lastIndexOf('.') + 1).toLowerCase();
@@ -90,7 +91,7 @@ const theme = EditorView.theme({
   '&.cm-focused': { outline: 'none' },
 });
 
-export default function Editor({ doc, readOnly = false, onChange, onSave, onRun, onCursor }: Props) {
+export default function Editor({ doc, readOnly = false, onChange, onSave, onRun, onCursor, goto }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const saved = useRef(new Map<string, { state: EditorState; top: number; rev: number }>());
@@ -114,8 +115,8 @@ export default function Editor({ doc, readOnly = false, onChange, onSave, onRun,
       EditorView.updateListener.of(u => {
         if (u.docChanged && cur.current) fns.current.onChange?.(cur.current.id, u.state.doc.toString());
         if (u.selectionSet || u.docChanged) {
-          const h = u.state.selection.main.head, ln = u.state.doc.lineAt(h);
-          fns.current.onCursor?.(ln.number, h - ln.from + 1);
+          const m = u.state.selection.main, ln = u.state.doc.lineAt(m.head);
+          fns.current.onCursor?.(ln.number, m.head - ln.from + 1, m.empty ? '' : u.state.sliceDoc(m.from, Math.min(m.to, m.from + 2000)));
         }
       }),
     ],
@@ -142,8 +143,18 @@ export default function Editor({ doc, readOnly = false, onChange, onSave, onRun,
       v.setState(make(doc));
     }
     const h = v.state.selection.main.head, ln = v.state.doc.lineAt(h);
-    fns.current.onCursor?.(ln.number, h - ln.from + 1);
+    fns.current.onCursor?.(ln.number, h - ln.from + 1, '');
   }, [doc?.id, doc?.rev, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // after the file is in: the line asked for, in the middle of the view
+  const went = useRef(0);
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !doc || !goto || went.current === goto.n) return;
+    went.current = goto.n;
+    const at = v.state.doc.line(Math.min(Math.max(1, goto.line), v.state.doc.lines)).from;
+    v.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: 'center' }) });
+  }, [goto?.n, doc?.id, doc?.rev]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return <div className="ed" ref={host} />;
 }

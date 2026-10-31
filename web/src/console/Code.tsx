@@ -8,10 +8,11 @@ import { DEMO } from '../demo';
 import { tr } from '../i18n';
 import { FileView, Tabs, Tree, langOf, useFiles } from './files';
 import { Icon } from './icons';
+import { usePanelNote } from './page';
 
 interface Props {
   lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void;
-  reveal?: { path: string; n: number } | null; // asked from another panel: open this file
+  reveal?: { path: string; line?: number; n: number } | null; // asked from another panel or the assistant: open this file
 }
 
 export function Code(p: Props) {
@@ -34,6 +35,7 @@ function Repo(p: Props) {
   const f = useFiles(p.lineId, 'code', p.tick, p.toast);
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<[number, number]>([1, 1]);
+  const [picked, setPicked] = useState('');
   const [diff, setDiff] = useState<{ path: string; text: string } | null>(null);
   const files = f.tree.data?.files ?? [];
   const changed = files.filter(x => x.status);
@@ -51,6 +53,11 @@ function Repo(p: Props) {
 
   const cur = f.now;
   const st = cur ? f.status.get(cur.path) : undefined;
+  const goto = p.reveal?.line && cur?.path === p.reveal.path ? { line: p.reveal.line, n: p.reveal.n } : null;
+  usePanelNote('code', 'file', {
+    仓库: place.path, 打开的文件: cur?.path, 光标: cur ? `第 ${pos[0]} 行第 ${pos[1]} 列` : null, 选中的文字: picked,
+    其他打开的文件: f.open.filter(o => o.path !== cur?.path).map(o => o.path).join('、'), 没保存: f.dirty ? `${f.dirty} 个文件` : null,
+  });
   const showDiff = () => {
     if (!cur) return;
     if (diff) { setDiff(null); return; }
@@ -81,7 +88,7 @@ function Repo(p: Props) {
             {changed.length > 6 && <span className="muted small">{tr('还有 {0} 个', changed.length - 6)}</span>}
           </div>
         )}
-        <Tree files={files} cur={f.cur} onOpen={f.show} dirty={dirtySet} filter={q} />
+        <Tree files={files} cur={f.cur} onOpen={f.show} dirty={dirtySet} filter={q} root="code" />
         {f.tree.data?.truncated && <p className="muted small tr-none">{tr('文件太多，只列出前 4000 个。')}</p>}
       </aside>
       <section className="ide-main">
@@ -90,7 +97,7 @@ function Repo(p: Props) {
           {!DEMO && <button className="ib" title={tr('保存（⌘S）')} disabled={!dirtySet.has(cur.path) || f.saving} onClick={() => f.save(cur.path)}><Icon n="save" size={15} /></button>}
         </>} />
         <div className="ide-ed">
-          <FileView f={f} onCursor={(l, c) => setPos([l, c])} empty={
+          <FileView f={f} goto={goto} onCursor={(l, c, s) => { setPos([l, c]); setPicked(s); }} empty={
             <div className="fv-note"><Icon n="code" size={30} /><b>{place.name}</b><p className="muted small">{tr('从左边挑一个文件打开。⌘S 保存，改动直接写回仓库。')}</p></div>} />
           {diff && <Diff text={diff.text} onClose={() => setDiff(null)} />}
         </div>

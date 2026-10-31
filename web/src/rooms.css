@@ -311,3 +311,11 @@
 .commits code { font-size: 11.5px; color: var(--muted); }
 .c-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 900px) { .lk-grid { grid-template-columns: 1fr; } }
+
+/* the little Markdown agents write */
+.msg-a ul, .msg-a ol, .msg-u ul, .msg-u ol { margin: 0 0 6px; padding-left: 20px; }
+.msg-a li, .msg-u li { margin: 2px 0; line-height: 1.55; }
+.msg-a :is(ul, ol):last-child { margin-bottom: 0; }
+.md-c { padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--ink) 7%, transparent); font: .9em ui-monospace, Menlo, monospace; word-break: break-word; }
+.md-hr { margin: 8px 0; border: 0; border-top: 1px dashed var(--line); }
+.md-h { font-weight: 700; }

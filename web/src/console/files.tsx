@@ -114,8 +114,9 @@ const KIND: Record<string, string> = {
 };
 export const kindColor = (path: string) => KIND[ext(path)] ?? '#a3927b';
 
-export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs }: {
+export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }: {
   files: WsEntry[]; cur: string | null; onOpen: (path: string) => void; dirty: Set<string>; filter?: string; openDirs?: string[];
+  root?: WsRoot; // which tree, for the parts of the page the assistant can point at
 }) {
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -158,7 +159,7 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs }: {
       const m = f.status && MARK[f.status];
       out.push(
         <button key={f.path} className={`tr-row tr-file${f.path === cur ? ' on' : ''}${f.status ? ` st-${f.status}` : ''}`} style={{ ['--d' as string]: depth }}
-          onClick={() => onOpen(f.path)} title={`${f.path} · ${bytes(f.size)}`}>
+          onClick={() => onOpen(f.path)} title={`${f.path} · ${bytes(f.size)}`} data-ref={root ? `file:${root}:${f.path}` : undefined} data-ref-label={f.path}>
           <i className="tr-kind" style={{ background: kindColor(f.path) }} /><span className="tr-name">{base(f.path)}</span>
           {dirty.has(f.path) && <i className="tr-dirty" title={tr('还没保存')} />}
           {m && <em className="tr-mark" title={m[1]}>{m[0]}</em>}
@@ -194,8 +195,8 @@ export function Tabs({ f, extra }: { f: Files; extra?: React.ReactNode }) {
   );
 }
 
-export function FileView({ f, onRun, onCursor, empty }: {
-  f: Files; onRun?: () => void; onCursor?: (ln: number, col: number) => void; empty: React.ReactNode;
+export function FileView({ f, onRun, onCursor, goto, empty }: {
+  f: Files; onRun?: () => void; onCursor?: (ln: number, col: number, picked: string) => void; goto?: { line: number; n: number } | null; empty: React.ReactNode;
 }) {
   const o = f.now;
   const doc: Doc | null = o && o.text != null ? { id: o.path, path: o.path, text: o.text, rev: o.rev } : null;
@@ -208,7 +209,7 @@ export function FileView({ f, onRun, onCursor, empty }: {
   return (
     <div className="fv">
       <Suspense fallback={<p className="muted fv-wait">{tr('正在载入编辑器…')}</p>}>
-        <Editor doc={doc} readOnly={DEMO} onChange={f.edit} onSave={() => { f.save(); }} onRun={onRun} onCursor={onCursor} />
+        <Editor doc={doc} readOnly={DEMO} onChange={f.edit} onSave={() => { f.save(); }} onRun={onRun} onCursor={onCursor} goto={goto} />
       </Suspense>
       {note && <div className="fv-over">{note}</div>}
     </div>

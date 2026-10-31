@@ -81,7 +81,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
   return createPortal(
     <>
       <div className="jd-back" onClick={onClose} />
-      <aside className={`jd s-${st}`} role="dialog" aria-label={name}>
+      <aside className={`jd s-${st}`} role="dialog" aria-label={name} data-ref={`job:${id}`} data-ref-label={`${tr('任务')} ${name}`}>
         <header className="jd-h">
           <div className="jd-t">
             <span className="jd-id">

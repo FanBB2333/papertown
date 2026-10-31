@@ -11,6 +11,7 @@ import { tr } from '../i18n';
 import { Bars, StateTag, Tip, fmtNum, stOf, useTip, when } from './charts';
 import { Icon } from './icons';
 import { JobDrawer } from './JobDrawer';
+import { usePanelNote } from './page';
 import { ago, base, bytes, dur, ext, flat, headlines, useFetch } from './util';
 
 interface Props { lineId: string; tick: number; onOpenFile: (path: string) => void }
@@ -23,6 +24,7 @@ export function Data(p: Props) {
   const d = useFetch(() => api.data(p.lineId), p.lineId, p.tick);
   const [job, setJob] = useState<string | null>(null);
   const [file, setFile] = useState<string | null>(null);
+  usePanelNote('data', 'open', { 打开着详情的任务: job, 打开着的数据文件: file });
   if (!d.data) return <div className="cm-page"><p className="muted">{d.err || tr('加载中…')}</p></div>;
   const { meta, results, runs, files } = d.data;
   const withResult = runs.filter(r => r.result && typeof r.result === 'object');
@@ -95,7 +97,8 @@ function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) =>
         {runs.map((r, i) => {
           const h = headlines(r.result, 4);
           return (
-            <button key={r.id} className={`rc s-${stOf(r.state)}`} style={{ ['--i' as string]: Math.min(i, 10) }} onClick={() => onOpen(r.id)}>
+            <button key={r.id} className={`rc s-${stOf(r.state)}`} style={{ ['--i' as string]: Math.min(i, 10) }} onClick={() => onOpen(r.id)}
+              data-ref={`job:${r.id}`} data-ref-label={`${tr('任务')} ${r.name}`}>
               <span className="rc-h"><StateTag s={stOf(r.state)} /><span className="muted small">{ago(r.finished_at)}</span></span>
               <b className="rc-n" title={r.name}>{r.name}</b>
               {h.length ? <span className="rc-m">{h.map(x => <span key={x.k}><strong>{fmtNum(x.v)}</strong><em title={x.k}>{x.name}</em></span>)}</span>
@@ -145,6 +148,7 @@ function Files({ lineId, files, onOpen }: { lineId: string; files: DFile[]; onOp
   const [q, setQ] = useState('');
   const [sortBy, setSortBy] = useState<'mtime' | 'name' | 'size'>('mtime');
   const [shut, setShut] = useState<Set<string>>(new Set());
+  usePanelNote('data', 'files', { 对比的文件组: fam, 文件种类: kind === 'all' ? null : KIND_NAME[kind], 搜文件: q.trim() });
   const cur = fams.find(f => f.key === fam);
 
   const needle = q.trim().toLowerCase();
@@ -188,7 +192,7 @@ function Files({ lineId, files, onOpen }: { lineId: string; files: DFile[]; onOp
                   <Icon n="chevron" size={12} className="tr-chev" /><Icon n="folder" size={14} /><span>{d}</span><em>{fs.length}</em>
                 </button>
                 {!closed && fs.map(f => (
-                  <button key={f.path} className="fb-f" onClick={() => onOpen(f.path)} title={f.path}>
+                  <button key={f.path} className="fb-f" onClick={() => onOpen(f.path)} title={f.path} data-ref={`file:code:${f.path}`} data-ref-label={f.path}>
                     <span>{base(f.path)}</span><span className="muted small">{bytes(f.size)}</span><span className="muted small">{ago(f.mtime)}</span>
                   </button>
                 ))}
@@ -283,7 +287,7 @@ function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen:
               ))}
             </tr></thead>
             <tbody>{rows.map(r => (
-              <tr key={r.path} onClick={() => onOpen(r.path)}>
+              <tr key={r.path} onClick={() => onOpen(r.path)} data-ref={`file:code:${r.path}`} data-ref-label={r.path}>
                 <td className="cmp-tag mono" title={r.path}>{r.tag}</td>
                 {shownCols.map(k => {
                   const v = r.vals.get(k);
@@ -323,7 +327,7 @@ function Runs({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) => void 
       <table className="ctab xt">
         <thead><tr>{th('name', tr('任务'))}{th('st', tr('状态'))}<th>{tr('在哪')}</th>{th('dur', tr('用时'))}{th('end', tr('结束'))}<th>{tr('结果')}</th></tr></thead>
         <tbody>{sorted.slice(0, all ? 400 : 12).map(r => (
-          <tr key={r.id} className={`s-${stOf(r.state)}`} onClick={() => onOpen(r.id)}>
+          <tr key={r.id} className={`s-${stOf(r.state)}`} onClick={() => onOpen(r.id)} data-ref={`job:${r.id}`} data-ref-label={`${tr('任务')} ${r.name}`}>
             <td><b className="xt-n">{r.name}</b></td>
             <td><StateTag s={stOf(r.state)} />{r.exit_code ? <span className="muted small"> · exit {r.exit_code}</span> : null}</td>
             <td className="muted">{r.where ?? '—'}</td>

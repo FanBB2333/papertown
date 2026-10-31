@@ -8,6 +8,7 @@ import { DEMO } from '../demo';
 import { tr } from '../i18n';
 import { FileView, Tabs, Tree, useFiles } from './files';
 import { Icon } from './icons';
+import { usePanelNote } from './page';
 
 interface Props { lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void }
 
@@ -51,6 +52,7 @@ function Tex(p: Props) {
   const [hasPdf, setHasPdf] = useState(!!place.pdf || DEMO);
   const [logOpen, setLogOpen] = useState(false);
   const [drag, setDrag] = useState(false);
+  const [at, setAt] = useState<{ line: number; picked: string }>({ line: 1, picked: '' });
   const body = useRef<HTMLDivElement>(null);
   const files = f.tree.data?.files ?? [];
   const dirtySet = new Set(f.open.filter(o => o.text !== o.saved).map(o => o.path));
@@ -94,6 +96,11 @@ function Tex(p: Props) {
 
   const d = run && !run.ok ? digest(run.log) : null;
   const url = `${paperPdfUrl(p.lineId, v)}#view=FitH&navpanes=0`;
+  usePanelNote('paper', 'tex', {
+    论文目录: place.path, 主文件: place.main, 打开的文件: f.cur, 光标: f.cur ? `第 ${at.line} 行` : null, 选中的文字: at.picked,
+    版面: { src: '只看源码', split: '源码和 PDF 对照', pdf: '只看 PDF' }[layout], 没保存: f.dirty ? `${f.dirty} 个文件` : null,
+    这次编译: run ? (run.ok ? `成功，${run.seconds.toFixed(1)} 秒${run.pages ? `，${run.pages} 页` : ''}` : `失败：${d?.errs[0]?.split('\n')[0] ?? ''}`) : null,
+  });
   return (
     <div className={`tex l-${layout}${drag ? ' dragging' : ''}`} ref={body}>
       <div className="tex-bar">
@@ -117,13 +124,13 @@ function Tex(p: Props) {
       <div className="tex-body">
         {side && <aside className="tex-files">
           <span className="ide-t">{tr('文件')}</span>
-          <Tree files={files} cur={f.cur} onOpen={x => (/\.pdf$/i.test(x) ? setLayout('pdf') : f.show(x))} dirty={dirtySet} />
+          <Tree files={files} cur={f.cur} onOpen={x => (/\.pdf$/i.test(x) ? setLayout('pdf') : f.show(x))} dirty={dirtySet} root="paper" />
         </aside>}
         <div className="tex-panes" style={{ ['--split' as string]: split }}>
           <section className="tex-src">
             <Tabs f={f} />
             <div className="ide-ed">
-              <FileView f={f} onRun={compile} empty={<div className="fv-note"><Icon n="doc" size={30} /><p className="muted small">{tr('从左边挑一个文件打开。')}</p></div>} />
+              <FileView f={f} onRun={compile} onCursor={(line, _c, picked) => setAt({ line, picked })} empty={<div className="fv-note"><Icon n="doc" size={30} /><p className="muted small">{tr('从左边挑一个文件打开。')}</p></div>} />
             </div>
             {run && !run.ok && logOpen && d && (
               <div className="tex-log">
@@ -135,7 +142,7 @@ function Tex(p: Props) {
             )}
           </section>
           <div className="tex-gutter" onPointerDown={onDrag} role="separator" aria-orientation="vertical" title={tr('拖动调整左右宽度')}><i /></div>
-          <section className="tex-pdf">
+          <section className="tex-pdf" data-ref="pdf" data-ref-label={tr('编译出的 PDF')}>
             {hasPdf ? <iframe key={v} src={url} title="PDF" /> : (
               <div className="fv-note"><Icon n="doc" size={30} /><b>{tr('还没有 PDF')}</b><p className="muted small">{tr('点「重新编译」排出第一版。')}</p></div>
             )}

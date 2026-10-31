@@ -15,7 +15,8 @@ import { Cluster } from './Cluster';
 import { Icon } from './icons';
 import { JobDrawer } from './JobDrawer';
 import { JobViews } from './JobViews';
-import { endOf, placeOf, resOf, startOf, stj, t } from './jobs';
+import { endOf, jobRef, placeOf, resOf, startOf, stj, t } from './jobs';
+import { usePanelNote } from './page';
 import { ago, headline, headlines, lastLine, pctOf, useFetch } from './util';
 
 interface Props { lineId: string; tick: number; onData: () => void }
@@ -77,6 +78,16 @@ export function Experiments(p: Props) {
   });
 
   const at = open ? open.list.indexOf(open.id) : -1;
+  usePanelNote('exp', 'filters', {
+    时间范围: zoom ? `${when(d0)} – ${when(d1)}（在时间线上框选放大的）` : RANGES.find(([k]) => k === range)![1],
+    状态: st ? ST[st].label : null, 搜索: q.trim(), 符合的任务: `${shown.length} 个（这段时间共 ${inRange.length} 个）`, 打开着详情的任务: open?.id,
+  });
+  // the assistant opens a job for you
+  useEffect(() => {
+    const show = (e: Event) => setOpenAt({ id: (e as CustomEvent<string>).detail, list: [] });
+    addEventListener('pt-open-job', show);
+    return () => removeEventListener('pt-open-job', show);
+  }, []);
 
   return (
     <div className="cm-page exp">
@@ -154,7 +165,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
           <div className="fc s-done">
             {head('done', tr('最新结果'), withRes.length)}
             {withRes.slice(0, 3).map(j => (
-              <button key={j.id} className="fc-j" onClick={() => onOpen(j.id)}>
+              <button key={j.id} className="fc-j" {...jobRef(j)} onClick={() => onOpen(j.id)}>
                 <span className="fc-t"><b title={j.name}>{j.name}</b><em>{when_(j)}</em></span>
                 <span className="fc-m">{headlines(resOf(j), 3).map(h => <span key={h.k} title={h.k}><strong>{fmtNum(h.v)}</strong><em>{h.name}</em></span>)}</span>
               </button>
@@ -167,7 +178,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
             {live.slice(0, 3).map(j => {
               const run = stj(j) === 'running', pct = run ? pctOf(j.nvidb?.progress) : null;
               return (
-                <button key={j.id} className="fc-j" onClick={() => onOpen(j.id)}>
+                <button key={j.id} className="fc-j" {...jobRef(j)} onClick={() => onOpen(j.id)}>
                   <span className="fc-t"><b title={j.name}>{j.name}</b><em>{run ? elapsed(j.nvidb?.elapsed_s ?? null) : ST.queued.label}</em></span>
                   {pct != null && <span className="fc-bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></span>}
                   <span className="fc-s mono">{j.nvidb?.progress || placeOf(j)}</span>
@@ -180,7 +191,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
           <div className="fc s-failed">
             {head('failed', tr('最近失败'), failed.length)}
             {failed.slice(0, 3).map(j => (
-              <button key={j.id} className="fc-j" onClick={() => onOpen(j.id)}>
+              <button key={j.id} className="fc-j" {...jobRef(j)} onClick={() => onOpen(j.id)}>
                 <span className="fc-t"><b title={j.name}>{j.name}</b><em>{when_(j)}</em></span>
                 <span className="fc-s mono" title={j.nvidb?.last_error}>{lastLine(j.nvidb?.last_error) || (j.nvidb?.exit_code != null ? tr('退出码 {0}', j.nvidb.exit_code) : tr('没有留下出错信息'))}</span>
               </button>

@@ -10,7 +10,8 @@ import type { Job } from '../api';
 import { tr } from '../i18n';
 import { ST, StateTag, Tip, elapsed, fmtNum, useNow, useTip, when, type St } from './charts';
 import { Icon, type IconName } from './icons';
-import { byBatch, byName, dayName, dayOf, lastAt, placeOf, ranFor, resOf, startOf, stj, t, type Group } from './jobs';
+import { byBatch, byName, dayName, dayOf, jobRef, lastAt, placeOf, ranFor, resOf, startOf, stj, t, type Group } from './jobs';
+import { usePanelNote } from './page';
 import { ago, headline, headlines, lastLine, pctOf, tails } from './util';
 
 type Kind = 'table' | 'cards' | 'board' | 'groups' | 'grid';
@@ -39,6 +40,7 @@ export function JobViews({ jobs, open, onOpen, onData }: Props) {
   const kind = view === 'auto' || !VIEWS.some(([k]) => k === view) ? autoKind(jobs) : view as Kind;
   const now = useNow(15_000);
   const p = { jobs, open, onOpen, now };
+  usePanelNote('exp', 'jobs', { 任务排法: `${VIEWS.find(([k]) => k === kind)![1]}${view === 'auto' ? '（自动挑的）' : ''}` });
   return (
     <section className="cs jv">
       <div className="cs-h jv-h">
@@ -118,7 +120,7 @@ function Table({ jobs, open, onOpen }: V) {
                   {tally.failed > 0 && <em className="bad-t">✕ {tally.failed}</em>}{tally.done > 0 && <em>✓ {tally.done}</em>}
                 </td></tr>
               )}
-              <tr className={`s-${s}${open === j.id ? ' on' : ''}`} onClick={() => onOpen(j.id, order)}>
+              <tr className={`s-${s}${open === j.id ? ' on' : ''}`} {...jobRef(j)} onClick={() => onOpen(j.id, order)}>
                 <td className="muted mono">{j.nvidb?.id ?? '—'}</td>
                 <td><b className="xt-n" title={j.nvidb?.notes || j.name}>{j.name}</b></td>
                 <td><StateTag s={s} /></td>
@@ -150,7 +152,7 @@ function Cards({ jobs, open, onOpen, now }: V) {
         {list.slice(0, more).map((j, i) => {
           const s = stj(j), pct = pctFor(j), res = headlines(resOf(j), 4), took = ranFor(j, now), line = lineOf(j);
           return (
-            <button key={j.id} className={`jc s-${s}${open === j.id ? ' on' : ''}`} style={{ ['--i' as string]: Math.min(i, 12) }} onClick={() => onOpen(j.id, order)}>
+            <button key={j.id} className={`jc s-${s}${open === j.id ? ' on' : ''}`} {...jobRef(j)} style={{ ['--i' as string]: Math.min(i, 12) }} onClick={() => onOpen(j.id, order)}>
               <span className="jc-h"><StateTag s={s} />{j.nvidb && <span className="muted small mono">#{j.nvidb.id}</span>}
                 <em>{s === 'running' ? elapsed(took) : ago(j.nvidb?.finished_at ?? j.ended_at ?? j.created_at)}</em></span>
               <b className="jc-n" title={j.name}>{j.name}</b>
@@ -191,7 +193,7 @@ function Board({ jobs, open, onOpen, now }: V) {
               {js.slice(0, all.includes(s) ? 500 : 12).map(j => {
                 const pct = pctFor(j), res = headline(resOf(j), 1)[0], line = lineOf(j);
                 return (
-                  <button key={j.id} className={`jb-j${open === j.id ? ' on' : ''}`} onClick={() => onOpen(j.id, order)}>
+                  <button key={j.id} className={`jb-j${open === j.id ? ' on' : ''}`} {...jobRef(j)} onClick={() => onOpen(j.id, order)}>
                     <b title={j.name}>{j.name}</b>
                     {pct != null && <span className="jc-bar thin"><span><i style={{ width: `${Math.min(100, pct)}%` }} /></span></span>}
                     {res && <span className="jb-r"><strong>{fmtNum(res[1])}</strong><em>{shortKey(res[0])}</em></span>}
@@ -258,7 +260,7 @@ function Groups({ jobs, open, onOpen, now }: V) {
                 {g.jobs.map(j => {
                   const s = stj(j), pct = pctFor(j), res = headline(resOf(j), 1)[0];
                   return (
-                    <button key={j.id} className={`jg-r s-${s}${open === j.id ? ' on' : ''}`} onClick={() => onOpen(j.id, order)}>
+                    <button key={j.id} className={`jg-r s-${s}${open === j.id ? ' on' : ''}`} {...jobRef(j)} onClick={() => onOpen(j.id, order)}>
                       {pct != null && <i className="jg-fill" style={{ width: `${Math.min(100, pct)}%` }} />}
                       <span className="jg-s">{ST[s].sign}</span>
                       <span className="jg-name" title={j.name}>{pre && j.name.startsWith(pre) ? <><em>{pre}</em>{j.name.slice(pre.length)}</> : j.name}</span>
@@ -309,7 +311,7 @@ function Grid({ jobs, open, onOpen, now }: V) {
               const s = stj(j), res = headlines(resOf(j), 2);
               return (
                 <button key={j.id} className={`jgr-c s-${s}${ST[s].hollow ? ' hollow' : ''}${res.length ? ' res' : ''}${open === j.id ? ' on' : ''}`}
-                  style={{ ['--i' as string]: Math.min(i, 30) }} aria-label={j.name} onClick={() => { hide(); onOpen(j.id, order); }}
+                  style={{ ['--i' as string]: Math.min(i, 30) }} aria-label={j.name} {...jobRef(j)} onClick={() => { hide(); onOpen(j.id, order); }}
                   onPointerMove={e => show(e, { title: j.name, rows: [
                     { v: ST[s].label, k: j.nvidb ? `#${j.nvidb.id}` : '', key: ST[s].c },
                     { v: placeOf(j), k: tr('在哪') },

@@ -39,6 +39,10 @@ const PATHS = {
   dots: 'M4 4h4v4H4zM10 4h4v4h-4zM16 4h4v4h-4zM4 10h4v4H4zM10 10h4v4h-4zM16 10h4v4h-4zM4 16h4v4H4zM10 16h4v4h-4z',
   wand: 'M5 19 15.5 8.5M14 4.5v3M17.5 6.5l2-2M19.5 10h-3M12 4.5l-1.2-1.2',
   person: 'M12 11.5a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6zM4.8 20.5a7.2 7.2 0 0 1 14.4 0',
+  chat: 'M4.5 5.5h15v10.5h-8.2L7 19.5v-3.5H4.5zM8.5 10.8h.01M12 10.8h.01M15.5 10.8h.01',
+  target: 'M12 19.5a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  sideR: 'M4 5h16v14H4zM14.5 5v14',
+  compose: 'M12 4.5H6a1.5 1.5 0 0 0-1.5 1.5v12A1.5 1.5 0 0 0 6 19.5h12a1.5 1.5 0 0 0 1.5-1.5v-6M17.5 3.5l3 3-8 8H9.5v-3z',
 } as const;
 
 export type IconName = keyof typeof PATHS;

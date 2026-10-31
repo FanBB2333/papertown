@@ -67,7 +67,7 @@ export function Overview(p: Props) {
         <div className="cs-h"><h3>{tr('研究进度')}</h3><span className="muted small">{tr('{0}/{1} 站完成', done, l.stages.length)}</span></div>
         <ol className="ov-steps" style={{ ['--done' as string]: done, ['--n' as string]: l.stages.length }}>
           {l.stages.map((s, i) => (
-            <li key={s.key} className={`ov-step s-${s.status}`} style={{ ['--i' as string]: i }}>
+            <li key={s.key} className={`ov-step s-${s.status}`} style={{ ['--i' as string]: i }} data-ref={`stage:${s.key}`} data-ref-label={`${tr('工序')} ${s.name}`}>
               <button onClick={() => p.go(STAGE_MOD[s.key] ?? 'overview')} title={s.note ?? s.out}>
                 <span className="ov-dot">{s.status === 'done' ? '✓' : i + 1}</span>
                 <b>{s.name}</b>

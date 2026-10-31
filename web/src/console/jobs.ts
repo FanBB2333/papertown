@@ -18,6 +18,8 @@ export const endOf = (j: Job) => t(j.nvidb?.finished_at ?? j.ended_at);
 export const stj = (j: Job) => stOf(j.nvidb?.state ?? j.status);
 export const resOf = (j: Job) => j.nvidb?.result ?? j.result;
 // when it last did something: finished, started, or was submitted
+// what the assistant in the sidebar points at for a job, wherever the job is drawn
+export const jobRef = (j: Job) => ({ 'data-ref': `job:${j.id}`, 'data-ref-label': `${tr('任务')} ${j.nvidb ? `#${j.nvidb.id} ` : ''}${j.name}` });
 export const lastAt = (j: Job) => [endOf(j), startOf(j), t(j.created_at)].find(Number.isFinite) ?? 0;
 // how long it has run: nvidb's count, or the clock for one still running
 export const ranFor = (j: Job, now = Date.now()) => {
