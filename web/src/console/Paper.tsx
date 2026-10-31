@@ -10,7 +10,10 @@ import { FileView, Tabs, Tree, useFiles } from './files';
 import { Icon } from './icons';
 import { usePanelNote } from './page';
 
-interface Props { lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void }
+interface Props {
+  lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void;
+  reveal?: { path: string; line?: number; n: number } | null; // asked from the assistant: open this file, at this line
+}
 
 type Layout = 'split' | 'src' | 'pdf';
 const SPLIT_KEY = 'pt-tex-split';
@@ -58,6 +61,8 @@ function Tex(p: Props) {
   const dirtySet = new Set(f.open.filter(o => o.text !== o.saved).map(o => o.path));
 
   useEffect(() => p.onDirty(f.dirty), [f.dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (p.reveal) { f.show(p.reveal.path); setLayout(l => (l === 'pdf' ? 'split' : l)); } }, [p.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  const goto = p.reveal?.line && f.now?.path === p.reveal.path ? { line: p.reveal.line, n: p.reveal.n } : null;
   useEffect(() => { if (!f.open.length && place.main) f.show(place.main); }, [place.main]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function compile() {
@@ -130,7 +135,7 @@ function Tex(p: Props) {
           <section className="tex-src">
             <Tabs f={f} />
             <div className="ide-ed">
-              <FileView f={f} onRun={compile} onCursor={(line, _c, picked) => setAt({ line, picked })} empty={<div className="fv-note"><Icon n="doc" size={30} /><p className="muted small">{tr('从左边挑一个文件打开。')}</p></div>} />
+              <FileView f={f} goto={goto} onRun={compile} onCursor={(line, _c, picked) => setAt({ line, picked })} empty={<div className="fv-note"><Icon n="doc" size={30} /><p className="muted small">{tr('从左边挑一个文件打开。')}</p></div>} />
             </div>
             {run && !run.ok && logOpen && d && (
               <div className="tex-log">

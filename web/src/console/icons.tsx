@@ -43,6 +43,9 @@ const PATHS = {
   target: 'M12 19.5a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
   sideR: 'M4 5h16v14H4zM14.5 5v14',
   compose: 'M12 4.5H6a1.5 1.5 0 0 0-1.5 1.5v12A1.5 1.5 0 0 0 6 19.5h12a1.5 1.5 0 0 0 1.5-1.5v-6M17.5 3.5l3 3-8 8H9.5v-3z',
+  send: 'M12 19V5.5M6 11l6-6 6 6',
+  stop: 'M7.5 7.5h9v9h-9z',
+  quote: 'M5 12.5h4.5v5H5zM5 12.5c0-3 1-5 3.5-6.5M14.5 12.5H19v5h-4.5zM14.5 12.5c0-3 1-5 3.5-6.5',
 } as const;
 
 export type IconName = keyof typeof PATHS;

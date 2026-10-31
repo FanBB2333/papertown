@@ -66,6 +66,7 @@ const needsYou = FILTERS[2][2];
 const hasPaper = (l: Line) => !!l.linked?.paper || l.files.includes('main.tex');
 
 const KEY = 'pt-console';
+type Reveal = { root: 'code' | 'paper'; path: string; line?: number; n: number };
 function remembered(): { line?: string; mod?: ModId; narrow?: boolean; side?: boolean } {
   try { return JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { return {}; }
 }
@@ -86,13 +87,15 @@ export function Console(p: Props) {
   const [mod, setMod] = useState<ModId>(isMod(hp.get('m')) ? hp.get('m') as ModId : first.mod ?? 'overview');
   const [narrow, setNarrow] = useState(!!first.narrow);
   const [side, setSide] = useState(!!first.side); // the assistant's sidebar
+  const opened = useRef(false); // you opened it, so its box takes the keys; one left open last time does not
+  const toggleSide = () => setSide(o => { opened.current ||= !o; return !o; });
   const [dir, setDir] = useState(1);
   const [rail, setRail] = useState(false);
   const [railTab, setRailTab] = useState<'projects' | 'papers'>('projects');
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   const [role, setRole] = useState<'coder' | 'writer'>('coder');
-  const [reveal, setReveal] = useState<{ path: string; line?: number; n: number } | null>(null); // a file to open in the code panel
+  const [reveal, setReveal] = useState<Reveal | null>(null); // a file to open in the code or paper panel
   const [hist, setHist] = useState<{ back: [string, ModId][]; fwd: [string, ModId][] }>({ back: [], fwd: [] });
   const dirty = useRef({ code: 0, paper: 0 });
   const searchRef = useRef<HTMLInputElement>(null);
@@ -149,19 +152,24 @@ export function Console(p: Props) {
     go({ line: next[0], mod: next[1] }, false);
   };
 
-  // what the assistant opens for you: a panel, a file at a line, a job's details, a part of the page lit up
-  useEffect(() => listen(e => {
-    if (e.type !== 'assistant_show') return;
-    const t: ShowTarget = e.target ?? {};
+  // what the assistant opens for you, or a job or file named in its reply that you click: a panel,
+  // a file at a line, a job's details, a part of the page lit up
+  const show = useCallback((t: ShowTarget) => {
     const job = t.job && /^\d+$/.test(t.job) ? `nvidb-${t.job}` : t.job;
     const [root, path, ln] = t.file ? (/^(code|paper):(.+?)(?::(\d+))?$/.exec(t.file) ?? []).slice(1) : [];
     const m = isMod(t.mod) ? t.mod : job ? 'exp' : root === 'paper' ? 'paper' : root ? 'code' : undefined;
     go({ line: t.line, mod: m });
-    if (root === 'code' && path) setReveal(r => ({ path, line: ln ? Number(ln) : undefined, n: (r?.n ?? 0) + 1 }));
+    if ((root === 'code' || root === 'paper') && path) setReveal(r => ({ root, path, line: ln ? Number(ln) : undefined, n: (r?.n ?? 0) + 1 }));
     if (job) setTimeout(() => dispatchEvent(new CustomEvent('pt-open-job', { detail: job })), 80);
     const ref = t.ref ?? (job ? `job:${job}` : path ? `file:${root}:${path}` : undefined);
     if (ref) setTimeout(() => flash(ref), 200);
-  }), [go]);
+  }, [go]);
+  useEffect(() => listen(e => { if (e.type === 'assistant_show') show(e.target ?? {}); }), [show]);
+  useEffect(() => {
+    const on = (e: Event) => show((e as CustomEvent<ShowTarget>).detail);
+    addEventListener('pt-show', on);
+    return () => removeEventListener('pt-show', on);
+  }, [show]);
 
   // a building asked for from inside a panel: its panel here when there is one, else its room
   const typeOf = (bid: string) => p.placements.find(x => x.id === bid)?.type ?? bid;
@@ -177,13 +185,14 @@ export function Console(p: Props) {
     openBuilding(el.getAttribute('data-open')!, el.getAttribute('data-line'));
   }
 
-  // keys: ⌘K finds a project, 1–9 and 0 pick a panel, Esc folds the rail
+  // keys: ⌘K finds a project, ⌘J opens and closes the assistant, 1–9 and 0 pick a panel, Esc folds the rail
   useEffect(() => {
     if (!p.active) return;
     const key = (e: KeyboardEvent) => {
       const t = e.target instanceof HTMLElement ? e.target : null;
       const typing = !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || !!t.closest('.cm-editor'));
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setRail(true); requestAnimationFrame(() => searchRef.current?.focus()); return; }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'j') { e.preventDefault(); toggleSide(); return; }
       if (e.key === 'Escape' && rail) { e.stopImmediatePropagation(); setRail(false); return; }
       if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.interior, .proto.chat-open, .settings')) return;
       const n = '1234567890'.indexOf(e.key);
@@ -242,7 +251,7 @@ export function Console(p: Props) {
             <kbd>⌘K</kbd>
           </label>
           <button className="btn pri fb-new" onClick={p.onIdea}><Icon n="plus" size={14} />{tr('新 idea')}</button>
-          <button className={`fb-side${side ? ' on' : ''}`} onClick={() => setSide(o => !o)} title={side ? tr('收起小助手') : tr('小助手：问这一页的事，请它帮你办')}
+          <button className={`fb-side${side ? ' on' : ''}`} onClick={toggleSide} title={side ? tr('收起小助手（⌘J）') : tr('小助手：问这一页的事，请它帮你办（⌘J）')}
             aria-pressed={side}><Icon n="chat" size={16} /><span>{tr('小助手')}</span></button>
         </div>
       </div>
@@ -260,7 +269,7 @@ export function Console(p: Props) {
                 onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)} />
                 : mod === 'survey' ? <Survey line={line} tick={p.tick} onHatch={p.onHatch} onAdjust={p.onAdjust} />
                   : mod === 'exp' ? <Experiments lineId={id} tick={p.tick} onData={() => go({ mod: 'data' })} />
-                    : mod === 'data' ? <Data lineId={id} tick={p.tick} onOpenFile={path => { setReveal(r => ({ path, n: (r?.n ?? 0) + 1 })); go({ mod: 'code' }); }} />
+                    : mod === 'data' ? <Data lineId={id} tick={p.tick} onOpenFile={path => { setReveal(r => ({ root: 'code', path, n: (r?.n ?? 0) + 1 })); go({ mod: 'code' }); }} />
                       : mod === 'agents' ? (
                         <div className="cm-agents">
                           <div className="cm-sub">
@@ -280,16 +289,16 @@ export function Console(p: Props) {
           )}
           {kept.has('code') && (
             <section className={`cm-mod bleed${mod === 'code' ? ' on' : ''}`} style={{ ['--dir' as string]: dir }}>
-              <Code lineId={id} info={ws.data} tick={p.tick} toast={p.toast} reveal={reveal} onDirty={n => { dirty.current.code = n; }} onAgents={() => { setRole('coder'); go({ mod: 'agents' }); }} />
+              <Code lineId={id} info={ws.data} tick={p.tick} toast={p.toast} reveal={reveal?.root === 'code' ? reveal : null} onDirty={n => { dirty.current.code = n; }} onAgents={() => { setRole('coder'); go({ mod: 'agents' }); }} />
             </section>
           )}
           {kept.has('paper') && (
             <section className={`cm-mod bleed${mod === 'paper' ? ' on' : ''}`} style={{ ['--dir' as string]: dir }}>
-              <Paper lineId={id} info={ws.data} tick={p.tick} toast={p.toast} onDirty={n => { dirty.current.paper = n; }} onAgents={() => { setRole('writer'); go({ mod: 'agents' }); }} />
+              <Paper lineId={id} info={ws.data} tick={p.tick} toast={p.toast} reveal={reveal?.root === 'paper' ? reveal : null} onDirty={n => { dirty.current.paper = n; }} onAgents={() => { setRole('writer'); go({ mod: 'agents' }); }} />
             </section>
           )}
         </div>
-        {side && <Assistant actions={actions} onClose={() => setSide(false)} />}
+        {side && <Assistant actions={actions} autoFocus={opened.current} onClose={() => setSide(false)} />}
       </div>
     </main>
   );

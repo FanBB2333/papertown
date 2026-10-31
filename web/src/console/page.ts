@@ -71,7 +71,7 @@ export function describe(target: Element): Focus {
 }
 
 // everything the sidebar tells the assistant, with the message or when you move
-export function snapshot(focus: Focus | null): PageCtx {
+export function snapshot(focus: Focus | null, selection = ''): PageCtx {
   const p = panel();
   const state: Record<string, string> = {};
   for (const n of notes.get(at.mod)?.values() ?? []) {
@@ -87,7 +87,21 @@ export function snapshot(focus: Focus | null): PageCtx {
   }
   // code and the paper are files the assistant reads itself; elsewhere the page's text helps
   const text = p && !['code', 'paper'].includes(at.mod) ? clip(squash(p.innerText), 8000) : '';
-  return { line: at.line, mod: at.mod, mod_name: at.name, state, focus, refs, text };
+  return { line: at.line, mod: at.mod, mod_name: at.name, state, focus, refs, text, ...(selection ? { selection } : {}) };
+}
+
+// text you select in the console (not in the sidebar), now and as you select it; '' once you
+// clear it there. Moving into the sidebar to write keeps it.
+export function onSelect(fn: (text: string) => void) {
+  const on = () => {
+    const s = getSelection();
+    const n = s?.anchorNode instanceof Element ? s.anchorNode : s?.anchorNode?.parentElement;
+    if (!s || !n?.closest('.p-console') || n.closest('.asst')) return;
+    fn(s.isCollapsed ? '' : s.toString().trim().slice(0, 4000));
+  };
+  on();
+  document.addEventListener('selectionchange', on);
+  return () => document.removeEventListener('selectionchange', on);
 }
 
 // light up a part of the page the assistant talks about, once it has rendered
