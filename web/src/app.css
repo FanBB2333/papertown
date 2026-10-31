@@ -50,6 +50,9 @@
 .p-sheet .btns a.btn { text-decoration: none; }
 
 /* status view */
+/* the paper's masthead carries the town's mark */
+.p-status .mast h1 { display: flex; align-items: center; justify-content: center; gap: 16px; }
+.p-status .mast h1 .logo-ic { width: 58px; height: 58px; margin-top: -8px; }
 .p-status .news a { text-decoration: none; }
 .p-status .news a:hover { text-decoration: underline; }
 .p-status .lead .news { max-height: 200px; overflow: auto; }

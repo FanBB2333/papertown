@@ -1,3 +1,5 @@
+<img src="web/public/logo.svg" width="72" alt="Papertown">
+
 # Papertown
 
 把一条科研流水线做成一座纸艺小镇：一颗 idea 从孵化场查重开始，通过后在造纸厂立项，经过方法设计、实验、写作、审稿，最后出港一篇论文。每道工序由一组 agent 员工完成，员工的能力来自 Agent Skills，外部数据通过 MCP 接入。

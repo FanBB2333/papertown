@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, fileUrl } from '../api';
-import { Item } from '../art';
+import { Item, Logo } from '../art';
 import { tr } from '../i18n';
 
 const STATUS: Record<string, string> = {
@@ -33,7 +33,7 @@ export function StatusView({ tick, active }: { tick: number; active: boolean }) 
       <div className="ld p-paper">
         <header className="mast">
           <div className="mast-l">{tr('运行状态 ·')} {now.getMonth() + 1} {tr('月')} {now.getDate()} {tr('日')} {now.toTimeString().slice(0, 5)}</div>
-          <h1>{tr('PAPERTOWN 日报')}</h1>
+          <h1><Logo />{tr('PAPERTOWN 日报')}</h1>
           <div className="mast-r"><span className={`chip ${d.hud.offline ? 'warn' : 'ok'}`}>{d.hud.offline ? tr('离线模式 · 模板输出') : tr('模型 {0}', d.hud.model)}</span></div>
         </header>
         <div className="rule" />

@@ -86,8 +86,14 @@ body.proto-page { background: #f4eee2; }
 .theme-sketch.la :is(.map-bg, .t3) { top: var(--hud-h); }
 .theme-sketch.la .hud .btn { background-color: color-mix(in srgb, var(--panel) 75%, transparent); }
 .theme-sketch.la .hud .seg button:not(.on) { color: color-mix(in srgb, var(--ink) 62%, var(--brand)); }
-.theme-sketch .brand { font-size: 20px; gap: 8px; }
+.theme-sketch .brand { font-size: 20px; gap: 9px; cursor: default; }
 .theme-sketch .brand b { font-weight: 400; }
+/* the mark: it leans in a little and its chimney puffs when you point at it */
+.brand .logo-ic { width: 32px; height: 32px; margin-top: -3px; transition: transform .6s var(--spring); }
+.brand:hover .logo-ic { transform: rotate(-6deg) translateY(-1px); }
+.logo-smoke { transform-box: fill-box; transform-origin: 0 100%; }
+.brand:hover .logo-smoke { animation: puff 1.6s var(--out) infinite; }
+@keyframes puff { 0% { opacity: 1; transform: none; } 70% { opacity: 0; transform: translate(2px, -5px) scale(1.25); } 71% { opacity: 0; transform: translateY(2px) scale(.8); } }
 .theme-sketch .seg { background: none; border: 0; padding: 0; gap: 2px; }
 .theme-sketch .seg button { position: relative; font-family: var(--head); font-size: 15px; color: var(--muted); padding: 4px 10px 7px; background: none; font-weight: 400; transition: color .3s var(--out); }
 .theme-sketch .seg button::after {
