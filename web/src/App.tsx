@@ -1,9 +1,12 @@
-// Papertown: the world map is home (A), walked as a small figure. Chat slides in from
-// the side (B), a building opens full screen from the inside (C), and the status view
-// (D) sits beside the world. The same town can be walked in 3D, through your own eyes;
-// the camera flies between the map's view and yours, so either hands over to the other.
+// Papertown: the console is home for anyone who would rather click than walk: every project
+// and everything the town does, as panels. The world map is the same town, walked as a small
+// figure. Chat slides in from the side (B), a building opens full screen from the inside (C),
+// and the status view (D) sits beside the world. The town can be walked in 3D too, through
+// your own eyes; the camera flies between the map's view and yours, so either hands over to
+// the other.
 //
-//   #view=status   #open=farm   #open=depot&line=line_1   #chat   #3d   — open a state directly
+//   #view=console&line=line_2&m=paper   #view=status   #open=farm   #open=depot&line=line_1   #chat   #3d
+//   — open a state directly
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
@@ -13,6 +16,7 @@ import { Drawer, type Composer, type Tab } from './components/Drawer';
 import { Interior } from './components/Interior';
 import { SettingsPanel } from './components/Settings';
 import { StatusView } from './components/StatusView';
+import { Console } from './console/Console';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { getSettings, useSettings } from './settings';
 import { DEMO } from './demo';
@@ -21,7 +25,7 @@ import { tr } from './i18n';
 
 const Town3D = lazy(() => import('./components/Town3D'));
 
-type View = 'world' | 'status';
+type View = 'console' | 'world' | 'status';
 // the map, the 3D town, and the flights between them
 type Dim = '2d' | 'to3d' | '3d' | 'to2d';
 const PHASE = { '2d': 'off', to3d: 'enter', '3d': 'live', to2d: 'leave' } as const;
@@ -48,7 +52,13 @@ function Gear() {
 
 export function App() {
   const hp = new URLSearchParams(location.hash.slice(1));
-  const [view, setView] = useState<View>(hp.get('view') === 'status' ? 'status' : 'world');
+  // a link into the town (a building, the chat, the 3D walk) opens the town; else the view you start on
+  const [view, setView] = useState<View>(() => {
+    const v = hp.get('view');
+    if (v === 'status' || v === 'console' || v === 'world') return v;
+    return hp.has('open') || hp.has('3d') || hp.has('chat') || getSettings().start !== 'console' ? 'world' : 'console';
+  });
+  const [consoleUp, setConsoleUp] = useState(view === 'console'); // mounted once shown, and kept
   const [world, setWorld] = useState<WorldState | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -68,7 +78,7 @@ export function App() {
   const [from3d, setFrom3d] = useState<MapView | null>(null);
   const [want3d, setWant3d] = useState(false); // the 3D code has been asked for
   const mapApi = useRef<MapApi | null>(null);
-  const hash3d = useRef(hp.has('3d') || (getSettings().start === '3d' && !hp.has('open') && hp.get('view') !== 'status'));
+  const hash3d = useRef(hp.has('3d') || (getSettings().start === '3d' && !hp.has('open') && view === 'world'));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const st = useSettings();
   const setSheet = useCallback((id: string | null, lineId?: string | null) => {
@@ -197,7 +207,7 @@ export function App() {
   function onRootClick(e: React.MouseEvent) {
     const t = e.target as Element;
     const el = t.closest('[data-open]');
-    if (!el || t.closest('.p-world')) return;
+    if (!el || t.closest('.p-world, .p-console')) return;
     const r = el.getBoundingClientRect();
     openRoom(el.getAttribute('data-open')!, el.getAttribute('data-line'), { x: r.left + r.width / 2, y: r.top + r.height / 2 });
   }
@@ -227,6 +237,11 @@ export function App() {
   useEffect(() => {
     if (world && hash3d.current) { hash3d.current = false; go3d(false); }
   }, [world, go3d]);
+  // the console is not part of the walk: going there from the 3D town lands back on the map
+  const show = useCallback((v: View) => {
+    if (v === 'console') { setConsoleUp(true); go2d(); }
+    setView(v);
+  }, [go2d]);
 
   // the walking hint fades once you have moved or after a while
   const [hint, setHint] = useState(true);
@@ -259,12 +274,20 @@ export function App() {
         </Suspense>
       )}
       <StatusView tick={tick} active={view === 'status'} />
+      {consoleUp && (
+        <Console active={view === 'console'} lines={lines} placements={world?.placements ?? []} tick={tick} toast={push}
+          onRoom={(id, lineId) => openRoom(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
+          onAsk={(id, name) => openChat({ kind: 'ask', building: id, name }, true)}
+          onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
+          onAdjust={id => openChat({ kind: 'adjust', lineId: id }, true)} />
+      )}
 
       <header className="hud">
         <div className="brand"><Logo /><b>Papertown</b></div>
         <div className="seg" role="tablist">
-          <button className={view === 'world' ? 'on' : ''} onClick={() => setView('world')}>{tr('小镇')}</button>
-          <button className={view === 'status' ? 'on' : ''} onClick={() => setView('status')}>{tr('运行状态')}</button>
+          <button className={view === 'console' ? 'on' : ''} onClick={() => show('console')} title={tr('不用走动：所有项目和小镇的功能都在面板里')}>{tr('中控屏')}</button>
+          <button className={view === 'world' ? 'on' : ''} onClick={() => show('world')} title={tr('在小镇里走动，进建筑办事；可以平面或 3D')}>{tr('小镇')}</button>
+          <button className={view === 'status' ? 'on' : ''} onClick={() => show('status')}>{tr('运行状态')}</button>
         </div>
         <div className="seg w-only" role="tablist" title={tr('平面地图和 3D 漫游之间切换，人站在同一个地方')}>
           <button className={dim === '2d' || dim === 'to2d' ? 'on' : ''} onClick={go2d}>{tr('平面')}</button>

@@ -127,7 +127,7 @@ export interface NvJob {
   id: number; name: string; state: string; node: string | null; gpu_ids: number[]; lane: string | null; vram_mb: number;
   progress: string | null; submitter: string | null; workdir: string | null; command: string; notes: string; held: boolean;
   created_at: string | null; started_at: string | null; finished_at: string | null; elapsed_s: number | null;
-  exit_code: number | null; last_error: string;
+  exit_code: number | null; last_error: string; result?: unknown;
   // where it may go and what it waits for (older readings leave these out)
   pool?: string | null; lane_seq?: number | null; node_constraint?: string | null; gpu_constraint?: number[]; gpus?: number;
   priority?: number; depends_on?: number[]; held_reason?: string | null; gpu_mem_mb?: number | null; max_runtime_s?: number | null;
@@ -151,6 +151,25 @@ export interface GpuStatus {
   summary: { nodes: number; up: number; gpus: number; idle: number; room: number; free_mb: number; total_mb: number } | null;
   counts: Record<string, number>; alerts: number;
 }
+// a project's files for the console: its code and its paper, each a folder or a git repository
+export type WsRoot = 'code' | 'paper';
+export interface WsPlace { path: string; name: string; git: boolean; branch?: string | null; dirty?: number; main?: string | null; pdf?: boolean }
+export interface WsInfo { line_id: string; linked: boolean; latexmk: boolean; code: WsPlace | null; paper: WsPlace | null }
+export interface WsEntry { path: string; size: number; status?: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' }
+export interface WsTree { root: WsRoot; files: WsEntry[]; truncated: boolean }
+export interface WsFile { path: string; size: number; mtime: number; binary: boolean; too_big: boolean; text: string | null }
+export interface Compiled { ok: boolean; log: string; pages?: number | null; seconds: number }
+export interface DataRun {
+  id: string; name: string; state: string; where: string | null; started_at: string | null; finished_at: string | null;
+  elapsed_s: number | null; exit_code: number | null; vram_mb: number | null; result: unknown;
+}
+export interface LineData {
+  meta: { datasets: string[]; metrics: string[]; baselines: string[]; seeds: number | null; gpu_hours: number | null; backend: string | null };
+  results: { metrics: string[]; rows: { method: string; values: number[]; ours: boolean }[]; simulated?: boolean; analysis?: string; concerns?: string[] } | null;
+  runs: DataRun[];
+  files: (WsEntry & { kind: 'processed' | 'raw' | 'other'; mtime: number })[];
+}
+
 export interface Backend { id: string; name: string; ready: boolean; note: string; active: number }
 export interface JobBoard { jobs: Job[]; backends: Backend[]; plant: Hud['plant'] }
 
@@ -253,11 +272,20 @@ export const api = {
   say: (id: string, text: string) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text }),
   brief: (id: string) => call<AgentEvent>('POST', `/api/agents/${id}/brief`),
   abort: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/abort`),
+  ws: (lineId: string) => call<WsInfo>('GET', `/api/lines/${lineId}/ws`),
+  wsTree: (lineId: string, root: WsRoot) => call<WsTree>('GET', `/api/lines/${lineId}/ws/${root}/tree`),
+  wsFile: (lineId: string, root: WsRoot, path: string) => call<WsFile>('GET', `/api/lines/${lineId}/ws/${root}/file?${new URLSearchParams({ path })}`),
+  wsSave: (lineId: string, root: WsRoot, path: string, text: string) => call<WsEntry>('PUT', `/api/lines/${lineId}/ws/${root}/file`, { path, text }),
+  wsDiff: (lineId: string, root: WsRoot, path: string) => call<{ path: string; diff: string }>('GET', `/api/lines/${lineId}/ws/${root}/diff?${new URLSearchParams({ path })}`),
+  compile: (lineId: string) => call<Compiled>('POST', `/api/lines/${lineId}/ws/paper/compile`),
+  data: (lineId: string) => call<LineData>('GET', `/api/lines/${lineId}/data`),
 };
 
 export const fileUrl = (lineId: string, name: string) => (DEMO ? demoFile(lineId, name) : `/api/lines/${lineId}/files/${name}`);
 // a linked project's paper, compiled in its own repository
 export const linkedPdfUrl = (lineId: string) => `/api/lines/${lineId}/linked/pdf`;
+// the paper's newest PDF, built in the console or beside its main file; v makes the view load it again
+export const paperPdfUrl = (lineId: string, v = 0) => (DEMO ? demoFile(lineId, 'main.pdf') : `/api/lines/${lineId}/ws/paper/pdf?v=${v}`);
 
 export type ServerEvent = { id: number; type: string; ts: string; [k: string]: any };
 

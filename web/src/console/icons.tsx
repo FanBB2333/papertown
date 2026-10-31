@@ -1,0 +1,43 @@
+// Line icons for the console, drawn on a 24px grid with the stroke in currentColor.
+
+const PATHS = {
+  compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
+  lens: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.5 15.5 20 20',
+  code: 'M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5M13.5 4.5l-3 15',
+  flask: 'M9.5 3.5h5M10.5 3.5v5.2L5 18.3A1.5 1.5 0 0 0 6.3 20.5h11.4a1.5 1.5 0 0 0 1.3-2.2l-5.5-9.6V3.5M7.6 14h8.8',
+  table: 'M4 5.5h16v13H4zM4 10h16M4 14.5h16M10 5.5v13',
+  doc: 'M6.5 3.5h7.5l4 4v13h-11.5zM13.5 3.5v4.5h4.5M9 12.5h6M9 16h6',
+  people: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.8 20a6.2 6.2 0 0 1 12.4 0M16 4.3a3.5 3.5 0 0 1 0 6.4M18.2 13.6A6.2 6.2 0 0 1 21.2 20',
+  spark: 'M12 3.5l1.9 5.6 5.6 1.9-5.6 1.9L12 18.5l-1.9-5.6L4.5 11l5.6-1.9zM18.5 16.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z',
+  plug: 'M9 3.5v4M15 3.5v4M6.5 7.5h11v3.5a5.5 5.5 0 0 1-11 0zM12 16.5v4',
+  books: 'M4.5 4.5h4v15h-4zM8.5 6.5h4v13h-4zM13.6 6.9l3.8-1.2 3.6 13.4-3.8 1.1z',
+  folder: 'M3.5 6.5a1.5 1.5 0 0 1 1.5-1.5h4.6l2 2.2H19a1.5 1.5 0 0 1 1.5 1.5v9.3a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5z',
+  chevron: 'M9 6l6 6-6 6',
+  down: 'M6 9.5l6 6 6-6',
+  left: 'M14.5 6l-6 6 6 6',
+  right: 'M9.5 6l6 6-6 6',
+  plus: 'M12 5v14M5 12h14',
+  close: 'M6.5 6.5l11 11M17.5 6.5l-11 11',
+  refresh: 'M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4',
+  branch: 'M7 4.5v15M7 15.5a8 8 0 0 0 8-8M17 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM7 21.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
+  play: 'M7.5 5v14l11.5-7z',
+  save: 'M5 4.5h11.5l3 3v12H5zM8 4.5v5h7v-5M8 19.5v-6h8.5v6',
+  split: 'M4 5h16v14H4zM12 5v14',
+  sidebar: 'M4 5h16v14H4zM9.5 5v14',
+  diff: 'M7 4v8M3 8h8M13 18h8M17.5 3.5v9M14 7l3.5-3.5L21 7',
+  bell: 'M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2H5zM10 20.5a2.2 2.2 0 0 0 4 0',
+  ext: 'M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v6h-13v-13h6',
+  gpu: 'M3.5 7h17v10h-17zM7 17v2.5M11 17v2.5M15 17v2.5M8.5 12a2 2 0 1 0 0-.01M15.5 12a2 2 0 1 0 0-.01',
+  file: 'M6.5 3.5h7.5l4 4v13h-11.5zM13.5 3.5v4.5h4.5',
+} as const;
+
+export type IconName = keyof typeof PATHS;
+
+export function Icon({ n, size = 18, className = '' }: { n: IconName; size?: number; className?: string }) {
+  return (
+    <svg className={`ic ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={PATHS[n]} />
+    </svg>
+  );
+}

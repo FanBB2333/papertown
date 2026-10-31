@@ -64,12 +64,37 @@ export function AgentRoom(p: Props) {
         ))}
         {roster && !roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，没法启动 pi。装好后重启服务即可。')}</p>}
       </aside>
-      {cur && (cur.agent?.started
-        ? cur.agent.runtime === 'paseo'
-          ? <PaseoChat key={cur.agent.id} {...p} agent={cur.agent} line={p.lines.find(l => l.id === cur.line.id)} />
-          : <AgentChat key={cur.agent.id} {...p} agent={cur.agent} line={p.lines.find(l => l.id === cur.line.id)} />
-        : <Hire key={cur.line.id} line={cur.line} role={p.role} agent={cur.agent} ok={!!roster?.available.ok} toast={p.toast} onDone={() => setBump(b => b + 1)}
-          repo={p.lines.find(l => l.id === cur.line.id)?.linked?.[p.role === 'writer' ? 'paper' : 'code']?.path} />)}
+      {cur && <Seat {...p} row={cur} ok={!!roster?.available.ok} onDone={() => setBump(b => b + 1)} />}
+    </div>
+  );
+}
+
+// a project's agent: its conversation once it has started, else hiring it
+function Seat(p: Props & { row: Roster['roster'][number]; ok: boolean; onDone: () => void }) {
+  const { row: cur } = p, line = p.lines.find(l => l.id === cur.line.id);
+  return cur.agent?.started
+    ? cur.agent.runtime === 'paseo'
+      ? <PaseoChat key={cur.agent.id} {...p} agent={cur.agent} line={line} />
+      : <AgentChat key={cur.agent.id} {...p} agent={cur.agent} line={line} />
+    : <Hire key={cur.line.id} line={cur.line} role={p.role} agent={cur.agent} ok={p.ok} toast={p.toast} onDone={p.onDone}
+      repo={line?.linked?.[p.role === 'writer' ? 'paper' : 'code']?.path} />;
+}
+
+// one project's agent alone, for the console: no list of projects beside it
+export function AgentDesk(p: Props & { lineId: string }) {
+  const [roster, setRoster] = useState<Roster | null>(null);
+  const [bump, setBump] = useState(0);
+  useEffect(() => listen(e => { if (e.type === 'agent' && e.agent?.role === p.role) setBump(b => b + 1); }), [p.role]);
+  useEffect(() => {
+    const t = setTimeout(() => api.roster(p.role).then(setRoster).catch(e => p.toast(e.message)), 120);
+    return () => clearTimeout(t);
+  }, [p.role, bump, p.tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const row = roster?.roster.find(x => x.line.id === p.lineId);
+  if (!roster) return <p className="muted">{tr('加载中…')}</p>;
+  return (
+    <div className="room room-agents desk">
+      {!roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，没法启动 pi。装好后重启服务即可。')}</p>}
+      {row ? <Seat {...p} row={row} ok={roster.available.ok} onDone={() => setBump(b => b + 1)} /> : <p className="muted">{tr('这个项目还不能配员工。')}</p>}
     </div>
   );
 }

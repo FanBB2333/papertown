@@ -71,6 +71,20 @@ for (const ln of lines) {
     writeFileSync(join(OUT, 'files', ln.id, name), /\.(tex|bib)$/.test(name) ? scrub(buf.toString('utf8')) : buf);
   }
 }
+// the console: each project's code and paper as files, its data, and the text of those files
+const TEXT = /\.(tex|bib|sty|cls|bst|md|txt|py|ts|js|json|jsonl|ya?ml|toml|cfg|sh|csv|tsv)$/i;
+for (const ln of lines) {
+  const ws = await get(`/api/lines/${ln.id}/ws`);
+  const data = await get(`/api/lines/${ln.id}/data`);
+  const want = new Map();
+  for (const root of ['code', 'paper']) {
+    if (!ws?.[root]) continue;
+    const tree = await get(`/api/lines/${ln.id}/ws/${root}/tree`);
+    for (const f of (tree?.files ?? []).filter(f => TEXT.test(f.path) && f.size < 256 * 1024).slice(0, 120)) want.set(`${root}:${f.path}`, [root, f.path]);
+  }
+  for (const f of (data?.files ?? []).filter(f => f.size < 256 * 1024).slice(0, 40)) want.set(`code:${f.path}`, ['code', f.path]);
+  for (const [root, path] of want.values()) await get(`/api/lines/${ln.id}/ws/${root}/file?${new URLSearchParams({ path })}`);
+}
 for (const id of jobs) await get(`/api/jobs/${id}?tail=400`);
 for (const role of ['coder', 'writer', 'monitor']) {
   for (const row of saved.get(demoKey('/api/agents', `?role=${role}`))?.roster ?? []) if (row.agent) agents.set(row.agent.id, row.agent);

@@ -65,8 +65,8 @@ function Look({ s }: { s: S }) {
       <Row label={tr('纸纹')} desc={tr('盖在整个页面上的纸张纹理')}>
         <Slider value={s.grain} min={0} max={1} step={0.05} fmt={v => v ? `${Math.round(v * 100)}%` : tr('关')} onChange={set('grain')} />
       </Row>
-      <Row label={tr('打开小镇时')} desc={tr('下次打开页面先看到哪种视图')}>
-        <Pick value={s.start} options={[['2d', tr('平面地图')], ['3d', tr('3D 漫游')]]} onChange={set('start')} />
+      <Row label={tr('打开页面时')} desc={tr('下次打开页面先看到哪种视图：中控屏是不用走动的面板，小镇可以平面或 3D')}>
+        <Pick value={s.start} options={[['console', tr('中控屏')], ['2d', tr('平面地图')], ['3d', tr('3D 漫游')]]} onChange={set('start')} />
       </Row>
     </>
   );
@@ -213,6 +213,7 @@ const KEYS: [string, string][] = [
   [tr('鼠标'), tr('3D 里转视角；平面上拖动地图、滚轮缩放')], [tr('点击'), tr('平面上进建筑；3D 里和 F 一样')],
   ['V', tr('3D 里切换第一 / 第三人称')], ['T', tr('3D 里切换白天 / 夜晚')],
   ['M', tr('3D 里回到平面')], ['Esc', tr('放开鼠标（全屏时同时退出全屏）/ 关闭对话 / 回到小镇 / 关闭设置')], [',', tr('打开设置')],
+  ['⌘K', tr('中控屏里换项目')], ['1 … 9, 0', tr('中控屏里切换左边的面板')], ['⌘S / ⌘↵', tr('中控屏的编辑器里保存 / 重新编译论文')],
 ];
 
 export function SettingsPanel({ open, hud, onClose }: { open: boolean; hud: Hud | null; onClose: () => void }) {

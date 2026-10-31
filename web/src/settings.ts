@@ -8,7 +8,7 @@ export interface Settings {
   // look and motion
   motion: 'full' | 'calm'; // calm: shorter, gentler animations
   grain: number; // paper grain over the page, 0..1
-  start: '2d' | '3d'; // which view the town opens in
+  start: 'console' | '2d' | '3d'; // what the page opens on: the console, or the town in 2D or 3D
   // the map
   smoothMap: boolean; // eased zoom and a little glide after a drag
   zoomSpeed: number; // 0.5..2, wheel zoom per notch
@@ -27,7 +27,7 @@ export interface Settings {
 }
 
 export const DEFAULTS: Settings = {
-  motion: 'full', grain: 0.5, start: '2d',
+  motion: 'full', grain: 0.5, start: 'console',
   smoothMap: true, zoomSpeed: 1, mapLabels: 'key', walkHint: true,
   sensitivity: 1, invertY: false, fov: 68, hand: true, bob: true, quality: 'high', fullscreen3d: true, tags3d: true, minimap: true,
 };
