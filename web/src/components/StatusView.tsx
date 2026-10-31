@@ -10,6 +10,12 @@ const STATUS: Record<string, string> = {
   hatching: tr('查重中'), waiting: tr('等你决定'), running: tr('进行中'), paused: tr('已暂停'), failed: tr('出错'), done: tr('已完成'),
 };
 
+// a line of news with what happened in bold and the particulars after it
+function Lede({ text }: { text: string }) {
+  const m = /^(.{2,40}?[：:。])(.+)$/s.exec(text);
+  return m ? <><b>{m[1]}</b>{m[2]}</> : <>{text}</>;
+}
+
 export function StatusView({ tick, active }: { tick: number; active: boolean }) {
   const [d, setD] = useState<any>(null);
 
@@ -42,7 +48,7 @@ export function StatusView({ tick, active }: { tick: number; active: boolean }) 
                 {lead.files.includes('main.pdf') && <a className="btn" href={fileUrl(lead.id, 'main.pdf')} target="_blank" rel="noreferrer">{tr('下载 PDF')}</a>}
               </div>
             </div>
-            <ul className="news">{d.headline.map((h: string, i: number) => <li key={i}><div><small>{h}</small></div></li>)}</ul>
+            <ul className="news">{d.headline.map((h: string, i: number) => <li key={i}><div><small><Lede text={h} /></small></div></li>)}</ul>
           </section>
         ) : (
           <section className="lead"><div><span className="kicker">{tr('头条')}</span><h2>{tr('还没有项目')}</h2><p>{tr('回到「世界」，在左下角放入一颗 idea。')}</p></div></section>
@@ -61,7 +67,7 @@ export function StatusView({ tick, active }: { tick: number; active: boolean }) 
             {d.projects.map((p: any) => (
               <div key={p.id} className="fac" data-open={p.mill_id ?? 'hatchery'}>
                 <b>{tr('项目 #')}{p.seq} · {p.title}</b>
-                <div className="row">{STATUS[p.status] ?? p.status} · {p.stage}<div className="bar"><i style={{ width: `${p.pct}%` }} /></div>{p.pct}%</div>
+                <div className="row"><span className={`pst pst-${p.status}`}>{STATUS[p.status] ?? p.status}</span>{p.stage}<div className="bar"><i style={{ width: `${p.pct}%` }} /></div><b>{p.pct}%</b></div>
               </div>
             ))}
           </section>

@@ -87,52 +87,119 @@
 .node .proj-top .lnk { margin-left: 0; white-space: nowrap; }
 
 /* one machine in full: its lanes, then a row per card with what runs, what waits in its
-   lanes in running order, and the loose jobs it could take */
+   lanes in running order, and the loose jobs it could take. Each job carries the colour of its
+   state as a stripe, its name in bold without what its list shares, and its memory as a chip. */
 .nd { scroll-margin-top: 12px; }
 .nd-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
 .nd-head kbd { margin-left: 4px; }
 .nd-title { flex: 1; min-width: 0; }
-.nd-title h4 { margin: 0; font: 17px var(--head); }
+.nd-title h4 { margin: 0; font: 21px var(--head); }
 .nd-title p { margin: 2px 0 0; }
-.nd h5.nd-h { margin: 18px 0 8px; font: 700 14px var(--head); } /* over .proto h5 */
-.nd-lanes { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
-.nd-lane { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 8px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
-.nd-lane b { font-size: 13px; }
-.nd-lane .muted, .nd-why { flex-basis: 100%; }
+.nd h5.nd-h { /* over .proto h5 */
+  display: flex; align-items: center; gap: 8px; margin: 22px 0 10px; padding-bottom: 8px; font: 700 15px var(--head);
+  background: var(--rule-brand) left bottom / 92px 6px no-repeat;
+}
+.nd-h em, .nd-ch em {
+  padding: 0 7px; border-radius: 99px; font: 600 11px/18px var(--font); font-style: normal; font-variant-numeric: tabular-nums;
+  color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+/* a count in the colour of the state it counts */
+.gpus-sum :is(.s-running, .s-queued, .s-failed) {
+  border-color: color-mix(in srgb, var(--sc) 32%, var(--line)); background: color-mix(in srgb, var(--sc) 7%, var(--panel)); box-shadow: inset 0 3px 0 var(--sc);
+}
+.gpus-sum :is(.s-running, .s-failed) b { color: color-mix(in srgb, var(--sc) 85%, var(--ink)); }
+
+.nd-lanes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.nd-lane {
+  --lc: color-mix(in srgb, var(--ink) 22%, transparent);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; min-width: 0; padding: 9px 12px 9px 15px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel); box-shadow: inset 3px 0 0 var(--lc);
+}
+.nd-lane.l-running { --lc: var(--brand); }
+.nd-lane:is(.l-waiting, .l-paused) { --lc: var(--warn); }
+.nd-lane.l-failed { --lc: var(--bad); }
+.nd-lane > b { font-size: 13.5px; }
+.nd-lnum { flex-basis: 100%; font-size: 12px; color: var(--muted); }
+.nd-lnum b { color: var(--ink); }
+.nd-next { flex-basis: 100%; display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; }
+.nd-next em { flex: none; font-style: normal; color: color-mix(in srgb, var(--lc) 80%, var(--ink)); }
+.nd-next em::after { content: ' →'; }
+.nd-next i { flex: none; font: 11px ui-monospace, Menlo, monospace; color: var(--muted); }
+.nd-next span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.nd-lane .nd-why { flex-basis: 100%; }
 .nd-why { color: var(--warn); line-height: 1.45; }
-.nd-gpus { display: flex; flex-direction: column; gap: 10px; }
+
+.nd-gpus { display: flex; flex-direction: column; gap: 12px; }
 .nd-gpu {
-  display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 12px; padding: 10px; border-radius: 14px;
+  display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 14px; padding: 12px; border-radius: 14px;
   border: 1px solid var(--line); background: var(--panel); scroll-margin-top: 12px;
 }
 .nd-gpu.hot { border-color: var(--brand); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 22%, transparent); }
 .nd-gpu > .gpu { align-self: start; }
-.nd-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.nd .nd-groups h6 { margin: 2px 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.nd-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.nd-groups > div + div { padding-left: 14px; border-left: 1px dashed var(--line); }
 .nd-groups p { margin: 0; }
-.nd-job { margin-bottom: 5px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); }
-.nd-job summary { display: block; padding: 6px 8px; cursor: pointer; list-style: none; font-size: 12px; }
+/* the column's heading: a mark in the colour of what it holds, and how many */
+.nd-ch { display: flex; align-items: center; gap: 7px; margin: 2px 0 9px; font: 600 12.5px var(--font); color: var(--ink); }
+.nd-ch i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--sc); }
+.nd-ch.c-ok { --sc: var(--ok); }
+.nd-ch.c-warn { --sc: var(--warn); }
+
+.nd-job {
+  margin-bottom: 6px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel2);
+  box-shadow: inset 3px 0 0 var(--sc); transition: border-color .2s, background-color .2s;
+}
+.nd-job.fits { --sc: var(--ok); }
+.nd-job.short { --sc: var(--warn); }
+.nd-job.s-running { border-color: color-mix(in srgb, var(--sc) 30%, var(--line)); background: color-mix(in srgb, var(--sc) 8%, var(--panel)); }
+.nd-job.s-failed { background: color-mix(in srgb, var(--sc) 6%, var(--panel2)); }
+.nd-job.next { border-color: color-mix(in srgb, var(--ink) 26%, transparent); background: var(--panel); }
+.nd-job:hover, .nd-job[open] { border-color: color-mix(in srgb, var(--sc) 55%, var(--line)); }
+.nd-job[open] { background: var(--panel); }
+.nd-job summary { display: block; padding: 7px 10px 8px 13px; cursor: pointer; list-style: none; }
 .nd-job summary::-webkit-details-marker { display: none; }
 .nd-job[open] summary { border-bottom: 1px dashed var(--line); }
-.nd-l1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.nd-jn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nd-l2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 4px; }
-.nd-meta { font-size: 11.5px; color: var(--muted); }
-.nd-pos { flex: none; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; background: color-mix(in srgb, var(--ink) 10%, transparent); }
-.nd-fit { font-size: 11px; padding: 0 7px; border-radius: 99px; color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
-.nd-fit.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
-.nd-prog { margin-top: 4px; font-size: 11.5px; color: var(--brand); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nd-job .kv, .nd-job .nv-notes, .nd-cmd { margin: 8px 10px; }
+.nd-l1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.nd-jn { flex: 1; display: flex; min-width: 0; font-size: 13px; color: var(--ink); white-space: nowrap; }
+/* when it does not fit, the shared start gives way first and what sets the name apart stays */
+.nd-jn > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.nd-pre { flex-shrink: 1000; min-width: 1.6em; color: var(--muted); }
+.nd-id { flex: none; font: 11px ui-monospace, Menlo, monospace; color: var(--muted); }
+.nd-pos {
+  flex: none; display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; font-size: 11px; font-weight: 600; color: var(--muted);
+  box-shadow: inset 0 0 0 1.2px color-mix(in srgb, var(--ink) 24%, transparent);
+}
+.nd-job.next .nd-pos { color: var(--panel); background: var(--ink); box-shadow: none; }
+.nd-l2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; margin-top: 5px; font-size: 11.5px; }
+.nd-l2 .stag { font-size: 11.5px; }
+.nd-vram { padding: 0 6px; border-radius: 6px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.nd-when { color: var(--ink); }
+.nd-meta { color: var(--muted); }
+.nd-who { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nd-fit { padding: 0 7px; border-radius: 7px 9px 6px 9px; font-weight: 600; color: color-mix(in srgb, var(--warn) 85%, var(--ink)); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+.nd-fit.ok { color: color-mix(in srgb, var(--ok) 85%, var(--ink)); background: color-mix(in srgb, var(--ok) 15%, transparent); }
+/* a running job's status line, with a bar when it counts how far it is */
+.nd-prog { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 7px; font-size: 11.5px; }
+.nd-pbar { flex: none; width: 70px; height: 5px; border-radius: 99px; overflow: hidden; background: color-mix(in srgb, var(--sc) 20%, transparent); }
+.nd-pbar i { display: block; height: 100%; border-radius: inherit; background: var(--sc); transition: width .8s var(--out); }
+.nd-prog b { flex: none; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--sc) 80%, var(--ink)); }
+.nd-prog > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px ui-monospace, Menlo, monospace; color: var(--muted); }
+.nd-job .kv, .nd-job .nv-notes, .nd-cmd { margin: 8px 10px 8px 13px; }
 .nd-job .kv { font-size: 12px; }
+.nd-job .kv dd { color: var(--ink); }
+.nd-dep { padding: 0 6px; border-radius: 6px; font: 11.5px ui-monospace, Menlo, monospace; background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.nd-job .nv-notes { padding-left: 10px; border-left: 2px solid color-mix(in srgb, var(--sc) 45%, transparent); color: var(--ink); }
 .nd-cmd {
   padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 6%, transparent);
   font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 180px; overflow: auto;
 }
-.nd-proc { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 5px; padding: 5px 8px; border-radius: 8px; border: 1px dashed var(--line); font-size: 12px; }
-.nd-proc span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nd-proc span:last-child { flex: none; }
-.nd-feed + .nd-feed { margin-top: 8px; }
-.nd-lname { display: block; margin-bottom: 4px; font-size: 11.5px; color: var(--muted); }
+.nd-proc { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; padding: 6px 9px; border-radius: 9px; border: 1px dashed var(--line); font-size: 12px; }
+.nd-proc > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nd-proc > :last-child { flex: none; }
+.nd-feed + .nd-feed { margin-top: 10px; }
+.nd-lname { display: block; margin-bottom: 5px; font-size: 11.5px; color: var(--muted); }
+.nd-lname b { font-weight: 600; color: var(--ink); }
 .nd-held { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
 .nd-foot { margin-top: 16px; }
 .nd-foot code { font-size: 11.5px; }
@@ -140,4 +207,5 @@
 @media (max-width: 960px) {
   .nd-gpu { grid-template-columns: 1fr; }
   .nd-groups { grid-template-columns: 1fr; }
+  .nd-groups > div + div { padding: 12px 0 0; border-left: 0; border-top: 1px dashed var(--line); }
 }

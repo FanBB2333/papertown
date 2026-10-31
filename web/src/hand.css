@@ -27,7 +27,8 @@ body.proto-page { background: #f4eee2; }
   content: ''; position: absolute; inset: 0; z-index: 90; pointer-events: none;
   background: var(--grain); background-size: 240px; mix-blend-mode: multiply; opacity: var(--grain-k, .5);
 }
-.theme-sketch :is(h1, h2, h3, h4, h5, h6, b, strong, th) { font-weight: 400; }
+/* headings carry their size in the brush face and stay light; bold is for what a line is about */
+.theme-sketch :is(h1, h2, h3, h4, h5, h6, th) { font-weight: 400; }
 .theme-sketch b, .theme-sketch strong { color: var(--ink); }
 .theme-sketch :is(code, pre, kbd, .code) { font-family: ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: 0; }
 
@@ -188,7 +189,13 @@ body.proto-page { background: #f4eee2; }
 .theme-sketch :is(.proj, .mon):hover { transform: translateY(-2px) rotate(-.25deg); box-shadow: none; }
 .theme-sketch :is(.proj, .mon).on { background-image: var(--box-brand); background-color: color-mix(in srgb, var(--accent, var(--brand)) 7%, var(--panel)); box-shadow: none; transform: translateX(3px); }
 .theme-sketch .tally b { font-size: 20px; }
-.theme-sketch .pst { background: none; padding: 0 2px; font-size: 12.5px; }
+/* a state is a dab of its colour with a dot, never only coloured words */
+.theme-sketch .pst {
+  display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; font-size: 12px; line-height: 20px;
+  border-radius: 9px 11px 8px 12px / 11px 8px 12px 9px; background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.theme-sketch .pst::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.theme-sketch .pst-linked { background: color-mix(in srgb, var(--ok) 13%, transparent); }
 .theme-sketch .crew-a { border-color: transparent; background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .theme-sketch .backend.off { background-image: var(--box-c); opacity: .75; }
 .theme-sketch .job { background: var(--panel); border-color: color-mix(in srgb, var(--ink) 32%, transparent); transition: transform .5s var(--spring), border-color .2s; }

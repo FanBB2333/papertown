@@ -2000,5 +2000,8 @@
  "等它把手上的事做完再交给它": "Queue it: handed over once it finishes what it's doing",
  "在底部的对话框里开始写": "Start writing in the chat at the bottom",
  "对话框里换收件人：部门或员工": "Pick who the chat goes to: a department or an agent",
- "{0} 个 skill": "{0} {0|skill|skills}"
+ "{0} 个 skill": "{0} {0|skill|skills}",
+ "下一个就轮到它": "Next to run",
+ "预留的显存": "Memory reserved for it",
+ "下一个": "Next"
 }
