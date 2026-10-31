@@ -186,10 +186,10 @@
 .dk-kbd { flex: none; align-self: center; margin-right: 2px; }
 .dk-bar:focus-within .dk-kbd { display: none; }
 .dk-budget {
-  flex: none; height: 36px; padding: 0 4px; border: 0; border-radius: 10px; background: none; font: 13px var(--font); color: var(--muted); cursor: pointer;
+  flex: none; height: 36px; gap: 3px; padding: 0 6px 0 8px; border: 0; border-radius: 10px; background: none; font: 13px var(--font); color: var(--muted); cursor: pointer;
   transition: background-color .2s, color .2s;
 }
-.dk-budget:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+.dk-budget:hover, .dk-budget.open { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
 .dk-mode { flex: none; align-self: center; display: flex; padding: 2px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 6%, transparent); animation: dk-pop .25s var(--out) both; }
 .dk-mode button {
   height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: none; font: 12.5px var(--font); color: var(--muted); cursor: pointer;

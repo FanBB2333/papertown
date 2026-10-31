@@ -46,6 +46,7 @@ const PATHS = {
   send: 'M12 19V5.5M6 11l6-6 6 6',
   stop: 'M7.5 7.5h9v9h-9z',
   quote: 'M5 12.5h4.5v5H5zM5 12.5c0-3 1-5 3.5-6.5M14.5 12.5H19v5h-4.5zM14.5 12.5c0-3 1-5 3.5-6.5',
+  check: 'M5 12.5l4.5 4.5L19 7.5',
 } as const;
 
 export type IconName = keyof typeof PATHS;

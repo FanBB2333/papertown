@@ -63,7 +63,7 @@ body.proto-page { background: #f4eee2; }
 .theme-sketch .bar > i { background-image: linear-gradient(90deg, color-mix(in srgb, currentColor 0%, transparent), rgba(255, 255, 255, .18)); }
 .theme-sketch kbd { border: 1px solid var(--ink-c); border-radius: 5px 6px 4px 6px / 6px 4px 6px 5px; padding: 0 5px; background: var(--panel); font-size: 11px; }
 
-.theme-sketch :is(textarea, input, select) { font-family: var(--font); }
+.theme-sketch :is(textarea, input) { font-family: var(--font); }
 .theme-sketch .chat-compose textarea {
   border-color: transparent; background: var(--panel) var(--box-a) center / 100% 100% no-repeat;
 }

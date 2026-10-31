@@ -40,10 +40,10 @@
 
 .sk-env { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 12px; }
 .sk-env p { margin: 3px 0 0; }
-.sk-env select, .mcp-form input, .mcp-form textarea, .field input:not([type]), .field textarea {
+.mcp-form input, .mcp-form textarea, .field input:not([type]), .field textarea {
   font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; max-width: 100%;
 }
-.sk-env select { min-width: 220px; }
+.sk-env .sel { min-width: 220px; padding: 7px 9px 7px 11px; }
 .sk-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
 .sk-tools .shelf-q { flex: 1; min-width: 220px; }
 

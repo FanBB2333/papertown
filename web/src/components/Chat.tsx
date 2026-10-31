@@ -12,6 +12,7 @@ import { Icon } from '../console/icons';
 import { tr } from '../i18n';
 import { Entry, fold, paseoTool, piTool, Text, Tool, Trail, UserMsg, usePaseoTalk, usePiTalk } from './AgentRoom';
 import { AGENT_STATUS, STATUS } from './MillRoom';
+import { Combo, Select } from './Select';
 import '../dock.css';
 
 export type Composer = { kind: 'idea' } | { kind: 'ask'; building: string; name: string } | { kind: 'adjust'; lineId: string }
@@ -131,9 +132,7 @@ function LinePane({ lines, placements, onRoom }: { lines: Line[]; placements: Pl
   return (
     <div className="pane-pad">
       {lines.length > 1 && (
-        <select className="line-pick" value={line.id} onChange={e => setSel(e.target.value)}>
-          {lines.map(l => <option key={l.id} value={l.id}>#{l.seq} {l.title}</option>)}
-        </select>
+        <Select className="line-pick" value={line.id} onChange={setSel} options={lines.map(l => ({ value: l.id, label: `#${l.seq} ${l.title}` }))} />
       )}
       <h5>#{line.seq} · {line.title}</h5>
       <p className="muted small">{line.idea}</p>
@@ -170,25 +169,20 @@ export function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => 
   return (
     <div className="llm-form">
       <label className="field">{tr('供应商')}
-        <select value={draft.provider} onChange={e => {
-          const id = e.target.value, d = llm.providers.find(x => x.id === id);
+        <Select value={draft.provider} options={llm.providers.map(x => ({ value: x.id, label: x.name }))} onChange={id => {
+          const d = llm.providers.find(x => x.id === id);
           setDraft(x => ({ ...x, provider: id, model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' }));
-        }}>
-          {llm.providers.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
+        }} />
       </label>
       <label className="field">{tr('强模型（Lv.3 以上的员工、最终回答）')}
-        <input list="llm-models" value={draft.model_strong} onChange={e => setDraft(x => ({ ...x, model_strong: e.target.value }))} />
+        <Combo value={draft.model_strong} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_strong: v }))} />
       </label>
       <label className="field">{tr('便宜模型（其余员工）')}
-        <input list="llm-models" value={draft.model_cheap} onChange={e => setDraft(x => ({ ...x, model_cheap: e.target.value }))} />
+        <Combo value={draft.model_cheap} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_cheap: v }))} />
       </label>
-      <datalist id="llm-models">{pv?.models.map(m => <option key={m} value={m} />)}</datalist>
       {draft.provider === 'anthropic' && (
         <label className="field">effort
-          <select value={draft.effort} onChange={e => setDraft(x => ({ ...x, effort: e.target.value }))}>
-            {['low', 'medium', 'high', 'xhigh', 'max'].map(x => <option key={x} value={x}>{x}</option>)}
-          </select>
+          <Select value={draft.effort} options={['low', 'medium', 'high', 'xhigh', 'max'].map(x => ({ value: x, label: x }))} onChange={v => setDraft(x => ({ ...x, effort: v }))} />
         </label>
       )}
       <p className="muted small">{tr('key 照旧从环境变量读取。切换只在这次运行里有效，重启服务后按环境变量重新决定。')}{draft.provider === 'openai' ? tr(' 接口：{0}', llm.openai_base_url) : ''}</p>
@@ -767,9 +761,8 @@ export function Chat(p: Props) {
             onChange={e => write(e.target.value)} onKeyDown={onKey} />
           {!text && <kbd className="dk-kbd" title={tr('在页面上任何地方按 / 开始写')}>/</kbd>}
           {c.kind === 'idea' && (
-            <select className="dk-budget" value={budget} onChange={e => setBudget(Number(e.target.value))} title={tr('这篇论文的预算')}>
-              {BUDGETS.map(b => <option key={b} value={b}>${b.toFixed(2)}</option>)}
-            </select>
+            <Select className="dk-budget" value={budget} onChange={setBudget} title={tr('这篇论文的预算')} label={tr('这篇论文的预算')}
+              options={BUDGETS.map(b => ({ value: b, label: `$${b.toFixed(2)}` }))} />
           )}
           {working && (
             <div className="dk-mode" role="radiogroup" aria-label={tr('它在忙时，消息怎么交给它')}>

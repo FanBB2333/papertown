@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type SkimResolution, type SkimScope, type SkimSkill, type SkimStatus, type TownSkill } from '../api';
 import type { RoomActions } from './Interior';
+import { Select } from './Select';
 import '../config-rooms.css';
 import { tr } from '../i18n';
 
@@ -136,12 +137,10 @@ export function SkillRoom(p: Props) {
               {res ? (res.env ? <>{tr('现在用')} <code>{res.env}</code>{tr('（')}{res.env_scope === 'active' ? tr('skim 当前激活的环境') : tr('{0}层定的', SCOPE_NAME[res.env_scope ?? ''])}{tr('）')}{res.env_missing && <span className="warn"> {tr('· 这个环境不存在')}</span>}</> : tr('现在不从任何环境开始，只用各层单独打开的 skill。')) : '…'}
             </p>
           </div>
-          <select value={envHere === null ? '__inherit' : envHere === '' ? '__none' : envHere} disabled={busy === 'core.env'}
-            onChange={e => set('core.env', e.target.value === '__inherit' ? null : e.target.value === '__none' ? '' : e.target.value)}>
-            <option value="__inherit">{sel.scope === 'global' ? tr('用 skim 激活的环境') : tr('沿用上一层')}</option>
-            <option value="__none">{tr('不用环境')}</option>
-            {st.envs.map(e => <option key={e.name} value={e.name}>{e.name}{tr('（')}{tr('{0} 个）', e.skills.length)}{e.active ? tr(' · 激活中') : ''}</option>)}
-          </select>
+          <Select value={envHere === null ? '__inherit' : envHere === '' ? '__none' : envHere} disabled={busy === 'core.env'} label={tr('起始环境')}
+            onChange={v => set('core.env', v === '__inherit' ? null : v === '__none' ? '' : v)}
+            options={[{ value: '__inherit', label: sel.scope === 'global' ? tr('用 skim 激活的环境') : tr('沿用上一层') }, { value: '__none', label: tr('不用环境') },
+              ...st.envs.map(e => ({ value: e.name, label: e.name, hint: tr('{0} 个 skill', e.skills.length) + (e.active ? tr(' · 激活中') : '') }))]} />
         </div>
 
         <div className="sk-tools">

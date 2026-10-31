@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type DataRun, type LineData } from '../api';
 import { tr } from '../i18n';
+import { Select } from '../components/Select';
 import { Bars, StateTag, Tip, fmtNum, stOf, useTip } from './charts';
 import { Icon } from './icons';
 import { JobDrawer } from './JobDrawer';
@@ -179,9 +180,8 @@ function Files({ lineId, files, onOpen }: { lineId: string; files: DFile[]; onOp
           <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('按路径筛选')} value={q} onChange={e => setQ(e.target.value)} /></label>
           <div className="seg mini">{['all', 'processed', 'raw', 'other'].filter(k => k === 'all' || files.some(f => f.kind === k)).map(k => (
             <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(k)}>{k === 'all' ? tr('全部') : KIND_NAME[k]}</button>))}</div>
-          <select className="fb-sort" value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)} aria-label={tr('排序')}>
-            <option value="mtime">{tr('最近修改')}</option><option value="name">{tr('名称')}</option><option value="size">{tr('大小')}</option>
-          </select>
+          <Select className="fb-sort" value={sortBy} onChange={setSortBy} label={tr('排序')}
+            options={[{ value: 'mtime', label: tr('最近修改') }, { value: 'name', label: tr('名称') }, { value: 'size', label: tr('大小') }]} />
         </div>
         <div className="fb-list">
           {dirs.map(([d, fs]) => {

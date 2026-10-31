@@ -190,7 +190,7 @@ export function Console(p: Props) {
     if (!p.active) return;
     const key = (e: KeyboardEvent) => {
       const t = e.target instanceof HTMLElement ? e.target : null;
-      const typing = !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || !!t.closest('.cm-editor'));
+      const typing = !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.getAttribute('role') === 'combobox' || !!t.closest('.cm-editor'));
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setRail(true); requestAnimationFrame(() => searchRef.current?.focus()); return; }
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'j') { e.preventDefault(); toggleSide(); return; }
       if (e.key === 'Escape' && rail) { e.stopImmediatePropagation(); setRail(false); return; }

@@ -12,6 +12,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { api, fileUrl, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
+import { Select, type Opt } from './Select';
 import { ConvSkills } from './SkillRoom';
 import { tr } from '../i18n';
 
@@ -187,22 +188,16 @@ export function PaseoPick({ busy, onStart, onReady, prefer = 'claude' }: {
   return (
     <>
       <label className="field">{tr('供应商')}
-        <select value={prov} onChange={e => pick(info, e.target.value)}>
-          {info.providers.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}
-        </select>
+        <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.label }))} onChange={id => pick(info, id)} />
       </label>
       {!!pv?.models.length && (
         <label className="field">{tr('模型')}
-          <select value={model} onChange={e => pick(info, prov, e.target.value)}>
-            {pv.models.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
-          </select>
+          <Select value={model} options={pv.models.map(x => ({ value: x.id, label: x.name }))} onChange={id => pick(info, prov, id)} />
         </label>
       )}
       {!!m && m.thinking.length > 1 && (
         <label className="field">{tr('思考强度')}
-          <select value={think} onChange={e => setThink(e.target.value)}>
-            {m.thinking.map(x => <option key={x} value={x}>{x}</option>)}
-          </select>
+          <Select value={think} options={m.thinking.map(x => ({ value: x, label: x }))} onChange={setThink} />
         </label>
       )}
       {!info.status.web && <p className="muted small">{tr('Paseo 的网页端没开，房间里显示不了对话，可以去 Paseo 桌面端看。打开方法：')}<code>paseo daemon config set features.webUi.enabled true</code>{tr('，再')} <code>paseo daemon restart</code>{tr('。')}</p>}
@@ -686,20 +681,15 @@ export function PiSwitch({ s, send }: { s: PiState; send: (t: string) => void })
   const cur = s.model ? `${s.model.provider}/${s.model.id}` : '';
   const groups = new Map<string, NonNullable<PiState['models']>>();
   for (const m of s.models ?? []) groups.set(m.provider, [...(groups.get(m.provider) ?? []), m]);
+  // grouped by provider, and the one in use even when pi does not list it
+  const models: Opt[] = [...groups].flatMap(([p, ms]) => ms.map(m => ({ value: `${p}/${m.id}`, label: m.name, group: s.providers?.[p] ?? p })));
+  if (cur && !models.some(m => m.value === cur)) models.unshift({ value: cur, label: cur });
   return (
     <div className="pi-switch">
-      <select value={cur} title={tr('模型（/model）')} onChange={e => send(`/model ${e.target.value}`)}>
-        {cur && !(s.models ?? []).some(m => `${m.provider}/${m.id}` === cur) && <option value={cur}>{cur}</option>}
-        {[...groups].map(([p, ms]) => (
-          <optgroup key={p} label={s.providers?.[p] ?? p}>
-            {ms.map(m => <option key={m.id} value={`${p}/${m.id}`}>{m.name}</option>)}
-          </optgroup>
-        ))}
-      </select>
+      <Select value={cur} options={models} title={tr('模型（/model）')} label={tr('模型（/model）')} placeholder={tr('模型')} onChange={v => send(`/model ${v}`)} />
       {s.levels.length > 1 && (
-        <select value={s.thinking} title={tr('思考强度（/thinking）')} onChange={e => send(`/thinking ${e.target.value}`)}>
-          {s.levels.map(l => <option key={l} value={l}>{l}</option>)}
-        </select>
+        <Select value={s.thinking} options={s.levels.map(l => ({ value: l, label: l }))} title={tr('思考强度（/thinking）')} label={tr('思考强度（/thinking）')}
+          onChange={v => send(`/thinking ${v}`)} />
       )}
       {s.context?.percent != null && <span className="muted small" title={tr('上下文用量')}>{tr('上下文')} {Math.round(s.context.percent)}%</span>}
     </div>
