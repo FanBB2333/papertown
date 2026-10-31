@@ -161,12 +161,16 @@ export function trx(s: string | null | undefined) {
 }
 
 // every string in a server response, in place; keys are left alone
-export function localize<T>(data: T): T {
+export function localize<T>(data: T, keep?: (v: object) => boolean): T {
   if (LANG === 'zh-Hans') return data;
   const walk = (v: unknown): unknown => {
     if (typeof v === 'string') return trx(v);
     if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) v[i] = walk(v[i]); return v; }
-    if (v && typeof v === 'object') { for (const k of Object.keys(v)) (v as Record<string, unknown>)[k] = walk((v as Record<string, unknown>)[k]); return v; }
+    if (v && typeof v === 'object') {
+      if (keep?.(v)) return v; // left as it is, whatever language it is in
+      for (const k of Object.keys(v)) (v as Record<string, unknown>)[k] = walk((v as Record<string, unknown>)[k]);
+      return v;
+    }
     return v;
   };
   return walk(data) as T;

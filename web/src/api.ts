@@ -233,14 +233,18 @@ export interface RagView {
 export interface RagHit extends PaperCard { matched: string[] }
 export interface RagResult { query: string; expanded: string; terms: string[]; method: 'coverage' | 'embedding'; hits: RagHit[] }
 
-async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
-  if (DEMO) return localize(await demoCall(method, url)) as T;
+// what you and the agents say in a conversation stays as it was written; the dictionary is for
+// what the town says
+const said = (v: object) => ['user', 'assistant'].includes((v as { kind?: string }).kind ?? '') || (v as { type?: string }).type === 'agent_delta';
+
+async function call<T>(method: string, url: string, body?: unknown, keep?: (v: object) => boolean): Promise<T> {
+  if (DEMO) return localize(await demoCall(method, url), keep) as T;
   const r = await fetch(url, {
     method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined,
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? trx(data.detail) : tr('输入有误')) : tr('请求失败 {0}', r.status));
-  return localize(data) as T;
+  return localize(data, keep) as T;
 }
 
 export const api = {
@@ -275,14 +279,14 @@ export const api = {
   gpus: (fresh = false) => call<GpuStatus>('GET', `/api/gpus${fresh ? '?fresh=1' : ''}`),
   cancelJob: (id: string) => call<Job>('POST', `/api/jobs/${id}/cancel`),
   roster: (role: AgentRole) => call<Roster>('GET', `/api/agents?role=${role}`),
-  agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`),
+  agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`, undefined, said),
   openAgent: (lineId: string, role: AgentRole) => call<Agent>('POST', '/api/agents', { line_id: lineId, role }),
   startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
   openInPaseo: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/open`),
   paseo: () => call<PaseoInfo>('GET', '/api/paseo'),
   conversations: () => call<{ conversations: PaseoConversation[] }>('GET', '/api/paseo/conversations'),
   importAgent: (lineId: string, role: AgentRole, extId: string) => call<Agent>('POST', '/api/agents/import', { line_id: lineId, role, ext_id: extId }),
-  timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null } }>('GET', `/api/agents/${id}/timeline`),
+  timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null } }>('GET', `/api/agents/${id}/timeline`, undefined, said),
   permit: (id: string, requestId: string, allow: boolean) => call<{ ok: boolean }>('POST', `/api/agents/${id}/permit`, { request_id: requestId, allow }),
   llm: () => call<Llm>('GET', '/api/llm'),
   samples: () => call<{ added: string[]; note: string }>('POST', '/api/samples'),
@@ -331,7 +335,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
     'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show'];
   for (const t of types) es.addEventListener(t, ev => {
-    const e = localize(JSON.parse((ev as MessageEvent).data));
+    const e = localize(JSON.parse((ev as MessageEvent).data), t === 'agent_event' || t === 'agent_delta' ? said : undefined);
     onEvent(e);
     for (const fn of listeners) fn(e);
   });
