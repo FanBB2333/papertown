@@ -85,10 +85,12 @@ def test_the_assistant_reads_the_page_and_asks_before_it_acts(tmp_path):
         assert c.post(f"/api/assistant/acts/{r['id']}", json={"allow": False}).json()["data"]["status"] == "denied"
         assert len(town.pipeline.lines()) == 1
 
-        # what you had selected goes with the message, in full in page.md
-        c.post("/api/assistant/say", json={"text": "这段对吗", "page": page | {"selection": "loss = a + b\nreturn loss"}})
-        said = town.agents.events("assistant")[-1]["data"]["text"]
-        assert "选中：「loss = a + b return loss」（2 行" in said and "return loss\n```" in (home / ".papertown" / "page.md").read_text()
+        # what you had selected goes with the message, in full in page.md, with the part it is in
+        at = {"label": "已取消 11", "ref": "count:cancelled", "text": "11\n已取消"}
+        c.post("/api/assistant/say", json={"text": "这段对吗", "page": page | {"selection": "loss = a + b\nreturn loss", "selection_at": at}})
+        said, md = town.agents.events("assistant")[-1]["data"]["text"], (home / ".papertown" / "page.md").read_text()
+        assert "选中：「loss = a + b return loss」（2 行" in said and "选中的地方：已取消 11〔count:cancelled〕" in said
+        assert "return loss\n```" in md and "那一块写着：11 已取消" in md
 
         # a new conversation sets Paseo's aside; the next start makes another
         first = town.agents.get("assistant")["ext_id"]

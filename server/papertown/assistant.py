@@ -84,7 +84,7 @@ GUIDE = """# Papertown · 小助手
 
 ## 用户在看什么
 
-- 用户每条消息开头有一段 `<page>…</page>`：在看哪个项目、哪个面板、面板上的设置和打开着的东西，以及他在页面上点了什么（「指着」）。他说「这个」「这里」，就是指着的那一项；没指着东西时，就是整个面板。
+- 用户每条消息开头有一段 `<page>…</page>`：在看哪个项目、哪个面板、面板上的设置和打开着的东西，他在页面上点了什么（「指着」），以及选中了哪段文字（「选中」，和它所在的那一块）。他说「这个」「这里」，就是指着的那一项或选中的文字；都没有时，就是整个面板。
 - 更详细的在 `.papertown/page.md`：这一页每块内容的数据从哪来（文件、命令、接口），页面上能亮给他看的地方，以及面板上现在显示的文字。他换页面、指东西时它会更新。用 {page} 读。
 - 回答之前去读真实来源，不要只凭页面上的文字猜；回答里说一句你看的是哪里。
 
@@ -96,7 +96,7 @@ GUIDE = """# Papertown · 小助手
 - 显卡和任务队列来自 nvidb：`nvidb queue status --json --no-tick`、`nvidb job show <编号> --json --no-tick`。nvidb 只读：不要提交、取消任务，也不要确认告警；用户想这么做时，把命令告诉他，让他自己在终端里跑。{net}
 ## 和用户来回
 
-- 拿不准他问的是哪里，就问他：{ask}。他的回答会作为下一条消息发来，开头的 `<page>` 里有他点的东西。问完就结束这一轮，等他回答。
+- 指着或选中的只是一个数字、一个词时，先看 page.md 里那一块写着什么、面板上的文字，多半就知道是什么了。还拿不准他问的是哪里，再问他：{ask}。他的回答会作为下一条消息发来，开头的 `<page>` 里有他点的东西。问完就结束这一轮，等他回答。
 - 想让他看页面上的某处：{show}。可以打开一个项目的某个面板（mod：overview 概览、survey 调研、code 代码仓库、exp 实验、data 数据、paper 论文、agents 员工、skills、mcp、rag 图书馆），打开代码仓库里的文件（file：`code:路径` 或 `code:路径:行号`），打开实验面板里一个任务的详情（job），或者把页面上的一处亮出来（ref，用 page.md 里列的标识）。说到页面上具体的东西时，顺手亮给他看。
 
 ## 替用户办事
@@ -137,6 +137,13 @@ def _bool(v: object) -> bool:
     if s in ("0", "false", "no", "off", "关掉", "停用"):
         return False
     raise ActError(f"enabled 要写 true 或 false，不是 {v}")
+
+
+def _part(f: object) -> dict | None:
+    """A part of the page as the sidebar names it: its label, ref, the heading over it and its text."""
+    if not isinstance(f, dict):
+        return None
+    return {k: clip(f.get(k), 400 if k == "text" else 120) for k in ("ref", "label", "where", "text") if f.get(k)} or None
 
 
 def _pointed(f: dict) -> str:
@@ -213,17 +220,18 @@ class Assistant:
     def _clean(p: dict) -> dict:
         ln = p.get("line") if isinstance(p.get("line"), dict) else {}
         mod = str(p.get("mod") or "")
-        focus = p.get("focus") if isinstance(p.get("focus"), dict) else None
+        selection = str(p.get("selection") or "").strip()[:SELECTION_MAX]
         return {
             "at": now(),
             "line": {"id": str(ln.get("id") or ""), "seq": ln.get("seq"), "title": clip(ln.get("title"), 80)} if ln.get("id") else None,
             "mod": mod, "mod_name": MODS.get(mod, clip(p.get("mod_name"), 20) or mod),
             "state": {clip(k, 20): clip(v, 160) for k, v in (p.get("state") or {}).items() if v not in (None, "", False)},
-            "focus": {k: clip(focus.get(k), 400 if k == "text" else 120) for k in ("ref", "label", "where", "text") if focus.get(k)} if focus else None,
+            "focus": _part(p.get("focus")),
             "refs": [{"ref": clip(r.get("ref"), 80), "label": clip(r.get("label"), 80)} for r in (p.get("refs") or [])[:REFS_MAX]
                      if isinstance(r, dict) and r.get("ref")],
             "text": str(p.get("text") or "")[:TEXT_MAX],
-            "selection": str(p.get("selection") or "").strip()[:SELECTION_MAX],
+            "selection": selection,
+            "selection_at": _part(p.get("selection_at")) if selection else None,
         }
 
     def header(self, p: dict) -> str:
@@ -236,6 +244,8 @@ class Assistant:
         if p.get("selection"):
             n = p["selection"].count("\n") + 1
             out.append(f"选中：「{clip(p['selection'], 120)}」" + (f"（{n} 行，全文在 page.md）" if n > 1 else ""))
+            if p.get("selection_at"):
+                out.append("选中的地方：" + _pointed(p["selection_at"]))
         return "\n".join([*out, "详细：.papertown/page.md", "</page>"])
 
     def _page_md(self, p: dict) -> str:
@@ -252,7 +262,11 @@ class Assistant:
             if f.get("text") and f.get("text") != f.get("label"):
                 out.append(f"  - 那一块写着：{f['text']}")
         if p.get("selection"):
-            out += ["- 用户在页面上选中了这段文字：", "", "```text", p["selection"], "```"]
+            at = p.get("selection_at")
+            out.append("- 用户在页面上选中了这段文字" + (f"，选中的地方：{_pointed(at)}" if at else "") + "：")
+            if at and at.get("text") and at.get("text") != at.get("label"):
+                out.append(f"  - 那一块写着：{at['text']}")
+            out += ["", "```text", p["selection"], "```"]
         out += ["", "## 这一页的数据从哪来", "", *[f"- {x}" for x in self._sources(p["mod"], ln["id"] if ln else None)]]
         if p["refs"]:
             out += ["", "## 页面上能亮给他看的地方（show 的 ref）", "", *[f"- `{r['ref']}` {r['label']}" for r in p["refs"]]]
