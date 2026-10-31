@@ -1,4 +1,4 @@
-"""papertown serve | ingest | mcp | skills | demo | job"""
+"""papertown (the TUI) | tui | serve | ingest | mcp | skills | demo | job"""
 
 from __future__ import annotations
 
@@ -9,8 +9,11 @@ import time
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="papertown")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    p = argparse.ArgumentParser(prog="papertown", description="On its own, `papertown` opens the town in this terminal (as `papertown tui`).")
+    sub = p.add_subparsers(dest="cmd")
+    tu = sub.add_parser("tui", help="the town in this terminal: projects, jobs, GPUs, staff, chat (the default)")
+    tu.add_argument("--server", default=os.environ.get("PAPERTOWN_URL", "http://127.0.0.1:8000"))
+    tu.add_argument("--no-start", action="store_true", help="don't start a server when none answers")
     sv = sub.add_parser("serve", help="start the API (and the built web app)")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
@@ -30,7 +33,10 @@ def main() -> None:
     jb.add_argument("command", nargs=argparse.REMAINDER, help="after --: the shell command")
     a = p.parse_args()
 
-    if a.cmd == "serve":
+    if a.cmd in (None, "tui"):
+        from .tui import run
+        run(getattr(a, "server", None), start=not getattr(a, "no_start", False))
+    elif a.cmd == "serve":
         import uvicorn
         from .api import create_app
         os.environ.setdefault("PAPERTOWN_URL", f"http://{'127.0.0.1' if a.host in ('0.0.0.0', '::') else a.host}:{a.port}")

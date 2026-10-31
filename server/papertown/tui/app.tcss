@@ -1,0 +1,224 @@
+/* The TUI's layout. Colours come from the two themes in look.py (the page's paper palette, dark
+   and light); $muted and $faint are theirs too. */
+
+Screen {
+    background: $background;
+    color: $foreground;
+}
+
+#masthead {
+    height: 1;
+    background: $panel;
+}
+
+#ribbon {
+    height: 1;
+    margin-bottom: 1;
+}
+
+#body {
+    height: 1fr;
+}
+
+#nav {
+    width: 14;
+    height: 100%;
+    padding: 1 0;
+    background: $surface;
+}
+
+#places {
+    width: 1fr;
+    height: 100%;
+}
+
+#places > Place {
+    height: 100%;
+}
+
+Place > Horizontal, Place > Vertical, Place Vertical > Horizontal {
+    height: 1fr;
+}
+
+.list-col {
+    width: 62;
+    height: 100%;
+}
+
+.list-col.wide {
+    width: 76;
+}
+
+.detail-col {
+    width: 1fr;
+    height: 100%;
+    border-left: vkey $panel;
+    padding: 0 0 0 1;
+}
+
+.chips, .tabs {
+    height: 1;
+    padding: 0 1;
+}
+
+.note {
+    height: auto;
+    padding: 0 1;
+}
+
+DataTable {
+    height: 1fr;
+    background: $background;
+    scrollbar-size-vertical: 1;
+    overflow-x: hidden;
+}
+
+DataTable > .datatable--header {
+    background: $background;
+    color: $muted;
+    text-style: none;
+}
+
+DataTable:focus > .datatable--cursor {
+    background: $block-cursor-background;
+    color: $foreground;
+    text-style: none;
+}
+
+DataTable > .datatable--cursor {
+    background: $block-cursor-blurred-background;
+    color: $foreground;
+    text-style: none;
+}
+
+DataTable > .datatable--hover {
+    background: $panel;
+}
+
+#pj-table, #st-depts, #st-agents {
+    height: 1fr;
+}
+
+#st-depts {
+    max-height: 12;
+}
+
+Pane {
+    height: 1fr;
+    scrollbar-size-vertical: 1;
+}
+
+.peek {
+    height: 12;
+    border-top: hkey $panel;
+}
+
+.files {
+    width: 40;
+    height: 100%;
+}
+
+.viewer {
+    width: 1fr;
+    height: 100%;
+    border-left: vkey $panel;
+}
+
+#composer {
+    height: 3;
+    margin: 0 1;
+    padding: 0 1;
+    border: round $primary 45%;
+    background: $surface;
+}
+
+#composer:focus-within {
+    border: round $primary;
+}
+
+#target {
+    width: auto;
+    height: 1;
+}
+
+#say {
+    width: 1fr;
+    height: 1;
+    border: none;
+    padding: 0;
+    background: $surface;
+}
+
+#say:focus {
+    border: none;
+}
+
+#hints {
+    height: 1;
+    padding: 0 1;
+}
+
+/* dialogs */
+
+.modal {
+    align: center middle;
+    background: $background 60%;
+}
+
+.dialog {
+    width: 76;
+    height: auto;
+    max-height: 85%;
+    padding: 1 2;
+    border: round $primary;
+    background: $surface;
+}
+
+.dialog.help {
+    width: 92;
+    height: 80%;
+}
+
+.dialog.editor {
+    width: 96%;
+    height: 92%;
+    padding: 0 1;
+}
+
+.dialog.editor TextArea {
+    height: 1fr;
+}
+
+.dialog-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+}
+
+.dialog-hint {
+    color: $muted;
+    margin-bottom: 1;
+}
+
+.dialog-keys {
+    color: $muted;
+    margin-top: 1;
+}
+
+.field-label {
+    color: $muted;
+    margin-top: 1;
+}
+
+.dialog Input, .dialog Select {
+    margin-bottom: 0;
+}
+
+#splash {
+    background: $background;
+}
+
+#splash-mark {
+    width: auto;
+    height: auto;
+}

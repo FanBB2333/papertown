@@ -375,8 +375,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, str(e)) from e
 
     @app.get("/api/jobs")
-    def jobs(line_id: str | None = None):
-        ext = [j for j in town.linked.farm_jobs() if not line_id or j["line_id"] == line_id]
+    def jobs(line_id: str | None = None, external: bool = True):
+        # external=false: only the farm's own (the TUI reads nvidb's itself)
+        ext = [j for j in town.linked.farm_jobs() if not line_id or j["line_id"] == line_id] if external else []
         return {"jobs": ext + town.farm.list(line_id), "backends": town.farm.backends(), "plant": town.plant.status()}
 
     @app.get("/api/gpus")
