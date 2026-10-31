@@ -9,3 +9,7 @@ web/dist-demo/
 .env
 .DS_Store
 server/papertown/paseo_link/node_modules/
+macos/.build/
+macos/build/
+web/dist.next/
+web/dist.prev/

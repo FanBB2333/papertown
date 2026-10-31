@@ -62,6 +62,19 @@ pnpm dev                          # http://127.0.0.1:5173
 
 `pnpm build` 之后，`papertown serve` 会直接托管 `web/dist`，只开后端也能用。
 
+### macOS App
+
+`macos/` 是一个 SwiftUI + WKWebView 的外壳，窗口里就是同一个网页，不另写一套界面（只需要 Command Line Tools，不用 Xcode）：
+
+```bash
+macos/build.sh             # 生成 macos/build/Papertown.app
+macos/build.sh --install   # 再拷到 ~/Applications
+```
+
+- **服务**：8000 端口上已经有 Papertown 在跑（比如终端里开的），App 直接用它；没有就在 `server/` 里用登录 shell 的环境（uv、pnpm、TeX 的 PATH 和 `~/.zshrc` 里的设置）运行 `uv run papertown serve --port $PAPERTOWN_PORT`，退出 App 时停掉它启动的那个。命令、端口、代码位置在「App 设置…」（⌥⌘,）里改，比如加上 `PAPERTOWN_PROVIDER=mock`；日志在 `~/Library/Logs/Papertown/`。
+- **网页改动同步**：页面不打包进 App，就是服务托管的 `web/dist`。启动时网页代码比 `web/dist` 新就先构建；运行中 `web/` 或 `design/src` 有改动，停下 3 秒后自动构建（先构建到 `web/dist.next` 再整体换上）；不管是 App 还是终端里的 `pnpm build` 更新了 `web/dist`，页面都会自动重新载入（输入框里有没发出去的字时只提示，按 ⌘R 再载入）。只有改了 `macos/` 才需要重新跑 `build.sh`。
+- **和浏览器一致**：外站链接用默认浏览器打开；项目文件照常下载到「下载」；PDF 开新窗口；`confirm()` 等对话框、选文件、3D 漫游的全屏和鼠标锁定都可用。菜单：⌘, 打开页面的设置，⌘1/2/3 切换中控屏 / 小镇 / 运行状态，⌘R 重新载入，⌘0/=/- 缩放，⇧⌘R 重新构建网页；Dock 图标上的数字是在等你决定的项目数。页面自己的设置（语言、起始视图……）存在 App 里，和浏览器各存一份。
+
 不想开界面，可以直接让一颗 idea 跑完整条线：
 
 ```bash

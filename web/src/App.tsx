@@ -244,6 +244,18 @@ export function App() {
     setView(v);
   }, [go2d]);
 
+  // the macOS app (macos/) drives the page from its menus: the settings, the view, a note
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ type?: string; view?: string; text?: string }>).detail ?? {};
+      if (d.type === 'settings') setSettingsOpen(true);
+      else if (d.type === 'view' && (d.view === 'console' || d.view === 'world' || d.view === 'status')) show(d.view);
+      else if (d.type === 'toast' && d.text) push(d.text);
+    };
+    addEventListener('papertown:command', on);
+    return () => removeEventListener('papertown:command', on);
+  }, [show, push]);
+
   // the walking hint fades once you have moved or after a while
   const [hint, setHint] = useState(true);
   useEffect(() => {
