@@ -9,6 +9,7 @@ import asyncio
 import json
 import threading
 from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
@@ -26,10 +27,9 @@ from .pipeline import LineError
 from .skim import SkimError
 from .town import Town
 from .workspace import WsError
+from .world import ASK_ROLE
 
 FILES = {"main.tex", "refs.bib", "main.pdf", "paper.zip"}
-ASK_ROLE = {"hatchery": "hatcher", "mill": "designer", "farm": "experimenter", "power_sim": "experimenter", "press": "writer",
-            "qa": "reviewer", "depot": "keeper", "workshop": "keeper", "logistics": "keeper", "dock_github": "keeper"}
 
 
 class SkimIn(BaseModel):
@@ -108,6 +108,7 @@ class SaveIn(BaseModel):
 
 class SayIn(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
+    mode: Literal["steer", "queue"] | None = None  # while it works: into what it is doing, or after it
 
 
 class JobIn(BaseModel):
@@ -361,6 +362,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def status():
         return status_mod.status(town)
 
+    @app.get("/api/departments")
+    def departments():
+        return status_mod.departments(town)
+
     # ---------- the farm ----------
 
     def farm(fn, *args):
@@ -494,7 +499,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/agents/{agent_id}/say")
     def agent_say(agent_id: str, body: SayIn):
-        return agents(town.agents.say, agent_id, body.text)
+        return agents(town.agents.say, agent_id, body.text, body.mode)
 
     @app.post("/api/agents/{agent_id}/brief")
     def agent_brief(agent_id: str):

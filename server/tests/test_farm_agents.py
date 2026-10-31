@@ -131,14 +131,20 @@ def test_paseo_agents_are_created_driven_and_followed(tmp_path):
         run = next(l for l in (fake.parent / "calls.log").read_text().splitlines() if l.startswith("run"))
         assert "--provider pi" in run and "--model openai-codex/gpt-5.6-luna" in run and "papertown.agent=" + a["id"] in run and "PAPERTOWN_AGENT_TOKEN=" in run
 
-        c.post(f"/api/agents/{a['id']}/say", json={"text": "先跑测试"})
+        # while it works a message steers it, or waits in the town until it is done
+        assert c.post(f"/api/agents/{a['id']}/say", json={"text": "先跑测试"}).json()["data"]["steered"] is True
+        held = c.post(f"/api/agents/{a['id']}/say", json={"text": "再补文档", "mode": "queue"}).json()
+        assert held["data"]["held"] and not held["data"]["delivered"]
         c.post(f"/api/agents/{a['id']}/abort")
         log = (fake.parent / "calls.log").read_text()
-        assert "send pa-1 --no-wait --prompt-file" in log and "stop pa-1" in log
+        assert log.count("send pa-1 --no-wait --prompt-file") == 1 and "stop pa-1" in log
 
-        # the watcher follows Paseo's status
+        # the watcher follows Paseo's status, and hands it what was queued once it is idle
         t0 = time.time()
-        while town.agents.get(a["id"])["status"] != "idle" and time.time() - t0 < 10:
+        while town.db.val("select json_extract(data, '$.held') from agent_events where id = ?", held["id"]) and time.time() - t0 < 15:
+            time.sleep(0.2)
+        assert (fake.parent / "calls.log").read_text().count("send pa-1 --no-wait --prompt-file") == 2
+        while town.agents.get(a["id"])["status"] != "idle" and time.time() - t0 < 25:
             time.sleep(0.2)
         assert town.agents.get(a["id"])["status"] == "idle"
 

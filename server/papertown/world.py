@@ -29,6 +29,10 @@ CORE = {"mill", "farm", "press", "depot"}
 LIVE = {"dock_arxiv", "customs", "hatchery", "mill", "farm", "press", "qa", "depot", "library", "genealogy",
         "market", "cityhall", "bank", "newspaper", "power_sim", "power", "academy", "exchange"}
 
+# Who answers when you ask a building something; everywhere else a scout does.
+ASK_ROLE = {"hatchery": "hatcher", "mill": "designer", "farm": "experimenter", "power_sim": "experimenter", "press": "writer",
+            "qa": "reviewer", "depot": "keeper", "workshop": "keeper", "logistics": "keeper", "dock_github": "keeper"}
+
 
 def st(name: str, out: str, *team: str) -> dict:
     return {"name": name, "out": out, "team": list(team)}
@@ -193,8 +197,7 @@ class World:
                 "from": self._goods(cat["from"]), "to": self._goods(cat["to"])}
         if b["type"] == "mill":
             return base | self._mill(b)
-        active = self.db.one("select s.*, l.title, l.seq from stages s join lines l on l.id = s.line_id"
-                             " where s.building = ? and s.status = 'run' order by s.started_at desc limit 1", b["type"])
+        active = self._active(b["type"])
         stations = [dict(s, st="todo") for s in cat["stations"]]
         if active and stations:
             k = min(len(stations) - 1, max(1, round(active["pct"] / 100 * (len(stations) - 1))))
@@ -206,6 +209,14 @@ class World:
         job = self._job(b, active)
         return base | {"job": job, "stations": stations, "active_line": active["line_id"] if active else None,
                        "repos": self.town.depots.all() if b["type"] == "depot" else None}
+
+    def job(self, b: dict) -> str:
+        """What a building is doing, in a line."""
+        return self._mill(b)["job"] if b["type"] == "mill" else self._job(b, self._active(b["type"]))
+
+    def _active(self, btype: str) -> dict | None:
+        return self.db.one("select s.*, l.title, l.seq from stages s join lines l on l.id = s.line_id"
+                           " where s.building = ? and s.status = 'run' order by s.started_at desc limit 1", btype)
 
     def _goods(self, pairs: list) -> list[list[str]]:
         out = []

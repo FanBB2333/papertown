@@ -507,6 +507,23 @@ class Agents:
                     self._set(a["id"], status=status, model=model)
                     if not x:
                         self._event(a["id"], "note", {"text": "Paseo 里找不到这个 agent 了（可能被删除或归档）。"})
+                if status == "idle":
+                    self.release(a["id"])
+
+    def release(self, agent_id: str) -> None:
+        """Send a Paseo agent that is done the oldest message that was queued for it."""
+        a = self.get(agent_id)
+        row = self.db.one("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1"
+                          " order by id limit 1", agent_id)
+        if not a or not row or not a.get("ext_id"):
+            return
+        try:
+            self.paseo.send(a["ext_id"], row["data"]["text"])
+        except PaseoError:
+            return  # it stays queued and goes with the next look
+        self.db.update("agent_events", {"id": row["id"]}, data=row["data"] | {"delivered": True, "held": False})
+        self.town.bus.publish("agent_event", event=self.db.one("select * from agent_events where id = ?", row["id"]))
+        self._set(agent_id, status="working")
 
     def stop(self, agent_id: str) -> dict:
         a = self.get(agent_id)
@@ -532,7 +549,10 @@ class Agents:
 
     # ---------- talking to it ----------
 
-    def say(self, agent_id: str, text: str) -> dict:
+    def say(self, agent_id: str, text: str, mode: str | None = None) -> dict:
+        """A message from the web. While the agent works, `mode` says how it gets there: "steer"
+        puts it into what the agent is doing, "queue" holds it until the agent is done; without
+        one each runtime keeps its own way (pi queues, Paseo steers)."""
         a = self.get(agent_id)
         if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")
@@ -542,12 +562,15 @@ class Agents:
         if a.get("runtime") == "paseo":
             if not a.get("ext_id"):
                 raise AgentError("先在 Paseo 里启动它")
+            busy = a["status"] == "working"
+            if busy and mode == "queue":  # Paseo has no queue of its own: the watcher sends it once the agent is idle
+                return self._event(agent_id, "user", {"text": text, "origin": "web", "delivered": False, "queued": True, "held": True})
             try:
                 self.paseo.send(a["ext_id"], text)
             except PaseoError as e:
                 raise AgentError(str(e)) from e
             self._set(agent_id, status="working")
-            return self._event(agent_id, "user", {"text": text, "origin": "web", "delivered": True})
+            return self._event(agent_id, "user", {"text": text, "origin": "web", "delivered": True, "steered": busy})
         if text.startswith("/") and len(text) > 1 and not text[1:2].isspace():
             return self._command(a, text)
         running = self.alive(a)
@@ -556,7 +579,7 @@ class Agents:
         with self._lock:
             self._seq += 1
             mid = self._seq
-            self._inbox.setdefault(agent_id, []).append({"id": mid, "text": text})
+            self._inbox.setdefault(agent_id, []).append({"id": mid, "text": text, "mode": mode})
         ev = self._event(agent_id, "user", {"text": text, "origin": "web", "mid": mid, "delivered": False})
         if not running:
             self.start(agent_id)
@@ -665,7 +688,8 @@ class Agents:
                     row = self.db.one("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.mid') = ?"
                                       " order by id desc limit 1", agent_id, mid)
                     if row:
-                        self.db.update("agent_events", {"id": row["id"]}, data=row["data"] | {"delivered": True, "queued": bool(e.get("queued"))})
+                        self.db.update("agent_events", {"id": row["id"]}, data=row["data"] | {"delivered": True, "queued": bool(e.get("queued")),
+                                                                                              "steered": bool(e.get("steered"))})
                         self.town.bus.publish("agent_event", event=self.db.one("select * from agent_events where id = ?", row["id"]))
             elif t == "note":
                 self._event(agent_id, "note", {"text": e.get("text", ""), "error": bool(e.get("error"))})

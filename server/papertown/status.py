@@ -7,11 +7,16 @@ from typing import TYPE_CHECKING
 
 from .library import expand, tokens
 from .pipeline import NAMES
+from .world import ASK_ROLE
 
 if TYPE_CHECKING:
     from .town import Town
 
 ACTIVE = ("hatching", "waiting", "running", "paused")
+# the departments the chat shows at a glance, in the order a paper passes through them,
+# and the staff agents who work in one
+DEPARTMENTS = ("hatchery", "market", "mill", "depot", "farm", "power", "press", "qa", "library")
+STAFF = {"coder": "depot", "writer": "press"}
 KINDS = [("RAG", "检索"), ("MCP", "外部工具"), ("SKILL", "加载 skill"), ("SCRIPT", "skill 脚本"), ("GRAPH", "图谱扩展"),
          ("TOOL", "内部工具"), ("LLM", "模型调用")]
 
@@ -38,6 +43,51 @@ def running(town: "Town") -> list[dict]:
         cur = snap["current"] or next((s for s in reversed(snap["stages"]) if s["status"] == "done"), snap["stages"][0])
         out.append({"id": snap["id"], "seq": snap["seq"], "title": snap["title"], "status": snap["status"],
                     "stage": cur["name"], "building": cur["building"], "pct": snap["pct"], "mill_id": snap["mill_id"]})
+    return out
+
+
+def departments(town: "Town") -> list[dict]:
+    """What each department is doing: the projects at it, the staff agents and jobs in it, and
+    who answers when you ask it something."""
+    at: dict[str, dict[str, dict]] = {}
+    for r in running(town):
+        at.setdefault(r["building"], {})[r["id"]] = {k: r[k] for k in ("id", "seq", "title", "status", "stage", "pct")}
+    # a project linked in from your own repositories can be at work in several places at once
+    for s in town.db.q("select s.building, s.key, s.status as st, s.pct, l.id, l.seq, l.title, l.status from stages s"
+                       " join lines l on l.id = s.line_id where s.status in ('run', 'wait') and l.status not in ('dropped', 'done')"):
+        at.setdefault(s["building"], {}).setdefault(s["id"], {"id": s["id"], "seq": s["seq"], "title": s["title"], "stage": NAMES.get(s["key"], s["key"]),
+                                                             "status": "waiting" if s["st"] == "wait" else s["status"], "pct": s["pct"]})
+    staff: dict[str, list[dict]] = {}
+    seqs = {r["id"]: r["seq"] for r in town.db.q("select id, seq from lines")}
+    for a in town.db.q("select * from agents where role in ('coder', 'writer') and runtime is not null order by updated_at desc"):
+        p = town.agents.public(a)
+        last = p["last"] or {}
+        staff.setdefault(STAFF[a["role"]], []).append(
+            {k: p[k] for k in ("id", "role", "name", "status", "runtime", "line_id", "model", "started", "cost", "updated_at")}
+            | {"seq": seqs.get(a["line_id"]), "last": {"kind": last.get("kind"), "text": str((last.get("data") or {}).get("text") or "")[:200]} if last else None})
+    jobs = [j for j in town.linked.farm_jobs() + town.farm.list(limit=100) if j["status"] in ("queued", "running")]
+    nv = town.nvidb.status()
+    out = []
+    for t in DEPARTMENTS:
+        b = town.world.get(t)
+        if not b:
+            continue
+        lines = sorted(at.get(t, {}).values(), key=lambda x: -x["seq"])
+        agents = sorted(staff.get(t, []), key=lambda x: x["status"] != "working")
+        mine = [{k: j[k] for k in ("id", "name", "status", "progress", "line_id", "backend")} for j in jobs] if t == "farm" else []
+        busy = (b["status"] == "busy" or any(x["status"] in ("running", "hatching") for x in lines)
+                or any(x["status"] in ("working", "starting") for x in agents) or any(j["status"] == "running" for j in mine)
+                or (t == "power" and nv["ok"] and (nv.get("counts") or {}).get("running", 0) > 0))
+        state = ("wait" if any(x["status"] == "waiting" for x in lines) else "busy" if busy
+                 else "off" if t == "power" and not nv["ok"] else "idle")
+        w = next(iter(town.market.best(ASK_ROLE.get(t, "scout"))), None)
+        meta = town.world.types[t]
+        d = town.world.districts[meta["district"]]
+        sm = nv.get("summary") if t == "power" and nv["ok"] else None
+        out.append({"id": b["id"], "type": t, "name": town.world.name(b), "district": d["name"], "color": d["color"],
+                    "state": state, "job": town.world.job(b), "lines": lines, "agents": agents, "jobs": mine,
+                    "gpus": {"total": sm["gpus"], "idle": sm["idle"], "running": (nv.get("counts") or {}).get("running", 0)} if sm else None,
+                    "worker": {"id": w["id"], "role": w["role"], "level": w["level"]} if w else None})
     return out
 
 

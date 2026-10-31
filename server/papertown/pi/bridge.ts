@@ -254,7 +254,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		},
 	});
 
-	function deliver(m: { id: number; kind?: string; text?: string; name?: string; args?: string }) {
+	function deliver(m: { id: number; kind?: string; text?: string; name?: string; args?: string; mode?: string | null }) {
 		if (m.kind === "abort") {
 			ctx?.abort();
 			send({ t: "delivered", ids: [m.id] });
@@ -266,9 +266,11 @@ export default function papertownBridge(pi: ExtensionAPI) {
 			return;
 		}
 		if (!m.text) return;
+		// while pi works a message either steers what it is doing or waits until it is done
 		const idle = ctx?.isIdle() ?? true;
-		void pi.sendUserMessage(m.text, idle ? undefined : { deliverAs: "followUp" });
-		send({ t: "delivered", ids: [m.id], queued: !idle });
+		const steer = m.mode === "steer";
+		void pi.sendUserMessage(m.text, idle ? undefined : { deliverAs: steer ? "steer" : "followUp" });
+		send({ t: "delivered", ids: [m.id], queued: !idle && !steer, steered: !idle && steer });
 	}
 
 	async function poll() {
