@@ -70,9 +70,10 @@ export function Survey(p: Props) {
         <section className="sv-tldr t-ok">
           <span className="sv-verdict">{tr('本地项目')}</span>
           <div>
-            <p className="sv-line">{lp.title ?? l.title}</p>
-            <span className="muted small">{[lp.sections?.length && tr('{0} 节', lp.sections.length), lp.figures && tr('{0} 张图', lp.figures), lp.tables && tr('{0} 张表', lp.tables),
-              lp.words && tr('约 {0} 词', lp.words), lp.bib && tr('{0} 条参考文献', lp.bib)].filter(Boolean).join(' · ')}</span>
+            <p className="sv-line">{[lp.sections?.length && tr('{0} 节', lp.sections.length), lp.figures && tr('{0} 张图', lp.figures), lp.tables && tr('{0} 张表', lp.tables),
+              lp.words && tr('约 {0} 词', lp.words), lp.bib && tr('{0} 条参考文献', lp.bib)].filter(Boolean).join(' · ') || tr('论文还是空的')}</p>
+            {/* the project's title is in the path bar; the paper's own, only when it says something else */}
+            {lp.title && lp.title !== l.title && <span className="muted small">{lp.title}</span>}
           </div>
         </section>
       ) : (

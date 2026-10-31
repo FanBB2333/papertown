@@ -1912,5 +1912,6 @@
  "已花 {0} / {1}": "Spent {0} of {1}",
  "GPU 小时": "GPU hours",
  "这段时间里这个项目的任务占卡的时长，按卡数累加": "How long this project's jobs held GPUs in this period, counted per card",
- "返回 {0} 篇 · 召回 {1} 篇候选再打分 · {2}": "Returns {0} · scores {1} full-text candidates · {2}"
+ "返回 {0} 篇 · 召回 {1} 篇候选再打分 · {2}": "Returns {0} · scores {1} full-text candidates · {2}",
+ "论文还是空的": "The paper is still empty"
 }
