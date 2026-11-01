@@ -23,7 +23,7 @@ from textual.widgets import ContentSwitcher, DataTable, Static, TextArea
 from ..anim import bar, clock, dur, gleam, seconds_since
 from ..client import ApiError
 from ..look import JOB, LINE, STAGE, clip, job_mark, job_state, line_mark, money, size, stage_mark
-from ..widgets import Confirm, Pane, Place, Prompt, row_key, sync_rows
+from ..widgets import Bar, Confirm, Pane, Place, Prompt, row_key, sync_rows
 
 TABS = [("overview", "概览"), ("survey", "调研"), ("code", "代码"), ("exp", "实验"), ("paper", "论文"), ("files", "文件"), ("team", "员工")]
 FILTERS = [("all", "全部"), ("active", "在做的"), ("waiting", "等你决定"), ("done", "已出厂")]
@@ -83,10 +83,10 @@ class Projects(Place):
     def compose(self) -> ComposeResult:
         with Horizontal():
             with Vertical(id="pj-left", classes="list-col"):
-                yield Static(id="pj-filter", classes="chips")
+                yield Bar(id="pj-filter", classes="chips")
                 yield DataTable(id="pj-table", cursor_type="row", zebra_stripes=False)
             with Vertical(id="pj-right", classes="detail-col"):
-                yield Static(id="pj-tabs", classes="tabs")
+                yield Bar(id="pj-tabs", classes="tabs")
                 with ContentSwitcher(id="pj-panes", initial="overview"):
                     yield Pane(id="overview")
                     with Vertical(id="survey"):

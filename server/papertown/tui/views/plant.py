@@ -17,7 +17,7 @@ from textual.widgets import DataTable, Static
 
 from ..anim import Tween, bar, dur, seconds_since, spark, star
 from ..look import JOB, clip, gb, job_mark, job_state
-from ..widgets import Pane, Place, row_key, sync_rows
+from ..widgets import Bar, Pane, Place, row_key, sync_rows
 
 STATE = {"full": "满", "idle": "空闲", "room": "有空", "busy": "忙"}
 
@@ -34,7 +34,7 @@ class Plant(Place):
         self.fill: dict[str, Tween] = {}  # each card's memory bar, easing to its value
 
     def compose(self) -> ComposeResult:
-        yield Static(id="pl-sum", classes="chips")
+        yield Bar(id="pl-sum", classes="chips")
         with Horizontal():
             with Vertical(classes="detail-col wide"):
                 yield Pane(id="pl-nodes")

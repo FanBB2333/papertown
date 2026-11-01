@@ -136,6 +136,12 @@ def writing(live: tuple[str, float, float] | None, t: float, p: dict[str, str]) 
     return [Text.assemble((star(t) + " ", f"bold {p['run']}"), (f"在写（{dur(time.time() - since)}）", p["muted"])), Padding(body, (0, 0, 0, 2))]
 
 
+class Bar(Static):
+    """a piece of the interface itself (tabs, filters, hints): clicked, never selected as text"""
+
+    ALLOW_SELECT = False
+
+
 class Pane(VerticalScroll):
     """a scrolling page of rich text"""
 

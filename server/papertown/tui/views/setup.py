@@ -18,7 +18,7 @@ from textual.widgets import ContentSwitcher, DataTable, Static
 from ..anim import bar, breathe, mix
 from ..client import ApiError
 from ..look import clip
-from ..widgets import Confirm, Form, Pane, Place, Prompt, row_key, sync_rows
+from ..widgets import Bar, Confirm, Form, Pane, Place, Prompt, row_key, sync_rows
 
 PAGES = [("skills", "技能"), ("mcp", "MCP"), ("library", "图书馆"), ("models", "模型")]
 
@@ -44,7 +44,7 @@ class Setup(Place):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static(id="su-tabs", classes="tabs")
+            yield Bar(id="su-tabs", classes="tabs")
             with ContentSwitcher(id="su-pages", initial="skills"):
                 with Horizontal(id="skills"):
                     yield DataTable(id="su-skills", cursor_type="row", classes="list-col")

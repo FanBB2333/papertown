@@ -18,7 +18,7 @@ from textual.widgets import ContentSwitcher, Static
 from ..anim import clock, mix
 from ..client import ApiError
 from ..look import clip
-from ..widgets import Pane, Place, Prompt, transcript, writing
+from ..widgets import Bar, Pane, Place, Prompt, transcript, writing
 
 PAGES = [("town", "小镇"), ("assistant", "小助手")]
 
@@ -42,7 +42,7 @@ class Chat(Place):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static(id="ch-tabs", classes="tabs")
+            yield Bar(id="ch-tabs", classes="tabs")
             with ContentSwitcher(id="ch-pages", initial="town"):
                 yield Pane(id="town")
                 yield Pane(id="assistant")

@@ -23,7 +23,7 @@ from .anim import Glow, Tween, breathe, dur, gleam, mix, parse_ts, star
 from .client import Api, ApiError, LocalServer
 from .local import Local
 from .look import PALETTES, clip, doing, themes
-from .widgets import Help, Place
+from .widgets import Bar, Help, Place
 
 # the events after which the numbers and the lists are fetched again, as the page does
 TICK = {"line", "world", "building", "bank", "power", "workers", "library", "skills", "job", "agent"}
@@ -42,6 +42,8 @@ class Target:
 
 
 class Masthead(Static):
+    ALLOW_SELECT = False  # the town's chrome: clicking it never selects its words
+
     def __init__(self) -> None:
         super().__init__(id="masthead")
         self.n = {k: Tween() for k in ("running", "waiting", "total", "week", "gpus", "idle")}
@@ -103,6 +105,8 @@ class Masthead(Static):
 class Ribbon(Static):
     """What the town is doing right now: a turning star and a gleam along the words while it works,
     the time it has been at it, and the star warming to red when the stream has been quiet too long."""
+
+    ALLOW_SELECT = False
 
     def __init__(self) -> None:
         super().__init__(id="ribbon")
@@ -170,6 +174,8 @@ PLACES = [("projects", "项目"), ("jobs", "任务"), ("plant", "电厂"), ("sta
 class Nav(Static):
     """the places, with a number to jump to each and what is going on there"""
 
+    ALLOW_SELECT = False  # a quick second or third click would otherwise select every place
+
     def __init__(self) -> None:
         super().__init__(id="nav")
 
@@ -230,7 +236,7 @@ class Composer(Horizontal):
 
     def __init__(self) -> None:
         super().__init__(id="composer")
-        self.label = Static(id="target")
+        self.label = Bar(id="target")
         self.box = SayBox(id="say", placeholder="写一个新 idea，Enter 发出去")
 
     def compose(self) -> ComposeResult:
@@ -247,7 +253,7 @@ class Splash(Screen):
         super().__init__(id="splash")
         self.status = "正在连接…"
         self.error: str | None = None
-        self.mark = Static(id="splash-mark")
+        self.mark = Bar(id="splash-mark")
 
     def compose(self) -> ComposeResult:
         with Middle():
@@ -296,7 +302,7 @@ class Main(Screen):
             with ContentSwitcher(id="places", initial="projects"):
                 yield from self.places
         yield Composer()
-        yield Static(id="hints")
+        yield Bar(id="hints")
 
 
 class Papertown(App):

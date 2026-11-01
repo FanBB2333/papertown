@@ -21,7 +21,7 @@ from textual.widgets import DataTable, Static
 from ..anim import bar, clock, dur, gleam, parse_ts, seconds_since
 from ..client import ApiError
 from ..look import BACKEND, JOB, clip, job_mark, job_state
-from ..widgets import Confirm, Form, Pane, Place, Prompt, row_key, sync_rows
+from ..widgets import Bar, Confirm, Form, Pane, Place, Prompt, row_key, sync_rows
 
 STATES = [("all", "全部"), ("running", "在跑"), ("queued", "排队"), ("done", "完成"), ("failed", "失败"), ("cancelled", "已取消")]
 
@@ -44,7 +44,7 @@ class Jobs(Place):
         self._polled = 0.0
 
     def compose(self) -> ComposeResult:
-        yield Static(id="jb-filter", classes="chips")
+        yield Bar(id="jb-filter", classes="chips")
         with Horizontal():
             with Vertical(classes="list-col wide"):
                 yield DataTable(id="jb-table", cursor_type="row")
