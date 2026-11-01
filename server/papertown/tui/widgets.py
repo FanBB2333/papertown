@@ -146,8 +146,9 @@ class Pane(VerticalScroll):
     def compose(self) -> ComposeResult:
         yield self.body
 
-    def show(self, renderable: Any) -> None:
-        self.body.update(renderable)
+    def show(self, renderable: Any, layout: bool = True) -> None:
+        # layout=False when only the look changes (a turning star, a gleam), not how many lines there are
+        self.body.update(renderable, layout=layout)
 
 
 class Prompt(ModalScreen[str | None]):

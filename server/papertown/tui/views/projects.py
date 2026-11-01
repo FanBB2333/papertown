@@ -171,7 +171,7 @@ class Projects(Place):
             chips.append(" ")
         if self.search:
             chips.append(f"  /{self.search}", style=p["brand"])
-        self.query_one("#pj-filter", Static).update(chips)
+        self.query_one("#pj-filter", Static).update(chips, layout=False)
         if self.sel is None and table.row_count:
             self.sel = row_key(table)
 
@@ -181,6 +181,8 @@ class Projects(Place):
             await self.load_line(self.sel)
 
     def tick(self, t: float) -> None:
+        if not self.town.beat:
+            return
         table = self.query_one("#pj-table", DataTable)
         # only the cells that move are redrawn: the marks of what works or waits, and rows still glowing
         moving = {ln["id"] for ln in self.town.lines if ln["status"] in ("running", "hatching", "waiting")}
@@ -193,7 +195,7 @@ class Projects(Place):
                     except Exception:
                         pass
         if self.tab == "overview" and self.line and any(s["status"] in ("run", "wait") for s in self.line.get("stages", [])):
-            self.paint_overview()
+            self.paint_overview(layout=False)
         self.paint_tabs()
 
     def on_town_event(self, ev: dict) -> None:
@@ -234,7 +236,7 @@ class Projects(Place):
             out.append(f" {label} ", style=f"bold {p['brand']} underline" if on else p["muted"])
             out.append(" ")
         out.append("   [ ] 翻页", style=p["faint"])
-        self.query_one("#pj-tabs", Static).update(out)
+        self.query_one("#pj-tabs", Static).update(out, layout=False)
 
     def action_tab(self, step: int) -> None:
         keys = [k for k, _ in TABS]
@@ -302,7 +304,7 @@ class Projects(Place):
         out.append(f" {LINE.get(ln.get('status', ''), ln.get('status', ''))}", style=p["muted"])
         return out
 
-    def paint_overview(self) -> None:
+    def paint_overview(self, layout: bool = True) -> None:
         ln, p, t = self.line, self.pal, self.town.t
         if not ln:
             return
@@ -366,7 +368,7 @@ class Projects(Place):
             parts.append(Text())
             for k, v in facts:
                 parts.append(Text.assemble((f"{k}  ", p["muted"]), (clip(v, 200), p["ink"])))
-        self.query_one("#overview", Pane).show(Padding(Group(*parts), (1, 2)))
+        self.query_one("#overview", Pane).show(Padding(Group(*parts), (1, 2)), layout=layout)
 
     def paint_survey(self) -> None:
         p = self.pal

@@ -77,7 +77,7 @@ class Setup(Place):
             out.append(f" {label} ", style=f"bold {p['brand']} underline" if k == self.page else p["muted"])
             out.append(" ")
         out.append("   [ ] 换页", style=p["faint"])
-        self.query_one("#su-tabs", Static).update(out)
+        self.query_one("#su-tabs", Static).update(out, layout=False)
 
     async def load(self) -> None:
         self.paint_tabs()
@@ -234,7 +234,7 @@ class Setup(Place):
     # ---------- the clock, keys ----------
 
     def tick(self, t: float) -> None:
-        if self.page == "mcp":
+        if self.page == "mcp" and self.town.beat:
             table = self.query_one("#su-mcp", DataTable)
             for s in self.servers():
                 if s.get("enabled") and s.get("state") not in ("ok", "error"):
@@ -258,12 +258,12 @@ class Setup(Place):
     def context(self) -> dict[str, Any]:
         return {"building": {"skills": "academy", "mcp": "exchange", "library": "library"}.get(self.page)}
 
-    async def action_page(self, step: int) -> None:
+    def action_page(self, step: int) -> None:
         keys = [k for k, _ in PAGES]
         self.page = keys[(keys.index(self.page) + step) % len(keys)]
         self.query_one("#su-pages", ContentSwitcher).current = self.page
         self.town.paint_hints()
-        await self.load()
+        self.run_worker(self.load(), exclusive=True, group="su-page", exit_on_error=False)
 
     async def _post(self, path: str, body: Any, done: str) -> None:
         try:

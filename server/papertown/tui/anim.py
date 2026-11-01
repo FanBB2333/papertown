@@ -17,7 +17,8 @@ BLOCKS = " ▏▎▍▌▋▊▉█"
 SPARK = "▁▂▃▄▅▆▇█"
 
 
-def star(t: float, speed: float = 8) -> str:
+def star(t: float, speed: float = 4) -> str:
+    # 4 glyphs a second suits what repaints on the beat (3 frames); the 12 fps strips ask for 8
     return FRAMES[int(t * speed) % len(FRAMES)]
 
 

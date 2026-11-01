@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import subprocess
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -24,12 +25,22 @@ class Local:
         self.nvidb = Nvidb(self.s)  # keeps its own trend of each card, from its own readings
         self.skim = Skim(SimpleNamespace(s=self.s))
         self.skills = SkillRegistry(self.s.skills_dir)
+        self._halt = threading.Event()
 
     def start(self) -> None:
         self.nvidb.start()  # `nvidb queue status --json --no-tick` every few seconds, as long as the TUI runs
+        if self.nvidb._usable():
+            threading.Thread(target=self._keep_history, daemon=True, name="nvidb-history").start()
 
     def stop(self) -> None:
         self.nvidb.stop()
+        self._halt.set()
+
+    def _keep_history(self) -> None:
+        # `nvidb job ls -n 1000` takes seconds: read it here ahead of time, so the jobs page finds it ready
+        while not self._halt.is_set():
+            self.nvidb.history()  # re-reads only once the last reading is old
+            self._halt.wait(5)
 
     # ---------- nvidb ----------
 

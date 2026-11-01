@@ -49,6 +49,7 @@ class Jobs(Place):
             with Vertical(classes="list-col wide"):
                 yield DataTable(id="jb-table", cursor_type="row")
             with Vertical(classes="detail-col"):
+                yield Static(id="jb-head", classes="note")
                 yield Pane(id="jb-detail")
 
     def on_mount(self) -> None:
@@ -63,9 +64,19 @@ class Jobs(Place):
         except ApiError:
             return
         own = [j for j in r.get("jobs", []) if not j.get("external")]  # a server from before external=false still sends them
-        self.jobs = await self.town.local.nvidb_jobs(self.town.lines) + own
         self.backends = r.get("backends", [])
+        # the farm's at once, with nvidb's last reading; then nvidb's as read now. The first time there is no
+        # last reading: wait for both, or the cursor would settle on a farm job before nvidb's running ones come in
+        last = [j for j in self.jobs if j.get("backend") == "nvidb"]
+        if last:
+            self.jobs = last + own
+            self.paint_list()
+        self.jobs = await self.town.local.nvidb_jobs(self.town.lines) + own
         self.paint_list()
+        table = self.query_one("#jb-table", DataTable)
+        if self.sel is None and table.row_count:  # the top row once the whole list is in: what runs comes first
+            table.move_cursor(row=0)
+            self.sel = row_key(table)
         if self.sel:
             await self.load_detail(self.sel)
 
@@ -123,21 +134,17 @@ class Jobs(Place):
         chips.append("全部" if self.project == "all" else self.seq(self.project), style=p["brand"])
         if self.search:
             chips.append(f"   /{self.search}", style=p["brand"])
-        self.query_one("#jb-filter", Static).update(chips)
-        if self.sel is None and table.row_count:
-            self.sel = row_key(table)
-            self.fetch(self.sel)
+        self.query_one("#jb-filter", Static).update(chips, layout=False)
 
     def tick(self, t: float) -> None:
+        if not self.town.beat:
+            return
         table = self.query_one("#jb-table", DataTable)
-        for j in self.visible()[:500]:
-            if job_state(j.get("status")) == "running":
-                try:
-                    table.update_cell(j["id"], "mark", job_mark("running", t, self.pal))
-                except Exception:
-                    pass
+        for j in self.jobs:
+            if job_state(j.get("status")) == "running" and j["id"] in table.rows:
+                table.update_cell(j["id"], "mark", job_mark("running", t, self.pal))
         if self.detail and job_state(self.detail.get("status")) == "running":
-            self.paint_detail()
+            self.paint_head(layout=False)  # only the lines that move: the command and the log stay as drawn
             # a running job's log, followed every couple of seconds (nvidb's every few: it is two commands)
             if self.follow and t - self._polled > (5 if str(self.detail["id"]).startswith("nvidb-") else 2):
                 self._polled = t
@@ -179,11 +186,12 @@ class Jobs(Place):
         self.detail = self.detail or next((j for j in self.jobs if j["id"] == job_id), None)
         self.paint_detail()
 
-    def paint_detail(self) -> None:
+    def paint_head(self, layout: bool = True) -> None:
+        """the top of the detail, which moves while a job runs: its mark, name, progress and time"""
         p, t, j = self.pal, self.town.t, self.detail
-        pane = self.query_one("#jb-detail", Pane)
+        box = self.query_one("#jb-head", Static)
         if not j:
-            pane.show(Text("没有任务" if not self.jobs else "", style=p["muted"]))
+            box.update(Text("没有任务" if not self.jobs else "", style=p["muted"]), layout=layout)
             return
         st = job_state(j.get("status"))
         head = Text()
@@ -205,6 +213,17 @@ class Jobs(Place):
         elif st == "running":
             times.append(f"已跑 {dur(seconds_since(j.get('started_at')))}")
         parts.append(Text(" · ".join(times), style=p["muted"]))
+        box.update(Group(*parts), layout=layout)
+
+    def paint_detail(self) -> None:
+        p, j = self.pal, self.detail
+        self.paint_head()
+        pane = self.query_one("#jb-detail", Pane)
+        if not j:
+            pane.show(Text(""))
+            return
+        st = job_state(j.get("status"))
+        parts: list[Any] = []
         if j.get("note"):
             parts.append(Text(j["note"], style=p["warn"] if st in ("failed", "queued") else p["ink"]))
         nv = j.get("nvidb") or {}

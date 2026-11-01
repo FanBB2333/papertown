@@ -69,7 +69,7 @@ class Chat(Place):
             out.append(f"   项目：{'全部' if not self.project else self.seq(self.project)}", style=p["faint"])
             out.append("   调用记录：" + ("显示" if self.trace else "不显示"), style=p["faint"])
         out.append("   [ ] 换页", style=p["faint"])
-        self.query_one("#ch-tabs", Static).update(out)
+        self.query_one("#ch-tabs", Static).update(out, layout=False)
 
     def seq(self, line_id: str | None) -> str:
         ln = next((x for x in self.town.lines if x["id"] == line_id), None)
@@ -110,7 +110,7 @@ class Chat(Place):
                     x.stylize(f"on {mix(p['bg'], p['brand'], glow * 0.3)}")
         return lines
 
-    def paint_town(self, scroll: bool = False) -> None:
+    def paint_town(self, scroll: bool = False, layout: bool = True) -> None:
         p, t = self.pal, self.town.t
         rows: list[tuple[str, dict]] = [(m.get("ts") or "", {"m": m}) for m in self.town.messages if not self.project or m.get("line_id") == self.project]
         if self.trace:
@@ -128,7 +128,7 @@ class Chat(Place):
             parts = [Text("还没有对话。在底下的框里写一个 idea，或者问哪个部门在做什么。", style=p["muted"])]
         pane = self.query_one("#town", Pane)
         bottom = pane.scroll_offset.y >= pane.max_scroll_y - 2
-        pane.show(Padding(Group(*parts), (0, 1)))
+        pane.show(Padding(Group(*parts), (0, 1)), layout=layout)
         if scroll or bottom:
             pane.scroll_end(animate=False)
         self.seen = len(self.town.messages)
@@ -159,8 +159,12 @@ class Chat(Place):
         pane.scroll_end(animate=False)
 
     def tick(self, t: float) -> None:
-        if self.page == "town" and (len(self.town.messages) != self.seen or self.town.glow.live):
+        if not self.town.beat:
+            return
+        if self.page == "town" and len(self.town.messages) != self.seen:
             self.paint_town()
+        elif self.page == "town" and self.town.glow.live:  # new ones fading in: the same lines, other colours
+            self.paint_town(layout=False)
         elif self.page == "assistant" and "assistant" in self.town.streaming:
             self.paint_assistant()
 
@@ -192,13 +196,13 @@ class Chat(Place):
     def context(self) -> dict[str, Any]:
         return {"line": self.project} if self.project else {}
 
-    async def action_page(self) -> None:
+    def action_page(self) -> None:
         self.page = "assistant" if self.page == "town" else "town"
         self.query_one("#ch-pages", ContentSwitcher).current = self.page
         if self.page == "assistant":
             self.town.target_i = next((i for i, x in enumerate(self.town.targets) if x.kind == "assistant"), self.town.target_i)
         self.town.paint_hints()
-        await self.load()
+        self.run_worker(self.load(), exclusive=True, group="ch-page", exit_on_error=False)
 
     def action_trace(self) -> None:
         self.trace = not self.trace

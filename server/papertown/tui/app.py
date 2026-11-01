@@ -76,7 +76,7 @@ class Masthead(Static):
         if hud:
             right.append(" 离线模式 " if hud.get("offline") else f" {hud.get('provider', '')} ", style=f"{p['warn'] if hud.get('offline') else p['ok']} on {p['raised']}")
             right.append("  ")
-        right.append("● " if town.online else f"{star(t)} ", style=p["ok"] if town.online else p["bad"])
+        right.append("● " if town.online else f"{star(t, 8)} ", style=p["ok"] if town.online else p["bad"])
         right.append("已连接" if town.online else "重连中", style=p["muted"])
         right.append(f"  {datetime.now():%H:%M} ", style=p["muted"])
         pad = max(1, self.size.width - out.cell_len - right.cell_len)
@@ -97,7 +97,7 @@ class Masthead(Static):
             self.n["idle"].set(town.gpu_summary.get("idle", 0))
         for tw in self.n.values():
             tw.step(dt)
-        self.update(self.line(t))
+        self.update(self.line(t), layout=False)  # one line, always: no layout pass at 12 fps
 
 
 class Ribbon(Static):
@@ -139,7 +139,7 @@ class Ribbon(Static):
             out.append(star(t, 10), style=f"bold {p['bad']}")
             out.append(" ")
             out.append_text(gleam(f"连不上 {town.api.base}，正在重连…", t, p["bad"], p["hi"]))
-            self.update(out)
+            self.update(out, layout=False)
             return
         acts = self.activities()
         if not acts:
@@ -150,18 +150,18 @@ class Ribbon(Static):
             out.append(" 写一个 idea，", style=p["faint"])
             out.append("?", style=f"bold {p['brand']}")
             out.append(" 看全部按键", style=p["faint"])
-            self.update(out)
+            self.update(out, layout=False)
             return
         # the first thing, turning over to the next every few seconds
         what, since = acts[int(t / 5) % len(acts)]
         quiet = time.time() - town.last_event
         color = mix(p["brand"], p["bad"], (quiet - 30) / 60) if quiet > 30 else p["brand"]
-        out.append(star(t), style=f"bold {color}")
+        out.append(star(t, 8), style=f"bold {color}")
         out.append(" ")
         out.append_text(gleam(what + "…", t, color, p["hi"]))
         more = f" · 另有 {len(acts) - 1} 处在忙" if len(acts) > 1 else ""
         out.append(f"  ({dur(time.time() - since)}{more})", style=p["muted"])
-        self.update(out)
+        self.update(out, layout=False)
 
 
 PLACES = [("projects", "项目"), ("jobs", "任务"), ("plant", "电厂"), ("staff", "员工"), ("chat", "对话"), ("daily", "日报"), ("setup", "配置")]
@@ -210,11 +210,11 @@ class Nav(Static):
                 row.stylize(f"on {p['raised']}")
             out.append_text(row)
             out.append("\n\n" if i < len(PLACES) - 1 else "\n")
-        self.update(out)
+        self.update(out, layout=False)
 
     def on_click(self, e: Any) -> None:
-        i = e.y // 2
-        if 0 <= i < len(PLACES):
+        i = (e.y - 1) // 2  # a line of padding on top, then a place every two lines (its own and the gap under it)
+        if e.y >= 1 and 0 <= i < len(PLACES):
             self.app.call_later(self.app.action_place, PLACES[i][0])  # type: ignore[attr-defined]
 
 
@@ -273,7 +273,7 @@ class Splash(Screen):
             out.append("q", style=f"bold {p['brand']}")
             out.append(" 退出", style=p["muted"])
         else:
-            out.append(star(t) + " ", style=f"bold {p['brand']}")
+            out.append(star(t, 8) + " ", style=f"bold {p['brand']}")
             out.append(self.status, style=p["muted"])
         self.mark.update(out)
 
@@ -345,6 +345,9 @@ class Papertown(App):
         self._last_frame = time.monotonic()
         self._sending = False
         self._focus: object = None
+        self.frames = 0
+        self.beat = False  # every third frame: the rate tables and pages animate at (the masthead, ribbon and nav run at 12 fps)
+        self._target: tuple | None = None
         for th in themes():
             self.register_theme(th)
         self.theme = "papertown"
@@ -485,6 +488,8 @@ class Papertown(App):
         now = time.monotonic()
         dt, self._last_frame = now - self._last_frame, now
         self.t = now - self.t0
+        self.frames += 1
+        self.beat = self.frames % 3 == 0
         if isinstance(self.screen, Splash):
             self.screen.frame(self.t)
             return
@@ -519,7 +524,8 @@ class Papertown(App):
         self.paint_hints()
         place = self.current
         place.focus_first()  # type: ignore[attr-defined]
-        await place.load()
+        # loading runs on its own, so the switch shows at once and keys keep working while it reads
+        self.run_worker(place.load(), group=f"load-{key}", exclusive=True, exit_on_error=False)
 
     def paint_hints(self) -> None:
         if not isinstance(self.screen, Main):
@@ -551,7 +557,10 @@ class Papertown(App):
     def action_theme(self) -> None:
         self.theme = "papertown-paper" if self.theme == "papertown" else "papertown"
 
-    async def action_reload(self) -> None:
+    def action_reload(self) -> None:
+        self.run_worker(self.reload(), group="reload", exclusive=True, exit_on_error=False)
+
+    async def reload(self) -> None:
         await self.refetch()
         await self.current.load()
         self.notify("已刷新")
@@ -592,13 +601,16 @@ class Papertown(App):
         p, tg = self.pal, self.target
         out = Text()
         sign = {"idea": "✎", "ask": "?", "adjust": "↻", "say": "→", "assistant": "✦"}[tg.kind]
-        out.append(star(self.t) if self._sending else sign, style=f"bold {p['brand']}")
+        out.append(star(self.t, 8) if self._sending else sign, style=f"bold {p['brand']}")
         out.append(f" {tg.label}", style=f"bold {p['ink']}")
         if tg.kind == "idea":
             out.append(f" · ${self.budget:.2f}", style=p["muted"])
         if tg.kind == "say":
             out.append(" · 插话" if self.say_mode == "steer" else " · 排队", style=p["muted"])
         out.append(" ❯ ", style=p["brand"])
+        if self._target == (out, tg.kind):  # the same as on screen: no repaint, and no layout (its width follows the words)
+            return
+        self._target = (out, tg.kind)
         try:
             self.screen.query_one("#target", Static).update(out)
             box = self.screen.query_one("#say", Input)

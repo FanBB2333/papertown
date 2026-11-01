@@ -45,7 +45,7 @@ class Daily(Place):
     def section(self, title: str) -> Text:
         return Text.assemble((title, f"bold {self.pal['brand']}"), (" " + "─" * 30, self.pal["faint"]))
 
-    def paint(self) -> None:
+    def paint(self, layout: bool = True) -> None:
         p, t, s, k = self.pal, self.town.t, self.s, self.grow.value
         if not s or s.get("error"):
             self.query_one("#dl-page", Pane).show(Text(s.get("error", "加载中…") if s else "加载中…", style=p["muted"]))
@@ -126,11 +126,13 @@ class Daily(Place):
             other += [self.section("技能"), Text("、".join(x["name"] for x in skills), style=p["muted"]), Text()]
         if side or other:
             parts.append(Columns([Group(*side), Group(*other)], expand=True, equal=True, padding=(0, 4)))
-        self.query_one("#dl-page", Pane).show(Padding(Group(*parts), (1, 3)))
+        self.query_one("#dl-page", Pane).show(Padding(Group(*parts), (1, 3)), layout=layout)
 
     def tick(self, t: float) -> None:
-        if self.grow.step(1 / 12) or any(x.get("status") in ("running", "hatching", "waiting") for x in self.s.get("projects") or []):
-            self.paint()
+        if not self.town.beat:
+            return
+        if self.grow.step(3 / 12) or any(x.get("status") in ("running", "hatching", "waiting") for x in self.s.get("projects") or []):
+            self.paint(layout=False)  # bars growing, marks turning: the page keeps its lines
 
     def hints(self) -> list[tuple[str, str]]:
         return [("o", "在浏览器里看")]

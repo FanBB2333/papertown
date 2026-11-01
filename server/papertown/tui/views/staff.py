@@ -35,6 +35,8 @@ class Staff(Place):
         self.timeline: dict | None = None
         self.roster: list[dict] = []
         self._polled = 0.0
+        self._tx: tuple[Any, list[Any]] = (None, [])  # the conversation as drawn, kept until it changes (Markdown is slow to build)
+        self._shown: tuple[str, str] | None = None  # what the detail pane shows now
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -91,7 +93,10 @@ class Staff(Place):
         kind, key = self.sel
         try:
             if kind == "agent":
-                self.timeline = await self.town.api.get(f"/api/agents/{key}/timeline", limit=200)
+                tl = await self.town.api.get(f"/api/agents/{key}/timeline", limit=200)
+                if tl == self.timeline and self._shown == self.sel:  # read again every few seconds: nothing new, nothing to redraw
+                    return
+                self.timeline = tl
             elif key == "market":
                 self.roster = await self.town.api.get("/api/workers")
         except ApiError as e:
@@ -130,12 +135,13 @@ class Staff(Place):
     def paint_detail(self) -> None:
         if not self.sel:
             return
+        self._shown = self.sel
         if self.sel[0] == "agent":
             self.paint_agent()
         else:
             self.paint_dept()
 
-    def paint_dept(self) -> None:
+    def paint_dept(self, layout: bool = True) -> None:
         p, t = self.pal, self.town.t
         d = next((x for x in self.town.depts if x["id"] == self.sel[1]), None) if self.sel else None
         if not d:
@@ -172,9 +178,9 @@ class Staff(Place):
                            f"{w.get('trailing_roi') or 0:.1f}")
             parts.append(tb)
         parts += [Text(), Text.assemble(("i", f"bold {self.pal['brand']}"), (" 在底下的框里问这个部门", self.pal["faint"]))]
-        self.query_one("#st-detail", Pane).show(Padding(Group(*parts), (0, 1)))
+        self.query_one("#st-detail", Pane).show(Padding(Group(*parts), (0, 1)), layout=layout)
 
-    def paint_agent(self) -> None:
+    def paint_agent(self, layout: bool = True) -> None:
         p, t = self.pal, self.town.t
         tl = self.timeline or {}
         a = tl.get("agent") or next((x for x in self.agents() if self.sel and x["id"] == self.sel[1]), None) or {}
@@ -188,7 +194,11 @@ class Staff(Place):
         if a.get("cwd"):
             parts.append(Text(a["cwd"], style=p["faint"]))
         parts.append(Text())
-        parts += transcript((tl.get("items") or [])[-60:], p, self.town.theme == "papertown")
+        items = tl.get("items") or []
+        key = (id(tl), len(items), self.town.theme)
+        if self._tx[0] != key:
+            self._tx = (key, transcript(items[-60:], p, self.town.theme == "papertown"))
+        parts += self._tx[1]
         parts += writing(self.town.streaming.get(a["id"]), t, p)
         for q in (tl.get("paseo") or {}).get("permissions") or []:
             parts += [Text(), Text.assemble((" 它想" + ("运行命令" if q.get("name") == "Bash" else f"用 {q.get('name')}") + " ", f"bold {p['bg']} on {p['warn']}"),
@@ -198,10 +208,12 @@ class Staff(Place):
         if len(parts) <= 3:
             parts.append(Text("还没有对话", style=p["muted"]))
         pane = self.query_one("#st-detail", Pane)
-        pane.show(Padding(Group(*parts), (0, 1)))
+        pane.show(Padding(Group(*parts), (0, 1)), layout=layout)
         pane.scroll_end(animate=False)
 
     def tick(self, t: float) -> None:
+        if not self.town.beat:
+            return
         dt = self.query_one("#st-depts", DataTable)
         for d in self.town.depts:
             if d.get("state") in ("busy", "wait"):
@@ -217,8 +229,7 @@ class Staff(Place):
                 except Exception:
                     pass
         if self.sel and self.sel[0] == "agent":
-            live = self.sel[1] in self.town.streaming
-            if live or int(t * 2) != int((t - 1 / 12) * 2):
+            if self.sel[1] in self.town.streaming:  # its words grow; otherwise the page only changes when it is read again
                 self.paint_agent()
             if t - self._polled > 5:
                 self._polled = t
@@ -226,7 +237,7 @@ class Staff(Place):
         elif self.sel:
             d = next((x for x in self.town.depts if x["id"] == self.sel[1]), None)
             if d and d.get("state") in ("busy", "wait"):
-                self.paint_dept()
+                self.paint_dept(layout=False)
 
     def on_town_event(self, ev: dict) -> None:
         if not self.is_mounted or self.town.place != "staff":

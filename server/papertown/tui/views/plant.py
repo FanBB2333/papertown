@@ -80,7 +80,7 @@ class Plant(Place):
             out.append(f"{plant.get('name', '电厂')} · {plant.get('summary', '')}", style=p["ink"])
             if g.get("note"):
                 out.append(f"   {g['note']}", style=p["muted"])
-            self.query_one("#pl-sum", Static).update(out)
+            self.query_one("#pl-sum", Static).update(out, layout=False)
             return
         s, c = g.get("summary") or {}, g.get("counts") or {}
         for v, label, color in [(f"{s.get('up', 0)}/{s.get('nodes', 0)}", "台机器在线", "ink"), (s.get("gpus", 0), "张卡", "ink"),
@@ -93,9 +93,9 @@ class Plant(Place):
         ago = seconds_since(g.get("polled_at"))
         out.append(f"{dur(ago)}前更新" if ago is not None else "", style=p["faint"])
         out.append("  · 只读", style=p["faint"])
-        self.query_one("#pl-sum", Static).update(out)
+        self.query_one("#pl-sum", Static).update(out, layout=False)
 
-    def paint_nodes(self) -> None:
+    def paint_nodes(self, layout: bool = True) -> None:
         p, t = self.pal, self.town.t
         pane = self.query_one("#pl-nodes", Pane)
         nodes = self.g.get("nodes") or []
@@ -134,7 +134,7 @@ class Plant(Place):
                         parts.append(Text(f"        {clip(who, 40)}  {gb(x.get('mem_mb'))}" + ("" if x.get("managed") else "  不在队列里"),
                                           style=p["faint"] if x.get("managed") else p["muted"]))
             parts.append(Text())
-        pane.show(Padding(Group(*parts), (0, 1)))
+        pane.show(Padding(Group(*parts), (0, 1)), layout=layout)
 
     @on(DataTable.RowHighlighted, "#pl-lanes")
     def picked(self, e: DataTable.RowHighlighted) -> None:
@@ -162,11 +162,11 @@ class Plant(Place):
         pane.show(Padding(Group(*parts), (0, 1)))
 
     def tick(self, t: float) -> None:
-        moving = any(tw.step(1 / 12) for tw in self.fill.values())
-        busy = bool(self.g.get("lanes"))
-        if moving or busy:
-            self.paint_nodes()
+        moving = any(tw.step(1 / 12) for tw in self.fill.values())  # bars easing: every frame, for the moment it takes
+        if moving or (self.town.beat and self.g.get("lanes")):
+            self.paint_nodes(layout=False)
             self.paint_summary()
+        if self.town.beat:
             table = self.query_one("#pl-lanes", DataTable)
             for ln in self.g.get("lanes") or []:
                 if ln.get("running"):
