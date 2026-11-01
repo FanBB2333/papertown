@@ -126,10 +126,11 @@ class Farm:
             raise FarmError("任务已经结束")
         if j["backend"] != "local":
             raise FarmError("这个后端的任务不能取消")
+        # marked first: the runner looks at the status once the process has gone, and must find it cancelled, not failed
+        self._set(job_id, status="cancelled", ended_at=now(), note="已取消")
         p = self._procs.get(job_id)
         if p and p.poll() is None:
             os.killpg(p.pid, signal.SIGTERM)
-        self._set(job_id, status="cancelled", ended_at=now(), note="已取消")
         return self.get(job_id)
 
     def _run_local(self, job_id: str) -> None:
