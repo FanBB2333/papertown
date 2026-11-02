@@ -67,6 +67,66 @@ def _text(p: Path) -> str | None:
         return None
 
 
+def inside(root: Path, rel: str) -> Path:
+    """rel under root, refused when it would leave it or reach into .git"""
+    parts = Path(rel).parts
+    if not rel or rel.startswith(("/", "~")) or ".." in parts or ".git" in parts:
+        raise WsError(400, f"不能用这个路径：{rel}")
+    p = (root / rel).resolve()
+    if not p.is_relative_to(root.resolve()):
+        raise WsError(400, f"路径出了项目目录：{rel}")
+    return p
+
+
+def git_status(root: Path) -> dict[str, str]:
+    out = {}
+    for ln in _git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all").split("\0"):
+        if len(ln) > 3:
+            code = (ln[0] if ln[0] not in " ?" else ln[1]) if ln[:2] != "??" else "?"
+            out[ln[3:]] = STATUS.get(code, "modified")
+    return out
+
+
+def list_files(root: Path, press: bool = False) -> dict:
+    """The files under root: git's own list in a repository (with each file's state), otherwise a
+    walk that leaves out hidden and tool directories; and in the press's paper, no build files.
+    Also what the TUI calls for a workspace on this machine."""
+    if (root / ".git").exists():
+        names = [n for n in _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0") if n]
+        status = git_status(root)
+    else:
+        names, status = [], {}
+        for d, dirs, files in os.walk(root):
+            dirs[:] = sorted(x for x in dirs if x not in SKIP_DIRS and not x.startswith("."))
+            rel = Path(d).relative_to(root)
+            names += [(rel / f).as_posix() for f in sorted(files) if not f.startswith(".")]
+            if len(names) > MAX_FILES:
+                break
+    files = []
+    for n in sorted(set(names)):
+        if any(part in SKIP_DIRS for part in Path(n).parts):
+            continue
+        if press and (Path(n).suffix in BUILD or n.endswith(".synctex.gz")):
+            continue
+        p = root / n
+        if not p.is_file():
+            continue
+        files.append({"path": n, "size": p.stat().st_size, **({"status": status[n]} if n in status else {})})
+        if len(files) >= MAX_FILES:
+            break
+    return {"files": files, "truncated": len(files) >= MAX_FILES}
+
+
+def read_file(root: Path, rel: str) -> dict:
+    p = inside(root, rel)
+    if not p.is_file():
+        raise WsError(404, f"没有这个文件：{rel}")
+    size = p.stat().st_size
+    text = _text(p) if size <= MAX_READ else None
+    return {"path": rel, "size": size, "mtime": p.stat().st_mtime, "binary": text is None and size <= MAX_READ,
+            "too_big": size > MAX_READ, "text": text}
+
+
 class Workspace:
     def __init__(self, town: "Town"):
         self.town = town
@@ -93,13 +153,7 @@ class Workspace:
         return r
 
     def _path(self, root: Path, rel: str) -> Path:
-        parts = Path(rel).parts
-        if not rel or rel.startswith(("/", "~")) or ".." in parts or ".git" in parts:
-            raise WsError(400, f"不能用这个路径：{rel}")
-        p = (root / rel).resolve()
-        if not p.is_relative_to(root.resolve()):
-            raise WsError(400, f"路径出了项目目录：{rel}")
-        return p
+        return inside(root, rel)
 
     def info(self, line_id: str) -> dict:
         out: dict = {"line_id": line_id, "linked": bool(self.town.linked.of(line_id)), "latexmk": bool(shutil.which("latexmk"))}
@@ -124,49 +178,13 @@ class Workspace:
 
     def tree(self, line_id: str, which: str) -> dict:
         root = self._need(line_id, which)
-        press = which == "paper" and not self.town.linked.of(line_id)
-        if (root / ".git").exists():
-            names = [n for n in _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0") if n]
-            status = self._status(root)
-        else:
-            names, status = [], {}
-            for d, dirs, files in os.walk(root):
-                dirs[:] = sorted(x for x in dirs if x not in SKIP_DIRS and not x.startswith("."))
-                rel = Path(d).relative_to(root)
-                names += [(rel / f).as_posix() for f in sorted(files) if not f.startswith(".")]
-                if len(names) > MAX_FILES:
-                    break
-        files = []
-        for n in sorted(set(names)):
-            if any(part in SKIP_DIRS for part in Path(n).parts):
-                continue
-            if press and (Path(n).suffix in BUILD or n.endswith(".synctex.gz")):
-                continue
-            p = root / n
-            if not p.is_file():
-                continue
-            files.append({"path": n, "size": p.stat().st_size, **({"status": status[n]} if n in status else {})})
-            if len(files) >= MAX_FILES:
-                break
-        return {"root": which, "files": files, "truncated": len(files) >= MAX_FILES}
+        return {"root": which, **list_files(root, press=which == "paper" and not self.town.linked.of(line_id))}
 
     def _status(self, root: Path) -> dict[str, str]:
-        out = {}
-        for ln in _git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all").split("\0"):
-            if len(ln) > 3:
-                code = (ln[0] if ln[0] not in " ?" else ln[1]) if ln[:2] != "??" else "?"
-                out[ln[3:]] = STATUS.get(code, "modified")
-        return out
+        return git_status(root)
 
     def read(self, line_id: str, which: str, rel: str) -> dict:
-        root = self._need(line_id, which)
-        p = self._path(root, rel)
-        if not p.is_file():
-            raise WsError(404, f"没有这个文件：{rel}")
-        size = p.stat().st_size
-        text = _text(p) if size <= MAX_READ else None
-        return {"path": rel, "size": size, "mtime": p.stat().st_mtime, "binary": text is None and size <= MAX_READ,
-                "too_big": size > MAX_READ, "text": text}
+        return read_file(self._need(line_id, which), rel)
 
     def save(self, line_id: str, which: str, rel: str, text: str) -> dict:
         root = self._need(line_id, which)

@@ -10,48 +10,22 @@ from typing import Any
 from rich.console import Group
 from rich.padding import Padding
 from rich.panel import Panel
-from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
-from textual.widgets import ContentSwitcher, DataTable, Static, TextArea
+from textual.widgets import ContentSwitcher, DataTable, Static
 
 from ..anim import bar, clock, dur, gleam, seconds_since
 from ..client import ApiError
-from ..look import JOB, LINE, STAGE, clip, job_mark, job_state, line_mark, money, size, stage_mark
+from ..look import JOB, LINE, STAGE, clip, job_mark, job_state, line_mark, money, stage_mark
 from ..widgets import Bar, Confirm, Pane, Place, Prompt, row_key, sync_rows
+from .ide import Editor, Ide
 
 TABS = [("overview", "概览"), ("survey", "调研"), ("code", "代码"), ("exp", "实验"), ("paper", "论文"), ("files", "文件"), ("team", "员工")]
 FILTERS = [("all", "全部"), ("active", "在做的"), ("waiting", "等你决定"), ("done", "已出厂")]
-
-
-def lexer_for(path: str) -> str:
-    ext = Path(path).suffix.lower()
-    return {".tex": "latex", ".bib": "bibtex", ".py": "python", ".md": "markdown", ".yaml": "yaml", ".yml": "yaml", ".json": "json",
-            ".sh": "bash", ".js": "javascript", ".ts": "typescript", ".tsx": "tsx", ".cpp": "cpp", ".h": "c", ".c": "c", ".toml": "toml",
-            ".css": "css", ".html": "html", ".txt": "text", ".cfg": "ini", ".ini": "ini"}.get(ext, "text")
-
-
-class Editor(ModalScreen[str | None]):
-    """a file of the project's workspace, to change and save (Ctrl+S) or leave as it was (Esc)"""
-
-    BINDINGS = [Binding("ctrl+s", "save", "保存", priority=True), Binding("escape", "dismiss(None)", "不存", priority=True)]  # before the text area's own
-
-    def __init__(self, path: str, text: str):
-        super().__init__(classes="modal")
-        self.path, self.text = path, text
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog editor"):
-            yield Static(Text.assemble(("改 ", "bold"), (self.path, "bold"), ("    Ctrl+S 保存 · Esc 不存", "dim")), classes="dialog-title")
-            yield TextArea(self.text, show_line_numbers=True, tab_behavior="indent", soft_wrap=False)
-
-    def action_save(self) -> None:
-        self.dismiss(self.query_one(TextArea).text)
 
 
 class Projects(Place):
@@ -61,7 +35,7 @@ class Projects(Place):
         Binding("f", "filter", "筛选"), Binding("slash", "search", "搜索"), Binding("n", "idea", "新 idea"),
         Binding("h", "hatch", "立项"), Binding("r", "resume", "继续"), Binding("e", "adjust", "调整"), Binding("a", "ask", "问"),
         Binding("d", "diff", "看改动", show=False), Binding("E", "edit", "改文件", show=False), Binding("C", "compile", "编译", show=False),
-        Binding("P", "pdf", "看 PDF", show=False), Binding("o", "open", "打开", show=False),
+        Binding("P", "pdf", "看 PDF", show=False), Binding("o", "open", "打开", show=False), Binding("z", "focus_mode", "专注", show=False),
     ]
 
     def __init__(self) -> None:
@@ -73,12 +47,9 @@ class Projects(Place):
         self.line: dict | None = None  # the selected project in full
         self.ws: dict | None = None
         self.papers: list[dict] = []
-        self.files: dict[str, list[dict]] = {}  # root → its files
         self.data: dict | None = None
         self.jobs: list[dict] = []
         self.agents: list[dict] = []
-        self.opened: tuple[str, str] | None = None  # (root, path) shown in the viewer
-        self.opened_text = ""
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -92,13 +63,9 @@ class Projects(Place):
                     with Vertical(id="survey"):
                         yield DataTable(id="pj-papers", cursor_type="row")
                         yield Pane(id="pj-paper", classes="peek")
-                    with Horizontal(id="code"):
-                        yield DataTable(id="pj-code-files", cursor_type="row", classes="files")
-                        yield Pane(id="pj-code-view", classes="viewer")
+                    yield Ide("code", id="code")
                     yield Pane(id="exp")
-                    with Horizontal(id="paper"):
-                        yield DataTable(id="pj-paper-files", cursor_type="row", classes="files")
-                        yield Pane(id="pj-paper-view", classes="viewer")
+                    yield Ide("paper", id="paper")
                     with Vertical(id="files"):
                         yield DataTable(id="pj-files", cursor_type="row")
                         yield Static(id="pj-files-note", classes="note")
@@ -114,10 +81,7 @@ class Projects(Place):
         p = self.query_one("#pj-papers", DataTable)
         for k, label, w in [("sim", "相似", 10), ("title", "论文", 44), ("year", "年份", 4), ("topic", "主题", 12)]:
             p.add_column(label, key=k, width=w)
-        for tid in ("#pj-code-files", "#pj-paper-files"):
-            ft = self.query_one(tid, DataTable)
-            ft.add_column("文件", key="path", width=30)
-            ft.add_column("大小", key="size", width=6)
+        self.lay_out()
         f = self.query_one("#pj-files", DataTable)
         f.add_column("文件", key="name", width=36)
         f.add_column("", key="what", width=24)
@@ -211,7 +175,6 @@ class Projects(Place):
         key = e.row_key.value
         if key and key != self.sel:
             self.sel = key
-            self.opened = None
             self.fetch(key)
 
     @work(exclusive=True, group="pj-line")
@@ -242,6 +205,7 @@ class Projects(Place):
         keys = [k for k, _ in TABS]
         self.tab = keys[(keys.index(self.tab) + step) % len(keys)]
         self.query_one("#pj-panes", ContentSwitcher).current = self.tab
+        self.lay_out()
         self.paint_tabs()
         self.town.paint_hints()
         self.run_worker(self.load_tab(), exclusive=True, group="pj-tab")
@@ -270,12 +234,7 @@ class Projects(Place):
                 self.paint_survey()
             elif self.tab in ("code", "paper"):
                 self.ws = await api.get(f"/api/lines/{lid}/ws")
-                root = self.tab
-                if (self.ws or {}).get(root):
-                    self.files[root] = (await api.get(f"/api/lines/{lid}/ws/{root}/tree")).get("files", [])
-                else:
-                    self.files[root] = []
-                self.paint_tree(root)
+                await self.query_one(f"#{self.tab}", Ide).load(self.line, self.ws or {})
             elif self.tab == "exp":
                 self.data, jobs = await api.get(f"/api/lines/{lid}/data"), await api.get("/api/jobs", line_id=lid, external="false")
                 own = [j for j in jobs.get("jobs", []) if not j.get("external")]
@@ -403,89 +362,60 @@ class Projects(Place):
         if x and x.get("url"):
             self.town.open_url(x["url"])
 
-    def paint_tree(self, root: str) -> None:
-        p = self.pal
-        table = self.query_one(f"#pj-{root}-files", DataTable)
-        files = self.files.get(root, [])
-        sync_rows(table, [(f["path"], (Text(clip(f["path"], 30), style=p["ink"]), Text(size(f.get("size")), style=p["muted"]))) for f in files])
-        view = self.query_one(f"#pj-{root}-view", Pane)
-        info = (self.ws or {}).get(root)
-        if not info:
-            view.show(Text("这个项目还没有" + ("代码仓库" if root == "code" else "论文工程"), style=p["muted"]))
-        elif not self.opened or self.opened[0] != root:
-            keys = [("Enter", "看文件"), ("E", "改"), ("d", "看改动")] + ([("C", "编译"), ("P", "看 PDF")] if root == "paper" else [])
-            body = [Text(f"{info.get('name')}  {info.get('path', '')}", style=f"bold {p['ink']}"),
-                    Text(f"{'git · ' + (info.get('branch') or '') if info.get('git') else '不是 git 仓库'}"
-                         f"{' · %d 处改动' % info['dirty'] if info.get('dirty') else ''} · {len(files)} 个文件", style=p["muted"]), Text()]
-            body.append(Text.assemble(*[x for k, w in keys for x in ((k, f"bold {p['brand']}"), (f" {w}   ", p["muted"]))]))
-            view.show(Padding(Group(*body), (0, 1)))
+    def ide(self) -> Ide | None:
+        return self.query_one(f"#{self.tab}", Ide) if self.tab in ("code", "paper") else None
 
-    @on(DataTable.RowSelected, "#pj-code-files")
-    @on(DataTable.RowSelected, "#pj-paper-files")
-    def open_file(self, e: DataTable.RowSelected) -> None:
-        root = "code" if e.data_table.id == "pj-code-files" else "paper"
-        self.view_file(root, e.row_key.value or "")
+    def lay_out(self) -> None:
+        """the list of projects: slim beside the code and the paper (their files need the room), and gone
+        altogether in 专注 (z)"""
+        left = self.query_one("#pj-left")
+        left.display = not self.town.prefs.focus
+        left.set_class(self.tab in ("code", "paper"), "slim")
 
-    @work(exclusive=True, group="pj-file")
-    async def view_file(self, root: str, path: str, diff: bool = False) -> None:
-        p = self.pal
-        view = self.query_one(f"#pj-{root}-view", Pane)
-        lid = self.line["id"] if self.line else ""
-        try:
-            if diff:
-                text = await self.town.local.git_diff(((self.ws or {}).get(root) or {}).get("path") or "", path)  # git diff, run here
-                view.show(Syntax(text, "diff", theme="ansi_dark" if self.town.theme == "papertown" else "ansi_light", word_wrap=False)
-                          if text else Text(f"{path} 没有未提交的改动", style=p["muted"]))
-                return
-            f = await self.town.api.get(f"/api/lines/{lid}/ws/{root}/file", path=path)
-        except ApiError as e:
-            view.show(Text(str(e), style=p["bad"]))
-            return
-        self.opened = (root, path)
-        if f.get("binary") or f.get("too_big"):
-            view.show(Text(f"{path} · {size(f.get('size'))} · {'二进制文件' if f.get('binary') else '太大，不在这里显示'}"
-                           + ("\nP 用系统的查看器打开" if path.endswith(".pdf") else ""), style=p["muted"]))
-            self.opened_text = ""
-            return
-        self.opened_text = f.get("text") or ""
-        view.show(Syntax(self.opened_text, lexer_for(path), theme="ansi_dark" if self.town.theme == "papertown" else "ansi_light",
-                         line_numbers=True, word_wrap=False, indent_guides=False))
-        view.scroll_home(animate=False)
-
-    def current_file(self) -> tuple[str, str] | None:
-        if self.tab not in ("code", "paper"):
-            return None
-        key = row_key(self.query_one(f"#pj-{self.tab}-files", DataTable))
-        return (self.tab, key) if key else None
+    def action_focus_mode(self) -> None:
+        self.town.prefs.focus = not self.town.prefs.focus
+        self.town.save_prefs()
+        self.lay_out()
+        if self.town.prefs.focus and self.query_one("#pj-table").has_focus:
+            ide = self.ide()
+            (ide.ftree if ide else self.query_one("#pj-tabs")).focus()
+        self.town.notify("专注：收起项目列表，z 放回来" if self.town.prefs.focus else "项目列表放回来了")
 
     def action_diff(self) -> None:
-        cf = self.current_file()
-        if cf:
-            self.view_file(cf[0], cf[1], diff=True)
+        ide = self.ide()
+        path = ide.current() if ide else None
+        if ide and path:
+            ide.open(path, diff=True)
 
     @work(group="pj-edit")
     async def action_edit(self) -> None:
-        cf = self.current_file()
-        if not cf or not self.line:
+        ide = self.ide()
+        path = ide.current() if ide else None
+        if not ide or not path or not self.line:
             return
-        lid = self.line["id"]
+        lid, root = self.line["id"], ide.root
         try:
-            f = await self.town.api.get(f"/api/lines/{lid}/ws/{cf[0]}/file", path=cf[1])
+            f = await self.town.local.ws_read((ide.info or {}).get("path") or "", path) or \
+                await self.town.api.get(f"/api/lines/{lid}/ws/{root}/file", path=path)
         except ApiError as e:
             self.town.notify(str(e), severity="error")
             return
-        if f.get("binary") or f.get("too_big"):
-            self.town.notify("这个文件不能在这里改", severity="warning")
+        if f.get("error") or f.get("binary") or f.get("too_big"):
+            self.town.notify(f.get("error") or "这个文件不能在这里改", severity="warning")
             return
-        text = await self.app.push_screen_wait(Editor(cf[1], f.get("text") or ""))
-        if text is None or text == f.get("text"):
-            return
-        try:
-            await self.town.api.put(f"/api/lines/{lid}/ws/{cf[0]}/file", {"path": cf[1], "text": text})
-            self.town.notify(f"已保存 {cf[1]}")
-            self.view_file(cf[0], cf[1])
-        except ApiError as e:
-            self.town.notify(str(e), title="没存上", severity="error")
+
+        async def save(text: str) -> bool:
+            try:
+                await self.town.api.put(f"/api/lines/{lid}/ws/{root}/file", {"path": path, "text": text})  # saving goes through the town
+                return True
+            except ApiError as e:
+                self.town.notify(str(e), title="没存上", severity="error")
+                return False
+
+        if await self.app.push_screen_wait(Editor(path, f.get("text") or "", save)):
+            self.town.notify(f"已保存 {path}")
+            await self.load_tab()
+            ide.open(path)
 
     def paint_exp(self) -> None:
         p, t = self.pal, self.town.t
@@ -614,9 +544,11 @@ class Projects(Place):
         if self.line:
             out += [("e", "调整"), ("a", "问")]
         if self.tab in ("code", "paper"):
-            out += [("Enter", "看"), ("E", "改"), ("d", "改动")]
-        if self.tab == "paper":
-            out += [("C", "编译"), ("P", "PDF")]
+            out = [("[ ]", "翻页"), ("Enter", "打开"), ("→←", "展开收起"), ("/", "筛选文件"), ("E", "改"), ("d", "改动"), ("w", "换行")]
+            if self.tab == "paper":
+                out += [("C", "编译"), ("P", "PDF")]
+            out += [("z", "专注"), ("T", "配色")]
+            return out
         if self.tab in ("survey", "files"):
             out.append(("Enter", "打开" if self.tab == "survey" else "下载"))
         return out
@@ -634,6 +566,12 @@ class Projects(Place):
 
     @work(group="pj-ask")
     async def action_search(self) -> None:
+        ide = self.ide()
+        if ide:  # beside the files, / looks for a file
+            q = await self.app.push_screen_wait(Prompt("筛选文件", "路径里带这些字的文件；空着回车就是不筛", ide.ftree.filter))
+            ide.set_filter(q or "")
+            ide.ftree.focus()
+            return
         q = await self.app.push_screen_wait(Prompt("搜索项目", "按编号、标题或 idea 里的字找；空着回车就是不筛", self.search))
         self.search = q or ""
         self.paint_list()
@@ -687,12 +625,19 @@ class Projects(Place):
         if not await self.app.push_screen_wait(Confirm(f"编译 #{self.line['seq']} 的论文？", "用 latexmk 重新编译，会更新 PDF")):
             return
         self.town.notify("正在编译…")
+        ide = self.query_one("#paper", Ide)
         try:
             r = await self.town.api.post(f"/api/lines/{self.line['id']}/ws/paper/compile")
-            ok = (r or {}).get("ok", True)
-            self.town.notify((r or {}).get("note") or ("编译好了" if ok else "编译失败"), severity="information" if ok else "error")
         except ApiError as e:
             self.town.notify(str(e), title="编译失败", severity="error")
+            return
+        ok = (r or {}).get("ok", True)
+        pages = (r or {}).get("pages")
+        self.town.notify((r or {}).get("note") or (f"编译好了 · {r.get('seconds', 0)} 秒" + (f" · {pages} 页" if pages else "") if ok else "编译失败，报错在右边"),
+                         severity="information" if ok else "error")
+        await self.load_tab()
+        if not ok and (r or {}).get("log"):
+            ide.show_log(r["log"])
 
     def action_pdf(self) -> None:
         if not self.line:

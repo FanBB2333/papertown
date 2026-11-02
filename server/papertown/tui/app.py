@@ -16,11 +16,13 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Horizontal, Middle
-from textual.screen import Screen
+from textual.screen import ModalScreen, Screen
 from textual.widgets import ContentSwitcher, Input, Static
 
 from .anim import Glow, Tween, breathe, dur, gleam, mix, parse_ts, star
 from .client import Api, ApiError, LocalServer
+from .edthemes import EdTheme, Prefs, resolve
+from .edthemes import css as editor_css
 from .local import Local
 from .look import PALETTES, clip, doing, themes
 from .widgets import Bar, Help, Place
@@ -307,6 +309,7 @@ class Main(Screen):
 
 class Papertown(App):
     CSS_PATH = "app.tcss"
+    CSS = editor_css()  # the editor's colour themes, one class each
     TITLE = "Papertown"
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
@@ -314,10 +317,10 @@ class Papertown(App):
         Binding("i", "compose", "写点什么"),
         Binding("question_mark", "help", "按键"),
         Binding("ctrl+r", "reload", "刷新"),
-        Binding("T", "theme", "换主题"),
+        Binding("T", "theme", "外观"),
         Binding("W", "web", "浏览器里打开"),
         Binding("q", "quit", "退出"),
-        Binding("ctrl+c", "quit", "退出", show=False, priority=True),
+        Binding("ctrl+c", "leave", "退出", show=False, priority=True),
     ]
 
     def __init__(self, api: Api, start_server: bool = True, events: bool = True):
@@ -356,13 +359,46 @@ class Papertown(App):
         self._target: tuple | None = None
         for th in themes():
             self.register_theme(th)
-        self.theme = "papertown"
+        self.prefs_path = self.local.s.data_dir / "tui.json"
+        self.prefs = Prefs.load(self.prefs_path)  # the looks chosen last time (T)
+        self.theme = self.prefs.theme
         from .views import make_places
         self.places = make_places()
 
     @property
     def pal(self) -> dict[str, str]:
         return PALETTES.get(self.theme, PALETTES["papertown"])
+
+    @property
+    def ed(self) -> EdTheme:
+        """the editor's colour theme, as it goes with the TUI's own"""
+        return resolve(self.prefs.ed_theme, self.theme == "papertown")
+
+    def set_look(self, theme: str | None = None, ed_theme: str | None = None, ed_icons: str | None = None, keep: bool = False) -> None:
+        """the TUI's theme, the editor's colours or the file icons: tried on (while you pick) or kept"""
+        before = (self.theme, self.prefs.ed_theme, self.prefs.ed_icons)
+        if theme:
+            self.theme = theme
+        if ed_theme:
+            self.prefs.ed_theme = ed_theme
+        if ed_icons:
+            self.prefs.ed_icons = ed_icons
+        if (self.theme, self.prefs.ed_theme, self.prefs.ed_icons) != before:
+            from .views.ide import Editor, Ide
+            for scr in self.screen_stack:
+                for ide in scr.query(Ide):
+                    ide.restyle()
+                if isinstance(scr, Editor):
+                    scr.restyle()
+            if self.theme != before[0] and any(isinstance(scr, Main) for scr in self.screen_stack):
+                # what is drawn once (not on the clock) is drawn again in the new colours
+                self.run_worker(self.current.load(), group=f"load-{self.place}", exclusive=True, exit_on_error=False)
+        if keep:
+            self.prefs.theme = self.theme
+            self.prefs.save(self.prefs_path)
+
+    def save_prefs(self) -> None:
+        self.prefs.save(self.prefs_path)
 
     # ---------- starting ----------
 
@@ -557,11 +593,17 @@ class Papertown(App):
             ("到处都能用", [("1 … 7", "项目 / 任务 / 电厂 / 员工 / 对话 / 日报 / 配置"), ("i", "到底下的框里写点什么"),
                          ("Tab（在框里）", "换说话的对象：新 idea、问部门、调整项目、对员工说、小助手"),
                          ("Ctrl+B（在框里）", "新 idea 的预算 / 对员工说时插话还是排队"), ("Esc", "离开框"),
-                         ("Ctrl+R", "全部重新拉一遍"), ("W", "在浏览器里打开网页版的同一处"), ("T", "深色 / 纸色主题"), ("q", "退出")]),
+                         ("Ctrl+R", "全部重新拉一遍"), ("W", "在浏览器里打开网页版的同一处"),
+                         ("T", "外观：界面的深色 / 纸色、编辑器配色、文件图标（↑↓ 试，Enter 用，Esc 不换）"), ("q", "退出")]),
         ]))
 
     def action_theme(self) -> None:
-        self.theme = "papertown-paper" if self.theme == "papertown" else "papertown"
+        from .views.ide import LookPicker
+        on_files = self.place == "projects" and getattr(self.current, "tab", "") in ("code", "paper")
+        self.push_screen(LookPicker("theme" if on_files else "ui"))
+
+    def action_leave(self) -> None:
+        self.exit()
 
     def action_reload(self) -> None:
         self.run_worker(self.reload(), group="reload", exclusive=True, exit_on_error=False)
@@ -646,8 +688,9 @@ class Papertown(App):
         self.current.focus_first()
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
-        # in a text box, letters are letters
-        if isinstance(self.focused, Input) and action in {"compose", "help", "theme", "web", "quit", "place"}:
+        # in a text box, letters are letters; and a dialog's keys are its own (q in a yes/no is not "quit")
+        if (isinstance(self.focused, Input) or isinstance(self.screen, ModalScreen)) and \
+                action in {"compose", "help", "theme", "web", "quit", "place", "reload"}:
             return False
         return True
 

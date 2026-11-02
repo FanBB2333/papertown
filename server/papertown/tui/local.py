@@ -1,8 +1,9 @@
 """What the TUI reads with the command-line tools themselves, the way the server does, rather than
 asking the server for it: nvidb's GPUs, lanes, jobs and logs (always --no-tick: nothing here ever
 submits, cancels, acknowledges or contacts a node), skim's skill store, the town's own skills as
-`papertown skills` lists them, and `git diff` in a workspace. What only the town knows (its projects,
-staff, messages, the farm's own jobs) still comes from the server."""
+`papertown skills` lists them, and a project's files when they are on this machine (its list, with
+git's state of each, the files themselves and `git diff`). What only the town knows (its projects,
+staff, messages, the farm's own jobs) still comes from the server, and so does saving a file."""
 
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from ..config import Settings
 from ..nvidb import Nvidb, as_farm_job
 from ..skills import SkillRegistry
 from ..skim import Skim
+from ..workspace import WsError, list_files, read_file
 
 
 class Local:
@@ -94,6 +96,27 @@ class Local:
 
     async def skim_store(self, fresh: bool = False) -> dict:
         return await asyncio.to_thread(self.skim.status, fresh)
+
+    # ---------- a project's files ----------
+
+    @staticmethod
+    def here(path: str | None) -> Path | None:
+        """a workspace's directory, when it is on this machine"""
+        p = Path(path).expanduser() if path else None
+        return p if p and p.is_dir() else None
+
+    async def ws_tree(self, path: str, press: bool = False) -> dict | None:
+        root = self.here(path)
+        return await asyncio.to_thread(list_files, root, press) if root else None
+
+    async def ws_read(self, path: str, rel: str) -> dict | None:
+        root = self.here(path)
+        if not root:
+            return None
+        try:
+            return await asyncio.to_thread(read_file, root, rel)
+        except WsError as e:
+            return {"path": rel, "error": str(e)}
 
     # ---------- git ----------
 
