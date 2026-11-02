@@ -84,7 +84,11 @@ create table if not exists agents(
   model text, cost real default 0, created_at text, updated_at text);
 create table if not exists agent_events(id integer primary key autoincrement, agent_id text, ts text, kind text, data text);
 
+-- what the agents in a project report to you, and the questions they ask you (leads.py)
+create table if not exists reports(id integer primary key autoincrement, line_id text, agent_id text, ts text, kind text, data text);
+
 create index if not exists agent_events_agent on agent_events(agent_id, id);
+create index if not exists reports_line on reports(line_id, id);
 create index if not exists jobs_line on jobs(line_id, created_at);
 create index if not exists trace_line on trace(line_id, id);
 create index if not exists messages_line on messages(line_id, id);

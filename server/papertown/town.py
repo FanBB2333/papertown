@@ -17,6 +17,7 @@ from .db import DB, now
 from .depots import Depots
 from .events import EventBus
 from .farm import Farm, summarize
+from .leads import Leads
 from .graph import Genealogy
 from .library import Embedder, Library
 from .linked import Linked
@@ -26,6 +27,7 @@ from .mcp_hub import McpHub
 from .nvidb import Nvidb
 from .skim import Skim
 from .pipeline import Pipeline
+from .relay import Relay
 from .press import Press
 from .skills import SkillRegistry
 from .tools import Tool, ToolCtx, ToolError, ToolRegistry, arr, n, obj, register_skill_tools, s
@@ -55,6 +57,8 @@ class Town:
         self.farm = Farm(self)
         self.agents = Agents(self)
         self.bounds = Bounds(self)
+        self.leads = Leads(self)
+        self.relay = Relay(self)
         self.assistant = Assistant(self)
         self.tools = ToolRegistry()
         self.mcp = McpHub(self)
@@ -75,10 +79,12 @@ class Town:
         samples.maybe_seed(self)
         self.linked.sync()
         self.nvidb.start()
-        self.assistant.start()
+        self.relay.start()
+        self.leads.start()
 
     def stop(self) -> None:
-        self.assistant.stop()
+        self.leads.stop()
+        self.relay.stop()
         self.nvidb.stop()
         self.mcp.stop()
 

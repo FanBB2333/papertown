@@ -8,6 +8,16 @@ conversation imported from Paseo has none of them and reads link.json next to th
     .papertown/pt submit main -- python run.py --seed 0
     .papertown/pt jobs [job_id]
     .papertown/pt rules                      your work boundaries: must, never, ask first
+    .papertown/pt ask "question" [--choice X]...   ask the user, in the project
+    .papertown/pt tell lead "..." [--now]    a worker to its project's lead
+
+A project's lead also has:
+
+    .papertown/pt status                     where the project stands
+    .papertown/pt worker coder|writer [n]    a worker's last messages
+    .papertown/pt tell coder|writer "..." [--now]
+    .papertown/pt report "..." [--key]       a report for the user
+    .papertown/pt reports                    the project's reports and questions
 
 The console's assistant has more (see its AGENTS.md):
 
@@ -135,11 +145,27 @@ def main(a):
         opts = a[2:i]
         backend = opts[opts.index("--backend") + 1] if "--backend" in opts else "local"
         j = call("/jobs", {"name": a[1], "command": " ".join(a[i + 1:]), "backend": backend})
-        print(f"已提交 {j['id']}（{j['name']}，{j['backend']}），状态 {j['status']}。用 pt jobs {j['id']} 查看。")
+        print(j.get("text") or f"已提交 {j['id']}（{j['name']}，{j['backend']}），状态 {j['status']}。用 pt jobs {j['id']} 查看。")
     elif a[0] == "jobs":
         print(call(f"/jobs/{a[1]}" if len(a) > 1 else "/jobs")["text"])
     elif a[0] == "rules":
         print(call("/rules")["text"])
+    elif a[0] in ("status", "reports"):
+        print(call(f"/{a[0]}" + (f"?line={quote(a[1])}" if len(a) > 1 else ""))["text"])
+    elif a[0] == "worker":
+        if len(a) < 2:
+            sys.exit("用法：pt worker coder|writer [条数]")
+        print(call(f"/worker/{quote(a[1])}" + (f"?n={int(a[2])}" if len(a) > 2 else ""))["text"])
+    elif a[0] == "tell":
+        opts, rest = options(a[1:], many=(), flags=("--now",))
+        if len(rest) < 2:
+            sys.exit('用法：pt tell <收件人> "消息" [--now]')
+        print(call("/tell", {"to": rest[0], "text": " ".join(rest[1:]), "now": bool(opts.get("now"))})["text"])
+    elif a[0] == "report":
+        opts, rest = options(a[1:], many=(), flags=("--key",))
+        if not rest:
+            sys.exit('用法：pt report "汇报" [--key]')
+        print(call("/report", {"text": " ".join(rest), "key": bool(opts.get("key"))})["text"])
     elif a[0] == "page":
         print(local("page.md", "用户还没在侧边栏里发过消息，不知道他在看哪一页。"))
     elif a[0] == "actions":

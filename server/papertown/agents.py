@@ -44,9 +44,10 @@ ROLES = {
     "writer": {"building": "press", "name": "写作员工", "title": "写论文的 agent"},
     "monitor": {"building": "farm", "name": "看田员", "title": "看实验进度的员工"},
     "assistant": {"building": "console", "name": "小助手", "title": "中控屏侧边栏里帮你看页面、办事的 agent"},
+    "lead": {"building": "mill", "name": "项目负责人", "title": "盯项目进度、催员工、向你汇报的 agent"},
 }
 PI_ROLES = ("coder", "writer")  # one per project
-CHAT_ROLES = (*PI_ROLES, "assistant")  # the ones you talk to
+CHAT_ROLES = (*PI_ROLES, "assistant", "lead")  # the ones you talk to
 
 # pi's built-in commands that open its terminal UI (selectors, login, clipboard): typed into tmux
 TUI_COMMANDS = {"settings", "scoped-models", "export", "import", "share", "bug", "changelog", "hotkeys",
@@ -58,10 +59,14 @@ PASEO_STATUS = {"running": "working", "idle": "idle", "closed": "idle", "error":
 TOOLS = {
     "pi": {"brief": "用 `papertown_project` 工具读项目简报",
            "submit": "用 `papertown_submit_job` 提交到实验农场",
-           "status": "用 `papertown_job_status` 查看任务进度、结果和日志"},
+           "status": "用 `papertown_job_status` 查看任务进度、结果和日志",
+           "lead": "这个项目可能有一位项目负责人，它会给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
+                   "做完或卡住时在回复里说清楚，它会读你的对话。"},
     "paseo": {"brief": "运行 `.papertown/pt brief` 读项目简报",
               "submit": "用 `.papertown/pt submit <名字> -- <命令>` 提交到实验农场",
-              "status": "用 `.papertown/pt jobs [任务 id]` 查看任务进度、结果和日志"},
+              "status": "用 `.papertown/pt jobs [任务 id]` 查看任务进度、结果和日志",
+              "lead": "这个项目可能有一位项目负责人，它会给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
+                      "做完、卡住或要它拍板时，用 `.papertown/pt tell lead \"…\"` 告诉它。"},
 }
 
 GUIDE = {
@@ -74,6 +79,7 @@ GUIDE = {
 - 正式实验不要在前台跑：{submit}，命令在本目录用 bash 执行。
   实验脚本打印 `PROGRESS <0-100>` 汇报进度，结束时打印 `RESULT {{json}}`，或写入 `$PAPERTOWN_JOB_DIR/result.json`。
 - {status}。
+- {lead}
 - 回复用中文，简短说明你做了什么、下一步是什么。
 """,
     "writer": """# Papertown · 写作员工
@@ -84,9 +90,37 @@ GUIDE = {
 - 论文写在 `main.tex`，参考文献在 `refs.bib`；目录里已有初稿时在它的基础上改。
 - 只写有依据的内容：数字来自实验结果，标着「模拟」的结果要在文中注明是模拟。
 - 改完用 `latexmk -pdf -interaction=nonstopmode main.tex` 编译，修掉报错。
+- {lead}
 - 回复用中文，简短说明改了哪些部分。
 """,
 }
+
+LEAD_GUIDE = """# Papertown · 项目负责人
+
+你是 Papertown 里项目 #{seq}「{title}」的负责人。代码由代码员工写，论文由写作员工写，你不动手改项目里的文件；你的事是让这个项目往前走，并让用户知道他该知道的事。
+
+## 工具（都是 `.papertown/pt`）
+
+- `pt status`：项目现在的样子：工序、三个 agent 在做什么、最近的实验任务、等用户回答的问题、最近的汇报。
+- `pt brief`：项目简报（idea、方法草案、实验、审稿意见、仓库现状）。
+- `pt worker coder|writer [条数]`：员工最近的对话。
+- `pt jobs [任务 id]`：实验农场里的任务和日志。
+- `pt tell coder|writer "…" [--now]`：给员工派活或提醒它。默认等它做完手上的事再交给它，`--now` 插进它正在做的事。
+- `pt report "…" [--key]`：给用户写一条汇报；要紧的（结论、卡住了、要他拍板的取舍）加 `--key`。
+- `pt ask "问题" [--choice 选项]…`：问用户，他的回答会作为 `<answer>` 消息发给你。
+- `pt rules`：你的工作边界。
+{linked}
+## 怎么干活
+
+- 你不会一直在线。项目里有动静时（实验结束或失败、员工结束一轮、工序变了、用户回答了问题），Papertown 会发一条 `<checkin>` 给你，写着这段时间变了什么和项目现在的样子；项目停着不动时也会隔一阵来一条。收到后看一眼，需要时读员工的对话或任务日志，该催的催、该派的派、该报的报，然后结束这一轮。
+- 派活时说清楚做什么、做到什么程度算完、做完用 `pt tell lead` 告诉你。员工卡住了先看它卡在哪，你能定的直接定；超出你工作边界的问用户。
+- 汇报只写用户该知道的：进展的结论、出了什么问题、要他决定什么，三五句话。没有新东西就不写，不要每次巡检都汇报。
+- 小助手是用户的代理人，它发来的消息（开头是 `<msg from="小助手">`）就是用户的意思：照办，办完用 `pt report` 回一句。员工发来的消息开头是 `<msg from="…代码员工">` 这样。
+- 回复用中文，短。
+"""
+LEAD_LINKED = """
+这个项目是从本机接入的：代码在 `{code}`，论文在 `{paper}`。你可以读这两个目录、看 `git status` 和 `git log`，但不要改文件，也不要提交。
+"""
 
 # A project linked in from your own repositories: the agent works in the repository itself
 # and gets this guide with its brief, since nothing is written into the repo. The brief is
@@ -100,6 +134,7 @@ LINKED_GUIDE = {
 - 项目简报附在这份说明后面，里面有仓库现状和最近的提交；以后想看最新的，{brief}。
 - 动手前先看 `git status` 和最近的提交，弄清楚做到哪一步了。只改和任务有关的文件，不要动用户还没提交的改动；commit、push 之前先问用户。
 - 要 GPU 或要跑很久的实验，用用户的 nvidb 队列提交（`nvidb job submit`，写清 `--vram` 和 `--note`），不要用 ssh 直接起任务。实验农场按工作目录和任务名认出这个项目的任务。
+- {lead}
 - 回复用中文，简短说明你做了什么、下一步是什么。
 """,
     "writer": """# Papertown · 写作员工
@@ -111,6 +146,7 @@ LINKED_GUIDE = {
 - 动手前先看 `git status`。只改和任务有关的文件，不要动用户还没提交的改动；commit、push 之前先问用户。
 - 只写有依据的内容：数字和结论来自代码仓库 `{code}` 里的实验结果，找不到依据的地方留 TODO，不要编。
 - 需要编译时用 `latexmk -pdf -interaction=nonstopmode {main}`，编译产物不要提交。
+- {lead}
 - 回复用中文，简短说明改了哪些部分。
 """,
 }
@@ -201,7 +237,7 @@ class Agents:
         if a:
             return a
         cwd = self._workdir(line_id, role)
-        self.db.insert("agents", {"id": agent_id, "line_id": line_id, "role": role, "status": "stopped" if role in PI_ROLES else "watching",
+        self.db.insert("agents", {"id": agent_id, "line_id": line_id, "role": role, "status": "stopped" if role in CHAT_ROLES else "watching",
                                   "tmux": f"pt-{agent_id}" if role in PI_ROLES else None, "cwd": str(cwd) if cwd else None,
                                   "token": secrets.token_urlsafe(18), "model": None, "cost": 0, "created_at": now(), "updated_at": now()})
         self._publish(agent_id)
@@ -210,6 +246,10 @@ class Agents:
     def _workdir(self, line_id: str | None, role: str) -> Path | None:
         if role == "assistant":
             return self.town.assistant.dir
+        if role == "lead":  # always Papertown's own directory: it reads the project, it does not write it
+            d = self.s.projects_dir / line_id / "lead"
+            d.mkdir(parents=True, exist_ok=True)
+            return d
         linked = self.town.linked.workdir(line_id, role)  # a project of your own: its repository itself
         if linked:
             return linked
@@ -308,12 +348,14 @@ class Agents:
             return self.town.assistant.guide(runtime) + bounds
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
         info = self.town.linked.summary(a["line_id"]) if self.town.linked.of(a["line_id"]) else None
+        code, paper = ((info or {}).get("code") or {}), ((info or {}).get("paper") or {})
+        where = {"code": code.get("path") or "（没有接代码仓库）", "paper": paper.get("path") or "（没有接论文仓库）"}
+        if a["role"] == "lead":
+            return LEAD_GUIDE.format(seq=line["seq"], title=line["title"], linked=LEAD_LINKED.format(**where) if info else "") + bounds
         if not info:
             return GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS[runtime]) + bounds
-        code, paper = info.get("code") or {}, info.get("paper") or {}
-        return LINKED_GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], brief=LINKED_BRIEF[runtime],
-                                              code=code.get("path") or "（没有接代码仓库）", paper=paper.get("path") or "（没有接论文仓库）",
-                                              main=paper.get("main") or "main.tex") + bounds
+        return LINKED_GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], brief=LINKED_BRIEF[runtime], lead=TOOLS[runtime]["lead"],
+                                              main=paper.get("main") or "main.tex", **where) + bounds
 
     def renew(self, agent_id: str) -> None:
         """Write a started agent's guide again, after its rules changed."""
@@ -337,6 +379,8 @@ class Agents:
         a shell that has no PAPERTOWN_* environment (an imported conversation). Returns pt."""
         tools = self._home(a["line_id"], a["role"]) / ".papertown"
         tools.mkdir(parents=True, exist_ok=True)
+        for sub in ("q", "a"):  # requests by file, for a sandbox without network (relay.py)
+            (tools / sub).mkdir(exist_ok=True)
         shutil.copyfile(PT, tools / "pt")
         (tools / "pt").chmod(0o755)
         link = tools / "link.json"
@@ -353,6 +397,8 @@ class Agents:
             raise AgentError("这个员工不能对话")
         if (runtime or a.get("runtime")) == "paseo":
             return self._start_paseo(a, provider, model, thinking)
+        if a["role"] == "lead":
+            raise AgentError("项目负责人只在 Paseo 里运行")
         if not (self.pi and self.tmux):
             raise AgentError(self.available()["note"])
         if self.alive(a):
@@ -409,6 +455,9 @@ class Agents:
         self._guide(a, "paseo")
         if a["role"] == "assistant":
             title, prompt = "Papertown · 小助手", self.town.assistant.intro()
+        elif a["role"] == "lead":
+            line = self.db.one("select * from lines where id = ?", a["line_id"])
+            title, prompt = f"Papertown #{line['seq']} 项目负责人：{line['title']}", self.brief(a["id"])
         else:
             line = self.db.one("select * from lines where id = ?", a["line_id"])
             title = f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}"
@@ -561,10 +610,11 @@ class Agents:
 
     # ---------- talking to it ----------
 
-    def say(self, agent_id: str, text: str, mode: str | None = None) -> dict:
-        """A message from the web. While the agent works, `mode` says how it gets there: "steer"
-        puts it into what the agent is doing, "queue" holds it until the agent is done; without
-        one each runtime keeps its own way (pi queues, Paseo steers)."""
+    def say(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
+        """A message from the web, or from another agent or the town (`origin`). While the agent
+        works, `mode` says how it gets there: "steer" puts it into what the agent is doing,
+        "queue" holds it until the agent is done; without one each runtime keeps its own way
+        (pi queues, Paseo steers)."""
         a = self.get(agent_id)
         if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")
@@ -576,13 +626,13 @@ class Agents:
                 raise AgentError("先在 Paseo 里启动它")
             busy = a["status"] == "working"
             if busy and mode == "queue":  # Paseo has no queue of its own: the watcher sends it once the agent is idle
-                return self._event(agent_id, "user", {"text": text, "origin": "web", "delivered": False, "queued": True, "held": True})
+                return self._event(agent_id, "user", {"text": text, "origin": origin, "delivered": False, "queued": True, "held": True})
             try:
                 self.paseo.send(a["ext_id"], text)
             except PaseoError as e:
                 raise AgentError(str(e)) from e
             self._set(agent_id, status="working")
-            return self._event(agent_id, "user", {"text": text, "origin": "web", "delivered": True, "steered": busy})
+            return self._event(agent_id, "user", {"text": text, "origin": origin, "delivered": True, "steered": busy})
         if text.startswith("/") and len(text) > 1 and not text[1:2].isspace():
             return self._command(a, text)
         running = self.alive(a)
@@ -592,7 +642,7 @@ class Agents:
             self._seq += 1
             mid = self._seq
             self._inbox.setdefault(agent_id, []).append({"id": mid, "text": text, "mode": mode})
-        ev = self._event(agent_id, "user", {"text": text, "origin": "web", "mid": mid, "delivered": False})
+        ev = self._event(agent_id, "user", {"text": text, "origin": origin, "mid": mid, "delivered": False})
         if not running:
             self.start(agent_id)
         return ev
@@ -648,6 +698,12 @@ class Agents:
             raise AgentError("没有这个员工")
         if a["role"] == "assistant":
             raise AgentError("小助手不跟着某个项目，没有项目简报")
+        if a["role"] == "lead":
+            line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
+            return (f"你现在是项目 #{line['seq']}「{line['title']}」的负责人。工作目录里的 AGENTS.md 说明了你的职责和工具，先读一遍，"
+                    f"再读下面项目现在的样子和简报。读完用 `{self._tools(a)} report` 写第一条汇报：项目到哪了、接下来怎么推进、有什么要用户定的；"
+                    "要员工动手的用 `pt tell` 派下去。然后结束这一轮，等巡检消息。\n\n"
+                    + self.town.leads.status(a["line_id"]) + "\n\n## 项目简报\n\n" + self.town.brief(a["line_id"], "lead"))
         if self.town.linked.of(a["line_id"]):  # in a linked repo the guide is not in AGENTS.md: send it along
             return self._linked_intro(a, "paseo" if a.get("runtime") == "paseo" else "pi")
         text = self.town.brief(a["line_id"], a["role"])
@@ -660,7 +716,9 @@ class Agents:
                 f"- `{pt} brief` 读最新的项目简报\n"
                 f"- `{pt} submit <名字> -- <命令>` 把实验提交到实验农场，命令在当前目录用 bash 执行；"
                 f"脚本打印 `PROGRESS <0-100>` 汇报进度，结束时打印 `RESULT {{json}}`\n"
-                f"- `{pt} jobs [任务 id]` 查看任务进度、结果和日志\n\n" + text)
+                f"- `{pt} jobs [任务 id]` 查看任务进度、结果和日志\n"
+                f"- `{pt} tell lead \"…\"` 告诉项目负责人你做完了、卡住了或要它拍板\n"
+                f"- `{pt} ask \"问题\" [--choice 选项]…` 问用户；`{pt} rules` 看你的工作边界\n\n" + text)
 
     # ---------- from the bridge ----------
 

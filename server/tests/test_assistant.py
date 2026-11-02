@@ -115,7 +115,7 @@ def test_pt_goes_through_files_when_the_sandbox_has_no_network(tmp_path):
         c.get("/api/assistant")
         c.post("/api/agents/assistant/start", json={"runtime": "paseo", "provider": "pi"})
         # the relay sends each request on to the server as pt would have; here that is the test client
-        town.assistant._fetch = lambda method, path, body, token: (lambda r: {"status": r.status_code, "body": r.json()})(
+        town.relay._fetch = lambda method, path, body, token: (lambda r: {"status": r.status_code, "body": r.json()})(
             c.request(method, path, json=body, headers={"x-papertown-token": token}))
         tools = town.assistant.dir / ".papertown"
         env = {"PATH": os.environ["PATH"], "PAPERTOWN_URL": "http://127.0.0.1:9", "PAPERTOWN_AGENT": "assistant",

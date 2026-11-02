@@ -16,17 +16,13 @@ particular to it is here:
 - Earlier conversations. A new conversation sets the Paseo one aside; the sidebar lists those
   (named by the first thing asked in each) and can go back to one.
 
-Its tools reach the server over HTTP. Codex runs commands in a sandbox without network, so
-`pt` then writes the same request as a file in the assistant's directory, which the server
-watches and answers beside it.
+Its tools reach the server over HTTP; from a sandbox without network (Codex's), by files
+(relay.py).
 """
 
 from __future__ import annotations
 
 import json
-import threading
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -44,7 +40,6 @@ MODS = {"overview": "概览", "survey": "调研", "code": "代码仓库", "exp":
 TEXT_MAX = 8000  # of the panel's own text
 SELECTION_MAX = 2000  # of the text you had selected
 REFS_MAX = 80
-OPEN = urllib.request.build_opener(urllib.request.ProxyHandler({})).open  # to this server itself, never through a proxy
 
 # What the assistant may ask to do, each run only once you allow it in the sidebar:
 # name -> (what it does, its arguments, the optional ones in brackets)
@@ -163,8 +158,6 @@ class Assistant:
         self.db = town.db
         self.dir = self.s.data_dir / "assistant"
         self.page: dict = {}  # the latest from the sidebar
-        self._halt = threading.Event()
-        self._thread: threading.Thread | None = None
 
     # ---------- its row and its files ----------
 
@@ -189,10 +182,8 @@ class Assistant:
                 "读完用一两句话告诉用户你能帮什么，然后等他提问。\n</start>")
 
     def tools(self, d: Path) -> None:
-        """Next to its `pt`: the list of actions, the page, and the folders the relay watches."""
+        """Next to its `pt`: the list of actions and the page."""
         (d / "actions.md").write_text(self.actions_text() + "\n", encoding="utf-8")
-        for sub in ("q", "a"):
-            (d / sub).mkdir(exist_ok=True)
         if self.page:
             (d / "page.md").write_text(self._page_md(self.page), encoding="utf-8")
 
@@ -553,62 +544,3 @@ class Assistant:
             self._close_asks()
             self.town.agents.attach(ID, conv)
         return self.town.agents.public(self.row())
-
-    # ---------- the relay, for a sandbox without network ----------
-
-    def start(self) -> None:
-        if self._thread:
-            return
-        self._halt.clear()
-        self._thread = threading.Thread(target=self._watch, daemon=True, name="assistant-relay")
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._halt.set()
-        self._thread = None
-
-    def _watch(self) -> None:
-        q = self.dir / ".papertown" / "q"
-        while not self._halt.wait(0.3):
-            try:
-                found = sorted(q.glob("*.json")) if q.is_dir() else []
-            except OSError:
-                continue
-            for f in found:
-                threading.Thread(target=self._relay, args=(f,), daemon=True).start()
-
-    def _relay(self, f: Path) -> None:
-        """One request `pt` left as a file: sent on to the server as it would have sent it, the
-        answer written beside it. Only reads and the assistant's own bridge go through."""
-        try:
-            req = json.loads(f.read_text(encoding="utf-8"))
-            f.unlink()
-        except (OSError, json.JSONDecodeError):
-            return
-        method, path, body = str(req.get("method") or "GET"), str(req.get("path") or ""), req.get("body")
-        if not path.startswith("/api/") or method not in ("GET", "POST") or method == "POST" and not path.startswith(f"/api/bridge/{ID}/"):
-            out = {"status": 400, "body": {"detail": f"不能经过这里转发：{method} {path}"}}
-        else:
-            out = self._fetch(method, path, body, str(req.get("token") or ""))
-        ans = f.parent.parent / "a" / f.name
-        try:
-            tmp = ans.with_suffix(".tmp")
-            tmp.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
-            tmp.replace(ans)
-        except OSError:
-            pass
-
-    def _fetch(self, method: str, path: str, body: object, token: str) -> dict:
-        req = urllib.request.Request(self.s.url.rstrip("/") + path, method=method,
-                                     data=None if body is None else json.dumps(body).encode(),
-                                     headers={"content-type": "application/json", "x-papertown-token": token})
-        try:
-            with OPEN(req, timeout=60) as r:
-                return {"status": r.status, "body": json.load(r)}
-        except urllib.error.HTTPError as e:
-            try:
-                return {"status": e.code, "body": json.load(e)}
-            except (json.JSONDecodeError, ValueError):
-                return {"status": e.code, "body": {"detail": str(e)}}
-        except (OSError, ValueError) as e:
-            return {"status": 502, "body": {"detail": f"Papertown 没有回应：{e}"}}

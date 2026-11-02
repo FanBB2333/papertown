@@ -20,6 +20,7 @@ from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
 from .assistant import ID as ASSISTANT, ActError
 from .bounds import BoundsError
+from .leads import LeadError
 from .config import SERVER_DIR, Settings
 from .library import RAG_LIMITS
 from .farm import FarmError, summarize
@@ -46,6 +47,27 @@ class BoundsIn(BaseModel):
     role: str | None = None  # with line_id: one of the project's workers
     rules: list[dict] = []
     off: list[str] = []  # inherited rules this level switches off
+
+
+class LeadIn(BaseModel):
+    supervise: bool | None = None  # check-ins when something happens in the project
+    every: int | None = Field(default=None, ge=10, le=1440)  # minutes of quiet before one comes anyway
+
+
+class AnswerIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class TellIn(BaseModel):
+    to: str = Field(min_length=1, max_length=80)
+    text: str = Field(min_length=1, max_length=8000)
+    now: bool = False  # into what it is doing, instead of after it
+    line: str | None = None
+
+
+class ReportIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    key: bool = False
 
 
 class McpServerIn(BaseModel):
@@ -532,6 +554,37 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except BoundsError as e:
             raise HTTPException(400, str(e)) from e
 
+    # ---------- each project's lead, its reports and its questions ----------
+
+    def leads(fn, *args):
+        try:
+            return fn(*args)
+        except (LeadError, AgentError) as e:
+            raise HTTPException(400, str(e)) from e
+
+    @app.get("/api/lines/{line_id}/lead")
+    def lead(line_id: str):
+        if not town.pipeline.line(line_id):
+            raise HTTPException(404, "没有这个项目")
+        return town.leads.view(line_id)
+
+    @app.post("/api/lines/{line_id}/lead")
+    def lead_settings(line_id: str, body: LeadIn):
+        if not town.pipeline.line(line_id):
+            raise HTTPException(404, "没有这个项目")
+        return town.leads.configure(line_id, body.supervise, body.every)
+
+    @app.get("/api/reports")
+    def reports(line_id: str | None = None, limit: int = 30):
+        if line_id:
+            return {"reports": town.leads.reports(line_id, min(max(limit, 1), 200)), "asks": town.leads.asks(line_id)}
+        return {"reports": town.db.q("select * from reports where kind = 'report' order by id desc limit ?", min(max(limit, 1), 200))[::-1],
+                "asks": town.leads.asks()}
+
+    @app.post("/api/reports/{report_id}/answer")
+    def report_answer(report_id: int, body: AnswerIn):
+        return leads(town.leads.answer, report_id, body.text)
+
     # ---------- the console's assistant, in the sidebar ----------
 
     def assistant(fn, *args):
@@ -621,9 +674,59 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/bridge/{agent_id}/ask")
     def bridge_ask(agent_id: str, body: AskIn, x_papertown_token: str | None = Header(default=None)):
-        helper(agent_id, x_papertown_token)
+        a = bridged(agent_id, x_papertown_token)
+        if a["role"] != ASSISTANT:  # an agent in a project asks in the project, where you see it
+            q = leads(town.leads.ask, agent_id, body.question, body.choices)
+            return {"text": f"已经问了用户（问题 {q['id']}），他的回答会作为一条 <answer> 消息发给你。先做别的，或者结束这一轮。"}
         town.assistant.ask(body.question, body.choices, body.point)
         return {"text": "已经在侧边栏里问了用户。他的回答会作为下一条消息发来，先结束这一轮。"}
+
+    def own_line(a: dict, line: str | None) -> str:
+        """The project an agent asks about: its own; the assistant names one, else the one on your screen."""
+        if a["role"] != ASSISTANT:
+            return a["line_id"]
+        lid = assistant(town.assistant._line, line)["id"] if line else (town.assistant.page.get("line") or {}).get("id")
+        if not lid:
+            raise HTTPException(400, "说一下是哪个项目")
+        return lid
+
+    @app.get("/api/bridge/{agent_id}/status")
+    def bridge_status(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        return {"text": leads(town.leads.status, own_line(a, line))}
+
+    @app.get("/api/bridge/{agent_id}/worker/{role}")
+    def bridge_worker(agent_id: str, role: str, n: int = 6, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        if a["role"] not in ("lead", ASSISTANT):
+            raise HTTPException(403, "只有项目负责人和小助手能看员工的对话")
+        return {"text": leads(town.leads.peek, own_line(a, line), role, min(max(n, 1), 30))}
+
+    @app.get("/api/bridge/{agent_id}/reports")
+    def bridge_reports(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        rows = town.leads.reports(own_line(a, line), 20)
+        text = "\n".join(f"- {r['ts'][:16].replace('T', ' ')} {r['data'].get('who') or ''}"
+                         + (f"【关键】：{r['data']['text']}" if r["kind"] == "report" and r["data"].get("key")
+                            else f"：{r['data']['text']}" if r["kind"] == "report"
+                            else f" 问（问题 {r['id']}{'，等回答' if r['data'].get('open') else ''}）：{r['data']['question']}"
+                            + (f" → 回答：{r['data']['answer']}" if r["data"].get("answer") else "")) for r in rows)
+        return {"text": text or "这个项目还没有汇报和问题。"}
+
+    @app.post("/api/bridge/{agent_id}/tell")
+    def bridge_tell(agent_id: str, body: TellIn, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        if a["role"] == ASSISTANT:
+            raise HTTPException(403, "小助手给项目发消息用 pt do")
+        return {"text": leads(town.leads.tell, agent_id, body.to, body.text, body.now)}
+
+    @app.post("/api/bridge/{agent_id}/report")
+    def bridge_report(agent_id: str, body: ReportIn, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        if a["role"] != "lead":
+            raise HTTPException(403, "只有项目负责人写汇报；员工有事用 pt tell lead 告诉负责人")
+        r = leads(town.leads.report, agent_id, body.text, body.key)
+        return {"text": f"已经记下这条汇报（{r['id']}），用户在项目的概览里会看到。"}
 
     @app.post("/api/bridge/{agent_id}/show")
     def bridge_show(agent_id: str, body: ShowIn, x_papertown_token: str | None = Header(default=None)):
@@ -640,6 +743,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/bridge/{agent_id}/jobs")
     def bridge_submit(agent_id: str, body: JobIn, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
+        kind, rule = town.bounds.policy(a["role"], a["line_id"], "job.submit")
+        if kind == "never":
+            raise HTTPException(403, f"你的工作边界不让你提交实验任务：{rule['text']}")
+        if kind == "ask":
+            q = leads(town.leads.ask, agent_id, f"{town.leads._who(a)}想提交实验任务「{body.name}」：{body.command[:300]}，可以吗？", ["可以", "不可以"],
+                      {"action": "job.submit", "name": body.name, "command": body.command, "backend": body.backend or "local"})
+            return {"id": None, "name": body.name, "backend": body.backend or "local", "status": "asking",
+                    "text": f"按你的工作边界（{rule['text']}），提交前要先问用户。已经问了（问题 {q['id']}），他同意后会替你提交，结果会告诉你。"}
         return farm(town.farm.submit, a["line_id"], body.name, body.command, body.backend or "local", agent_id, a["cwd"])
 
     @app.get("/api/bridge/{agent_id}/jobs")

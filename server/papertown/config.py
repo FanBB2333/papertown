@@ -91,6 +91,9 @@ class Settings:
     skim_bin: str = field(default_factory=lambda: _env("PAPERTOWN_SKIM_BIN"))
     # your own projects, linked in from local repos (see linked.py); default: projects.json in the data dir
     projects: str = field(default_factory=lambda: _env("PAPERTOWN_PROJECTS"))
+    # project leads: seconds between looks at their projects, and at least between two check-ins
+    lead_tick: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_TICK", "20") or 20))
+    lead_gap: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_GAP", "180") or 180))
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 
