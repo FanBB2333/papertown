@@ -22,6 +22,7 @@ import { getSettings, useSettings } from './settings';
 import { DEMO } from './demo';
 import { enterFull, holdEscape, leaveFull } from './fullscreen';
 import { tr } from './i18n';
+import './mobile.css';
 
 const Town3D = lazy(() => import('./components/Town3D'));
 
@@ -315,7 +316,7 @@ export function App() {
             {!online ? tr('连接断开') : DEMO ? tr('静态演示') : hud.offline ? tr('离线模式') : hud.provider}</span>}
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={() => setSettingsOpen(true)}><Gear />{tr('设置')}</button>
-          <button className={`btn${chatOpen ? ' on' : ''}`} title={tr('指挥小镇的员工，看各部门在做什么（/ 直接开始写）')}
+          <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('指挥小镇的员工，看各部门在做什么（/ 直接开始写）')}
             onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('对话')}</button>
         </div>
       </header>

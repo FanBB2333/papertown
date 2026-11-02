@@ -23,6 +23,9 @@ export function useFetch<T>(fn: () => Promise<T>, id: string, tick = 0, delay = 
   return { data: mine ? s.data : null, err: mine ? s.err : '', loading: !mine, reload: () => setBump(b => b + 1) };
 }
 
+// a phone held upright: the console in one column (mobile.css)
+export const PHONE = '(max-width: 720px)';
+
 // whether a media query holds, kept up to date
 export function useMedia(query: string) {
   const [on, setOn] = useState(() => matchMedia(query).matches);

@@ -2035,5 +2035,9 @@
  "实心的文件和文件夹图标，常见文件夹各有颜色": "Solid file and folder icons, with common folders in their own colours",
  "只有文件名": "Just the names",
  "颜色主题和文件图标（⌘K ⌘T）": "Colour theme and file icons (⌘K ⌘T)",
- "无图标": "None"
+ "无图标": "None",
+ "面板": "Panels",
+ "全部面板": "All panels",
+ "更多": "More",
+ "清空": "Clear"
 }

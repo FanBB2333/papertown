@@ -6,6 +6,10 @@
 // the skills, MCP servers and library. The town, 2D or 3D, is the same work walked through.
 // The assistant opens in a sidebar on the right and is told what you are looking at.
 //
+// On a phone the same console in one column: the project is the bar along the top (tap it for
+// the list, which rises from the bottom), the panels most looked at are tabs along the bottom
+// with the rest under 更多, and the assistant takes the whole screen.
+//
 //   #view=console&line=line_2&m=paper   — open a project's panel directly
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -27,7 +31,7 @@ import { Overview, STAGE_MOD } from './Overview';
 import { flash, setPlace, usePanelNote } from './page';
 import { Paper } from './Paper';
 import { Survey } from './Survey';
-import { revealX, useFetch, useMedia } from './util';
+import { PHONE, revealX, useFetch, useMedia } from './util';
 import '../console.css';
 
 export type ModId = 'overview' | 'survey' | 'code' | 'exp' | 'data' | 'paper' | 'agents' | 'skills' | 'mcp' | 'rag';
@@ -46,6 +50,8 @@ const MODS: { id: ModId; name: string; sub: string; icon: IconName; town?: boole
 ];
 const IDS = MODS.map(m => m.id);
 const isMod = (s: unknown): s is ModId => IDS.includes(s as ModId);
+// a phone's tabs along the bottom: the panels you look at most away from your desk
+const PHONE_TABS: ModId[] = ['overview', 'survey', 'exp', 'paper'];
 // the panels that do their own layout edge to edge, with no heading over them
 const BLEED = new Set<ModId>(['code', 'paper', 'agents', 'skills', 'mcp', 'rag']);
 
@@ -98,6 +104,7 @@ export function Console(p: Props) {
   const [role, setRole] = useState<'coder' | 'writer'>('coder');
   const [reveal, setReveal] = useState<Reveal | null>(null); // a file to open in the code or paper panel
   const [hist, setHist] = useState<{ back: [string, ModId][]; fwd: [string, ModId][] }>({ back: [], fwd: [] });
+  const phone = useMedia(PHONE);
   const dirty = useRef({ code: 0, paper: 0 });
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -258,11 +265,11 @@ export function Console(p: Props) {
       </div>
 
       <div className="rail-back" onClick={() => setRail(false)} />
-      <Rail open={rail} lines={lines} cur={cur} tab={railTab} setTab={setRailTab} filter={filter} setFilter={setFilter} q={q}
-        onPick={pick} onIdea={() => { setRail(false); p.onIdea(); }} onClose={() => setRail(false)} />
+      <Rail open={rail} lines={lines} cur={cur} tab={railTab} setTab={setRailTab} filter={filter} setFilter={setFilter} q={q} setQ={setQ}
+        phone={phone} onPick={pick} onIdea={() => { setRail(false); p.onIdea(); }} onClose={() => setRail(false)} />
 
       <div className="cbody">
-        <Drawer mod={mod} narrow={narrow || squeezed} locked={squeezed} setNarrow={setNarrow} line={line} code={ws.data?.code?.dirty ?? 0} onPick={m => go({ mod: m })} />
+        {!phone && <Drawer mod={mod} narrow={narrow || squeezed} locked={squeezed} setNarrow={setNarrow} line={line} code={ws.data?.code?.dirty ?? 0} onPick={m => go({ mod: m })} />}
         <div className="cm" key={id}>
           {!kept.has(mod) && (
             <section className={`cm-mod on${BLEED.has(mod) ? ' bleed' : ''}`} key={mod} style={{ ['--dir' as string]: dir }}>
@@ -301,12 +308,21 @@ export function Console(p: Props) {
         </div>
         {side && <Assistant actions={actions} autoFocus={opened.current} onClose={() => setSide(false)} />}
       </div>
+      {phone && <PhoneTabs mod={mod} line={line} code={ws.data?.code?.dirty ?? 0} onPick={m => { setSide(false); go({ mod: m }); }} />}
       <EdPicker />
     </main>
   );
 }
 
 // ---------- the module drawer ----------
+
+// each research panel's mark: how its stages stand
+function markOf(line: Line | null, m: ModId) {
+  const st = (line?.stages ?? []).filter(s => STAGE_MOD[s.key] === m && s.key !== 'idea').map(s => s.status);
+  if (m === 'data') return line?.stages.find(s => s.key === 'exp')?.status === 'done' ? 'done' : '';
+  if (!st.length) return '';
+  return st.includes('run') ? 'run' : st.includes('wait') ? 'wait' : st.every(s => s === 'done') ? 'done' : '';
+}
 
 function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
   mod: ModId; narrow: boolean; locked: boolean; setNarrow: (f: (n: boolean) => boolean) => void; line: Line | null; code: number; onPick: (m: ModId) => void;
@@ -318,15 +334,8 @@ function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
     if (el) setPill({ y: el.offsetTop, h: el.offsetHeight });
   }, [mod, narrow]);
 
-  // each research panel's mark: how its stages stand
-  const mark = (m: ModId) => {
-    const st = (line?.stages ?? []).filter(s => STAGE_MOD[s.key] === m && s.key !== 'idea').map(s => s.status);
-    if (m === 'data') return line?.stages.find(s => s.key === 'exp')?.status === 'done' ? 'done' : '';
-    if (!st.length) return '';
-    return st.includes('run') ? 'run' : st.includes('wait') ? 'wait' : st.every(s => s === 'done') ? 'done' : '';
-  };
   const item = (m: typeof MODS[number], i: number) => {
-    const k = mark(m.id);
+    const k = markOf(line, m.id);
     return (
       <button key={m.id} data-m={m.id} className={`cd-item${m.id === mod ? ' on' : ''}`} onClick={() => onPick(m.id)}
         title={`${m.name} · ${m.sub}  (${(i + 1) % 10})`} style={{ ['--i' as string]: i }}>
@@ -351,11 +360,63 @@ function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
   );
 }
 
+// ---------- a phone's tabs ----------
+
+// along the bottom, the four panels looked at most; the fifth tab is 更多, every panel in a sheet,
+// and stands for the panel shown when it is one of those
+function PhoneTabs({ mod, line, code, onPick }: { mod: ModId; line: Line | null; code: number; onPick: (m: ModId) => void }) {
+  const [more, setMore] = useState(false);
+  const other = PHONE_TABS.includes(mod) ? null : MODS.find(m => m.id === mod)!;
+  const pick = (m: ModId) => { setMore(false); onPick(m); };
+  const mark = (m: ModId) => (m === 'code' && code > 0 ? <em className="cd-n">{code}</em> : markOf(line, m) && <i className={`cd-dot k-${markOf(line, m)}`} />);
+  // what waits under 更多 shows on its tab
+  const behind = code > 0 || MODS.some(m => !PHONE_TABS.includes(m.id) && markOf(line, m.id) === 'wait');
+  return (
+    <>
+      <nav className="mtabs" aria-label={tr('面板')}>
+        {PHONE_TABS.map(id => {
+          const m = MODS.find(x => x.id === id)!;
+          return (
+            <button key={id} className={`mt${mod === id && !more ? ' on' : ''}`} onClick={() => pick(id)} aria-current={mod === id}>
+              <span className="mt-ic"><Icon n={m.icon} size={21} />{mark(id)}</span>
+              <span className="mt-l">{m.name}</span>
+            </button>
+          );
+        })}
+        <button className={`mt${other || more ? ' on' : ''}`} onClick={() => setMore(o => !o)} aria-expanded={more}>
+          <span className="mt-ic"><Icon n={other && !more ? other.icon : 'cards'} size={21} />{other && !more ? mark(other.id) : behind && <i className="cd-dot k-wait" />}</span>
+          <span className="mt-l">{other && !more ? other.name : tr('更多')}</span>
+        </button>
+      </nav>
+      {more && (
+        <div className="msheet-back" onClick={() => setMore(false)}>
+          <div className="msheet" role="dialog" aria-label={tr('全部面板')} onClick={e => e.stopPropagation()}>
+            <span className="sheet-grip" />
+            {[[tr('研究流程'), MODS.filter(m => !m.town)], [tr('小镇配置'), MODS.filter(m => m.town)]].map(([h, ms]) => (
+              <section key={h as string}>
+                <h6>{h as string}</h6>
+                {(ms as typeof MODS).map(m => (
+                  <button key={m.id} className={`ms-row${m.id === mod ? ' on' : ''}`} onClick={() => pick(m.id)}>
+                    <Icon n={m.icon} size={20} />
+                    <span className="ms-t"><b>{m.name}</b><span>{m.sub}</span></span>
+                    {mark(m.id)}
+                  </button>
+                ))}
+              </section>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ---------- the rail of folders ----------
 
-function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, onPick, onIdea, onClose }: {
+function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, phone, onPick, onIdea, onClose }: {
   open: boolean; lines: Line[]; cur: Line; tab: 'projects' | 'papers'; setTab: (t: 'projects' | 'papers') => void;
-  filter: Filter; setFilter: (f: Filter) => void; q: string; onPick: (l: Line, m?: ModId) => void; onIdea: () => void; onClose: () => void;
+  filter: Filter; setFilter: (f: Filter) => void; q: string; setQ: (q: string) => void; phone: boolean;
+  onPick: (l: Line, m?: ModId) => void; onIdea: () => void; onClose: () => void;
 }) {
   const track = useRef<HTMLDivElement>(null);
   const [hi, setHi] = useState(0);
@@ -372,7 +433,10 @@ function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, onPick, onI
     const i = Math.max(0, shown.findIndex(l => l.id === cur.id));
     setHi(i);
     requestAnimationFrame(() => {
-      revealX(track.current, track.current?.children[i], true);
+      const t = track.current, el = t?.children[i] as HTMLElement | undefined;
+      // on a phone the folders run down, not across; the sheet is still rising, so by where they lie, not where they show
+      if (phone) { if (t && el) t.scrollTop = Math.max(0, el.offsetTop + el.offsetHeight + 16 - t.clientHeight); }
+      else revealX(t, el, true);
       if (!(document.activeElement instanceof HTMLInputElement)) track.current?.focus({ preventScroll: true });
     });
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -401,6 +465,13 @@ function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, onPick, onI
           ) : null)}
         </div>}
         <span className="rail-keys muted small"><kbd>←</kbd><kbd>→</kbd> {tr('挑选')} · <kbd>Enter</kbd> {tr('打开')} · <kbd>Esc</kbd> {tr('收起')}</span>
+        {phone && (
+          <label className="rail-q">
+            <Icon n="lens" size={16} />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={tr('找项目或论文')} enterKeyHint="search" />
+            {q && <button className="ib" onClick={() => setQ('')} aria-label={tr('清空')}><Icon n="close" size={14} /></button>}
+          </label>
+        )}
       </div>
       <div className="rail-wrap">
         <button className="rail-arrow l" onClick={() => scroll(-1)} aria-label={tr('向左')}><Icon n="left" size={18} /></button>

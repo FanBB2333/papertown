@@ -705,8 +705,18 @@ export function Chat(p: Props) {
   }
 
   const style = col ? { left: col.x, ['--dk-room' as string]: `${col.w}px` } : undefined;
+  // opening the closed box: on what waits for you first
+  const wake = () => {
+    const wait = depts.find(d => d.state === 'wait');
+    if (wait) choose({ kind: 'ask', building: wait.id, name: wait.name });
+    p.setOpen(true);
+  };
   return (
     <div className={`dock${p.open ? ' open' : ''}${p.away ? ' away' : ''}`} style={style}>
+      {/* on a phone the closed box is this button in the corner (mobile.css) */}
+      <button className="dk-fab" onClick={wake} aria-label={tr('对话')}>
+        <Icon n="chat" size={22} />{depts.some(d => d.state === 'wait') && <i />}
+      </button>
       <div className="dk-shell">
         <div className="dk-grow" aria-hidden={!p.open}>
           <div className="dk-panel">
@@ -773,11 +783,7 @@ export function Chat(p: Props) {
             </div>
           )}
           {working && <button className="dk-stop" title={tr('打断它手上的事')} aria-label={tr('打断')} onClick={() => abort(agent!.id)}><Icon n="stop" size={15} className="fill" /></button>}
-          {!p.open && <Lights depts={depts} onClick={() => {
-            const wait = depts.find(d => d.state === 'wait');
-            if (wait) choose({ kind: 'ask', building: wait.id, name: wait.name });
-            p.setOpen(true);
-          }} />}
+          {!p.open && <Lights depts={depts} onClick={wake} />}
           <button className="dk-send" disabled={!text.trim() || sending} onClick={() => send()} title={tr('发送（Enter）')} aria-label={tr('发送')}>
             <Icon n="send" size={18} />
           </button>

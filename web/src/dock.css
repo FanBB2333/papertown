@@ -17,6 +17,7 @@
 .proto .walk-hint { bottom: 92px; }
 .pt-hint { bottom: 84px; }
 .dock .ic { width: 18px; height: 18px; }
+.dk-fab { display: none; } /* a phone's (mobile.css) */
 
 .dk-shell {
   position: relative; display: flex; flex-direction: column; border-radius: 18px; background: var(--panel);

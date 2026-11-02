@@ -1,6 +1,8 @@
 // The paper panel, laid out like Overleaf: the paper's files, the LaTeX source, and the PDF it
 // compiles to beside it, with a divider to drag between the two. Recompiling (Mod-Enter in
 // the editor) saves what is unsaved first; a failed run shows LaTeX's errors under the source.
+// A phone has no room for the two side by side: it shows one or the other, the PDF first, and
+// the files over them.
 
 import { useEffect, useRef, useState } from 'react';
 import { api, paperPdfUrl, type Compiled, type WsInfo } from '../api';
@@ -10,6 +12,7 @@ import { themeVars, useLook } from './edthemes';
 import { FileView, Tabs, Tree, useFiles } from './files';
 import { Icon } from './icons';
 import { usePanelNote } from './page';
+import { PHONE, useMedia } from './util';
 
 interface Props {
   lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void;
@@ -48,9 +51,11 @@ function Tex(p: Props) {
   const place = p.info!.paper!;
   const f = useFiles(p.lineId, 'paper', p.tick, p.toast);
   const { theme } = useLook();
-  const [layout, setLayout] = useState<Layout>('split');
+  const phone = useMedia(PHONE);
+  const [want, setLayout] = useState<Layout>('split');
+  const layout: Layout = phone && want === 'split' ? 'pdf' : want;
   const [split, setSplit] = useState(loadSplit);
-  const [side, setSide] = useState(true);
+  const [side, setSide] = useState(() => !matchMedia(PHONE).matches);
   const [run, setRun] = useState<Compiled | null>(null);
   const [busy, setBusy] = useState(false);
   const [v, setV] = useState(0);
@@ -63,7 +68,7 @@ function Tex(p: Props) {
   const dirtySet = new Set(f.open.filter(o => o.text !== o.saved).map(o => o.path));
 
   useEffect(() => p.onDirty(f.dirty), [f.dirty]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (p.reveal) { f.show(p.reveal.path); setLayout(l => (l === 'pdf' ? 'split' : l)); } }, [p.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (p.reveal) { f.show(p.reveal.path); setLayout(l => (phone ? 'src' : l === 'pdf' ? 'split' : l)); } }, [p.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   const goto = p.reveal?.line && f.now?.path === p.reveal.path ? { line: p.reveal.line, n: p.reveal.n } : null;
   useEffect(() => { if (!f.open.length && place.main) f.show(place.main); }, [place.main]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,7 +121,7 @@ function Tex(p: Props) {
         <span className="sp" />
         <div className="seg tex-seg" role="tablist">
           <button className={layout === 'src' ? 'on' : ''} onClick={() => setLayout('src')}>{tr('源码')}</button>
-          <button className={layout === 'split' ? 'on' : ''} onClick={() => setLayout('split')}>{tr('对照')}</button>
+          {!phone && <button className={layout === 'split' ? 'on' : ''} onClick={() => setLayout('split')}>{tr('对照')}</button>}
           <button className={layout === 'pdf' ? 'on' : ''} onClick={() => setLayout('pdf')}>PDF</button>
         </div>
         {run && <span className={`tex-run ${run.ok ? 'ok' : 'bad'}`} onClick={() => setLogOpen(o => !o)} title={tr('看编译日志')}>
@@ -129,9 +134,14 @@ function Tex(p: Props) {
         </button>
       </div>
       <div className="tex-body" data-ed={theme.dark ? 'dark' : 'light'} style={themeVars(theme)}>
+        {side && phone && <div className="tex-files-back" onClick={() => setSide(false)} />}
         {side && <aside className="tex-files">
           <span className="ide-t">{tr('文件')}</span>
-          <Tree files={files} cur={f.cur} onOpen={x => (/\.pdf$/i.test(x) ? setLayout('pdf') : f.show(x))} dirty={dirtySet} root="paper" />
+          <Tree files={files} cur={f.cur} dirty={dirtySet} root="paper" onOpen={x => {
+            if (/\.pdf$/i.test(x)) setLayout('pdf');
+            else { f.show(x); if (phone) setLayout('src'); }
+            if (phone) setSide(false);
+          }} />
         </aside>}
         <div className="tex-panes" style={{ ['--split' as string]: split }}>
           <section className="tex-src">

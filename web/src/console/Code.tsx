@@ -1,6 +1,7 @@
 // The code panel, laid out like VS Code: the repository's files down the left with git's marks,
 // the open files as tabs, the editor, and a status bar. Mod-S writes the file back into the
-// repository; a changed file can be compared with what git has.
+// repository; a changed file can be compared with what git has. On a phone the files and the
+// editor take the whole width in turn: opening a file shows it, 文件 goes back to the list.
 
 import { useEffect, useState } from 'react';
 import { api, type WsInfo } from '../api';
@@ -10,6 +11,7 @@ import { themeVars, useLook } from './edthemes';
 import { FileView, Tabs, Tree, langOf, useFiles } from './files';
 import { Icon } from './icons';
 import { usePanelNote } from './page';
+import { PHONE, useMedia } from './util';
 
 interface Props {
   lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void;
@@ -39,6 +41,8 @@ function Repo(p: Props) {
   const [pos, setPos] = useState<[number, number]>([1, 1]);
   const [picked, setPicked] = useState('');
   const [diff, setDiff] = useState<{ path: string; text: string } | null>(null);
+  const phone = useMedia(PHONE);
+  const [browse, setBrowse] = useState(false);
   const files = f.tree.data?.files ?? [];
   const changed = files.filter(x => x.status);
   const dirtySet = new Set(f.open.filter(o => o.text !== o.saved).map(o => o.path));
@@ -54,6 +58,7 @@ function Repo(p: Props) {
   useEffect(() => { if (p.reveal) f.show(p.reveal.path); }, [p.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cur = f.now;
+  const open = (path: string) => { f.show(path); setBrowse(false); };
   const st = cur ? f.status.get(cur.path) : undefined;
   const goto = p.reveal?.line && cur?.path === p.reveal.path ? { line: p.reveal.line, n: p.reveal.n } : null;
   usePanelNote('code', 'file', {
@@ -67,7 +72,7 @@ function Repo(p: Props) {
   };
 
   return (
-    <div className="ide" data-ed={theme.dark ? 'dark' : 'light'} style={themeVars(theme)}>
+    <div className={`ide${phone && (browse || !cur) ? ' browse' : ''}`} data-ed={theme.dark ? 'dark' : 'light'} style={themeVars(theme)}>
       <aside className="ide-side">
         <div className="ide-sh">
           <span className="ide-t">{tr('资源管理器')}</span>
@@ -83,18 +88,18 @@ function Repo(p: Props) {
           <div className="ide-changes">
             <span className="ide-t">{tr('改动 · {0}', changed.length)}</span>
             {changed.slice(0, 6).map(x => (
-              <button key={x.path} className={`ide-ch st-${x.status}`} onClick={() => f.show(x.path)} title={x.path}>
+              <button key={x.path} className={`ide-ch st-${x.status}`} onClick={() => open(x.path)} title={x.path}>
                 <span>{x.path}</span><em>{x.status?.[0].toUpperCase()}</em>
               </button>
             ))}
             {changed.length > 6 && <span className="muted small">{tr('还有 {0} 个', changed.length - 6)}</span>}
           </div>
         )}
-        <Tree files={files} cur={f.cur} onOpen={f.show} dirty={dirtySet} filter={q} root="code" />
+        <Tree files={files} cur={f.cur} onOpen={open} dirty={dirtySet} filter={q} root="code" />
         {f.tree.data?.truncated && <p className="muted small tr-none">{tr('文件太多，只列出前 4000 个。')}</p>}
       </aside>
       <section className="ide-main">
-        <Tabs f={f} extra={cur && <>
+        <Tabs f={f} lead={phone && <button className="ib ide-files" onClick={() => setBrowse(true)}><Icon n="folder" size={16} />{tr('文件')}</button>} extra={cur && <>
           {st && st !== 'untracked' && <button className={`ib${diff ? ' on' : ''}`} title={tr('和 git 里的版本对比')} onClick={showDiff}><Icon n="diff" size={15} /></button>}
           {!DEMO && <button className="ib" title={tr('保存（⌘S）')} disabled={!dirtySet.has(cur.path) || f.saving} onClick={() => f.save(cur.path)}><Icon n="save" size={15} /></button>}
         </>} />

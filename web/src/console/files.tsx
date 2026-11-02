@@ -168,12 +168,13 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
 
 // ---------- tabs and the open file ----------
 
-export function Tabs({ f, extra }: { f: Files; extra?: React.ReactNode }) {
+export function Tabs({ f, lead, extra }: { f: Files; lead?: React.ReactNode; extra?: React.ReactNode }) {
   const bar = useRef<HTMLDivElement>(null);
   const { icons } = useLook();
   useEffect(() => revealX(bar.current, bar.current?.querySelector('.tab.on')), [f.cur, f.open.length]);
   return (
     <div className="etabs">
+      {lead}
       <div className="tabs-in" ref={bar}>
         {f.open.map(o => (
           <div key={o.path} className={`tab${o.path === f.cur ? ' on' : ''}${isDirty(o) ? ' dirty' : ''}`} title={o.path}
