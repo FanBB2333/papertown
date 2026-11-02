@@ -28,6 +28,10 @@ The console's assistant has more (see its AGENTS.md):
     .papertown/pt show [--mod exp] [--line line_6] [--file code:path[:line]] [--job id] [--ref ref]
     .papertown/pt actions
     .papertown/pt do <action> [key=value]... [--why "..."]
+    .papertown/pt status|reports <line>      where a project stands; its reports and questions
+    .papertown/pt worker coder|writer --line <line>
+    .papertown/pt tell <line> "..." [--now]   to a project's lead ("<line> coder": to a worker)
+    .papertown/pt answer <question> "..."    your answer, passed on to the agent that asked
 
 When the shell has no network (Codex's sandbox), the assistant's requests go as files in
 q/ beside this script; the server answers each one in a/.
@@ -153,9 +157,15 @@ def main(a):
     elif a[0] in ("status", "reports"):
         print(call(f"/{a[0]}" + (f"?line={quote(a[1])}" if len(a) > 1 else ""))["text"])
     elif a[0] == "worker":
-        if len(a) < 2:
-            sys.exit("用法：pt worker coder|writer [条数]")
-        print(call(f"/worker/{quote(a[1])}" + (f"?n={int(a[2])}" if len(a) > 2 else ""))["text"])
+        opts, rest = options(a[1:], many=(), flags=())
+        if not rest:
+            sys.exit("用法：pt worker coder|writer [条数] [--line 项目]")
+        q = {**({"n": rest[1]} if len(rest) > 1 else {}), **({"line": opts["line"]} if opts.get("line") else {})}
+        print(call(f"/worker/{quote(rest[0])}" + ("?" + "&".join(f"{k}={quote(str(v))}" for k, v in q.items()) if q else ""))["text"])
+    elif a[0] == "answer":
+        if len(a) < 3:
+            sys.exit('用法：pt answer <问题编号> "回答"')
+        print(call("/answer", {"id": a[1], "text": " ".join(a[2:])})["text"])
     elif a[0] == "tell":
         opts, rest = options(a[1:], many=(), flags=("--now",))
         if len(rest) < 2:

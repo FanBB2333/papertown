@@ -143,3 +143,55 @@ def test_a_lead_hears_when_its_project_moves(tmp_path):
         time.sleep(0.5)
         look()
         assert len(checkins()) == 5  # switched off
+
+
+def test_the_assistant_speaks_for_you_to_the_projects(tmp_path):
+    app, calls = started(tmp_path)
+    with TestClient(app) as c:
+        town = app.state.town
+        line = c.post("/api/ideas", json={"text": IDEA}).json()
+        lid = line["id"]
+        wait_for(town, lid, {"waiting"})
+        assert c.get("/api/paseo").json()["defaults"]["assistant"] == {"provider": "codex", "model": "gpt-6.1-terra", "thinking": "xhigh"}
+        c.get("/api/assistant")
+        c.post("/api/agents/assistant/start", json={"runtime": "paseo"})  # nothing picked: its default
+        c.post("/api/agents", json={"line_id": lid, "role": "lead"})
+        c.post(f"/api/agents/lead-{lid}/start", json={"runtime": "paseo"})
+        runs = [x for x in calls.read_text().splitlines() if x.startswith("run")]
+        assert "--provider codex" in runs[0] and "--model gpt-6.1-terra --thinking xhigh" in runs[0]
+        assert "--model gpt-6.1-terra --thinking high" in runs[1]
+        home = town.assistant.dir
+        assert "也是用户的代理人" in (home / "AGENTS.md").read_text() and "## 你和项目" in (home / "AGENTS.md").read_text()
+        h = {"x-papertown-token": town.agents.get("assistant")["token"]}
+        assert "tell（line text [role] [now]）" in (home / ".papertown" / "actions.md").read_text()
+        assert "〔直接做〕" in town.assistant.actions_text() and "job.cancel（job）：" in town.assistant.actions_text()
+
+        # a project you name comes with where it stands
+        c.post("/api/assistant/say", json={"text": f"#{line['seq']} 现在怎么样了？"})
+        said = town.agents.events("assistant")[-1]["data"]["text"]
+        assert said.startswith("<projects>\n") and f"项目 #{line['seq']}" in said and said.endswith("现在怎么样了？")
+
+        # it tells the lead at once, and the sidebar keeps a record
+        r = c.post("/api/bridge/assistant/tell", json={"to": f"#{line['seq']}", "text": "先把基线复现出来"}, headers=h).json()
+        assert r["text"].startswith("已经做了：给#1 的项目负责人发消息")
+        got = town.agents.events(f"lead-{lid}")[-1]["data"]
+        assert got["origin"] == "assistant" and got["text"].startswith('<msg from="小助手">')
+        card = c.get("/api/assistant").json()["acts"][-1]["data"]
+        assert card["status"] == "done" and card["auto"]
+        assert c.post("/api/bridge/assistant/tell", json={"to": f"#{line['seq']} coder", "text": "x"}, headers=h).status_code == 400  # not started
+
+        # it passes on your answer to a project's question
+        q = town.leads.ask(f"lead-{lid}", "先做哪个数据集？", ["A", "B"])
+        c.post("/api/bridge/assistant/answer", json={"id": str(q["id"]), "text": "先做 A"}, headers=h)
+        assert town.leads.asks(lid) == [] and "用户（经小助手转达）回答：先做 A" in town.agents.events(f"lead-{lid}")[-1]["data"]["text"]
+
+        # the boundaries can make telling wait for your yes
+        c.put("/api/bounds", json={"rules": [{"kind": "ask", "text": "给项目下命令前问我", "inherit": "no", "action": "tell"}]})
+        assert "〔要他在侧边栏点「允许」：给项目下命令前问我〕" in (home / ".papertown" / "actions.md").read_text()
+        before = len(town.agents.events(f"lead-{lid}"))
+        r = c.post("/api/bridge/assistant/tell", json={"to": lid, "text": "停一下"}, headers=h).json()
+        assert "按你的工作边界：给项目下命令前问我" in r["text"] and len(town.agents.events(f"lead-{lid}")) == before
+        c.post(f"/api/assistant/acts/{r['id']}", json={"allow": True})
+        assert town.agents.events(f"lead-{lid}")[-1]["data"]["text"].endswith("停一下\n</msg>")
+        c.put("/api/bounds", json={"rules": [{"kind": "never", "text": "别动项目", "inherit": "no", "action": "tell"}]})
+        assert c.post("/api/bridge/assistant/tell", json={"to": lid, "text": "x"}, headers=h).status_code == 400

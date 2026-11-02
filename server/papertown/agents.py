@@ -447,6 +447,9 @@ class Agents:
         it from then on, so starting again only reopens it."""
         if a.get("ext_id"):
             return self.public(a)
+        if not provider and a["role"] in ("assistant", "lead"):
+            d = self.s.paseo_default(a["role"])
+            provider, model, thinking = d["provider"], model or d["model"], thinking or d["thinking"]
         if not provider:
             raise AgentError("先选一个 Paseo 里的供应商")
         st = self.paseo.status(fresh=True)

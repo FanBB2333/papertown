@@ -91,11 +91,21 @@ class Settings:
     skim_bin: str = field(default_factory=lambda: _env("PAPERTOWN_SKIM_BIN"))
     # your own projects, linked in from local repos (see linked.py); default: projects.json in the data dir
     projects: str = field(default_factory=lambda: _env("PAPERTOWN_PROJECTS"))
+    # what the assistant and the project leads start with on Paseo when none is picked: provider/model@thinking
+    assistant_model: str = field(default_factory=lambda: _env("PAPERTOWN_ASSISTANT_MODEL", "codex/gpt-6.1-terra@xhigh"))
+    lead_model: str = field(default_factory=lambda: _env("PAPERTOWN_LEAD_MODEL", "codex/gpt-6.1-terra@high"))
     # project leads: seconds between looks at their projects, and at least between two check-ins
     lead_tick: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_TICK", "20") or 20))
     lead_gap: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_GAP", "180") or 180))
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
+
+    def paseo_default(self, role: str) -> dict:
+        """The provider, model and thinking an assistant or a lead starts with on Paseo."""
+        spec = self.assistant_model if role == "assistant" else self.lead_model if role == "lead" else ""
+        provider, _, rest = spec.partition("/")
+        model, _, thinking = rest.partition("@")
+        return {"provider": provider or None, "model": model or None, "thinking": thinking or None}
 
     def __post_init__(self) -> None:
         strong, cheap = PROVIDERS.get(self.provider, PROVIDERS["mock"])["default"]

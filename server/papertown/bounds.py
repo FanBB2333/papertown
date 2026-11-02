@@ -41,6 +41,7 @@ LEVEL_OF = {"assistant": "global", "lead": "project", "coder": "worker", "writer
 # what a never or ask rule can name, so that Papertown refuses it or holds it for you
 ACTIONS = {
     "tell": "给别的 agent 发消息、派活",
+    "answer": "替用户回答项目里的问题",
     "job.submit": "提交实验任务",
     "job.cancel": "取消实验任务",
     "line.hatch": "让项目立项",

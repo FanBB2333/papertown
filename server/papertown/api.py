@@ -65,6 +65,11 @@ class TellIn(BaseModel):
     line: str | None = None
 
 
+class AnswerByIn(BaseModel):
+    id: str = Field(min_length=1, max_length=20)
+    text: str = Field(min_length=1, max_length=2000)
+
+
 class ReportIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     key: bool = False
@@ -522,7 +527,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception as e:  # noqa: BLE001 - the CLI's own message is the useful part
             st = st | {"note": str(e)}
             providers = []
-        return {"status": st, "providers": providers}
+        return {"status": st, "providers": providers, "defaults": {r: town.s.paseo_default(r) for r in ("assistant", "lead")}}
 
     @app.post("/api/agents/{agent_id}/stop")
     def agent_stop(agent_id: str):
@@ -716,9 +721,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/bridge/{agent_id}/tell")
     def bridge_tell(agent_id: str, body: TellIn, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
-        if a["role"] == ASSISTANT:
-            raise HTTPException(403, "小助手给项目发消息用 pt do")
+        if a["role"] == ASSISTANT:  # to a project: "#6" for its lead, "#6 coder" for one of its workers
+            words = body.to.replace(":", " ").split()
+            line = next((w for w in words if w.lstrip("#").isdigit() or w.startswith("line_")), body.line)
+            role = next((w for w in words if w != line), None)
+            return acted(town.assistant.act, "tell", {"line": line or (town.assistant.page.get("line") or {}).get("id"), "role": role,
+                                                       "text": body.text, "now": body.now}, "")
         return {"text": leads(town.leads.tell, agent_id, body.to, body.text, body.now)}
+
+    @app.post("/api/bridge/{agent_id}/answer")
+    def bridge_answer(agent_id: str, body: AnswerByIn, x_papertown_token: str | None = Header(default=None)):
+        helper(agent_id, x_papertown_token)
+        return acted(town.assistant.act, "answer", {"id": body.id, "text": body.text}, "")
 
     @app.post("/api/bridge/{agent_id}/report")
     def bridge_report(agent_id: str, body: ReportIn, x_papertown_token: str | None = Header(default=None)):
@@ -737,8 +751,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/bridge/{agent_id}/act")
     def bridge_act(agent_id: str, body: ActIn, x_papertown_token: str | None = Header(default=None)):
         helper(agent_id, x_papertown_token)
-        e = assistant(town.assistant.propose, body.action, body.args, body.why)
-        return {"id": e["id"], "text": f"已经请用户确认「{e['data']['title']}」。他点了允许或拒绝之后，结果会作为一条 <event> 消息发给你；先告诉他你请求了什么，然后结束这一轮。"}
+        return acted(town.assistant.act, body.action, body.args, body.why)
+
+    def acted(fn, *args) -> dict:
+        """An action of the assistant's, as pt tells it what became of it."""
+        e = assistant(fn, *args)
+        d = e["data"]
+        if d["status"] == "done":
+            return {"id": e["id"], "text": f"已经做了：{d['title']}。{d['result']}"}
+        why = f"（按你的工作边界：{d['rule']}）" if d.get("rule") else ""
+        return {"id": e["id"], "text": f"已经请用户确认「{d['title']}」{why}。他点了允许或拒绝之后，结果会作为一条 <event> 消息发给你；先告诉他你请求了什么，然后结束这一轮。"}
 
     @app.post("/api/bridge/{agent_id}/jobs")
     def bridge_submit(agent_id: str, body: JobIn, x_papertown_token: str | None = Header(default=None)):

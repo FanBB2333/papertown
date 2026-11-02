@@ -1,5 +1,8 @@
 """The console's assistant: an agent in the sidebar that tells you what the page in front of
-you shows, read from where it comes from, and does things in the town once you allow them.
+you shows, read from where it comes from, and speaks for you to the projects. Each project has
+a lead (leads.py) that keeps it moving; the assistant is above them, across projects, and works
+only when you write to it: a project you name by number comes with where it stands now, and
+what you want of a project goes to its lead.
 It runs the way the depot's and the press's agents do (pi in tmux, or Paseo); what is
 particular to it is here:
 
@@ -10,9 +13,11 @@ particular to it is here:
   panel shows.
 - Asking. It can ask you something, with choices, or ask you to point at the page.
 - Showing. It can open a panel, a file or a job for you and light up a part of the page.
-- Doing. It proposes actions from a fixed list (submit or cancel a farm job, hatch, resume,
-  adjust, message an employee, compile a paper, switch a skill or an MCP server). Each one
-  waits in the sidebar until you allow it, and what came of it is sent back to the assistant.
+- Doing. It takes actions from a fixed list (tell a project's lead, pass on your answer to a
+  project's question, submit or cancel a farm job, hatch, resume, adjust, compile a paper,
+  switch a skill or an MCP server). Telling and answering are done at once; the rest wait in
+  the sidebar until you allow them, and what came of it is sent back to the assistant. The
+  work boundaries can hold any of them for your yes, or refuse it.
 - Earlier conversations. A new conversation sets the Paseo one aside; the sidebar lists those
   (named by the first thing asked in each) and can go back to one.
 
@@ -23,11 +28,13 @@ Its tools reach the server over HTTP; from a sandbox without network (Codex's), 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from .agents import ROLES, AgentError
 from .db import now
+from .leads import LeadError
 from .paseo import PaseoError
 from .workspace import WsError
 
@@ -41,16 +48,19 @@ TEXT_MAX = 8000  # of the panel's own text
 SELECTION_MAX = 2000  # of the text you had selected
 REFS_MAX = 80
 
-# What the assistant may ask to do, each run only once you allow it in the sidebar:
-# name -> (what it does, its arguments, the optional ones in brackets)
+# What the assistant may do: name -> (what it does, its arguments, the optional ones in brackets).
+# Telling a project and passing on your answers are done at once; the rest wait for you to allow
+# them in the sidebar. The work boundaries can make any of them wait, or refuse it.
 ACTIONS: dict[str, tuple[str, str]] = {
+    "tell": ("给项目发消息、派活：发给项目负责人；用户明确要求时，role 写 coder 或 writer 直接发给员工；now=true 插进它正在做的事",
+             "line text [role] [now]"),
+    "answer": ("把用户对项目里某个问题的回答转给在等的 agent：id 是问题编号，text 是用户的回答", "id text"),
     "job.submit": ("在实验农场提交一个任务：本地执行器在项目的代码目录里用 bash 跑这条命令", "line name command"),
     "job.cancel": ("取消实验农场里排着或在跑的任务（nvidb 的任务不行，Papertown 对 nvidb 只读）", "job"),
     "line.hatch": ("让孵化场里查重过了的项目立项，进造纸厂开工", "line"),
     "line.resume": ("让停下来等你的项目接着往下做", "line"),
     "line.adjust": ("按一句话调整项目的方向，再接着做", "line text"),
     "idea.submit": ("放入一颗新 idea，孵化场先查重", "text"),
-    "agent.say": ("给项目的代码员工（coder）或写作员工（writer）发一条消息，它要已经启动过", "line role text"),
     "agent.brief": ("给项目的代码员工或写作员工再发一遍最新的项目简报", "line role"),
     "agent.abort": ("打断项目的代码员工或写作员工手上的事", "line role"),
     "paper.compile": ("重新编译项目的论文", "line"),
@@ -59,23 +69,41 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "mcp.toggle": ("启用或停用接线局里的一个 MCP server", "name enabled"),
     "mcp.restart": ("重连接线局里的一个 MCP server", "name"),
 }
+DIRECT = ("tell", "answer")  # done at once unless the boundaries say otherwise
+MENTIONED_MAX = 3  # projects whose progress goes with one message
 
 # how the assistant reaches the town, by runtime
 TOOLS = {
     "pi": {"page": "`papertown_page` 工具", "get": "`papertown_get` 工具（path 写接口路径）", "brief": "`papertown_brief` 工具",
            "ask": "`papertown_ask` 工具（question；choices 是给他点的选项；point 为 true 时请他在页面上点一下）",
            "show": "`papertown_show` 工具（mod、line、file、job、ref 按需要填）", "actions": "`papertown_actions` 工具",
-           "do": "`papertown_do` 工具（action 是动作名，args 是它的参数，why 写为什么要做）", "net": ""},
+           "do": "`papertown_do` 工具（action 是动作名，args 是它的参数，why 写为什么要做）", "net": "",
+           "status": "`papertown_get` 读 `/api/lines/<项目>/lead`（负责人、汇报和等回答的问题）和 `/api/lines/<项目>`",
+           "reports": "`papertown_get` 读 `/api/reports?line_id=<项目>`", "worker": "`papertown_get` 读 `/api/agents/coder-<项目>`（写作员工换成 writer）",
+           "tell": "`papertown_do` 工具（action 写 tell，args 写 line 和 text；发给员工本人时加 role）",
+           "answer": "`papertown_do` 工具（action 写 answer，args 写 id 和 text）"},
     "paseo": {"page": "`.papertown/pt page`（或直接读这个文件）", "get": "`.papertown/pt get <接口>`", "brief": "`.papertown/pt brief [项目]`",
               "ask": "`.papertown/pt ask \"问题\" [--choice 选项]… [--point]`（--choice 是给他点的选项，--point 请他在页面上点一下）",
               "show": "`.papertown/pt show [--mod 面板] [--line 项目] [--file code:路径[:行号]] [--job 任务] [--ref 标识]`",
               "actions": "`.papertown/pt actions`", "do": "`.papertown/pt do <动作> key=value… --why \"为什么\"`",
-              "net": "\n- `.papertown/pt` 直接连本机的 Papertown（{url}）；所在的沙箱不让联网时，它自动改走工作目录里的文件，不用为它申请权限。\n"},
+              "net": "\n- `.papertown/pt` 直接连本机的 Papertown（{url}）；所在的沙箱不让联网时，它自动改走工作目录里的文件，不用为它申请权限。\n",
+              "status": "`.papertown/pt status <项目>`", "reports": "`.papertown/pt reports <项目>`",
+              "worker": "`.papertown/pt worker coder|writer --line <项目>`",
+              "tell": "`.papertown/pt tell <项目> \"…\"`（发给员工本人时写 `.papertown/pt tell \"<项目> coder\" \"…\"`；加 `--now` 插进它正在做的事）",
+              "answer": "`.papertown/pt answer <问题编号> \"…\"`"},
 }
 
 GUIDE = """# Papertown · 小助手
 
-你是 Papertown 中控屏右边侧边栏里的小助手。用户一边看页面一边问你：这一页显示的是什么、数字从哪来、任务现在怎么样了、接下来该做什么。你读页面背后的真实数据来回答；用户要你办的事，你提出请求，他点了「允许」才执行。
+你是 Papertown 中控屏右边侧边栏里的小助手，也是用户的代理人：他通过你了解各个项目、给项目下命令、协调项目之间的事。他一边看页面一边问你：这一页显示的是什么、数字从哪来、某个项目怎么样了、接下来该做什么。你读页面背后的真实数据来回答，替他把话带给项目。
+
+## 你和项目
+
+- 每个项目有一位项目负责人（agent）：盯进度、催员工、给用户写汇报。员工（代码员工、写作员工）在它手下干活。你不盯某一个项目，你管项目之间的事：比较、取舍、协调（两个项目抢同一批卡、一个项目的结论另一个要用）。
+- 用户不发话时你不做事，也不要自己去巡检项目，那是负责人的事。
+- 用户提到某个项目，先弄清它现在的样子再回答。他用 #编号 提到的，Papertown 会把那个项目刚读的进展附在消息里（`<projects>`）；没附上的（他说的是名字，或者说「这个项目」），用 {status} 读。要更细的：{reports} 看汇报和问题，{worker} 看员工的对话。
+- 给项目的命令发给它的负责人：{tell}。说清楚要什么结果、什么时候要；负责人会派给员工，办完写汇报。用户明确说「直接让代码员工……」时才发给员工本人。
+- 项目里有 agent 在等用户回答（汇报里标着「等回答」）：用户跟你说话时给了答案，用 {answer} 转过去；他没说的，不要替他拿主意，把问题转述给他。
 
 ## 用户在看什么
 
@@ -96,9 +124,9 @@ GUIDE = """# Papertown · 小助手
 
 ## 替用户办事
 
-- 能做的事用 {actions} 看：提交或取消实验农场的任务、立项、继续、调整方向、放入新 idea、给项目的代码员工或写作员工发消息、编译论文、开关 skill 和 MCP server。
-- 办事用 {do}。请求不会马上执行：侧边栏会弹出一张卡片，写着你要做什么、为什么，他点「允许」才执行，结果会作为一条 `<event>…</event>` 消息发给你。提完请求就结束这一轮，告诉他你请求了什么、在等他点。
-- 只用这个办法改小镇里的东西，不要直接调用会改东西的接口。要改代码或论文，请对应的员工去做（agent.say）。
+- 能做的事用 {actions} 看，每件后面写着现在是直接做、要他先点「允许」，还是不能做（取决于他给你设的工作边界）：给项目发消息、转达回答、提交或取消实验农场的任务、立项、继续、调整方向、放入新 idea、编译论文、开关 skill 和 MCP server。
+- 办事用 {do}（发消息和转达回答也可以用上面的写法）。直接做的会马上执行并告诉你结果；要他允许的，侧边栏会弹出一张卡片写着你要做什么、为什么，他点了才执行，结果会作为一条 `<event>…</event>` 消息发给你。提完这种请求就结束这一轮，告诉他你请求了什么、在等他点。
+- 只用这个办法改小镇里的东西，不要直接调用会改东西的接口。要改代码或论文，告诉那个项目的负责人（tell）。
 
 ## 回复
 
@@ -116,10 +144,11 @@ def clip(s: object, n: int = 120) -> str:
     return t if len(t) <= n else t[: n - 1] + "…"
 
 
-def _role(v: object) -> str:
-    r = {"coder": "coder", "代码员工": "coder", "代码": "coder", "writer": "writer", "写作员工": "writer", "写作": "writer"}.get(str(v).strip())
-    if not r:
-        raise ActError("role 要写 coder（代码员工）或 writer（写作员工）")
+def _role(v: object, allowed: tuple[str, ...] = ("coder", "writer")) -> str:
+    r = {"coder": "coder", "代码员工": "coder", "代码": "coder", "writer": "writer", "写作员工": "writer", "写作": "writer",
+         "lead": "lead", "负责人": "lead", "项目负责人": "lead"}.get(str(v).strip().lower())
+    if r not in allowed:
+        raise ActError("role 要写 " + "、".join({"coder": "coder（代码员工）", "writer": "writer（写作员工）", "lead": "lead（项目负责人）"}[x] for x in allowed))
     return r
 
 
@@ -178,8 +207,8 @@ class Assistant:
 
     def intro(self) -> str:
         """Its first message, marked <start> so the sidebar shows it as a note rather than as yours."""
-        return ("<start>\n你是 Papertown 中控屏的小助手。工作目录里的 AGENTS.md 说明了怎么看用户的页面、怎么读数据、怎么问用户、怎么替用户办事，先读一遍。"
-                "读完用一两句话告诉用户你能帮什么，然后等他提问。\n</start>")
+        return ("<start>\n你是 Papertown 中控屏的小助手，也是用户的代理人。工作目录里的 AGENTS.md 说明了你和各个项目的关系、怎么看用户的页面、"
+                "怎么读数据、怎么问用户、怎么替用户办事，先读一遍。读完用一两句话告诉用户你能帮什么，然后等他提问。\n</start>")
 
     def tools(self, d: Path) -> None:
         """Next to its `pt`: the list of actions and the page."""
@@ -188,10 +217,16 @@ class Assistant:
             (d / "page.md").write_text(self._page_md(self.page), encoding="utf-8")
 
     def actions_text(self) -> str:
-        out = ["能替用户做的事（每件都要他在侧边栏点「允许」才执行）：", ""]
-        out += [f"- {k}（{v[1]}）：{v[0]}" for k, v in ACTIONS.items()]
+        out = ["能替用户做的事，后面写着现在怎么办（按用户给你设的工作边界）：", ""]
+        for k, v in ACTIONS.items():
+            kind, rule = self.policy(k)
+            how = {"auto": "直接做", "ask": "要他在侧边栏点「允许」", "never": "不能做"}[kind] + (f"：{rule['text']}" if rule else "")
+            out.append(f"- {k}（{v[1]}）：{v[0]}。〔{how}〕")
         out += ["", "line 写项目的 id（line_6）或编号（#6）；job 写实验农场的任务 id（job_xxxxxxxx）。"]
         return "\n".join(out)
+
+    def policy(self, action: str) -> tuple[str, dict | None]:
+        return self.town.bounds.policy(ID, None, action, "auto" if action in DIRECT else "ask")
 
     # ---------- the page you are looking at ----------
 
@@ -333,7 +368,22 @@ class Assistant:
         self._close_asks(text)
         if a.get("runtime") == "paseo" and a.get("ext_id"):
             self._name(a["ext_id"], text)
-        return self.town.agents.say(ID, f"{self.header(p)}\n\n{text.strip()}" if p else text)
+        head = [x for x in (self.header(p) if p else "", self.projects(text)) if x]
+        return self.town.agents.say(ID, "\n\n".join([*head, text.strip()]))
+
+    def projects(self, text: str) -> str:
+        """Where the projects you name by number stand, read just now, to go with your message."""
+        seqs = list(dict.fromkeys(int(x) for x in re.findall(r"#(\d+)", text)))[:MENTIONED_MAX]
+        lines = [ln for ln in (self.db.one("select id from lines where seq = ?", n) for n in seqs) if ln]
+        if not lines:
+            return ""
+        parts = []
+        for ln in lines:
+            try:
+                parts.append(self.town.leads.status(ln["id"]))
+            except LeadError:
+                continue
+        return "<projects>\n你提到的项目，Papertown 刚读的进展：\n\n" + "\n\n".join(parts) + "\n</projects>" if parts else ""
 
     def brief(self, line: str | None) -> str:
         lid = self._line(line)["id"] if line else (self.page.get("line") or {}).get("id")
@@ -364,11 +414,22 @@ class Assistant:
         self.town.bus.publish("assistant_show", target=t)
         return t
 
-    # ---------- doing things, once you allow them ----------
+    # ---------- doing things: at once, or once you allow them ----------
 
-    def propose(self, action: str, args: dict, why: str) -> dict:
-        title, _ = self._plan(action, args)
-        return self.town.agents.record(ID, "act", {"action": action, "args": args, "why": clip(why, 300), "title": title, "status": "pending"})
+    def act(self, action: str, args: dict, why: str) -> dict:
+        """An action the assistant takes: done now if it may, else a card that waits for you."""
+        title, run = self._plan(action, args)
+        kind, rule = self.policy(action)
+        if kind == "never":
+            raise ActError(f"你的工作边界不让你做这件事：{rule['text']}")
+        card = {"action": action, "args": args, "why": clip(why, 300), "title": title}
+        if kind == "ask":
+            return self.town.agents.record(ID, "act", card | {"status": "pending", **({"rule": rule["text"]} if rule else {})})
+        try:
+            return self.town.agents.record(ID, "act", card | {"status": "done", "auto": True, "result": run(), "decided_at": now()})
+        except (ActError, LeadError, AgentError) as e:
+            self.town.agents.record(ID, "act", card | {"status": "failed", "auto": True, "result": str(e), "decided_at": now()})
+            raise ActError(str(e)) from e
 
     def decide(self, event_id: int, allow: bool) -> dict:
         e = self.db.one("select * from agent_events where id = ? and agent_id = ? and kind = 'act'", event_id, ID)
@@ -411,6 +472,29 @@ class Assistant:
         miss = [k for k in ACTIONS[name][1].split() if not k.startswith("[") and a.get(k) in (None, "")]
         if miss:
             raise ActError(f"{name} 还缺 {'、'.join(miss)}（参数是 {ACTIONS[name][1]}）")
+        if name == "answer":
+            try:
+                q = self.db.one("select * from reports where id = ? and kind = 'ask'", int(str(a["id"]).lstrip("#")))
+            except ValueError:
+                q = None
+            if not q or not q["data"].get("open"):
+                raise ActError(f"没有在等回答的问题 {a['id']}")
+            seq, text = self.db.val("select seq from lines where id = ?", q["line_id"]), str(a["text"]).strip()
+            return (f"替你回答 #{seq} 的{q['data'].get('who') or ''}「{clip(q['data']['question'], 60)}」：{clip(text, 120)}",
+                    lambda: (t.leads.answer(q["id"], text, "assistant"), "已经转给它")[1])
+        if name == "tell":
+            ln, text = self._line(a["line"]), str(a["text"]).strip()
+            role = _role(a["role"], ("lead", "coder", "writer")) if a.get("role") else "lead"
+            try:
+                target = t.leads.target(self.row(), role, ln["id"])
+            except LeadError as e:
+                raise ActError(str(e)) from e
+            now_, who = _bool(a["now"]) if a.get("now") not in (None, "") else False, t.leads._who(target)
+
+            def tell() -> str:
+                t.leads.deliver(self.row(), target, text, now_)
+                return f"已发给{who}" + ("" if now_ or target["status"] != "working" else "，它在忙，等它做完手上的事再交给它")
+            return f"给{who}发消息：{clip(text, 160)}", tell
         if name == "idea.submit":
             text = str(a["text"]).strip()
             return f"放入一颗新 idea：{clip(text, 80)}", lambda: f"已放入，成了项目 #{t.pipeline.submit_idea(text, None)['seq']}"
@@ -469,9 +553,6 @@ class Assistant:
         ag = t.agents.get(aid)
         if not ag or not ag.get("runtime"):
             raise ActError(f"{who}还没有启动，请用户先在「员工」面板里启动它")
-        if name == "agent.say":
-            text = str(a["text"]).strip()
-            return f"给{who}发消息：{clip(text, 160)}", lambda: (t.agents.say(aid, text), "已发出")[1]
         if name == "agent.brief":
             return f"给{who}发项目简报", lambda: (t.agents.say(aid, t.agents.brief(aid)), "已发出")[1]
         return f"打断{who}手上的事", lambda: (t.agents.abort(aid), "已打断")[1]
