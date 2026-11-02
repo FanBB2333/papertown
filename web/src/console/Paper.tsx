@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, paperPdfUrl, type Compiled, type WsInfo } from '../api';
 import { DEMO } from '../demo';
 import { tr } from '../i18n';
+import { themeVars, useLook } from './edthemes';
 import { FileView, Tabs, Tree, useFiles } from './files';
 import { Icon } from './icons';
 import { usePanelNote } from './page';
@@ -46,6 +47,7 @@ function digest(log: string) {
 function Tex(p: Props) {
   const place = p.info!.paper!;
   const f = useFiles(p.lineId, 'paper', p.tick, p.toast);
+  const { theme } = useLook();
   const [layout, setLayout] = useState<Layout>('split');
   const [split, setSplit] = useState(loadSplit);
   const [side, setSide] = useState(true);
@@ -126,7 +128,7 @@ function Tex(p: Props) {
           <Icon n={busy ? 'refresh' : 'play'} size={14} />{busy ? tr('编译中…') : tr('重新编译')}
         </button>
       </div>
-      <div className="tex-body">
+      <div className="tex-body" data-ed={theme.dark ? 'dark' : 'light'} style={themeVars(theme)}>
         {side && <aside className="tex-files">
           <span className="ide-t">{tr('文件')}</span>
           <Tree files={files} cur={f.cur} onOpen={x => (/\.pdf$/i.test(x) ? setLayout('pdf') : f.show(x))} dirty={dirtySet} root="paper" />

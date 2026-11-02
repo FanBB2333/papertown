@@ -24,12 +24,16 @@ export interface Settings {
   fullscreen3d: boolean; // the walk goes full screen
   tags3d: boolean; // building names over the town
   minimap: boolean;
+  // the editor in the console (see console/edthemes.ts)
+  edTheme: string; // a colour theme's id
+  edIcons: 'dots' | 'glyphs' | 'badges' | 'none'; // the file icon theme
 }
 
 export const DEFAULTS: Settings = {
   motion: 'full', grain: 0.5, start: 'console',
   smoothMap: true, zoomSpeed: 1, mapLabels: 'key', walkHint: true,
   sensitivity: 1, invertY: false, fov: 68, hand: true, bob: true, quality: 'high', fullscreen3d: true, tags3d: true, minimap: true,
+  edTheme: 'paper', edIcons: 'dots',
 };
 
 const KEY = 'pt-settings';

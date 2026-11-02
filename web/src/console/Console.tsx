@@ -20,6 +20,7 @@ import { tr } from '../i18n';
 import { Assistant } from './Assistant';
 import { Code } from './Code';
 import { Data } from './Data';
+import { EdPicker } from './EdPicker';
 import { Experiments } from './Experiments';
 import { Icon, type IconName } from './icons';
 import { Overview, STAGE_MOD } from './Overview';
@@ -300,6 +301,7 @@ export function Console(p: Props) {
         </div>
         {side && <Assistant actions={actions} autoFocus={opened.current} onClose={() => setSide(false)} />}
       </div>
+      <EdPicker />
     </main>
   );
 }

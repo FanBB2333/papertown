@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { api, type WsInfo } from '../api';
 import { DEMO } from '../demo';
 import { tr } from '../i18n';
+import { themeVars, useLook } from './edthemes';
 import { FileView, Tabs, Tree, langOf, useFiles } from './files';
 import { Icon } from './icons';
 import { usePanelNote } from './page';
@@ -33,6 +34,7 @@ export function Code(p: Props) {
 function Repo(p: Props) {
   const place = p.info!.code!;
   const f = useFiles(p.lineId, 'code', p.tick, p.toast);
+  const { theme } = useLook();
   const [q, setQ] = useState('');
   const [pos, setPos] = useState<[number, number]>([1, 1]);
   const [picked, setPicked] = useState('');
@@ -65,7 +67,7 @@ function Repo(p: Props) {
   };
 
   return (
-    <div className="ide">
+    <div className="ide" data-ed={theme.dark ? 'dark' : 'light'} style={themeVars(theme)}>
       <aside className="ide-side">
         <div className="ide-sh">
           <span className="ide-t">{tr('资源管理器')}</span>

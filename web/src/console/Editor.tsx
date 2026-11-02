@@ -1,14 +1,15 @@
 // The console's text editor (CodeMirror 6), for code and for TeX. One view stays mounted and
 // each open file keeps its own state in it, so switching tabs keeps each file's undo
-// history, selection and scroll. Mod-S saves, Mod-Enter runs (the paper: compile).
+// history, selection and scroll. Mod-S saves, Mod-Enter runs (the paper: compile), Mod-K Mod-T
+// picks a colour theme. Tokens are drawn by class and coloured by the theme's variables
+// (edthemes.ts), so a theme change reaches every open file at once.
 
 import { useEffect, useRef } from 'react';
 import { basicSetup } from 'codemirror';
 import { EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
-import { HighlightStyle, StreamLanguage, syntaxHighlighting } from '@codemirror/language';
+import { StreamLanguage, syntaxHighlighting } from '@codemirror/language';
 import { indentWithTab } from '@codemirror/commands';
-import { tags as t } from '@lezer/highlight';
 import { python } from '@codemirror/lang-python';
 import { javascript } from '@codemirror/lang-javascript';
 import { json } from '@codemirror/lang-json';
@@ -17,9 +18,11 @@ import { css } from '@codemirror/lang-css';
 import { html } from '@codemirror/lang-html';
 import { cpp } from '@codemirror/lang-cpp';
 import { yaml } from '@codemirror/lang-yaml';
-import { stex } from '@codemirror/legacy-modes/mode/stex';
 import { shell } from '@codemirror/legacy-modes/mode/shell';
 import { toml } from '@codemirror/legacy-modes/mode/toml';
+import { openPicker } from './edthemes';
+import { highlighter } from './highlight';
+import { bibtex, latex } from './latex';
 
 export interface Doc { id: string; path: string; text: string; rev: number }
 
@@ -46,7 +49,8 @@ function language(path: string): Extension[] {
     case 'html': case 'htm': case 'vue': case 'svelte': return [html()];
     case 'c': case 'cc': case 'cpp': case 'cxx': case 'h': case 'hpp': case 'cu': case 'cuh': return [cpp()];
     case 'yaml': case 'yml': return [yaml()];
-    case 'tex': case 'sty': case 'cls': case 'bib': case 'bbx': case 'cbx': return [StreamLanguage.define(stex), EditorView.lineWrapping];
+    case 'tex': case 'sty': case 'cls': case 'bbx': case 'cbx': case 'ltx': return [latex, EditorView.lineWrapping];
+    case 'bib': return [bibtex, EditorView.lineWrapping];
     case 'sh': case 'bash': case 'zsh': return [StreamLanguage.define(shell)];
     case 'toml': case 'cfg': case 'ini': return [StreamLanguage.define(toml)];
     case 'txt': case 'log': case 'csv': case 'tsv': return [EditorView.lineWrapping];
@@ -54,40 +58,31 @@ function language(path: string): Extension[] {
   }
 }
 
-// the paper's colours, quiet enough to read code on for a long time
-const ink = HighlightStyle.define([
-  { tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword], color: '#a5482c' },
-  { tag: [t.string, t.special(t.string), t.regexp], color: '#5b7a37' },
-  { tag: [t.number, t.bool, t.null, t.atom], color: '#a06a14' },
-  { tag: [t.comment, t.lineComment, t.blockComment], color: '#a3927b', fontStyle: 'italic' },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: '#2f6390' },
-  { tag: [t.typeName, t.className, t.namespace], color: '#2e7472' },
-  { tag: [t.propertyName, t.attributeName], color: '#7a4f93' },
-  { tag: [t.definition(t.variableName)], color: '#3a2c1e' },
-  { tag: [t.tagName, t.macroName], color: '#a5482c' },
-  { tag: [t.heading], color: '#2f261d', fontWeight: '700' },
-  { tag: [t.emphasis], fontStyle: 'italic' },
-  { tag: [t.strong], fontWeight: '700' },
-  { tag: [t.link, t.url], color: '#2f6390', textDecoration: 'underline' },
-  { tag: [t.meta, t.processingInstruction], color: '#857560' },
-  { tag: [t.bracket, t.paren, t.squareBracket, t.brace], color: '#6b5a46' },
-  { tag: t.invalid, color: '#b9543f' },
-]);
-
+// the editor's own parts, in the panel's theme (--ed-… from edthemes.ts)
 const theme = EditorView.theme({
-  '&': { height: '100%', fontSize: '13px', backgroundColor: 'var(--ed-bg)', color: 'var(--ink)' },
+  '&': { height: '100%', fontSize: '13px', backgroundColor: 'var(--ed-bg)', color: 'var(--ed-fg)' },
   '.cm-scroller': { fontFamily: '"SF Mono", "JetBrains Mono", Menlo, Consolas, monospace', lineHeight: '1.6' },
-  '.cm-content': { caretColor: 'var(--brand)', padding: '10px 0' },
-  '.cm-cursor': { borderLeftColor: 'var(--brand)', borderLeftWidth: '2px' },
-  '.cm-gutters': { backgroundColor: 'var(--ed-bg)', color: 'color-mix(in srgb, var(--muted) 70%, transparent)', border: 'none', paddingLeft: '6px' },
-  '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--ink)' },
-  '.cm-activeLine': { backgroundColor: 'color-mix(in srgb, var(--brand) 5%, transparent)' },
-  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: 'color-mix(in srgb, var(--brand) 22%, transparent) !important' },
-  '.cm-selectionMatch': { backgroundColor: 'color-mix(in srgb, var(--warn) 18%, transparent)' },
-  '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': { backgroundColor: 'color-mix(in srgb, var(--ok) 22%, transparent)', outline: 'none' },
-  '.cm-foldPlaceholder': { backgroundColor: 'var(--panel2)', border: 'none', color: 'var(--muted)' },
-  '.cm-tooltip': { backgroundColor: 'var(--panel)', border: '1px solid var(--line)', borderRadius: '8px' },
-  '.cm-panels': { backgroundColor: 'var(--panel2)', color: 'var(--ink)' },
+  '.cm-content': { caretColor: 'var(--ed-cursor)', padding: '10px 0' },
+  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--ed-cursor)', borderLeftWidth: '2px' },
+  '.cm-gutters': { backgroundColor: 'var(--ed-bg)', color: 'var(--ed-gutter)', border: 'none', paddingLeft: '6px' },
+  '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--ed-gutterOn)' },
+  '.cm-activeLine': { backgroundColor: 'var(--ed-line)' },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: 'var(--ed-sel) !important' },
+  '.cm-selectionMatch': { backgroundColor: 'var(--ed-match)' },
+  '.cm-searchMatch': { backgroundColor: 'var(--ed-match)', outline: '1px solid color-mix(in srgb, var(--ed-accent) 45%, transparent)' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--ed-sel)' },
+  '.cm-matchingBracket, &.cm-focused .cm-matchingBracket': { backgroundColor: 'var(--ed-bracket)', outline: 'none' },
+  '.cm-nonmatchingBracket, &.cm-focused .cm-nonmatchingBracket': { color: 'var(--tk-bad)' },
+  '.cm-foldPlaceholder': { backgroundColor: 'var(--ed-tabs)', border: 'none', color: 'var(--ed-muted)' },
+  '.cm-foldGutter .cm-gutterElement': { color: 'var(--ed-gutter)' },
+  '.cm-tooltip': { backgroundColor: 'var(--ed-side)', color: 'var(--ed-fg)', border: '1px solid var(--ed-border)', borderRadius: '8px' },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: 'var(--ed-sel)', color: 'var(--ed-fg)' },
+  '.cm-panels': { backgroundColor: 'var(--ed-side)', color: 'var(--ed-fg)' },
+  '.cm-panels-top': { borderBottom: '1px solid var(--ed-border)' },
+  '.cm-panels-bottom': { borderTop: '1px solid var(--ed-border)' },
+  '.cm-textfield': { backgroundColor: 'var(--ed-input)', color: 'var(--ed-fg)', border: '1px solid var(--ed-border)', borderRadius: '5px' },
+  '.cm-button': { backgroundImage: 'none', backgroundColor: 'var(--ed-input)', color: 'var(--ed-fg)', border: '1px solid var(--ed-border)', borderRadius: '5px' },
+  '.cm-panel button[name=close]': { color: 'var(--ed-muted)' },
   '&.cm-focused': { outline: 'none' },
 });
 
@@ -106,9 +101,10 @@ export default function Editor({ doc, readOnly = false, onChange, onSave, onRun,
       Prec.highest(keymap.of([
         { key: 'Mod-s', preventDefault: true, run: () => { fns.current.onSave?.(); return true; } },
         { key: 'Mod-Enter', preventDefault: true, run: () => { fns.current.onRun?.(); return true; } },
+        { key: 'Mod-k Mod-t', preventDefault: true, run: () => { openPicker('theme'); return true; } },
         indentWithTab,
       ])),
-      syntaxHighlighting(ink),
+      syntaxHighlighting(highlighter),
       theme,
       language(d.path),
       EditorState.readOnly.of(readOnly),

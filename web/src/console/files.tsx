@@ -6,6 +6,8 @@ import { api, type WsEntry, type WsRoot } from '../api';
 import { DEMO } from '../demo';
 import { tr } from '../i18n';
 import type { Doc } from './Editor';
+import { openPicker, useLook } from './edthemes';
+import { FileIcon, FolderIcon } from './fileicons';
 import { Icon } from './icons';
 import { base, bytes, ext, revealX, useFetch } from './util';
 
@@ -106,14 +108,6 @@ const MARK: Record<string, [string, string]> = {
   modified: ['M', tr('已修改')], added: ['A', tr('新加入暂存')], deleted: ['D', tr('已删除')], renamed: ['R', tr('改了名')], untracked: ['U', tr('未跟踪的新文件')],
 };
 
-// the colour of a file's kind, as a small dot before its name
-const KIND: Record<string, string> = {
-  py: '#3d6f9e', ipynb: '#c2663f', js: '#b8952d', ts: '#2f6390', tsx: '#2f6390', jsx: '#b8952d', json: '#8a6d3b', md: '#5f7f9e',
-  tex: '#2e7472', bib: '#6b9160', sty: '#2e7472', cls: '#2e7472', yaml: '#7a4f93', yml: '#7a4f93', toml: '#7a4f93', sh: '#5b7a37',
-  csv: '#6b9160', tsv: '#6b9160', pdf: '#b9543f', png: '#a06a14', jpg: '#a06a14', svg: '#a06a14', cpp: '#7a4f93', c: '#7a4f93', h: '#7a4f93', cu: '#5b7a37',
-};
-export const kindColor = (path: string) => KIND[ext(path)] ?? '#a3927b';
-
 export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }: {
   files: WsEntry[]; cur: string | null; onOpen: (path: string) => void; dirty: Set<string>; filter?: string; openDirs?: string[];
   root?: WsRoot; // which tree, for the parts of the page the assistant can point at
@@ -136,6 +130,7 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
   }, [cur]);
   const toggle = (p: string) => setOpened(s => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; });
   const all = !!filter.trim();
+  const { icons } = useLook();
 
   // a folder is marked when anything inside it is
   const marked = useMemo(() => {
@@ -150,7 +145,7 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
       const on = all || opened.has(sub.path);
       out.push(
         <button key={`d:${sub.path}`} className={`tr-row tr-dir${on ? ' open' : ''}${marked.has(sub.path) ? ' marked' : ''}`} style={{ ['--d' as string]: depth }} onClick={() => toggle(sub.path)}>
-          <Icon n="chevron" size={13} className="tr-chev" /><span className="tr-name">{sub.name}</span>
+          <Icon n="chevron" size={13} className="tr-chev" /><FolderIcon name={sub.name} open={on} theme={icons} /><span className="tr-name">{sub.name}</span>
         </button>,
       );
       if (on) out.push(...rows(sub, depth + 1));
@@ -160,7 +155,7 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
       out.push(
         <button key={f.path} className={`tr-row tr-file${f.path === cur ? ' on' : ''}${f.status ? ` st-${f.status}` : ''}`} style={{ ['--d' as string]: depth }}
           onClick={() => onOpen(f.path)} title={`${f.path} · ${bytes(f.size)}`} data-ref={root ? `file:${root}:${f.path}` : undefined} data-ref-label={f.path}>
-          <i className="tr-kind" style={{ background: kindColor(f.path) }} /><span className="tr-name">{base(f.path)}</span>
+          <FileIcon path={f.path} theme={icons} /><span className="tr-name">{base(f.path)}</span>
           {dirty.has(f.path) && <i className="tr-dirty" title={tr('还没保存')} />}
           {m && <em className="tr-mark" title={m[1]}>{m[0]}</em>}
         </button>,
@@ -168,13 +163,14 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
     }
     return out;
   }
-  return <div className="tree">{rows(top, 0)}{!shown.length && <p className="muted small tr-none">{filter ? tr('没有匹配的文件。') : tr('这里还没有文件。')}</p>}</div>;
+  return <div className={`tree ic-${icons}`}>{rows(top, 0)}{!shown.length && <p className="muted small tr-none">{filter ? tr('没有匹配的文件。') : tr('这里还没有文件。')}</p>}</div>;
 }
 
 // ---------- tabs and the open file ----------
 
 export function Tabs({ f, extra }: { f: Files; extra?: React.ReactNode }) {
   const bar = useRef<HTMLDivElement>(null);
+  const { icons } = useLook();
   useEffect(() => revealX(bar.current, bar.current?.querySelector('.tab.on')), [f.cur, f.open.length]);
   return (
     <div className="etabs">
@@ -182,7 +178,7 @@ export function Tabs({ f, extra }: { f: Files; extra?: React.ReactNode }) {
         {f.open.map(o => (
           <div key={o.path} className={`tab${o.path === f.cur ? ' on' : ''}${isDirty(o) ? ' dirty' : ''}`} title={o.path}
             onClick={() => f.setCur(o.path)} onAuxClick={e => { if (e.button === 1) f.close(o.path); }}>
-            <i className="tr-kind" style={{ background: kindColor(o.path) }} />
+            <FileIcon path={o.path} theme={icons} />
             <span>{base(o.path)}</span>
             <button className="tab-x" aria-label={tr('关闭')} onClick={e => { e.stopPropagation(); f.close(o.path); }}>
               <i className="tab-dot" /><Icon n="close" size={12} />
@@ -190,7 +186,10 @@ export function Tabs({ f, extra }: { f: Files; extra?: React.ReactNode }) {
           </div>
         ))}
       </div>
-      {extra && <div className="tabs-r">{extra}</div>}
+      <div className="tabs-r">
+        {extra}
+        <button className="ib" title={tr('颜色主题和文件图标（⌘K ⌘T）')} onClick={() => openPicker('theme')}><Icon n="palette" size={15} /></button>
+      </div>
     </div>
   );
 }

@@ -5,13 +5,16 @@
 import { useEffect, useState } from 'react';
 import { api, listen, type Hud, type Llm, type PaseoInfo, type Roster } from '../api';
 import { DEFAULTS, resetSettings, setSettings, useSettings, type Settings as S } from '../settings';
+import { IconRow, Sample } from '../console/EdPicker';
+import { ICON_THEMES, THEMES, chooseLook } from '../console/edthemes';
 import { LlmForm } from './Chat';
 import '../settings.css';
 import { LANG, LANGS, setLang, tr } from '../i18n';
 
-type Tab = 'look' | 'map' | 'walk' | 'model' | 'agents' | 'demo' | 'keys';
+type Tab = 'look' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'demo' | 'keys';
 const TABS: [Tab, string, string][] = [
   ['look', tr('外观与动效'), tr('动画、纸纹、打开时的视图')],
+  ['editor', tr('编辑器'), tr('颜色主题和文件图标')],
   ['map', tr('平面地图'), tr('缩放、拖动、建筑名字')],
   ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质')],
   ['model', tr('模型'), tr('小镇员工用的大模型')],
@@ -20,11 +23,11 @@ const TABS: [Tab, string, string][] = [
   ['keys', tr('快捷键'), tr('所有按键一览')],
 ];
 
-function Row({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
+function Row({ label, desc, children }: { label: string; desc?: string; children?: React.ReactNode }) {
   return (
     <div className="st-row">
       <div className="st-l"><b>{label}</b>{desc && <span>{desc}</span>}</div>
-      <div className="st-c">{children}</div>
+      {children && <div className="st-c">{children}</div>}
     </div>
   );
 }
@@ -68,6 +71,32 @@ function Look({ s }: { s: S }) {
       <Row label={tr('打开页面时')} desc={tr('下次打开页面先看到哪种视图：中控屏是不用走动的面板，小镇可以平面或 3D')}>
         <Pick value={s.start} options={[['console', tr('中控屏')], ['2d', tr('平面地图')], ['3d', tr('3D 漫游')]]} onChange={set('start')} />
       </Row>
+    </>
+  );
+}
+
+// the code and paper editors' looks: the same choices as the pick at the top of the editor (⌘K ⌘T)
+function Editor({ s }: { s: S }) {
+  return (
+    <>
+      <Row label={tr('颜色主题')} desc={tr('代码和论文编辑器的配色，连同文件列表、标签页和状态栏；在编辑器里按 ⌘K ⌘T 可以边看边换')} />
+      <div className="st-themes" role="radiogroup">
+        {THEMES.map(th => (
+          <button key={th.id} role="radio" aria-checked={th.id === s.edTheme} className={`st-theme${th.id === s.edTheme ? ' on' : ''}`} onClick={() => chooseLook({ theme: th.id })}>
+            <Sample th={th} />
+            <span><b>{th.name}</b><em>{th.dark ? tr('深色') : tr('浅色')}</em></span>
+          </button>
+        ))}
+      </div>
+      <Row label={tr('文件图标')} desc={tr('文件列表和标签页里，文件名前面的图标')} />
+      <div className="st-icons" role="radiogroup">
+        {ICON_THEMES.map(([id, name, desc]) => (
+          <button key={id} role="radio" aria-checked={id === s.edIcons} className={`st-icon${id === s.edIcons ? ' on' : ''}`} onClick={() => chooseLook({ icons: id })}>
+            <IconRow id={id} />
+            <b>{name}</b><span>{desc}</span>
+          </button>
+        ))}
+      </div>
     </>
   );
 }
@@ -215,6 +244,7 @@ const KEYS: [string, string][] = [
   ['M', tr('3D 里回到平面')], ['Esc', tr('放开鼠标（全屏时同时退出全屏）/ 关闭对话 / 回到小镇 / 关闭设置')], [',', tr('打开设置')],
   ['/', tr('在底部的对话框里开始写')], ['@', tr('对话框里换收件人：部门或员工')],
   ['⌘K', tr('中控屏里换项目')], ['⌘J', tr('中控屏里打开或收起小助手')], ['1 … 9, 0', tr('中控屏里切换左边的面板')], ['⌘S / ⌘↵', tr('中控屏的编辑器里保存 / 重新编译论文')],
+  ['⌘K ⌘T', tr('中控屏的编辑器里换颜色主题和文件图标')],
 ];
 
 export function SettingsPanel({ open, hud, onClose }: { open: boolean; hud: Hud | null; onClose: () => void }) {
@@ -235,6 +265,7 @@ export function SettingsPanel({ open, hud, onClose }: { open: boolean; hud: Hud 
         <section className="st-body" key={tab}>
           <header><h3>{TABS.find(t => t[0] === tab)![1]}</h3><button className="sh-x" onClick={onClose} title={tr('关闭（Esc）')}>×</button></header>
           {tab === 'look' && <Look s={s} />}
+          {tab === 'editor' && <Editor s={s} />}
           {tab === 'map' && <MapTab s={s} />}
           {tab === 'walk' && <Walk s={s} />}
           {tab === 'model' && <Model />}
