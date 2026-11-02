@@ -1,4 +1,4 @@
-// The press and the depot: one coding agent per project, in one of two places.
+// The press, the depot and the mill: one agent per project for each of them, in one of two places.
 // - Paseo: any provider Paseo hosts (Claude Code, Codex, OpenCode, Pi, ...). The room embeds
 //   Paseo's own page for the agent, so its commands, model switches and permission prompts
 //   are all there.
@@ -6,7 +6,8 @@
 //   terminal, both ways and live. Its model and thinking level can be switched here, and
 //   pi's slash commands typed here run in pi (the ones that need its terminal UI open there).
 // The console's assistant reads its conversation through the same hooks (usePaseoTalk,
-// usePiTalk) and shows it in its own sidebar.
+// usePiTalk) and shows it in its own sidebar. A project's lead runs on Paseo only; beside its
+// conversation are its check-ins, its reports and the questions it waits on you for.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { api, fileUrl, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
@@ -14,7 +15,8 @@ import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
 import { Select, type Opt } from './Select';
 import { ConvSkills } from './SkillRoom';
-import { tr } from '../i18n';
+import { LeadAside } from '../console/Lead';
+import { tr, trx } from '../i18n';
 
 interface Props extends RoomActions {
   role: AgentRole;
@@ -28,6 +30,7 @@ const ROLE = {
   writer: { name: tr('写作员工'), place: tr('印刷厂'), job: tr('读实验结果，在 main.tex 里写论文并编译') },
   monitor: { name: tr('看田员'), place: tr('实验农场'), job: '' },
   assistant: { name: tr('小助手'), place: tr('中控屏'), job: '' },
+  lead: { name: tr('项目负责人'), place: tr('造纸厂'), job: tr('盯进度、催员工、向你汇报') },
 } as const;
 
 export function AgentRoom(p: Props) {
@@ -114,7 +117,7 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
 }) {
   const [busy, setBusy] = useState(false);
   const [paseo, setPaseo] = useState(false);
-  const r = ROLE[role];
+  const r = ROLE[role], lead = role === 'lead';
 
   async function go(o: StartOpts) {
     setBusy(true);
@@ -133,22 +136,24 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
     <section className="room-main hire">
       <div className="hire-wrap">
         <h2>#{line.seq} {tr('还没有')}{r.name}</h2>
-        {repo ? (
+        {lead ? (
+          <p className="muted">{tr('负责人盯着这个项目：项目有动静时看一眼，催员工干活、给他们派活，有要紧的事向你汇报、问你。它只跑在 Paseo 里，工作目录是 Papertown 自己的，不碰项目的仓库。')}</p>
+        ) : repo ? (
           <p className="warn-box">{tr('这是从本地接入的项目：员工会直接在')} <code>{repo}</code> {tr('里改文件，改动是真的。启动时会让它先看 git status、提交和推送前问你；它的说明和 pt 工具放在 Papertown 自己的目录里，不写进仓库。')}</p>
         ) : <p className="muted">{tr('选一种运行方式。工作目录都是这个项目在')}{r.place}{tr('的目录，启动时会先把项目简报发给它。')}</p>}
         <div className="hire-opts">
           <div className="hire-card">
             <h3>Paseo <span className="chip">{tr('推荐')}</span></h3>
             <p className="muted small">{tr('Claude Code、Codex、OpenCode、Pi 等都可以。对话用的是 Paseo 自己的界面，命令、模型切换和权限审批都照旧。')}</p>
-            <PaseoPick busy={busy} onStart={go} onReady={setPaseo} />
+            <PaseoPick busy={busy} onStart={go} onReady={setPaseo} role={lead ? 'lead' : undefined} />
           </div>
-          <div className="hire-card">
+          {!lead && <div className="hire-card">
             <h3>{tr('pi · 后台终端')}</h3>
             <p className="muted small">{tr('本机的 pi 跑在 tmux 里，终端和这里的对话实时同步。这里能切换模型和思考强度，输入 / 可以用 pi 的命令。它用 pi 自己的模型设置和登录。')}</p>
             <button className="btn" disabled={!ok || busy} onClick={() => go({ runtime: 'pi' })}>{busy ? tr('启动中…') : tr('启动 pi')}</button>
             {!ok && <p className="muted small">{tr('本机没有 pi 或 tmux。')}</p>}
-          </div>
-          {paseo && <ImportCard busy={busy} onPick={async id => {
+          </div>}
+          {paseo && !lead && <ImportCard busy={busy} onPick={async id => {
             setBusy(true);
             try { await api.importAgent(line.id, role, id); onDone(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
           }} />}
@@ -158,9 +163,10 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
   );
 }
 
-// a provider, model and thinking level from what Paseo lists, and the button that starts it there
-export function PaseoPick({ busy, onStart, onReady, prefer = 'claude' }: {
-  busy: boolean; onStart: (o: StartOpts) => void; onReady?: (ok: boolean) => void; prefer?: string;
+// a provider, model and thinking level from what Paseo lists, and the button that starts it there;
+// the assistant and a lead start on what Papertown is set to give them, when Paseo has it
+export function PaseoPick({ busy, onStart, onReady, prefer = 'claude', role }: {
+  busy: boolean; onStart: (o: StartOpts) => void; onReady?: (ok: boolean) => void; prefer?: string; role?: 'assistant' | 'lead';
 }) {
   const [info, setInfo] = useState<PaseoInfo | null>(null);
   const [prov, setProv] = useState('');
@@ -171,22 +177,26 @@ export function PaseoPick({ busy, onStart, onReady, prefer = 'claude' }: {
     api.paseo().then(i => {
       setInfo(i);
       onReady?.(i.status.ok);
-      pick(i, (i.providers.find(x => x.id === prefer) ?? i.providers[0])?.id ?? '');
+      const d = role ? i.defaults?.[role] : undefined, own = i.providers.find(x => x.id === d?.provider);
+      if (own) pick(i, own.id, d?.model ?? undefined, d?.thinking ?? undefined);
+      else pick(i, (i.providers.find(x => x.id === prefer) ?? i.providers[0])?.id ?? '');
     }).catch(e => setInfo({ status: { ok: false, note: tr('连不上 Paseo：{0}', (e as Error).message) }, providers: [] }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function pick(i: PaseoInfo | null, id: string, mid?: string) {
+  function pick(i: PaseoInfo | null, id: string, mid?: string, th?: string) {
     const pv = i?.providers.find(x => x.id === id), m = pv?.models.find(x => x.id === mid) ?? pv?.models[0];
     setProv(id);
     setModel(m?.id ?? '');
-    setThink(m?.default_thinking ?? '');
+    setThink(th && m?.thinking.includes(th) ? th : m?.default_thinking ?? '');
   }
 
   const pv = info?.providers.find(x => x.id === prov), m = pv?.models.find(x => x.id === model);
   if (!info) return <p className="muted small">{tr('正在连本机的 Paseo…')}</p>;
   if (!info.status.ok) return <p className="warn-box small">{info.status.note}</p>;
+  const d = role ? info.defaults?.[role] : undefined;
   return (
     <>
+      {d?.provider && <p className="muted small">{tr('Papertown 给它配的是 {0}', [d.provider, d.model, d.thinking].filter(Boolean).join(' / '))}{info.providers.some(x => x.id === d.provider) ? '' : tr('，但 Paseo 里没有这个供应商')}</p>}
       <label className="field">{tr('供应商')}
         <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.label }))} onChange={id => pick(info, id)} />
       </label>
@@ -260,7 +270,7 @@ export type Item = { ev: AgentEvent; end?: AgentEvent };
 export type ToolSt = 'run' | 'ok' | 'bad';
 
 // what the project has next to the chat: experiments for code, the manuscript for papers
-function Aside({ agent, role, line, onOpen, children }: { agent: Agent; role: AgentRole; line?: Line; onOpen: RoomActions['onOpen']; children: React.ReactNode }) {
+function Aside({ agent, role, line, onOpen, toast, children }: { agent: Agent; role: AgentRole; line?: Line; onOpen: RoomActions['onOpen']; toast: (t: string) => void; children: React.ReactNode }) {
   const lid = agent.line_id ?? '';
   const [jobs, setJobs] = useState<Job[]>([]);
   const [repos, setRepos] = useState<any[]>([]);
@@ -278,7 +288,7 @@ function Aside({ agent, role, line, onOpen, children }: { agent: Agent; role: Ag
   return (
     <aside className="room-aside">
       {children}
-      <ConvSkills lineId={lid} agentId={agent.id} onOpen={onOpen} />
+      {role === 'lead' ? <LeadAside lineId={lid} toast={toast} /> : <ConvSkills lineId={lid} agentId={agent.id} onOpen={onOpen} />}
       {role === 'coder' && (
         <div className="pnl-s">
           <h4>{tr('提交到农场的实验')}</h4>
@@ -443,7 +453,7 @@ export function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent
             </>
           )}
       </section>
-      <Aside agent={agent} role={role} line={line} onOpen={onOpen}>
+      <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
         <div className="pnl-s">
           <h4>Paseo</h4>
           <p className="muted small">{tr('同一段对话也在 Paseo 的桌面端和手机上。权限审批在这里就能点；命令和模型切换在「完整界面」里。')}</p>
@@ -458,13 +468,26 @@ export function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent
 // a Paseo tool call as a tool trail shows it
 export const paseoTool = (t: PaseoItem) => ({ name: t.name ?? '', arg: t.arg, st: (t.status === 'running' ? 'run' : t.status === 'completed' ? 'ok' : 'bad') as ToolSt, note: t.error ?? undefined });
 
+// what Papertown put into the conversation rather than you: a message from another agent, a
+// check-in on the project, your answer to its question, its work boundaries changed
+const TAGGED = /^<(msg|checkin|answer|bounds)(?: from="([^"]*)")?>\n?([\s\S]*?)\n?<\/\1>\s*$/;
+const someone = (w: string) => { const m = /^#(\d+) 的(.+)$/.exec(w); return m ? tr('#{0} 的{1}', m[1], trx(m[2])) : trx(w); };
+function tagged(t: string) {
+  const m = TAGGED.exec(t.trim());
+  if (!m) return null;
+  const label = m[1] === 'msg' ? tr('{0}发来的消息', someone(m[2] ?? '')) : { checkin: tr('Papertown：项目的近况'), answer: tr('你的回答'), bounds: tr('工作边界改了') }[m[1]]!;
+  return { k: m[1], label, body: m[3] };
+}
+
 // a long message from you (a project brief, a pasted log) shows its first lines until opened
-export function UserMsg({ text }: { text: string }) {
+export function UserMsg({ text: raw }: { text: string }) {
   const [open, setOpen] = useState(false);
+  const tag = tagged(raw), text = tag?.body ?? raw;
   const lines = text.split('\n'), long = lines.length > 6 || text.length > 360;
   const shown = open || !long ? text : lines.slice(0, 4).join('\n').slice(0, 240).trimEnd() + '…';
   return (
-    <div className={`msg-u${long ? ' long' : ''}`}>
+    <div className={`msg-u${long ? ' long' : ''}${tag ? ` msg-tag t-${tag.k}` : ''}`}>
+      {tag && <span className="mt-k">{tag.label}</span>}
       <Text text={shown} />
       {long && <button className="more" onClick={() => setOpen(o => !o)}>{open ? tr('收起') : tr('展开全部（{0} 行）', lines.length)}</button>}
     </div>
@@ -619,7 +642,7 @@ export function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent
           <button className="btn pri" disabled={!text.trim()} onClick={send}>{tr('发送')}</button>
         </div>
       </section>
-      <Aside agent={agent} role={role} line={line} onOpen={onOpen}>
+      <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
         <div className="pnl-s">
           <h4>{tr('终端')}</h4>
           <p className="muted small">{tr('pi 在后台的 tmux 里运行，接上就能看到同一段对话，在那里输入也会同步到这里。')}</p>

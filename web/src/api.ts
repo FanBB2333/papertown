@@ -62,7 +62,7 @@ export interface Sheet {
   active_line?: string | null;
 }
 
-export type AgentRole = 'coder' | 'writer' | 'monitor' | 'assistant';
+export type AgentRole = 'coder' | 'writer' | 'monitor' | 'assistant' | 'lead';
 export type AgentStatus = 'stopped' | 'starting' | 'idle' | 'working' | 'error' | 'watching';
 
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act'; data: any }
@@ -89,6 +89,26 @@ export interface PaseoProvider { id: string; label: string; modes: string; model
 export interface PaseoInfo {
   status: { ok: boolean; note: string; server_id?: string; web?: string | null; version?: string };
   providers: PaseoProvider[];
+  defaults?: Record<'assistant' | 'lead', PaseoDefault>; // what each starts with unless another is picked
+}
+export interface PaseoDefault { provider: string | null; model: string | null; thinking: string | null }
+
+// what the agents in a project report to you, and the questions they ask you
+export interface Report {
+  id: number; line_id: string; agent_id: string; ts: string; kind: 'report' | 'ask';
+  data: { text?: string; key?: boolean; who?: string; question?: string; choices?: string[]; open?: boolean; answer?: string;
+    answered_at?: string; by?: string; act?: { action: string } | null; result?: string };
+}
+export interface LeadView { agent: Agent | null; settings: { supervise: boolean; every: number }; reports: Report[]; asks: Report[] }
+
+// work boundaries: global (the assistant), project (its lead), worker (one coder or writer)
+export type BoundKind = 'must' | 'never' | 'ask';
+export type BoundInherit = 'yes' | 'no' | 'force';
+export interface Bound { id: string; kind: BoundKind; text: string; inherit: BoundInherit; action: string | null; from?: 'global' | 'project' | 'worker'; locked?: boolean }
+export interface BoundsLevel { rules: Bound[]; off?: string[] }
+export interface BoundsView {
+  levels: { global: BoundsLevel; project?: BoundsLevel; workers?: Record<'coder' | 'writer', BoundsLevel> };
+  effective: Record<string, Bound[]>; kinds: Record<BoundKind, string>; inherit: Record<BoundInherit, string>; actions: Record<string, string>;
 }
 export interface Llm {
   provider: string; model_strong: string; model_cheap: string; effort: string; offline: boolean; openai_base_url: string;
@@ -249,6 +269,10 @@ export interface RagResult { query: string; expanded: string; terms: string[]; m
 // what you and the agents say in a conversation stays as it was written; the dictionary is for
 // what the town says
 const said = (v: object) => ['user', 'assistant'].includes((v as { kind?: string }).kind ?? '') || (v as { type?: string }).type === 'agent_delta';
+// a report or a question as its agent wrote it (and your answer)
+const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'text' in v);
+// a work boundary as you wrote it
+const ruled = (v: object) => 'inherit' in v && 'kind' in v;
 
 async function call<T>(method: string, url: string, body?: unknown, keep?: (v: object) => boolean): Promise<T> {
   if (DEMO) return localize(await demoCall(method, url), keep) as T;
@@ -308,6 +332,12 @@ export const api = {
   papersOf: (lineId: string) => call<{ survey: PaperCard[]; references: PaperCard[] }>('GET', `/api/lines/${lineId}/papers`),
   setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
+  lead: (lineId: string) => call<LeadView>('GET', `/api/lines/${lineId}/lead`, undefined, written),
+  setLead: (lineId: string, o: { supervise?: boolean; every?: number }) => call<LeadView['settings']>('POST', `/api/lines/${lineId}/lead`, o),
+  reports: (lineId?: string) => call<{ reports: Report[]; asks: Report[] }>('GET', `/api/reports${lineId ? `?line_id=${lineId}` : ''}`, undefined, written),
+  answer: (id: number, text: string) => call<Report>('POST', `/api/reports/${id}/answer`, { text }),
+  bounds: (lineId?: string) => call<BoundsView>('GET', `/api/bounds${lineId ? `?line_id=${lineId}` : ''}`, undefined, ruled),
+  saveBounds: (o: { line_id?: string; role?: string; rules: Partial<Bound>[]; off?: string[] }) => call<BoundsView>('PUT', '/api/bounds', o, ruled),
   say: (id: string, text: string, mode?: SayMode) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text, ...(mode ? { mode } : {}) }),
   brief: (id: string) => call<AgentEvent>('POST', `/api/agents/${id}/brief`),
   abort: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/abort`),
@@ -349,9 +379,9 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; } // the demo is a snapshot: nothing happens live
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report'];
   for (const t of types) es.addEventListener(t, ev => {
-    const e = localize(JSON.parse((ev as MessageEvent).data), t === 'agent_event' || t === 'agent_delta' ? said : undefined);
+    const e = localize(JSON.parse((ev as MessageEvent).data), t === 'report' ? written : t === 'agent_event' || t === 'agent_delta' ? said : undefined);
     onEvent(e);
     for (const fn of listeners) fn(e);
   });

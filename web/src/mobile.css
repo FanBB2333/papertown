@@ -175,5 +175,17 @@
   .dock.open .dk-bar textarea { order: -1; flex: 1 0 100%; }
   .dock.open .dk-send { margin-left: auto; }
   .dk-head .llm-btn { max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* work boundaries: a rule's words on a line of their own, its choices under them */
+  .bd-row { flex-wrap: wrap; padding: 6px 6px 6px 8px; }
+  .bd-row .bd-text { order: -1; flex: 1 0 calc(100% - 40px); font-size: 15px; }
+  .bd-row .bd-del { order: -1; }
+  .bd-row .bd-kind, .bd-row .bd-inh { width: auto; flex: 1 1 0; }
+  .bd-row .bd-act { width: auto; flex: 1 0 100%; }
+  .bd-in { flex-wrap: wrap; row-gap: 4px; }
+  .bd-in .bd-t { flex: 1 0 calc(100% - 90px); }
+  .bd-add { flex: 1 1 0; justify-content: center; padding-inline: 6px; }
+  .bd-save { margin-left: 0; width: 100%; justify-content: flex-end; }
+  .ld-reply input { font-size: 15px; }
 }
 @keyframes m-up { from { transform: translateY(100%); } }

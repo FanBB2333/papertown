@@ -1,18 +1,21 @@
-// The overview panel: where the project stands and what it waits on you for. The eight
-// stages as one line of steps (each opens the panel that does its work), what each part
-// of the project has come to so far, and the mill's full sheet folded away underneath.
+// The overview panel: where the project stands and what it waits on you for. Its lead, with
+// the questions it asks you and what it reported; the eight stages as one line of steps (each
+// opens the panel that does its work), what each part of the project has come to so far, and
+// the mill's full sheet folded away underneath.
 
 import type { Line, Placement, WsInfo } from '../api';
 import { MillDetail } from '../components/Sheet';
 import { STATUS } from '../components/MillRoom';
 import { tr } from '../i18n';
 import { Icon, type IconName } from './icons';
+import { LeadCard } from './Lead';
 import type { ModId } from './Console';
 import { gist } from './util';
 
 interface Props {
   line: Line | null; info: WsInfo | null; tick: number; placements: Placement[]; go: (m: ModId) => void;
   onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; onOpen: (id: string) => void;
+  toast: (t: string) => void; onLead: () => void; // the project's lead, in the 员工 panel
 }
 
 export const STAGE_MOD: Record<string, ModId> = {
@@ -87,6 +90,8 @@ export function Overview(p: Props) {
           ))}
         </ol>
       </section>
+
+      <LeadCard lineId={l.id} toast={p.toast} onOpen={p.onLead} />
 
       <div className="ov-parts">
         {parts.map((x, i) => (

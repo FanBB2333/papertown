@@ -318,3 +318,34 @@
 .md-c { padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--ink) 7%, transparent); font: .9em ui-monospace, Menlo, monospace; word-break: break-word; }
 .md-hr { margin: 8px 0; border: 0; border-top: 1px dashed var(--line); }
 .md-h { font-weight: 700; }
+
+/* a project's lead: the questions it waits on you for, and what it reported */
+.ld-card .cs-h .ld-who { display: inline-flex; align-items: center; gap: 6px; margin-left: 0; color: var(--muted); }
+.ld-card .cs-h .lnk { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
+.ld-none { margin: 0; line-height: 1.6; }
+.ld-ask { padding: 10px 12px; margin-bottom: 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); animation: rise-in .3s var(--out) both; }
+.ld-ask p { margin: 4px 0 8px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+.ld-k { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warn); }
+.ld-ask .btns { margin-bottom: 8px; }
+.ld-reply { display: flex; gap: 6px; }
+.ld-reply input { flex: 1; min-width: 0; font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.ld-reply input:focus { outline: none; border-color: var(--brand); }
+.ld-reps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ld-rep { padding: 7px 10px 8px 12px; border-left: 3px solid var(--line); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--panel2) 50%, transparent); font-size: 13.5px; line-height: 1.55; }
+.ld-rep.key { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 6%, var(--panel)); }
+.ld-rep p { margin: 0 0 4px; } .ld-rep p:last-child { margin-bottom: 0; }
+.ld-when { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-size: 11.5px; color: var(--muted); }
+.ld-when b { font-weight: 600; color: var(--warn); }
+.ld-sw { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 10px; font-size: 13px; line-height: 1.5; cursor: pointer; }
+.ld-sw input { margin-top: 3px; accent-color: var(--brand); }
+.room-aside .ld-ask { margin-bottom: 8px; }
+
+/* what Papertown put into a conversation rather than you: another agent's message, a check-in,
+   your answer to its question, its work boundaries changed */
+.msg-u.msg-tag { align-self: flex-start; max-width: min(760px, 92%); font-size: 13.5px; border-radius: 12px; border: 1px dashed var(--line); background: color-mix(in srgb, var(--panel2) 60%, var(--panel)); }
+.msg-tag .mt-k { display: block; margin-bottom: 4px; font: 600 12px var(--font); color: var(--muted); }
+.msg-tag.t-msg { border-style: solid; border-color: color-mix(in srgb, var(--brand) 35%, var(--line)); background: color-mix(in srgb, var(--brand) 6%, var(--panel)); }
+.msg-tag.t-msg .mt-k { color: var(--brand); }
+.msg-tag.t-answer { border-style: solid; border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+.msg-tag.t-answer .mt-k { color: var(--ok); }
+.msg-tag.t-bounds .mt-k { color: var(--warn); }

@@ -32,22 +32,28 @@ const ASK: Record<string, string[]> = {
   mcp: [tr('这些 MCP 服务器都连上了吗？')],
   rag: [tr('图书馆里有哪些和这个项目相关的论文？')],
 };
-const ASK_ANY = [tr('这一页在讲什么？'), tr('有什么要我处理的？')];
+const ASK_ANY = [tr('这一页在讲什么？'), tr('有什么要我处理的？'), tr('各个项目现在怎么样？')];
 const ASK_AT = [tr('这是什么？'), tr('这里有问题吗？')];
 const ASK_SEL = [tr('解释一下这段'), tr('这段有什么问题？')];
 
-// a message as it went out: the page it was written on, then your words; or a note from the town.
-// Paseo drops the <start> mark from a conversation's first prompt, so its opening words mark it too.
-type Said = { text: string; where?: string; pointed?: string; selected?: string; selectedAt?: string; event?: string };
+// a message as it went out: the page it was written on, where the projects you named stood, then
+// your words; or a note from the town. Paseo drops the <start> mark from a conversation's first
+// prompt, so its opening words mark it too.
+type Said = { text: string; where?: string; pointed?: string; selected?: string; selectedAt?: string; projects?: string[]; event?: string };
 export function parse(t: string): Said {
   if (/^(<start>|你是 Papertown 中控屏的小助手)/.test(t)) return { text: '', event: tr('小助手启动了，先读了一遍它的说明。') };
   const ev = /^<event>\n?([\s\S]*?)\n?<\/event>\s*$/.exec(t);
   if (ev) return { text: '', event: ev[1].trim() };
+  if (/^<bounds>/.test(t)) return { text: '', event: tr('你改了工作边界，它收到了新的一份。') };
   const pg = /^<page>\n([\s\S]*?)\n<\/page>\n*/.exec(t);
-  if (!pg) return { text: t };
+  const rest = pg ? t.slice(pg[0].length) : t;
+  const pj = /^<projects>\n([\s\S]*?)\n<\/projects>\n*/.exec(rest);
+  const projects = pj ? [...pj[1].matchAll(/^项目 #(\d+)「/gm)].map(m => m[1]) : undefined;
+  const text = pj ? rest.slice(pj[0].length) : rest;
+  if (!pg) return { text, projects };
   const lines = pg[1].split('\n'), get = (k: string) => lines.find(l => l.startsWith(k))?.slice(k.length);
   return {
-    text: t.slice(pg[0].length), where: get('在看：')?.replace(/（.*）$/, ''), pointed: get('指着：')?.split('〔')[0],
+    text, projects, where: get('在看：')?.replace(/（.*）$/, ''), pointed: get('指着：')?.split('〔')[0],
     selected: get('选中：')?.replace(/（\d+ 行，全文在 page\.md）$/, '').replace(/^「([\s\S]*)」$/, '$1'), selectedAt: get('选中的地方：')?.split(/〔|，在「/)[0],
   };
 }
@@ -268,7 +274,7 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
             <Earlier limit={3} title={tr('接着之前的对话')} onPick={resume} />
             <div className="hire-card">
               <h3>Paseo</h3>
-              <PaseoPick busy={busy} onStart={start} />
+              <PaseoPick busy={busy} onStart={start} role="assistant" />
             </div>
             <div className="hire-card">
               <h3>{tr('pi · 后台终端')}</h3>
@@ -380,14 +386,15 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
 
 // one of your messages: what went along with it in small type, then your words
 function YouMsg({ r }: { r: YouRow }) {
-  const { where, pointed, selected, selectedAt } = r.ctx;
+  const { where, pointed, selected, selectedAt, projects } = r.ctx;
   return (
     <div className="as-you">
-      {(where || pointed || selected) && (
+      {(where || pointed || selected || projects?.length) && (
         <div className="as-said">
           {where && <span title={trx(where)}><Icon n="eye" size={11} /><i>{trx(where)}</i></span>}
           {pointed && <span className="on" title={trx(pointed)}><Icon n="target" size={11} /><i>{trx(pointed)}</i></span>}
           {selected && <span className="on" title={selected}><Icon n="quote" size={11} /><i>{selected}{selectedAt && <em> · {trx(selectedAt)}</em>}</i></span>}
+          {!!projects?.length && <span title={tr('Papertown 把这些项目刚读的进展附在了消息里')}><Icon n="compass" size={11} /><i>{tr('附上了 {0} 的进展', projects.map(n => `#${n}`).join(' '))}</i></span>}
         </div>
       )}
       <UserMsg text={r.text} />
@@ -500,7 +507,11 @@ function Cards({ view, send, toast, onPoint }: {
     if (el && !shown.current.has(el)) { shown.current.add(el); requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })); }
   };
   const ask = view.asks[0];
-  const acts = view.acts.filter(e => e.data.status === 'pending' || done[e.id]);
+  // what it did on its own (a message, an answer passed on) shows for a moment too
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 5000); return () => clearInterval(t); }, []);
+  const fresh = (e: AgentEvent) => e.data.auto && now - Date.parse(e.data.decided_at ?? e.ts) < 15000;
+  const acts = view.acts.filter(e => e.data.status === 'pending' || done[e.id] || fresh(e));
   async function decide(e: AgentEvent, allow: boolean) {
     try {
       const r = await api.decide(e.id, allow);
@@ -525,9 +536,10 @@ function Cards({ view, send, toast, onPoint }: {
         const d = (done[e.id] ?? e).data;
         return (
           <div key={e.id} className={`as-card as-act st-${d.status}`} ref={seen}>
-            <span className="as-k">{d.status === 'pending' ? tr('它想替你做') : d.status === 'done' ? tr('已经做了') : d.status === 'denied' ? tr('你没让它做') : tr('没做成')}</span>
+            <span className="as-k">{d.status === 'pending' ? tr('它想替你做') : d.status === 'done' ? (d.auto ? tr('已替你做了') : tr('已经做了')) : d.status === 'denied' ? tr('你没让它做') : tr('没做成')}</span>
             <p><b>{d.title}</b></p>
             {d.why && d.status === 'pending' && <p className="muted small">{d.why}</p>}
+            {d.rule && d.status === 'pending' && <p className="muted small">{tr('按你的工作边界要先问你：{0}', d.rule)}</p>}
             {d.result && <p className="small">{d.result}</p>}
             {d.status === 'pending' && <div className="as-choices">
               <button className="btn pri" onClick={() => decide(e, true)}>{tr('允许')}</button>

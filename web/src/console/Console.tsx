@@ -13,15 +13,16 @@
 //   #view=console&line=line_2&m=paper   — open a project's panel directly
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, listen, type Line, type Placement, type ShowTarget } from '../api';
+import { api, listen, type Line, type Placement, type Report, type ShowTarget } from '../api';
 import { AgentDesk } from '../components/AgentRoom';
 import type { RoomActions } from '../components/Interior';
 import { McpRoom } from '../components/McpRoom';
 import { STATUS } from '../components/MillRoom';
 import { RagRoom } from '../components/RagRoom';
 import { SkillRoom } from '../components/SkillRoom';
-import { tr } from '../i18n';
+import { tr, trx } from '../i18n';
 import { Assistant } from './Assistant';
+import { Bounds } from './Bounds';
 import { Code } from './Code';
 import { Data } from './Data';
 import { EdPicker } from './EdPicker';
@@ -31,10 +32,10 @@ import { Overview, STAGE_MOD } from './Overview';
 import { flash, setPlace, usePanelNote } from './page';
 import { Paper } from './Paper';
 import { Survey } from './Survey';
-import { PHONE, revealX, useFetch, useMedia } from './util';
+import { gist, PHONE, revealX, useFetch, useMedia } from './util';
 import '../console.css';
 
-export type ModId = 'overview' | 'survey' | 'code' | 'exp' | 'data' | 'paper' | 'agents' | 'skills' | 'mcp' | 'rag';
+export type ModId = 'overview' | 'survey' | 'code' | 'exp' | 'data' | 'paper' | 'agents' | 'skills' | 'mcp' | 'rag' | 'rules';
 
 const MODS: { id: ModId; name: string; sub: string; icon: IconName; town?: boolean }[] = [
   { id: 'overview', name: tr('概览'), sub: tr('项目走到哪一步、在等你做什么'), icon: 'compass' },
@@ -43,10 +44,11 @@ const MODS: { id: ModId; name: string; sub: string; icon: IconName; town?: boole
   { id: 'exp', name: tr('实验'), sub: tr('nvidb 上正在跑的、接下来要跑的任务'), icon: 'flask' },
   { id: 'data', name: tr('数据'), sub: tr('实验的元数据、结果和数据文件'), icon: 'table' },
   { id: 'paper', name: tr('论文'), sub: tr('LaTeX 源码和排出的 PDF，左右对照'), icon: 'doc' },
-  { id: 'agents', name: tr('员工'), sub: tr('这个项目的代码员工和写作员工'), icon: 'people' },
+  { id: 'agents', name: tr('员工'), sub: tr('这个项目的负责人、代码员工和写作员工'), icon: 'people' },
   { id: 'skills', name: 'Skills', sub: tr('给全局、项目、对话配 skill'), icon: 'spark', town: true },
   { id: 'mcp', name: 'MCP', sub: tr('小镇接的 MCP server 和它们给的工具'), icon: 'plug', town: true },
   { id: 'rag', name: tr('图书馆'), sub: tr('馆藏、RAG 检索设置和检索试验台'), icon: 'books', town: true },
+  { id: 'rules', name: tr('工作边界'), sub: tr('全局、项目、员工三层：必须完成、不能做、需要询问'), icon: 'shield', town: true },
 ];
 const IDS = MODS.map(m => m.id);
 const isMod = (s: unknown): s is ModId => IDS.includes(s as ModId);
@@ -61,15 +63,22 @@ const BY_BUILDING: Record<string, ModId> = {
   power: 'exp', power_sim: 'exp', coldstore: 'data', press: 'paper', qa: 'paper', market: 'agents', academy: 'skills', exchange: 'mcp', library: 'rag',
 };
 
+// `asked`: the projects with a question from their agents waiting for your answer
 type Filter = 'all' | 'run' | 'you' | 'done' | 'local';
-const FILTERS: [Filter, string, (l: Line) => boolean][] = [
+const FILTERS: [Filter, string, (l: Line, asked: Set<string>) => boolean][] = [
   ['all', tr('全部'), () => true],
   ['run', tr('在跑'), l => ['running', 'hatching'].includes(l.status)],
-  ['you', tr('等你'), l => ['waiting', 'paused', 'failed'].includes(l.status)],
+  ['you', tr('等你'), (l, asked) => ['waiting', 'paused', 'failed'].includes(l.status) || asked.has(l.id)],
   ['done', tr('已完成'), l => l.status === 'done'],
   ['local', tr('本地项目'), l => !!l.linked],
 ];
 const needsYou = FILTERS[2][2];
+// the 员工 panel's tabs: [what the assistant reads, the tab, what it does]
+const ROLES = {
+  lead: ['项目负责人', tr('项目负责人'), tr('盯着项目进度、催员工干活，有要紧的事向你汇报、问你')],
+  coder: ['代码员工', tr('代码员工'), tr('在代码仓库里写代码、跑测试，再把实验提交出去')],
+  writer: ['写作员工', tr('写作员工'), tr('在论文目录里写稿、改稿、排版')],
+} as const;
 const hasPaper = (l: Line) => !!l.linked?.paper || l.files.includes('main.tex');
 
 const KEY = 'pt-console';
@@ -101,7 +110,8 @@ export function Console(p: Props) {
   const [railTab, setRailTab] = useState<'projects' | 'papers'>('projects');
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
-  const [role, setRole] = useState<'coder' | 'writer'>('coder');
+  const [role, setRole] = useState<'lead' | 'coder' | 'writer'>('lead');
+  const [asks, setAsks] = useState<Report[]>([]); // questions from the projects' agents, waiting for you
   const [reveal, setReveal] = useState<Reveal | null>(null); // a file to open in the code or paper panel
   const [hist, setHist] = useState<{ back: [string, ModId][]; fwd: [string, ModId][] }>({ back: [], fwd: [] });
   const phone = useMedia(PHONE);
@@ -109,8 +119,9 @@ export function Console(p: Props) {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const lines = useMemo(() => [...p.lines].sort((a, b) => b.seq - a.seq), [p.lines]);
+  const asked = useMemo(() => new Set(asks.map(a => a.line_id)), [asks]);
   // the project asked for, else the first that needs you, else the newest
-  const cur = lines.find(l => l.id === want) ?? lines.find(needsYou) ?? lines.find(l => l.status === 'running') ?? lines[0] ?? null;
+  const cur = lines.find(l => l.id === want) ?? lines.find(l => needsYou(l, asked)) ?? lines.find(l => l.status === 'running') ?? lines[0] ?? null;
   const id = cur?.id ?? '';
   const full = useFetch(() => api.line(id), id, p.tick);
   const ws = useFetch(() => api.ws(id), id, p.tick);
@@ -123,7 +134,22 @@ export function Console(p: Props) {
   // a narrow window with the assistant open folds the drawer to its icons, to leave the panel room
   const squeezed = useMedia('(max-width: 1320px)') && side;
   useEffect(() => setPlace(cur ? { id: cur.id, seq: cur.seq, title: cur.title } : null, mod, MODS.find(m => m.id === mod)!.name), [cur?.id, cur?.title, mod]); // eslint-disable-line react-hooks/exhaustive-deps
-  usePanelNote('agents', 'role', { 员工: mod === 'agents' ? (role === 'coder' ? '代码员工' : '写作员工') : null });
+  usePanelNote('agents', 'role', { 员工: mod === 'agents' ? ROLES[role][0] : null });
+
+  // what the projects' agents ask you, and what they report as key, wherever you are
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.reports().then(r => alive && setAsks(r.asks)).catch(() => {});
+    load();
+    const off = listen(e => {
+      if (e.type !== 'report') return;
+      const r = e.report as Report, l = p.lines.find(x => x.id === r.line_id);
+      if (r.kind === 'ask' && r.data.open) p.toast(tr('#{0} 的{1}在问你：{2}', l?.seq ?? '?', trx(r.data.who ?? ''), gist(r.data.question, 80)));
+      else if (r.kind === 'report' && r.data.key) p.toast(tr('#{0} 的{1}：{2}', l?.seq ?? '?', trx(r.data.who ?? ''), gist(r.data.text, 80)));
+      if (r.kind === 'ask') load();
+    });
+    return () => { alive = false; off(); };
+  }, [p.lines]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // the panels that keep their state while another is shown: their editors, open files and edits
   const [kept, setKept] = useState<Set<ModId>>(new Set());
@@ -212,7 +238,7 @@ export function Console(p: Props) {
 
   const actions: RoomActions = { ...p, onOpen: (bid, lineId) => openBuilding(bid, lineId) };
   const here = MODS.find(m => m.id === mod)!;
-  const waiting = lines.filter(needsYou).length;
+  const waiting = lines.filter(l => needsYou(l, asked)).length;
   const pick = (l: Line, m?: ModId) => { go({ line: l.id, mod: m }); setTimeout(() => setRail(false), 160); };
 
   if (!cur && !p.ready) return <main className="p-console"><p className="cm-loading muted">{tr('加载中…')}</p></main>;
@@ -266,7 +292,7 @@ export function Console(p: Props) {
 
       <div className="rail-back" onClick={() => setRail(false)} />
       <Rail open={rail} lines={lines} cur={cur} tab={railTab} setTab={setRailTab} filter={filter} setFilter={setFilter} q={q} setQ={setQ}
-        phone={phone} onPick={pick} onIdea={() => { setRail(false); p.onIdea(); }} onClose={() => setRail(false)} />
+        asked={asked} phone={phone} onPick={pick} onIdea={() => { setRail(false); p.onIdea(); }} onClose={() => setRail(false)} />
 
       <div className="cbody">
         {!phone && <Drawer mod={mod} narrow={narrow || squeezed} locked={squeezed} setNarrow={setNarrow} line={line} code={ws.data?.code?.dirty ?? 0} onPick={m => go({ mod: m })} />}
@@ -274,7 +300,8 @@ export function Console(p: Props) {
           {!kept.has(mod) && (
             <section className={`cm-mod on${BLEED.has(mod) ? ' bleed' : ''}`} key={mod} style={{ ['--dir' as string]: dir }}>
               {mod === 'overview' ? <Overview line={line} info={ws.data} tick={p.tick} placements={p.placements} go={m => go({ mod: m })}
-                onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)} />
+                onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)}
+                toast={p.toast} onLead={() => { setRole('lead'); go({ mod: 'agents' }); }} />
                 : mod === 'survey' ? <Survey line={line} tick={p.tick} onHatch={p.onHatch} onAdjust={p.onAdjust} />
                   : mod === 'exp' ? <Experiments lineId={id} tick={p.tick} onData={() => go({ mod: 'data' })} />
                     : mod === 'data' ? <Data lineId={id} tick={p.tick} onOpenFile={path => { setReveal(r => ({ root: 'code', path, n: (r?.n ?? 0) + 1 })); go({ mod: 'code' }); }} />
@@ -282,17 +309,17 @@ export function Console(p: Props) {
                         <div className="cm-agents">
                           <div className="cm-sub">
                             <div className="seg" role="tablist">
-                              <button className={role === 'coder' ? 'on' : ''} onClick={() => setRole('coder')}>{tr('代码员工')}</button>
-                              <button className={role === 'writer' ? 'on' : ''} onClick={() => setRole('writer')}>{tr('写作员工')}</button>
+                              {(Object.keys(ROLES) as (keyof typeof ROLES)[]).map(r => <button key={r} className={role === r ? 'on' : ''} onClick={() => setRole(r)}>{ROLES[r][1]}</button>)}
                             </div>
-                            <span className="muted small">{role === 'coder' ? tr('在代码仓库里写代码、跑测试，再把实验提交出去') : tr('在论文目录里写稿、改稿、排版')}</span>
+                            <span className="muted small">{ROLES[role][2]}</span>
                           </div>
                           <AgentDesk key={`${role}:${id}`} {...actions} role={role} focus={id} lines={p.lines} tick={p.tick} lineId={id} />
                         </div>
                       )
                         : mod === 'skills' ? <SkillRoom key={id} {...actions} focus={id} tick={p.tick} />
                           : mod === 'mcp' ? <McpRoom {...actions} tick={p.tick} />
-                            : mod === 'rag' ? <RagRoom {...actions} tick={p.tick} /> : null}
+                            : mod === 'rag' ? <RagRoom {...actions} tick={p.tick} />
+                              : mod === 'rules' ? <Bounds line={line} toast={p.toast} /> : null}
             </section>
           )}
           {kept.has('code') && (
@@ -338,7 +365,7 @@ function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
     const k = markOf(line, m.id);
     return (
       <button key={m.id} data-m={m.id} className={`cd-item${m.id === mod ? ' on' : ''}`} onClick={() => onPick(m.id)}
-        title={`${m.name} · ${m.sub}  (${(i + 1) % 10})`} style={{ ['--i' as string]: i }}>
+        title={`${m.name} · ${m.sub}${i < 10 ? `  (${(i + 1) % 10})` : ''}`} style={{ ['--i' as string]: i }}>
         <Icon n={m.icon} size={18} />
         <span className="cd-name">{m.name}</span>
         {m.id === 'code' && code > 0 ? <em className="cd-n" title={tr('{0} 处改动', code)}>{code}</em> : k && <i className={`cd-dot k-${k}`} />}
@@ -413,8 +440,8 @@ function PhoneTabs({ mod, line, code, onPick }: { mod: ModId; line: Line | null;
 
 // ---------- the rail of folders ----------
 
-function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, phone, onPick, onIdea, onClose }: {
-  open: boolean; lines: Line[]; cur: Line; tab: 'projects' | 'papers'; setTab: (t: 'projects' | 'papers') => void;
+function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, asked, phone, onPick, onIdea, onClose }: {
+  open: boolean; lines: Line[]; cur: Line; tab: 'projects' | 'papers'; setTab: (t: 'projects' | 'papers') => void; asked: Set<string>;
   filter: Filter; setFilter: (f: Filter) => void; q: string; setQ: (q: string) => void; phone: boolean;
   onPick: (l: Line, m?: ModId) => void; onIdea: () => void; onClose: () => void;
 }) {
@@ -423,9 +450,9 @@ function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, phone
   const test = FILTERS.find(f => f[0] === filter)![2];
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
-    return lines.filter(l => (tab === 'papers' ? hasPaper(l) : test(l))
+    return lines.filter(l => (tab === 'papers' ? hasPaper(l) : test(l, asked))
       && (!t || `#${l.seq} ${l.title} ${l.idea} ${l.linked?.paper?.title ?? ''}`.toLowerCase().includes(t)));
-  }, [lines, tab, test, q]);
+  }, [lines, tab, test, q, asked]);
 
   // opening: the current folder comes into view and takes the keys
   useEffect(() => {
@@ -450,7 +477,7 @@ function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, phone
     else if (e.key === 'Escape') { e.preventDefault(); onClose(); }
   }
   const scroll = (d: number) => track.current?.scrollBy({ left: d * track.current.clientWidth * 0.8, behavior: 'smooth' });
-  const counts = Object.fromEntries(FILTERS.map(([k, , f]) => [k, lines.filter(f).length]));
+  const counts = Object.fromEntries(FILTERS.map(([k, , f]) => [k, lines.filter(l => f(l, asked)).length]));
 
   return (
     <div className={`rail${open ? ' open' : ''}`} aria-hidden={!open} onKeyDown={onKey}>
