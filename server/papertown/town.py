@@ -10,6 +10,7 @@ from pathlib import Path
 from .agents import Agents
 from .assistant import Assistant
 from .bank import Bank
+from .bounds import Bounds
 from .compute import Job, SimulatedPlant
 from .config import PROVIDERS, Settings
 from .db import DB, now
@@ -53,6 +54,7 @@ class Town:
         self.world = World(self)
         self.farm = Farm(self)
         self.agents = Agents(self)
+        self.bounds = Bounds(self)
         self.assistant = Assistant(self)
         self.tools = ToolRegistry()
         self.mcp = McpHub(self)

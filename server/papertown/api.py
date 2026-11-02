@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
 from .assistant import ID as ASSISTANT, ActError
+from .bounds import BoundsError
 from .config import SERVER_DIR, Settings
 from .library import RAG_LIMITS
 from .farm import FarmError, summarize
@@ -38,6 +39,13 @@ class SkimIn(BaseModel):
     value: str | None = None  # None unsets the key
     line_id: str | None = None
     agent_id: str | None = None
+
+
+class BoundsIn(BaseModel):
+    line_id: str | None = None  # none: the global level
+    role: str | None = None  # with line_id: one of the project's workers
+    rules: list[dict] = []
+    off: list[str] = []  # inherited rules this level switches off
 
 
 class McpServerIn(BaseModel):
@@ -511,6 +519,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         agents(town.agents.abort, agent_id)
         return {"ok": True}
 
+    # ---------- work boundaries: global, project, worker ----------
+
+    @app.get("/api/bounds")
+    def bounds(line_id: str | None = None):
+        return town.bounds.view(line_id)
+
+    @app.put("/api/bounds")
+    def bounds_save(body: BoundsIn):
+        try:
+            return town.bounds.save(body.line_id, body.role, body.rules, body.off)
+        except BoundsError as e:
+            raise HTTPException(400, str(e)) from e
+
     # ---------- the console's assistant, in the sidebar ----------
 
     def assistant(fn, *args):
@@ -576,6 +597,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if a["role"] == ASSISTANT:  # no project of its own: the one named, else the one on your screen
             return {"text": assistant(town.assistant.brief, line)}
         return {"text": town.brief(a["line_id"], a["role"])}
+
+    @app.get("/api/bridge/{agent_id}/rules")
+    def bridge_rules(agent_id: str, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        return {"text": town.bounds.text(a["role"], a["line_id"], str(town.agents.pt(a)) if a.get("runtime") == "paseo" else None)}
 
     def helper(agent_id: str, token: str | None) -> dict:
         a = bridged(agent_id, token)

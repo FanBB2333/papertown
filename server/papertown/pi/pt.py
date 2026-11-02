@@ -7,6 +7,7 @@ conversation imported from Paseo has none of them and reads link.json next to th
     .papertown/pt brief
     .papertown/pt submit main -- python run.py --seed 0
     .papertown/pt jobs [job_id]
+    .papertown/pt rules                      your work boundaries: must, never, ask first
 
 The console's assistant has more (see its AGENTS.md):
 
@@ -137,6 +138,8 @@ def main(a):
         print(f"已提交 {j['id']}（{j['name']}，{j['backend']}），状态 {j['status']}。用 pt jobs {j['id']} 查看。")
     elif a[0] == "jobs":
         print(call(f"/jobs/{a[1]}" if len(a) > 1 else "/jobs")["text"])
+    elif a[0] == "rules":
+        print(call("/rules")["text"])
     elif a[0] == "page":
         print(local("page.md", "用户还没在侧边栏里发过消息，不知道他在看哪一页。"))
     elif a[0] == "actions":

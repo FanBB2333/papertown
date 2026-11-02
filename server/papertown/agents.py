@@ -302,16 +302,28 @@ class Agents:
         return text
 
     def _guide_text(self, a: dict, runtime: str) -> str:
+        """The role's guide, ending with the agent's work boundaries."""
+        bounds = self.town.bounds.section(a["role"], a["line_id"], ".papertown/pt" if runtime == "paseo" else None)
         if a["role"] == "assistant":
-            return self.town.assistant.guide(runtime)
+            return self.town.assistant.guide(runtime) + bounds
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
         info = self.town.linked.summary(a["line_id"]) if self.town.linked.of(a["line_id"]) else None
         if not info:
-            return GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS[runtime])
+            return GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS[runtime]) + bounds
         code, paper = info.get("code") or {}, info.get("paper") or {}
         return LINKED_GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], brief=LINKED_BRIEF[runtime],
                                               code=code.get("path") or "（没有接代码仓库）", paper=paper.get("path") or "（没有接论文仓库）",
-                                              main=paper.get("main") or "main.tex")
+                                              main=paper.get("main") or "main.tex") + bounds
+
+    def renew(self, agent_id: str) -> None:
+        """Write a started agent's guide again, after its rules changed."""
+        a = self.get(agent_id)
+        if a and a.get("runtime") and a.get("cwd"):
+            self._guide(a, a["runtime"])
+
+    def pt(self, a: dict) -> Path:
+        """Where a Paseo agent's `pt` is, by full path (an imported conversation works elsewhere)."""
+        return self._home(a["line_id"], a["role"]) / ".papertown" / "pt"
 
     def _linked_intro(self, a: dict, runtime: str) -> str:
         """A linked project's first message: the guide, then the brief."""
