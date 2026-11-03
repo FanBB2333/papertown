@@ -152,7 +152,7 @@ def test_the_assistant_speaks_for_you_to_the_projects(tmp_path):
         line = c.post("/api/ideas", json={"text": IDEA}).json()
         lid = line["id"]
         wait_for(town, lid, {"waiting"})
-        assert c.get("/api/paseo").json()["defaults"]["assistant"] == {"provider": "codex", "model": "gpt-6.1-terra", "thinking": "xhigh"}
+        assert c.get("/api/paseo").json()["defaults"]["assistant"] == {"provider": "codex", "model": "gpt-6.1-terra", "thinking": "xhigh", "set": False}
         c.get("/api/assistant")
         c.post("/api/agents/assistant/start", json={"runtime": "paseo"})  # nothing picked: its default
         c.post("/api/agents", json={"line_id": lid, "role": "lead"})

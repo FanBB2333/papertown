@@ -91,12 +91,15 @@ class Settings:
     skim_bin: str = field(default_factory=lambda: _env("PAPERTOWN_SKIM_BIN"))
     # your own projects, linked in from local repos (see linked.py); default: projects.json in the data dir
     projects: str = field(default_factory=lambda: _env("PAPERTOWN_PROJECTS"))
-    # what the assistant and the project leads start with on Paseo when none is picked: provider/model@thinking
+    # what the assistant and the project leads start with on Paseo until one is chosen in the
+    # settings page (see paseo_models.py): provider/model@thinking
     assistant_model: str = field(default_factory=lambda: _env("PAPERTOWN_ASSISTANT_MODEL", "codex/gpt-6.1-terra@xhigh"))
     lead_model: str = field(default_factory=lambda: _env("PAPERTOWN_LEAD_MODEL", "codex/gpt-6.1-terra@high"))
     # project leads: seconds between looks at their projects, and at least between two check-ins
     lead_tick: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_TICK", "20") or 20))
     lead_gap: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_GAP", "180") or 180))
+    # seconds between readings of Paseo's model list for new models; 0 turns them off
+    paseo_watch: float = field(default_factory=lambda: float(_env("PAPERTOWN_PASEO_WATCH", "1800") or 0))
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 

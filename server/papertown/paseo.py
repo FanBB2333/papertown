@@ -149,8 +149,9 @@ class Paseo:
         except OSError:
             return False
 
-    def providers(self) -> list[dict]:
-        """Providers that are ready, each with its models and thinking options."""
+    def providers(self, fresh: bool = False) -> list[dict]:
+        """Providers that are ready, each with its models and thinking options; read again when
+        `fresh`, else kept for five minutes."""
         def load() -> list[dict]:
             for _ in range(10):  # right after the daemon starts, providers report "loading" for a while
                 rows = self._cli("provider", "ls") or []
@@ -169,6 +170,9 @@ class Paseo:
                                     "default_thinking": m.get("defaultThinkingOptionId")} for m in ms]}
             with ThreadPoolExecutor(4) as ex:
                 return list(ex.map(models, rows))
+        if fresh:
+            with self._lock:
+                self._cache.pop("providers", None)
         return self._cached("providers", 300, load)
 
     def url(self, agent_id: str) -> str | None:

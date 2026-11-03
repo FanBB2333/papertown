@@ -25,6 +25,7 @@ from .llm import make_provider
 from .market import Market
 from .mcp_hub import McpHub
 from .nvidb import Nvidb
+from .paseo_models import PaseoModels
 from .skim import Skim
 from .pipeline import Pipeline
 from .relay import Relay
@@ -59,6 +60,7 @@ class Town:
         self.bounds = Bounds(self)
         self.leads = Leads(self)
         self.relay = Relay(self)
+        self.paseo_models = PaseoModels(self)
         self.assistant = Assistant(self)
         self.tools = ToolRegistry()
         self.mcp = McpHub(self)
@@ -81,8 +83,10 @@ class Town:
         self.nvidb.start()
         self.relay.start()
         self.leads.start()
+        self.paseo_models.start()
 
     def stop(self) -> None:
+        self.paseo_models.stop()
         self.leads.stop()
         self.relay.stop()
         self.nvidb.stop()

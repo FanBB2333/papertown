@@ -89,9 +89,14 @@ export interface PaseoProvider { id: string; label: string; modes: string; model
 export interface PaseoInfo {
   status: { ok: boolean; note: string; server_id?: string; web?: string | null; version?: string };
   providers: PaseoProvider[];
-  defaults?: Record<'assistant' | 'lead', PaseoDefault>; // what each starts with unless another is picked
+  defaults?: PaseoDefaults; // what each starts with unless another is picked
+  news?: ModelNews[];
 }
-export interface PaseoDefault { provider: string | null; model: string | null; thinking: string | null }
+// `set`: chosen in the settings page, else the environment's PAPERTOWN_ASSISTANT_MODEL / _LEAD_MODEL
+export interface PaseoDefault { provider: string | null; model: string | null; thinking: string | null; set?: boolean }
+export type PaseoDefaults = Record<'assistant' | 'lead', PaseoDefault>;
+// a model Paseo started offering since Papertown last looked
+export interface ModelNews { key: string; provider: string; label: string; model: string; name: string; thinking: string[]; default_thinking: string | null; at: string }
 
 // what the agents in a project report to you, and the questions they ask you
 export interface Report {
@@ -321,7 +326,11 @@ export const api = {
   openAgent: (lineId: string, role: AgentRole) => call<Agent>('POST', '/api/agents', { line_id: lineId, role }),
   startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
   openInPaseo: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/open`),
-  paseo: () => call<PaseoInfo>('GET', '/api/paseo'),
+  paseo: (fresh?: boolean) => call<PaseoInfo>('GET', `/api/paseo${fresh ? '?fresh=1' : ''}`),
+  setPaseoDefault: (role: 'assistant' | 'lead', o: { provider: string | null; model?: string | null; thinking?: string | null }) =>
+    call<PaseoDefaults>('POST', '/api/paseo/defaults', { role, ...o }),
+  modelNews: () => call<{ news: ModelNews[]; defaults: PaseoDefaults }>('GET', '/api/paseo/news'),
+  dismissModels: (keys?: string[]) => call<{ news: ModelNews[] }>('POST', '/api/paseo/news/dismiss', { keys: keys ?? null }),
   conversations: () => call<{ conversations: PaseoConversation[] }>('GET', '/api/paseo/conversations'),
   importAgent: (lineId: string, role: AgentRole, extId: string) => call<Agent>('POST', '/api/agents/import', { line_id: lineId, role, ext_id: extId }),
   timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null } }>('GET', `/api/agents/${id}/timeline`, undefined, said),
@@ -379,7 +388,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; } // the demo is a snapshot: nothing happens live
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), t === 'report' ? written : t === 'agent_event' || t === 'agent_delta' ? said : undefined);
     onEvent(e);

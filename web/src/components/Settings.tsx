@@ -3,11 +3,12 @@
 // agents' runtimes (on the server), the demo samples, and the keys.
 
 import { useEffect, useState } from 'react';
-import { api, listen, type Hud, type Llm, type PaseoInfo, type Roster } from '../api';
+import { api, listen, type Hud, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { DEFAULTS, resetSettings, setSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
 import { ICON_THEMES, THEMES, chooseLook } from '../console/edthemes';
 import { LlmForm } from './Chat';
+import { Select } from './Select';
 import '../settings.css';
 import { LANG, LANGS, setLang, tr } from '../i18n';
 
@@ -170,13 +171,59 @@ function Model() {
   );
 }
 
+// what the assistant or a project's lead starts on, picked from what Paseo lists now
+const ENV = { assistant: 'PAPERTOWN_ASSISTANT_MODEL', lead: 'PAPERTOWN_LEAD_MODEL' } as const;
+function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead'; name: string; info: PaseoInfo; onSaved: (i: PaseoInfo) => void }) {
+  const d: PaseoDefault = info.defaults?.[role] ?? { provider: null, model: null, thinking: null };
+  const was = { provider: d.provider ?? '', model: d.model ?? '', thinking: d.thinking ?? '' };
+  const [v, setV] = useState(was);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const pv = info.providers.find(p => p.id === v.provider), m = pv?.models.find(x => x.id === v.model);
+  const gone = !!d.provider && (!info.providers.some(p => p.id === d.provider) || (!!d.model && !info.providers.find(p => p.id === d.provider)?.models.some(x => x.id === d.model)));
+  const changed = JSON.stringify(v) !== JSON.stringify(was);
+  // another provider or model keeps the thinking when it has it
+  const to = (provider: string, model?: string) => {
+    const p = info.providers.find(x => x.id === provider), mm = p?.models.find(x => x.id === model) ?? p?.models[0];
+    setV(x => ({ provider, model: mm?.id ?? '', thinking: mm && mm.thinking.includes(x.thinking) ? x.thinking : mm?.default_thinking ?? '' }));
+  };
+  async function save(o: { provider: string | null; model?: string | null; thinking?: string | null }) {
+    setBusy(true);
+    setErr('');
+    try {
+      const defaults = await api.setPaseoDefault(role, o);
+      onSaved({ ...info, defaults });
+      const n = defaults[role];
+      setV({ provider: n.provider ?? '', model: n.model ?? '', thinking: n.thinking ?? '' });
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+  return (
+    <>
+      <Row label={tr('{0}默认用', name)} desc={d.set ? tr('在这里选的，启动时预先选好') : tr('没选过，用环境变量 {0}', ENV[role])}>
+        <div className="st-models">
+          <Select value={v.provider} label={tr('供应商')} placeholder={tr('选供应商')} options={info.providers.map(p => ({ value: p.id, label: p.label }))} onChange={id => to(id)} />
+          {!!pv?.models.length && <Select value={v.model} label={tr('模型')} options={pv.models.map(x => ({ value: x.id, label: x.name }))} onChange={id => to(v.provider, id)} />}
+          {!!m && m.thinking.length > 1 && <Select value={v.thinking} label={tr('思考强度')} options={m.thinking.map(x => ({ value: x, label: x }))} onChange={t => setV(x => ({ ...x, thinking: t }))} />}
+          {changed && <button className="btn pri" disabled={busy || !v.provider} onClick={() => save({ provider: v.provider, model: v.model || null, thinking: v.thinking || null })}>{tr('保存')}</button>}
+          {!changed && d.set && <button className="btn" disabled={busy} onClick={() => save({ provider: null })} title={ENV[role]}>{tr('改回环境变量的')}</button>}
+        </div>
+      </Row>
+      {gone && !changed && <p className="warn-box small">{tr('Paseo 里现在没有 {0}，启动时会退回到这个供应商的第一个模型。', [d.provider, d.model].filter(Boolean).join(' / '))}</p>}
+      {err && <p className="warn-box small">{err}</p>}
+    </>
+  );
+}
+
 function Agents() {
   const [paseo, setPaseo] = useState<PaseoInfo | null | 'err'>(null);
   const [pi, setPi] = useState<Roster['available'] | null>(null);
+  const [n, setN] = useState(0); // the default pickers start over from a new reading
+  const [reading, setReading] = useState(false);
   useEffect(() => {
     api.paseo().then(setPaseo).catch(() => setPaseo('err'));
     api.roster('coder').then(r => setPi(r.available)).catch(() => {});
   }, []);
+  const again = () => { setReading(true); api.paseo(true).then(i => { setPaseo(i); setN(x => x + 1); }).catch(() => setPaseo('err')).finally(() => setReading(false)); };
   const st = paseo && paseo !== 'err' ? paseo.status : null;
   return (
     <>
@@ -189,16 +236,23 @@ function Agents() {
           <Row label={tr('网页端')} desc={tr('房间里「完整界面」嵌入的就是它')}>
             <span className="muted small">{st.web ?? tr('没开：paseo daemon config set features.webUi.enabled true')}</span>
           </Row>
-          <Row label={tr('可用的供应商')}>
-            <span className="st-tags">{paseo !== 'err' && paseo?.providers.map(p => <span key={p.id} className="chip">{p.label} · {tr('{0} 个模型', p.models.length)}</span>)}</span>
+          <Row label={tr('可用的供应商')} desc={tr('从 Paseo 读出来的，每隔一阵重读一次；有新模型时中控屏会问你要不要换')}>
+            <span className="st-tags">
+              {paseo !== 'err' && paseo?.providers.map(p => <span key={p.id} className="chip">{p.label} · {tr('{0} 个模型', p.models.length)}</span>)}
+              <button className="btn" disabled={reading} onClick={again}>{reading ? tr('读取中…') : tr('重新读取')}</button>
+            </span>
           </Row>
+          {paseo && paseo !== 'err' && <div key={n}>
+            <DefaultModel role="assistant" name={tr('小助手')} info={paseo} onSaved={setPaseo} />
+            <DefaultModel role="lead" name={tr('项目负责人')} info={paseo} onSaved={setPaseo} />
+          </div>}
         </>
       )}
       <Row label={tr('本机 pi')} desc={tr('跑在 tmux 里的后台终端 agent')}>
         <span className={`chip ${pi?.ok ? 'ok' : 'warn'}`}>{pi === null ? tr('检查中…') : pi.ok ? tr('可用') : tr('不可用')}</span>
       </Row>
       {pi && !pi.ok && <p className="warn-box small">{pi.note}</p>}
-      <p className="muted small">{tr('雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。')}</p>
+      <p className="muted small">{tr('雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。小助手和项目负责人的默认模型只管以后启动的，已经在跑的不受影响。')}</p>
     </>
   );
 }

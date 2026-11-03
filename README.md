@@ -148,7 +148,8 @@ uv run papertown demo "让 VLA 模型用结构化的场景图做长程规划"
 | `PAPERTOWN_NVIDB=0`、`PAPERTOWN_NVIDB_BIN`、`PAPERTOWN_NVIDB_POLL` | 关掉 nvidb 显卡读取；nvidb 的路径（默认在 PATH 上找）；后台读 nvidb 的间隔秒数（默认 10） |
 | `PAPERTOWN_PROJECTS` | 本地项目清单的位置，默认数据目录下的 `projects.json` |
 | `PAPERTOWN_SKIM_BIN` | skim 的路径（默认在 PATH 上找），技能学堂用它按项目、按对话配置 skill |
-| `PAPERTOWN_ASSISTANT_MODEL`、`PAPERTOWN_LEAD_MODEL` | 小助手和项目负责人在 Paseo 里默认用的模型，写成 `供应商/模型@思考强度`，默认 `codex/gpt-6.1-terra@xhigh` 和 `codex/gpt-6.1-terra@high`；启动时可以换 |
+| `PAPERTOWN_ASSISTANT_MODEL`、`PAPERTOWN_LEAD_MODEL` | 小助手和项目负责人在 Paseo 里默认用的模型，写成 `供应商/模型@思考强度`，默认 `codex/gpt-6.1-terra@xhigh` 和 `codex/gpt-6.1-terra@high`；只在设置页里没选过时才用，见「默认模型和新模型」 |
+| `PAPERTOWN_PASEO_WATCH` | 多久重读一次 Paseo 的模型列表找新模型（秒，默认 1800，`0` 关掉；打开模型选择时也会读） |
 | `PAPERTOWN_LEAD_TICK`、`PAPERTOWN_LEAD_GAP` | 多久看一次各项目有没有动静（秒，默认 20）；同一个负责人两次巡检至少隔多久（秒，默认 180） |
 
 完整列表见 [`.env.example`](.env.example) 和 `server/papertown/config.py`。
@@ -273,11 +274,17 @@ pi 用它自己的模型设置和登录，Papertown 不碰任何 key；pi 报告
 
 ### 项目负责人
 
-每个项目可以配一位负责人，在中控屏「员工」面板的第一个标签里启动（只跑在 Paseo 里，默认 `PAPERTOWN_LEAD_MODEL`）。它的工作目录是 Papertown 自己的 `server/var/projects/<项目>/lead`，不碰项目的仓库；接入的本地项目它可以读代码和论文目录、看 git，但不改不提交。
+每个项目可以配一位负责人，在中控屏「员工」面板的第一个标签里启动（只跑在 Paseo 里，预先选好设置页里的默认模型）。它的工作目录是 Papertown 自己的 `server/var/projects/<项目>/lead`，不碰项目的仓库；接入的本地项目它可以读代码和论文目录、看 git，但不改不提交。
 
 - **巡检**：负责人不一直在线。Papertown 每隔 `PAPERTOWN_LEAD_TICK` 秒比对一次每个项目的状况（项目状态、工序、实验任务、员工状态、等你回答的问题），有变化（实验结束或失败、员工结束一轮、工序变了、你回答了问题）就在负责人空下来、离上次巡检超过 `PAPERTOWN_LEAD_GAP` 秒时给它发一条 `<checkin>`，写着这段时间变了什么和项目现在的样子。在跑的项目和接入的本地项目没有动静时也会隔一阵（默认 60 分钟，侧栏可以改成 15 分钟到 8 小时）来一条，接连三次没有新动静就停下，直到项目又有变化。侧栏的「巡检」可以整个关掉。
 - **它能做的**：`pt status` 看项目、`pt worker coder|writer` 读员工最近的对话、`pt jobs` 看任务和日志、`pt tell coder|writer "…" [--now]` 给员工派活或提醒（默认等员工做完手上的事再交给它，`--now` 插进去）、`pt report "…" [--key]` 给你写汇报、`pt ask "问题" [--choice 选项]…` 问你、`pt rules` 看边界。员工收到的消息开头是 `<msg from="#5 的项目负责人">`，员工也能用 `pt tell lead` 回话。
 - **汇报和问题**：概览上的「项目负责人」卡片和员工面板的侧栏列出它和员工等你回答的问题（点选项或写几句回答，回答会发回提问的 agent）和最近的汇报，要紧的标出来并在屏幕上弹一下。问题如果是工作边界拦下的动作（见「工作边界」），你答「可以」时 Papertown 就替它执行。数据在 `GET /api/lines/<id>/lead`、`GET /api/reports`，回答用 `POST /api/reports/<id>/answer`。
+
+### 默认模型和新模型
+
+可选的供应商、模型和思考强度都是从 Paseo 读出来的（`paseo provider ls` 和 `paseo provider models <供应商>`，缓存 5 分钟），不在 Papertown 里写死。小助手和项目负责人启动时预先选好的那个，在设置页「员工 Agent」里从这份列表中选，存在数据目录的 `paseo.json`；没选过时用 `PAPERTOWN_ASSISTANT_MODEL` / `PAPERTOWN_LEAD_MODEL`。选好的模型如果后来在 Paseo 里没了，设置页会提示，启动时退回到这个供应商的第一个模型。默认只管以后启动的，已经在跑的负责人和小助手不受影响（小助手开新对话时换上）。
+
+Papertown 每隔一阵（`PAPERTOWN_PASEO_WATCH`）重读一次 Paseo 的列表，设置页的「重新读取」也会读。已知供应商里多出来的模型算新模型，中控屏右上角（手机上在底部）会弹出一张卡片，列出新模型，问你要不要让小助手、项目负责人以后默认用它：思考强度沿用原来的，新模型没有时用它自己的默认。「切换」和「不用了」都会把这次的提醒收掉，× 只是先收起，下次打开页面还会提醒。第一次读到的模型、新出现的供应商的模型只记下来，不提醒。接口：`GET /api/paseo`（`?fresh=1` 重读）、`POST /api/paseo/defaults`、`GET /api/paseo/news`、`POST /api/paseo/news/dismiss`。
 
 ### 中控屏的小助手
 

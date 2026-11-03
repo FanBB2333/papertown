@@ -20,6 +20,7 @@ from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
 from .assistant import ID as ASSISTANT, ActError
 from .bounds import BoundsError
+from .paseo_models import ModelError
 from .leads import LeadError
 from .config import SERVER_DIR, Settings
 from .library import RAG_LIMITS
@@ -164,6 +165,17 @@ class PageIn(BaseModel):
 class AssistantSayIn(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
     page: dict | None = None
+
+
+class DefaultIn(BaseModel):
+    role: str
+    provider: str | None = None  # none: back to the environment's setting
+    model: str | None = None
+    thinking: str | None = None
+
+
+class DismissIn(BaseModel):
+    keys: list[str] | None = None  # none: all of it
 
 
 class DecideIn(BaseModel):
@@ -519,15 +531,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, str(e)) from e
 
     @app.get("/api/paseo")
-    def paseo():
-        p = town.agents.paseo
+    def paseo(fresh: bool = False):
+        p, m = town.agents.paseo, town.paseo_models
         st = p.status(fresh=True)
         try:
-            providers = p.providers() if st["ok"] else []
+            providers = p.providers(fresh) if st["ok"] else []
         except Exception as e:  # noqa: BLE001 - the CLI's own message is the useful part
             st = st | {"note": str(e)}
             providers = []
-        return {"status": st, "providers": providers, "defaults": {r: town.s.paseo_default(r) for r in ("assistant", "lead")}}
+        if providers:
+            m.learn(providers)
+        return {"status": st, "providers": providers, "defaults": m.defaults(), "news": m.news()}
+
+    # what the assistant and the leads start on, and the models Paseo started offering since
+    @app.post("/api/paseo/defaults")
+    def paseo_default(body: DefaultIn):
+        try:
+            return town.paseo_models.set_default(body.role, body.provider, body.model, body.thinking)
+        except ModelError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @app.get("/api/paseo/news")
+    def paseo_news():
+        return {"news": town.paseo_models.news(), "defaults": town.paseo_models.defaults()}
+
+    @app.post("/api/paseo/news/dismiss")
+    def paseo_news_dismiss(body: DismissIn):
+        return {"news": town.paseo_models.dismiss(body.keys)}
 
     @app.post("/api/agents/{agent_id}/stop")
     def agent_stop(agent_id: str):

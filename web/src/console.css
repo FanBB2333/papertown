@@ -1449,3 +1449,24 @@ g.pt-flash > rect:not(.g-pad) { animation: pt-flash-svg 2.4s var(--out); }
 .bd-eg li::marker { color: var(--k); }
 .bd-eg .bd-from { margin-left: 6px; }
 @media (max-width: 1100px) { .bd-grid { grid-template-columns: minmax(0, 1fr); } .bd-eff { position: static; } }
+
+/* ---------- a model Paseo started offering: switch the assistant or the leads to it? ---------- */
+.mnews {
+  position: fixed; z-index: 60; right: 18px; top: calc(var(--hud-h, 64px) + 62px); width: min(380px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 12px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line));
+  background: var(--panel); box-shadow: 0 18px 40px -18px rgba(60, 40, 20, .45), var(--soft); animation: rise-in .45s var(--out) both;
+}
+.mn-x { position: absolute; right: 8px; top: 8px; color: var(--muted); }
+.mn-k { display: flex; align-items: center; gap: 6px; padding-right: 26px; font: 600 13.5px var(--font); color: var(--brand); }
+.mn-list { display: flex; flex-direction: column; gap: 5px; }
+.mn-m { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 10px; border-radius: 9px; border: 1px solid var(--line); background: none; color: var(--ink); font: 13.5px var(--font); text-align: left; cursor: pointer; transition: border-color .2s, background-color .2s; }
+.mn-m:hover { border-color: color-mix(in srgb, var(--brand) 40%, var(--line)); }
+.mn-m.on { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 9%, var(--panel)); }
+.mn-q { margin: 2px 0 0; font-size: 13.5px; }
+.mn-roles { display: flex; flex-direction: column; gap: 6px; }
+.mn-role { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 13.5px; }
+.mn-role input { margin-top: 3px; accent-color: var(--brand); }
+.mn-role > span { display: flex; flex-direction: column; min-width: 0; }
+.mn-role .small { overflow-wrap: anywhere; }
+.mnews > p.small { margin: 0; line-height: 1.5; }
+.mnews .btns { display: flex; gap: 8px; }

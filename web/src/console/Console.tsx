@@ -4,7 +4,8 @@
 // town's configuration run down the left, and the one picked fills the right: the survey to
 // read, the code and the paper to edit, the experiments and their data, the project's agents,
 // the skills, MCP servers and library. The town, 2D or 3D, is the same work walked through.
-// The assistant opens in a sidebar on the right and is told what you are looking at.
+// The assistant opens in a sidebar on the right and is told what you are looking at. When Paseo
+// starts offering a new model, a card asks whether the assistant and the leads should switch.
 //
 // On a phone the same console in one column: the project is the bar along the top (tap it for
 // the list, which rises from the bottom), the panels most looked at are tabs along the bottom
@@ -28,6 +29,7 @@ import { Data } from './Data';
 import { EdPicker } from './EdPicker';
 import { Experiments } from './Experiments';
 import { Icon, type IconName } from './icons';
+import { NewModels } from './NewModels';
 import { Overview, STAGE_MOD } from './Overview';
 import { flash, setPlace, usePanelNote } from './page';
 import { Paper } from './Paper';
@@ -336,6 +338,7 @@ export function Console(p: Props) {
         {side && <Assistant actions={actions} autoFocus={opened.current} onClose={() => setSide(false)} />}
       </div>
       {phone && <PhoneTabs mod={mod} line={line} code={ws.data?.code?.dirty ?? 0} onPick={m => { setSide(false); go({ mod: m }); }} />}
+      {p.active && <NewModels toast={p.toast} />}
       <EdPicker />
     </main>
   );

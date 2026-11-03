@@ -101,3 +101,6 @@
   .st-row { flex-direction: column; align-items: flex-start; gap: 8px; }
   .st-c { max-width: 100%; justify-content: flex-start; }
 }
+/* the assistant's and the leads' default models, picked from Paseo's list */
+.st-models { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: flex-end; }
+.st-models .sel { min-width: 104px; max-width: 220px; }
