@@ -2192,5 +2192,8 @@
  "在 Paseo 里用 {0} 启动": "Start in Paseo on {0}",
  "配负责人": "Set up a lead",
  "给负责人附一句（可选），比如「重点看实验」": "A word for the lead (optional), e.g. “focus on the experiments”",
- "附言：{0}": "Note: {0}"
+ "附言：{0}": "Note: {0}",
+ "#{0} {1}，看详情": "#{0} {1}, open its details",
+ "卡点": "Blocker",
+ "{0}由 {1} 写": "Written {0} by {1}"
 }
