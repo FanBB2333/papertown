@@ -8,7 +8,7 @@ export interface Settings {
   // look and motion
   motion: 'full' | 'calm'; // calm: shorter, gentler animations
   grain: number; // paper grain over the page, 0..1
-  start: 'console' | '2d' | '3d'; // what the page opens on: the console, or the town in 2D or 3D
+  start: 'cards' | 'console' | '2d' | '3d'; // what the page opens on: the projects' cards, the console, or the town in 2D or 3D
   // the map
   smoothMap: boolean; // eased zoom and a little glide after a drag
   zoomSpeed: number; // 0.5..2, wheel zoom per notch

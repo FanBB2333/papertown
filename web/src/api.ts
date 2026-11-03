@@ -104,6 +104,19 @@ export interface Report {
   data: { text?: string; key?: boolean; who?: string; question?: string; choices?: string[]; open?: boolean; answer?: string;
     answered_at?: string; by?: string; act?: { action: string } | null; result?: string };
 }
+// a project on the 进展 page: Papertown's own facts, its lead, and the card the lead wrote when asked
+export type Health = 'ok' | 'risk' | 'blocked';
+export interface Card {
+  summary: string; health: Health; progress: number | null; milestone: string;
+  done: string[]; next: string[]; blockers: string[]; need_you: string[]; metrics: { name: string; value: string; note: string }[];
+  at: string; by: string;
+}
+export interface ProjectCard {
+  line: { id: string; seq: number; title: string; status: string; linked: boolean; updated_at: string;
+    stages: { key: string; name: string; status: 'todo' | 'run' | 'wait' | 'done' }[]; stage: { name: string; status: string; pct: number } | null };
+  lead: Agent | null; card: Card | null; prev: number | null; pending: { at: string; note: string } | null;
+  jobs: Record<string, number>; asks: number;
+}
 export interface LeadView { agent: Agent | null; settings: { supervise: boolean; every: number }; reports: Report[]; asks: Report[] }
 
 // work boundaries: global (the assistant), project (its lead), worker (one coder or writer)
@@ -276,6 +289,8 @@ export interface RagResult { query: string; expanded: string; terms: string[]; m
 const said = (v: object) => ['user', 'assistant'].includes((v as { kind?: string }).kind ?? '') || (v as { type?: string }).type === 'agent_delta';
 // a report or a question as its agent wrote it (and your answer)
 const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'text' in v);
+// a card as the lead wrote it
+const carded = (v: object) => said(v) || ('summary' in v && 'health' in v);
 // a work boundary as you wrote it
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
 
@@ -341,6 +356,10 @@ export const api = {
   papersOf: (lineId: string) => call<{ survey: PaperCard[]; references: PaperCard[] }>('GET', `/api/lines/${lineId}/papers`),
   setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
+  cards: () => call<{ cards: ProjectCard[] }>('GET', '/api/cards', undefined, carded),
+  updateCard: (lineId: string, note = '') => call<ProjectCard>('POST', `/api/lines/${lineId}/card`, { note }, carded),
+  cancelCard: (lineId: string) => call<ProjectCard>('POST', `/api/lines/${lineId}/card/cancel`, {}, carded),
+  updateCards: () => call<{ sent: string[]; skipped: { line_id: string; why: string }[] }>('POST', '/api/cards/update', {}),
   lead: (lineId: string) => call<LeadView>('GET', `/api/lines/${lineId}/lead`, undefined, written),
   setLead: (lineId: string, o: { supervise?: boolean; every?: number }) => call<LeadView['settings']>('POST', `/api/lines/${lineId}/lead`, o),
   reports: (lineId?: string) => call<{ reports: Report[]; asks: Report[] }>('GET', `/api/reports${lineId ? `?line_id=${lineId}` : ''}`, undefined, written),
@@ -388,9 +407,9 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; } // the demo is a snapshot: nothing happens live
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card'];
   for (const t of types) es.addEventListener(t, ev => {
-    const e = localize(JSON.parse((ev as MessageEvent).data), t === 'report' ? written : t === 'agent_event' || t === 'agent_delta' ? said : undefined);
+    const e = localize(JSON.parse((ev as MessageEvent).data), t === 'report' ? written : t === 'card' ? carded : t === 'agent_event' || t === 'agent_delta' ? said : undefined);
     onEvent(e);
     for (const fn of listeners) fn(e);
   });

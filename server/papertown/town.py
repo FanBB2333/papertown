@@ -11,6 +11,7 @@ from .agents import Agents
 from .assistant import Assistant
 from .bank import Bank
 from .bounds import Bounds
+from .cards import Cards
 from .compute import Job, SimulatedPlant
 from .config import PROVIDERS, Settings
 from .db import DB, now
@@ -61,6 +62,7 @@ class Town:
         self.leads = Leads(self)
         self.relay = Relay(self)
         self.paseo_models = PaseoModels(self)
+        self.cards = Cards(self)
         self.assistant = Assistant(self)
         self.tools = ToolRegistry()
         self.mcp = McpHub(self)

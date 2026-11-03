@@ -17,6 +17,7 @@ import { Interior } from './components/Interior';
 import { SettingsPanel } from './components/Settings';
 import { StatusView } from './components/StatusView';
 import { Console } from './console/Console';
+import { Progress } from './progress/Progress';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { getSettings, useSettings } from './settings';
 import { DEMO } from './demo';
@@ -26,7 +27,7 @@ import './mobile.css';
 
 const Town3D = lazy(() => import('./components/Town3D'));
 
-type View = 'console' | 'world' | 'status';
+type View = 'cards' | 'console' | 'world' | 'status';
 // the map, the 3D town, and the flights between them
 type Dim = '2d' | 'to3d' | '3d' | 'to2d';
 const PHASE = { '2d': 'off', to3d: 'enter', '3d': 'live', to2d: 'leave' } as const;
@@ -56,8 +57,9 @@ export function App() {
   // a link into the town (a building, the chat, the 3D walk) opens the town; else the view you start on
   const [view, setView] = useState<View>(() => {
     const v = hp.get('view');
-    if (v === 'status' || v === 'console' || v === 'world') return v;
-    return hp.has('open') || hp.has('3d') || hp.has('chat') || getSettings().start !== 'console' ? 'world' : 'console';
+    if (v === 'status' || v === 'console' || v === 'world' || v === 'cards') return v;
+    const start = getSettings().start;
+    return hp.has('open') || hp.has('3d') || hp.has('chat') || (start !== 'console' && start !== 'cards') ? 'world' : start;
   });
   const [consoleUp, setConsoleUp] = useState(view === 'console'); // mounted once shown, and kept
   const [world, setWorld] = useState<WorldState | null>(null);
@@ -245,12 +247,19 @@ export function App() {
     setView(v);
   }, [go2d]);
 
+  // a project's card opens the project in the console, which comes up first if it was never shown
+  const openProject = useCallback((lineId: string) => {
+    const wasUp = consoleUp;
+    show('console');
+    setTimeout(() => dispatchEvent(new CustomEvent('pt-show', { detail: { line: lineId, mod: 'overview' } })), wasUp ? 60 : 250);
+  }, [show, consoleUp]);
+
   // the macOS app (macos/) drives the page from its menus: the settings, the view, a note
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ type?: string; view?: string; text?: string }>).detail ?? {};
       if (d.type === 'settings') setSettingsOpen(true);
-      else if (d.type === 'view' && (d.view === 'console' || d.view === 'world' || d.view === 'status')) show(d.view);
+      else if (d.type === 'view' && (d.view === 'cards' || d.view === 'console' || d.view === 'world' || d.view === 'status')) show(d.view);
       else if (d.type === 'toast' && d.text) push(d.text);
     };
     addEventListener('papertown:command', on);
@@ -288,6 +297,7 @@ export function App() {
         </Suspense>
       )}
       <StatusView tick={tick} active={view === 'status'} />
+      <Progress active={view === 'cards'} toast={push} onOpen={openProject} />
       {consoleUp && (
         <Console active={view === 'console'} lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
           onRoom={(id, lineId) => openRoom(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
@@ -299,6 +309,7 @@ export function App() {
       <header className="hud">
         <div className="brand"><Logo /><b>Papertown</b></div>
         <div className="seg" role="tablist">
+          <button className={view === 'cards' ? 'on' : ''} onClick={() => show('cards')} title={tr('每个项目一张卡片：进展、风险、要你决定的事')}>{tr('进展')}</button>
           <button className={view === 'console' ? 'on' : ''} onClick={() => show('console')} title={tr('不用走动：所有项目和小镇的功能都在面板里')}>{tr('中控屏')}</button>
           <button className={view === 'world' ? 'on' : ''} onClick={() => show('world')} title={tr('在小镇里走动，进建筑办事；可以平面或 3D')}>{tr('小镇')}</button>
           <button className={view === 'status' ? 'on' : ''} onClick={() => show('status')}>{tr('运行状态')}</button>

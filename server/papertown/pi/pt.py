@@ -18,6 +18,8 @@ A project's lead also has:
     .papertown/pt tell coder|writer "..." [--now]
     .papertown/pt report "..." [--key]       a report for the user
     .papertown/pt reports                    the project's reports and questions
+    .papertown/pt card                       its card on the 进展 page: the fields and the card as it is
+    .papertown/pt card set '<json>'|file.json   write the card, when the user asked for it
 
 The console's assistant has more (see its AGENTS.md):
 
@@ -176,6 +178,24 @@ def main(a):
         if not rest:
             sys.exit('用法：pt report "汇报" [--key]')
         print(call("/report", {"text": " ".join(rest), "key": bool(opts.get("key"))})["text"])
+    elif a[0] == "card":
+        if len(a) == 1:
+            print(call("/card")["text"])
+        elif a[1] == "set" and len(a) > 2:
+            raw = " ".join(a[2:]).strip()
+            if not raw.startswith("{"):
+                try:
+                    with open(raw, encoding="utf-8") as f:
+                        raw = f.read()
+                except OSError as e:
+                    sys.exit(f"读不了 {raw}：{e}")
+            try:
+                card = json.loads(raw)
+            except ValueError as e:
+                sys.exit(f"卡片不是合法的 JSON：{e}")
+            print(call("/card", {"card": card})["text"])
+        else:
+            sys.exit("用法：pt card | pt card set '<JSON>' | pt card set 文件.json")
     elif a[0] == "page":
         print(local("page.md", "用户还没在侧边栏里发过消息，不知道他在看哪一页。"))
     elif a[0] == "actions":

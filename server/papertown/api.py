@@ -20,6 +20,7 @@ from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
 from .assistant import ID as ASSISTANT, ActError
 from .bounds import BoundsError
+from .cards import CardError
 from .paseo_models import ModelError
 from .leads import LeadError
 from .config import SERVER_DIR, Settings
@@ -69,6 +70,14 @@ class TellIn(BaseModel):
 class AnswerByIn(BaseModel):
     id: str = Field(min_length=1, max_length=20)
     text: str = Field(min_length=1, max_length=2000)
+
+
+class CardAsk(BaseModel):
+    note: str = Field(default="", max_length=300)  # a word for the lead along with it
+
+
+class CardIn(BaseModel):
+    card: dict
 
 
 class ReportIn(BaseModel):
@@ -594,8 +603,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def leads(fn, *args):
         try:
             return fn(*args)
-        except (LeadError, AgentError) as e:
+        except (LeadError, AgentError, CardError) as e:
             raise HTTPException(400, str(e)) from e
+
+    # ---------- the 进展 page: each project's card, written by its lead when you ask ----------
+
+    @app.get("/api/cards")
+    def cards():
+        return {"cards": town.cards.all()}
+
+    @app.post("/api/cards/update")
+    def cards_update():
+        return town.cards.request_all()
+
+    @app.post("/api/lines/{line_id}/card")
+    def card_update(line_id: str, body: CardAsk):
+        return leads(town.cards.request, line_id, body.note)
+
+    @app.post("/api/lines/{line_id}/card/cancel")
+    def card_cancel(line_id: str):
+        return leads(town.cards.cancel, line_id)
 
     @app.get("/api/lines/{line_id}/lead")
     def lead(line_id: str):
@@ -771,6 +798,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(403, "只有项目负责人写汇报；员工有事用 pt tell lead 告诉负责人")
         r = leads(town.leads.report, agent_id, body.text, body.key)
         return {"text": f"已经记下这条汇报（{r['id']}），用户在项目的概览里会看到。"}
+
+    @app.get("/api/bridge/{agent_id}/card")
+    def bridge_card(agent_id: str, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        if a["role"] != "lead":
+            raise HTTPException(403, "只有项目负责人写项目卡片")
+        return {"text": town.cards.guide(a["line_id"])}
+
+    @app.post("/api/bridge/{agent_id}/card")
+    def bridge_card_set(agent_id: str, body: CardIn, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        c = leads(town.cards.write, agent_id, body.card)
+        return {"text": f"卡片更新好了（{c['summary'][:30]}…），用户在「进展」页上会看到。"}
 
     @app.post("/api/bridge/{agent_id}/show")
     def bridge_show(agent_id: str, body: ShowIn, x_papertown_token: str | None = Header(default=None)):

@@ -469,13 +469,14 @@ export function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent
 export const paseoTool = (t: PaseoItem) => ({ name: t.name ?? '', arg: t.arg, st: (t.status === 'running' ? 'run' : t.status === 'completed' ? 'ok' : 'bad') as ToolSt, note: t.error ?? undefined });
 
 // what Papertown put into the conversation rather than you: a message from another agent, a
-// check-in on the project, your answer to its question, its work boundaries changed
-const TAGGED = /^<(msg|checkin|answer|bounds)(?: from="([^"]*)")?>\n?([\s\S]*?)\n?<\/\1>\s*$/;
+// check-in on the project, your answer to its question, its work boundaries changed, the card
+// you asked it to write
+const TAGGED = /^<(msg|checkin|answer|bounds|card)(?: from="([^"]*)")?>\n?([\s\S]*?)\n?<\/\1>\s*$/;
 const someone = (w: string) => { const m = /^#(\d+) 的(.+)$/.exec(w); return m ? tr('#{0} 的{1}', m[1], trx(m[2])) : trx(w); };
 function tagged(t: string) {
   const m = TAGGED.exec(t.trim());
   if (!m) return null;
-  const label = m[1] === 'msg' ? tr('{0}发来的消息', someone(m[2] ?? '')) : { checkin: tr('Papertown：项目的近况'), answer: tr('你的回答'), bounds: tr('工作边界改了') }[m[1]]!;
+  const label = m[1] === 'msg' ? tr('{0}发来的消息', someone(m[2] ?? '')) : { checkin: tr('Papertown：项目的近况'), answer: tr('你的回答'), bounds: tr('工作边界改了'), card: tr('你请它更新项目卡片') }[m[1]]!;
   return { k: m[1], label, body: m[3] };
 }
 
