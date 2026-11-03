@@ -7,6 +7,7 @@
 // the grid is the same height and holds a summary; clicking one opens all of it.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, listen, type Card, type Health, type PaseoDefaults, type ProjectCard } from '../api';
 import { AGENT_STATUS, STATUS } from '../components/MillRoom';
 import { tr } from '../i18n';
@@ -246,7 +247,9 @@ function ProjectBox({ r, i, defs, toast, onChange, onOpen, onDetail }: {
   );
 }
 
-// a card in full, over the page: every number and every list, and a word for the lead with 更新
+// a card in full, over the page: every number and every list, and a word for the lead with 更新.
+// It is put at the app's root, since the page under it scrolls and moves on its way in, and a
+// fixed overlay inside it would scroll along.
 function Detail({ r, defs, toast, onChange, onOpen, onClose }: {
   r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onOpen: () => void; onClose: () => void;
 }) {
@@ -259,7 +262,7 @@ function Detail({ r, defs, toast, onChange, onOpen, onClose }: {
     return () => removeEventListener('keydown', k, true);
   }, [onClose]);
   const lists = LISTS.filter(([k]) => card?.[k].length);
-  return (
+  return createPortal(
     <div className="pd-back" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <section className={`pd${card ? ` h-${card.health}` : ''}`} role="dialog" aria-modal="true" aria-label={`#${line.seq} ${line.title}`}>
         <span className="sheet-grip" />
@@ -306,6 +309,7 @@ function Detail({ r, defs, toast, onChange, onOpen, onClose }: {
           </div>
         </footer>
       </section>
-    </div>
+    </div>,
+    document.querySelector('.theme-sketch') ?? document.body,
   );
 }
