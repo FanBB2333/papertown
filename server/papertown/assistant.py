@@ -32,7 +32,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from .agents import ROLES, AgentError
+from .agents import PAGE_GUIDE, ROLES, AgentError
 from .db import now
 from .leads import LeadError
 from .paseo import PaseoError
@@ -131,8 +131,9 @@ GUIDE = """# Papertown · 小助手
 ## 回复
 
 - 用中文，短：先给结论，再给依据。数字带上单位和出处。
+- 要用表格、图或对比才讲得清的（比较几个项目、一批实验的结果、一段代码怎么工作），写成一页 HTML，用 `.papertown/pt publish 页面.html "标题" --line <项目>` 发到那个项目的「汇报与讲解」，在侧边栏里说一句结论，告诉他页面的标题。
 - 不知道就说不知道，并说可以去哪里查。
-"""
+""" + PAGE_GUIDE
 
 
 class ActError(Exception):

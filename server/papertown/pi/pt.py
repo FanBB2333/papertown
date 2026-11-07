@@ -20,6 +20,16 @@ A project's lead also has:
     .papertown/pt reports                    the project's reports and questions
     .papertown/pt card                       its card on the 进展 page: the fields and the card as it is
     .papertown/pt card set '<json>'|file.json   write the card, when the user asked for it
+    .papertown/pt reply <question> "..."|file.md|page.html ["a line about it"]
+                                             your answer to a question the user put to you
+
+Any agent of a project has:
+
+    .papertown/pt recall "..."               search the project: its card, reports, jobs, code, paper
+                                             and the agent conversations and notes imported for it
+    .papertown/pt publish page.html ["title"] [--kind report|explain]
+                                             a page in HTML for the user, under 汇报与讲解 in 进展
+                                             (the assistant adds --line <project>)
 
 The console's assistant has more (see its AGENTS.md):
 
@@ -139,6 +149,14 @@ def options(args, many=("--choice",), flags=("--point",)):
     return opts, rest
 
 
+def read(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    except (OSError, UnicodeDecodeError) as e:
+        sys.exit(f"读不了 {path}：{e}")
+
+
 def main(a):
     if not a or a[0] in ("-h", "--help"):
         print(__doc__)
@@ -196,6 +214,26 @@ def main(a):
             print(call("/card", {"card": card})["text"])
         else:
             sys.exit("用法：pt card | pt card set '<JSON>' | pt card set 文件.json")
+    elif a[0] == "recall":
+        if len(a) < 2:
+            sys.exit('用法：pt recall "要找的"')
+        print(call("/recall?q=" + quote(" ".join(a[1:])))["text"])
+    elif a[0] == "reply":
+        if len(a) < 3:
+            sys.exit('用法：pt reply <问题 id> "回答" | pt reply <问题 id> 文件.md | pt reply <问题 id> 回答.html ["一句话"]')
+        if a[2].lower().endswith((".html", ".htm")) and os.path.isfile(a[2]):
+            print(call("/reply", {"id": a[1], "html": read(a[2]), "text": " ".join(a[3:]).strip()})["text"])
+            return
+        text = " ".join(a[2:]).strip()
+        if len(a) == 3 and os.path.isfile(text):
+            text = read(text)
+        print(call("/reply", {"id": a[1], "text": text})["text"])
+    elif a[0] == "publish":
+        opts, rest = options(a[1:], many=(), flags=())
+        if not rest or not os.path.isfile(rest[0]):
+            sys.exit('用法：pt publish 页面.html ["标题"] [--kind report|explain]（小助手加 --line <项目>）')
+        print(call("/publish", {"html": read(rest[0]), "title": " ".join(rest[1:]).strip(), "kind": opts.get("kind") or "explain",
+                                "line": opts.get("line")})["text"])
     elif a[0] == "page":
         print(local("page.md", "用户还没在侧边栏里发过消息，不知道他在看哪一页。"))
     elif a[0] == "actions":

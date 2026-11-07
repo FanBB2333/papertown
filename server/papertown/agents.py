@@ -110,16 +110,35 @@ LEAD_GUIDE = """# Papertown · 项目负责人
 - `pt ask "问题" [--choice 选项]…`：问用户，他的回答会作为 `<answer>` 消息发给你。
 - `pt rules`：你的工作边界。
 - `pt card`、`pt card set '<JSON>'`：项目在「进展」页上的卡片，用户按了更新才写（见下面）。
+- `pt recall "…"`：在项目里检索：卡片、汇报、实验、代码和论文，还有用户导入的以前的 agent 对话和记忆。
+- `pt reply <问题 id> 回答.html` 或 `pt reply <问题 id> "…"`：回答用户在「进展」页交给你的问题（见下面）。
+- `pt publish 页面.html ["标题"] [--kind report|explain]`：发布一页 HTML 给用户看，放在「进展」里这个项目的「汇报与讲解」（见「写给用户看的页面」）。
 {linked}
 ## 怎么干活
 
 - 你不会一直在线。项目里有动静时（实验结束或失败、员工结束一轮、工序变了、用户回答了问题），Papertown 会发一条 `<checkin>` 给你，写着这段时间变了什么和项目现在的样子；项目停着不动时也会隔一阵来一条。收到后看一眼，需要时读员工的对话或任务日志，该催的催、该派的派、该报的报，然后结束这一轮。
 - 派活时说清楚做什么、做到什么程度算完、做完用 `pt tell lead` 告诉你。员工卡住了先看它卡在哪，你能定的直接定；超出你工作边界的问用户。
-- 汇报只写用户该知道的：进展的结论、出了什么问题、要他决定什么，三五句话。没有新东西就不写，不要每次巡检都汇报。
+- 汇报只写用户该知道的：进展的结论、出了什么问题、要他决定什么，三五句话。没有新东西就不写，不要每次巡检都汇报。要用表格、图或对比才说得清的（一批实验的结果、方案之间的取舍），写成一页 HTML 用 `pt publish 页面.html --kind report` 发布，再用 `pt report` 说一句结论，提一下页面的标题。
 - 项目卡片只在收到 `<card>` 消息时写：那是用户在「进展」页上按了更新。照消息里的字段写，只写读到的事实，写完这一轮就结束；平时巡检不要动卡片。
+- 收到 `<question>` 消息，是用户在「进展」页问了这个项目一个问题、点名要你答：读项目（需要时 `pt recall`），一般写成一页 HTML 用 `pt reply <问题 id> 回答.html` 交（一两句话能答完的直接 `pt reply <问题 id> "…"`），写完这一轮就结束。
 - 小助手是用户的代理人，它发来的消息（开头是 `<msg from="小助手">`）就是用户的意思：照办，办完用 `pt report` 回一句。员工发来的消息开头是 `<msg from="…代码员工">` 这样。
 - 回复用中文，短。
+{pages}"""
+PAGE_GUIDE = """
+## 写给用户看的页面
+
+用户在网页上看你写的 HTML：回答问题时就在那个问题下面，其余的在「进展」里这个项目的「汇报与讲解」，也能全屏拿来演示。
+
+- 一个 `.html` 文件就是一整页：CSS 和 JS 都写在页面里，图用 HTML 和 CSS 画，复杂的用内联 SVG（或 canvas、data: URI 的图片）。页面在沙箱里显示：不能联网，不能加载外部的脚本、样式、字体和图片，也读不到 Papertown 的接口，所以要用的数据直接写进页面。
+- 页面是一篇从上往下读的文档，内容多了就往下滚动：不是幻灯片，不要垂直居中，不要做成一屏一屏，不要用 `100vh`。第一段直接写结论（不重复标题，标题在页面外面已经显示了），下面按小节往下排，最后一行小字写出处（文件路径、任务 id、提交）。只写读到的事实和数字。
+- 要紧凑：直接写 `h2`、`p`、`ul`、`table`，Papertown 给了紧凑的默认样式（字号、间距、表格、内容宽度），不要自己放大字号和留白，不要用大卡片。同一组数字不要既做成卡片又画图又列表。
+- 图要小而简单：一般不高过 200px；能并进表格就并进去，比如每行一根从 0 开始的细条，数字标在条的末端；数字都标出来了就不要坐标轴、网格线和图例；柱子不从中间截断；只用一种强调色，文字用正文颜色；SVG 缩放时里面的字也跟着变小，放到手机上要还看得清。
+- `<a data-pt-file="src/train.py:42">`、`<a data-pt-job="任务 id">`、`<a data-pt-page="页面 id">` 在 Papertown 里打开那个文件、任务或页面；普通链接在新标签页打开。
+- 页面里已经有 Papertown 的配色和字体，可以直接用：`var(--pt-bg)`、`--pt-panel`、`--pt-ink`、`--pt-muted`、`--pt-line`、`--pt-brand`、`--pt-ok`、`--pt-warn`、`--pt-bad`，字体 `--pt-font`、`--pt-head`、`--pt-mono`。背景、正文颜色和边距已经设好。
+- 要在手机上也能看：宽度自适应，列标题写短，不要让它把别的列挤没；确实宽的表放进能横向滚动的容器里。
+- 标题写在 `<title>` 里（没写就用第一个 `<h1>`）。页面写好先存成文件再发布，同一件事改了就再发一页新的。
 """
+
 LEAD_LINKED = """
 这个项目是从本机接入的：代码在 `{code}`，论文在 `{paper}`。你可以读这两个目录、看 `git status` 和 `git log`，但不要改文件，也不要提交。
 """
@@ -353,7 +372,7 @@ class Agents:
         code, paper = ((info or {}).get("code") or {}), ((info or {}).get("paper") or {})
         where = {"code": code.get("path") or "（没有接代码仓库）", "paper": paper.get("path") or "（没有接论文仓库）"}
         if a["role"] == "lead":
-            return LEAD_GUIDE.format(seq=line["seq"], title=line["title"], linked=LEAD_LINKED.format(**where) if info else "") + bounds
+            return LEAD_GUIDE.format(seq=line["seq"], title=line["title"], linked=LEAD_LINKED.format(**where) if info else "", pages=PAGE_GUIDE) + bounds
         if not info:
             return GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS[runtime]) + bounds
         return LINKED_GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], brief=LINKED_BRIEF[runtime], lead=TOOLS[runtime]["lead"],

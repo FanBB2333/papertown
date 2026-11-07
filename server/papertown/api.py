@@ -11,14 +11,17 @@ import threading
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
+from .ask import AskError
 from .assistant import ID as ASSISTANT, ActError
+from .auth import COOKIE, DAYS, Auth, AuthError, Gate
 from .bounds import BoundsError
 from .cards import CardError
 from .paseo_models import ModelError
@@ -26,6 +29,8 @@ from .leads import LeadError
 from .config import SERVER_DIR, Settings
 from .library import RAG_LIMITS
 from .farm import FarmError, summarize
+from .history import HistoryError
+from .pages import KINDS as PAGE_KINDS, MAX as PAGE_MAX, PageError, csp as page_csp, render as render_page
 from .mcp_hub import McpError
 from .pipeline import LineError
 from .skim import SkimError
@@ -72,12 +77,47 @@ class AnswerByIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
 
 
+class LoginIn(BaseModel):
+    password: str = Field(max_length=200)
+
+
+class PasswordIn(BaseModel):
+    password: str = Field(max_length=200)
+    old: str | None = Field(default=None, max_length=200)  # from another device: the one it replaces
+
+
 class CardAsk(BaseModel):
     note: str = Field(default="", max_length=300)  # a word for the lead along with it
 
 
 class CardIn(BaseModel):
     card: dict
+
+
+class LayoutIn(BaseModel):
+    panes: list[str] | None = None  # None: back to the default
+
+
+class MemoryIn(BaseModel):
+    keys: list[str] = Field(min_length=1, max_length=400)
+
+
+class QuestionIn(BaseModel):
+    q: str = Field(min_length=1, max_length=1000)
+    lead: bool = False  # the project's lead answers too
+
+
+class ReplyIn(BaseModel):
+    id: str
+    text: str = Field(default="", max_length=20000)
+    html: str | None = Field(default=None, max_length=PAGE_MAX)  # the answer as a page
+
+
+class PublishIn(BaseModel):
+    html: str = Field(min_length=1, max_length=PAGE_MAX)
+    title: str = Field(default="", max_length=200)
+    kind: str = "explain"
+    line: str | None = None  # the assistant names the project
 
 
 class ReportIn(BaseModel):
@@ -227,6 +267,24 @@ def job_text(j: dict, log: str = "") -> str:
     return out
 
 
+class Pages(StaticFiles):
+    """The built page, at every address the page has (/progress, /console/6/code, ...): a path
+    that is no file gets index.html, and the page routes it itself."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            r = await super().get_response(path, scope)
+        except StarletteHTTPException as e:
+            if e.status_code != 404 or path.startswith("api") or "." in path.rsplit("/", 1)[-1]:
+                raise
+            r = await super().get_response("index.html", scope)
+        if not path.startswith("assets/"):  # only the built files change their name with a new build
+            r.headers["Cache-Control"] = "no-cache"
+        if path.endswith((".woff2", ".woff")):  # the town's font, for the agents' pages in their sandbox too
+            r.headers["Access-Control-Allow-Origin"] = "*"
+        return r
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     town = Town(settings)
 
@@ -247,6 +305,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Papertown", lifespan=lifespan)
     app.state.town = town
+    auth = Auth(town.s.data_dir)
+    app.add_middleware(Gate, auth=auth)
+
+    # ---------- signing in: this machine goes straight in, other devices with the password ----------
+
+    def authed(fn, *args):
+        try:
+            return fn(*args)
+        except AuthError as e:
+            raise HTTPException(e.status, str(e)) from e
+
+    @app.get("/api/auth/state")
+    def auth_state(request: Request):
+        return auth.state(request.scope)
+
+    @app.post("/api/auth/login")
+    def auth_login(body: LoginIn, request: Request, response: Response):
+        tok = authed(auth.login, request.scope, body.password, request.headers.get("user-agent", ""))
+        https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+        response.set_cookie(COOKIE, tok, max_age=DAYS * 86400, httponly=True, samesite="lax", secure=https, path="/")
+        return {"ok": True}
+
+    @app.post("/api/auth/logout")
+    def auth_logout(request: Request, response: Response):
+        auth.logout(request.scope)
+        response.delete_cookie(COOKIE, path="/")
+        return {"ok": True}
+
+    @app.post("/api/auth/logout-all")
+    def auth_logout_all(request: Request, response: Response):
+        n = authed(auth.logout_all, request.scope)
+        response.delete_cookie(COOKIE, path="/")
+        return {"ok": True, "ended": n}
+
+    @app.post("/api/auth/password")
+    def auth_password(body: PasswordIn, request: Request):
+        authed(auth.set_password, request.scope, body.password, body.old)
+        return auth.state(request.scope)
+
+    @app.delete("/api/auth/password")
+    def auth_password_clear(request: Request):
+        authed(auth.clear_password, request.scope)
+        return auth.state(request.scope)
 
     def guard(fn, *args):
         try:
@@ -610,7 +711,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/cards")
     def cards():
-        return {"cards": town.cards.all()}
+        return {"cards": town.cards.all(), "layout": town.cards.layout()}
+
+    @app.get("/api/lines/{line_id}/card")
+    def card_one(line_id: str):
+        return leads(town.cards.one, line_id)
+
+    @app.post("/api/cards/layout")
+    def cards_layout(body: LayoutIn):
+        return leads(town.cards.set_layout, body.panes)
 
     @app.post("/api/cards/update")
     def cards_update():
@@ -623,6 +732,72 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/lines/{line_id}/card/cancel")
     def card_cancel(line_id: str):
         return leads(town.cards.cancel, line_id)
+
+    # ---------- a project's memory from earlier agent conversations, and questions about it ----------
+
+    def known(fn, *args):
+        try:
+            return fn(*args)
+        except (HistoryError, AskError, AgentError, CardError, PageError) as e:
+            raise HTTPException(400, str(e)) from e
+
+    @app.get("/api/lines/{line_id}/memory")
+    def memory(line_id: str):
+        return {"items": town.history.imported(line_id), "counts": town.history.counts(line_id)}
+
+    @app.get("/api/lines/{line_id}/memory/scan")
+    def memory_scan(line_id: str):
+        return town.history.scan(line_id)
+
+    @app.post("/api/lines/{line_id}/memory/import")
+    def memory_import(line_id: str, body: MemoryIn):
+        return known(town.history.do_import, line_id, body.keys)
+
+    @app.get("/api/lines/{line_id}/memory/{mid}")
+    def memory_one(line_id: str, mid: str):
+        return known(town.history.get, line_id, mid)
+
+    @app.delete("/api/lines/{line_id}/memory/{mid}")
+    def memory_remove(line_id: str, mid: str):
+        return known(town.history.remove, line_id, mid)
+
+    @app.get("/api/lines/{line_id}/search")
+    def line_search(line_id: str, q: str, k: int = 8):
+        return {"hits": [{x: v for x, v in h.items() if x != "_text"} for h in known(town.asker.search, line_id, q, min(max(k, 1), 30))]}
+
+    @app.get("/api/lines/{line_id}/questions")
+    def questions(line_id: str):
+        return {"questions": town.asker.questions(line_id), "lead": bool(town.cards._lead(line_id)), "offline": town.s.offline}
+
+    @app.post("/api/lines/{line_id}/questions")
+    def question_ask(line_id: str, body: QuestionIn):
+        return known(town.asker.ask, line_id, body.q, body.lead)
+
+    @app.delete("/api/lines/{line_id}/questions/{qid}")
+    def question_remove(line_id: str, qid: str):
+        return known(town.asker.remove, line_id, qid)
+
+    # pages the agents write in HTML: reports, explainers, answers; /view is the page itself, sandboxed
+    @app.get("/api/lines/{line_id}/pages")
+    def pages(line_id: str):
+        return {"pages": town.pages.all(line_id), "kinds": PAGE_KINDS}
+
+    @app.get("/api/lines/{line_id}/pages/{pid}/view")
+    def page_view(line_id: str, pid: str, request: Request, look: str = ""):
+        try:
+            html = town.pages.html(line_id, pid)
+        except PageError as e:
+            raise HTTPException(404, str(e)) from e
+        font = next(iter(sorted(town.s.web_dist.glob("assets/lxgwwenkaigbscreen-*.css"))), None)
+        origin = f"{request.headers.get('x-forwarded-proto') or request.url.scheme}://{request.headers.get('host') or request.url.netloc}"
+        return HTMLResponse(render_page(html, f"/assets/{font.name}" if font else "", look),
+                            headers={"Content-Security-Policy": page_csp(origin if font else ""), "X-Content-Type-Options": "nosniff",
+                                     "Referrer-Policy": "no-referrer", "Cache-Control": "no-store"})
+
+    @app.delete("/api/lines/{line_id}/pages/{pid}")
+    def page_remove(line_id: str, pid: str):
+        known(town.pages.remove, line_id, pid)
+        return {"ok": True}
 
     @app.get("/api/lines/{line_id}/lead")
     def lead(line_id: str):
@@ -812,6 +987,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         c = leads(town.cards.write, agent_id, body.card)
         return {"text": f"卡片更新好了（{c['summary'][:30]}…），用户在「进展」页上会看到。"}
 
+    @app.get("/api/bridge/{agent_id}/recall")
+    def bridge_recall(agent_id: str, q: str, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        if not a.get("line_id"):
+            raise HTTPException(400, "你没有自己的项目：检索要在一个项目里")
+        return {"text": known(town.asker.recall, a["line_id"], q)}
+
+    @app.post("/api/bridge/{agent_id}/reply")
+    def bridge_reply(agent_id: str, body: ReplyIn, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        r = known(town.asker.reply, agent_id, body.id, body.text, body.html)
+        page = f"，页面是「{r['lead']['title']}」" if r["lead"].get("page") else ""
+        return {"text": f"回答交上去了（{r['id']}{page}），用户在「进展」页的提问里会看到。"}
+
+    @app.post("/api/bridge/{agent_id}/publish")
+    def bridge_publish(agent_id: str, body: PublishIn, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        line_id = a.get("line_id")
+        if a["role"] == ASSISTANT and body.line:
+            try:
+                line_id = town.assistant._line(body.line)["id"]
+            except ActError as e:
+                raise HTTPException(400, str(e)) from e
+        if not line_id:
+            raise HTTPException(400, "说一下是哪个项目：--line <项目>")
+        p = known(town.pages.publish, line_id, body.html, body.title, body.kind, a.get("model") or a.get("name") or "", agent_id)
+        return {"text": f"页面发布了（{p['id']}「{p['title']}」），用户在「进展」里这个项目的「汇报与讲解」看。"}
+
     @app.post("/api/bridge/{agent_id}/show")
     def bridge_show(agent_id: str, body: ShowIn, x_papertown_token: str | None = Header(default=None)):
         helper(agent_id, x_papertown_token)
@@ -982,5 +1185,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     if town.s.web_dist.is_dir():
-        app.mount("/", StaticFiles(directory=town.s.web_dist, html=True), name="web")
+        app.mount("/", Pages(directory=town.s.web_dist, html=True), name="web")
     return app

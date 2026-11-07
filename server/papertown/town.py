@@ -11,6 +11,8 @@ from .agents import Agents
 from .assistant import Assistant
 from .bank import Bank
 from .bounds import Bounds
+from .ask import Asker
+from .pages import Pages
 from .cards import Cards
 from .compute import Job, SimulatedPlant
 from .config import PROVIDERS, Settings
@@ -26,6 +28,7 @@ from .llm import make_provider
 from .market import Market
 from .mcp_hub import McpHub
 from .nvidb import Nvidb
+from .history import History
 from .paseo_models import PaseoModels
 from .skim import Skim
 from .pipeline import Pipeline
@@ -63,6 +66,9 @@ class Town:
         self.relay = Relay(self)
         self.paseo_models = PaseoModels(self)
         self.cards = Cards(self)
+        self.history = History(self)
+        self.pages = Pages(self)
+        self.asker = Asker(self)
         self.assistant = Assistant(self)
         self.tools = ToolRegistry()
         self.mcp = McpHub(self)

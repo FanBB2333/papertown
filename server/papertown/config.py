@@ -100,6 +100,9 @@ class Settings:
     lead_gap: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_GAP", "180") or 180))
     # seconds between readings of Paseo's model list for new models; 0 turns them off
     paseo_watch: float = field(default_factory=lambda: float(_env("PAPERTOWN_PASEO_WATCH", "1800") or 0))
+    # where Claude Code and Codex keep their conversations, for importing a project's earlier ones (history.py)
+    claude_home: str = field(default_factory=lambda: _env("PAPERTOWN_CLAUDE_HOME", "~/.claude"))
+    codex_home: str = field(default_factory=lambda: _env("PAPERTOWN_CODEX_HOME", "~/.codex"))
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 
