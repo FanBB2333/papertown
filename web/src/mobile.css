@@ -14,10 +14,10 @@
   .theme-sketch.la .hud { gap: 8px; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); }
   .brand b, .hud-quiet, .hud-chat { display: none; }
   .theme-sketch .brand .logo-ic { width: 28px; height: 28px; }
-  .theme-sketch .hud .seg button { font-size: 14px; padding: 4px 7px 7px; }
+  .theme-sketch .hud .seg :is(button, a) { font-size: 14px; padding: 4px 7px 7px; }
   .hud-r { gap: 6px; }
   .hud .chip { font-size: 11px; padding: 2px 8px; white-space: nowrap; }
-  .hud :is(.hud-gear, .demo-gh) { width: 34px; height: 34px; padding: 0; gap: 0; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0; }
+  .hud :is(.hud-gear, .demo-gh) { width: 34px; height: 34px; padding: 0; gap: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 0; }
   .hud-gear .gear { width: 17px; height: 17px; }
   .toasts { top: calc(var(--hud-h) + 58px); max-width: calc(100vw - 32px); }
 

@@ -25,5 +25,5 @@ function localizeArt() {
 }
 
 // the app's modules work some of their strings out as they load, so they load once the language is ready
-loadLang().then(() => { localizeArt(); return import('./App'); })
-  .then(({ App }) => createRoot(document.getElementById('root')!).render(<App />));
+loadLang().then(() => { localizeArt(); return import('./Root'); })
+  .then(({ Root }) => createRoot(document.getElementById('root')!).render(<Root />));

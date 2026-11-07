@@ -106,17 +106,57 @@ export interface Report {
 }
 // a project on the 进展 page: Papertown's own facts, its lead, and the card the lead wrote when asked
 export type Health = 'ok' | 'risk' | 'blocked';
+export type OutputState = 'todo' | 'doing' | 'done';
 export interface Card {
   summary: string; health: Health; progress: number | null; milestone: string;
   done: string[]; next: string[]; blockers: string[]; need_you: string[]; metrics: { name: string; value: string; note: string }[];
+  plans: { name: string; goal: string; when: string }[]; outputs: { name: string; due: string; state: OutputState }[];
   at: string; by: string;
 }
+// a job as a card lists it: what, where, how far, since when
+export interface CardRun { id: string; name: string; where: string | null; progress: number | null; line: string | null; since: string | null }
+export interface CardRepo {
+  path: string; name: string; missing?: boolean; git?: boolean; branch?: string | null; dirty?: number;
+  commit?: { hash: string; when: string; subject: string } | null; remote?: string | null; files?: number; langs?: { ext: string; n: number }[];
+  main?: string | null; title?: string | null; words?: number; figures?: number; tables?: number; bib?: number; pdf?: boolean; pdf_at?: string | null; sections?: number;
+}
+export interface MemoryCounts { sessions: number; notes: number; messages: number; at: string | null }
 export interface ProjectCard {
   line: { id: string; seq: number; title: string; status: string; linked: boolean; updated_at: string;
     stages: { key: string; name: string; status: 'todo' | 'run' | 'wait' | 'done' }[]; stage: { name: string; status: string; pct: number } | null };
   lead: Agent | null; card: Card | null; prev: number | null; pending: { at: string; note: string } | null;
   jobs: Record<string, number>; asks: number;
+  running: CardRun[]; queued: CardRun[]; repos: { code: CardRepo | null; paper: CardRepo | null }; memory: MemoryCounts;
 }
+export type Pane = 'summary' | 'attention' | 'milestone' | 'metrics' | 'running' | 'planned' | 'outputs' | 'code' | 'paper' | 'memory';
+export interface CardLayout { panes: Pane[]; default: Pane[] }
+
+// a project's memory from earlier agent conversations (Claude Code, Codex) and notes
+export type MemorySource = 'claude' | 'codex' | 'claude-memory' | 'repo';
+export interface MemoryFound {
+  key: string; source: MemorySource; kind: 'session' | 'note'; repo: 'code' | 'paper'; title: string; cwd: string; origin: string;
+  started: string | null; ended: string | null; size: number; imported: boolean; changed: boolean;
+}
+export interface MemoryItem {
+  id: string; key: string; source: MemorySource; kind: 'session' | 'note'; repo: 'code' | 'paper'; title: string; cwd: string; origin: string;
+  started: string | null; ended: string | null; n: number; chars: number; imported_at: string;
+}
+export interface MemoryFull extends MemoryItem { messages?: { role: 'user' | 'assistant'; text: string; at: string | null }[]; text?: string }
+
+// a question about a project, what was found for it and the answers
+export type HitKind = 'card' | 'report' | 'line' | 'job' | 'code' | 'paper' | 'session' | 'note';
+export interface Hit {
+  n: number; kind: HitKind; title: string; where: string; snippet: string; terms: string[]; score: number;
+  ref: { file?: string; job?: string; memory?: string; msg?: number; report?: number; card?: boolean; mod?: string };
+}
+export interface Question {
+  id: string; n: number; q: string; at: string; hits: Hit[]; answer: string | null; by: string | null; status: 'done' | 'waiting';
+  lead: { id: string; asked: string; text?: string; at?: string; by?: string; page?: string; title?: string } | null;
+}
+// a page an agent wrote in HTML for you: a report, an explainer, an answer to a question
+export type PageKind = 'report' | 'explain' | 'answer';
+export interface Page { id: string; n: number; title: string; kind: PageKind; by: string; agent: string; question: string | null; at: string; size: number }
+export interface AuthState { local: boolean; password: boolean; authed: boolean; signed_in: boolean; sessions?: number }
 export interface LeadView { agent: Agent | null; settings: { supervise: boolean; every: number }; reports: Report[]; asks: Report[] }
 
 // work boundaries: global (the assistant), project (its lead), worker (one coder or writer)
@@ -286,11 +326,18 @@ export interface RagResult { query: string; expanded: string; terms: string[]; m
 
 // what you and the agents say in a conversation stays as it was written; the dictionary is for
 // what the town says
+// an agent's page is served in the look the app is in
+const pageLook = () => {
+  const h = document.documentElement;
+  return h.classList.contains('ui-cf') ? `?look=${h.dataset.mode === 'dark' ? 'dark' : 'light'}` : '';
+};
 const said = (v: object) => ['user', 'assistant'].includes((v as { kind?: string }).kind ?? '') || (v as { type?: string }).type === 'agent_delta';
 // a report or a question as its agent wrote it (and your answer)
 const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'text' in v);
 // a card as the lead wrote it
 const carded = (v: object) => said(v) || ('summary' in v && 'health' in v);
+// what the agents and you wrote before, found in the project: as it was written
+const asIs = () => true;
 // a work boundary as you wrote it
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
 
@@ -300,6 +347,7 @@ async function call<T>(method: string, url: string, body?: unknown, keep?: (v: o
     method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined,
   });
   const data = await r.json().catch(() => ({}));
+  if (r.status === 401 && !url.startsWith('/api/auth/')) dispatchEvent(new Event('pt-signed-out')); // the login ran out: back to the landing
   if (!r.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? trx(data.detail) : tr('输入有误')) : tr('请求失败 {0}', r.status));
   return localize(data, keep) as T;
 }
@@ -356,7 +404,28 @@ export const api = {
   papersOf: (lineId: string) => call<{ survey: PaperCard[]; references: PaperCard[] }>('GET', `/api/lines/${lineId}/papers`),
   setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
-  cards: () => call<{ cards: ProjectCard[] }>('GET', '/api/cards', undefined, carded),
+  cards: () => call<{ cards: ProjectCard[]; layout: CardLayout }>('GET', '/api/cards', undefined, carded),
+  card: (lineId: string) => call<ProjectCard>('GET', `/api/lines/${lineId}/card`, undefined, carded),
+  setLayout: (panes: Pane[] | null) => call<CardLayout>('POST', '/api/cards/layout', { panes }),
+  memory: (lineId: string) => call<{ items: MemoryItem[]; counts: MemoryCounts }>('GET', `/api/lines/${lineId}/memory`, undefined, asIs),
+  memoryScan: (lineId: string) => call<{ found: MemoryFound[]; roots: { repo: 'code' | 'paper'; path: string }[]; sources: Record<'claude' | 'codex', boolean> }>(
+    'GET', `/api/lines/${lineId}/memory/scan`, undefined, asIs),
+  memoryImport: (lineId: string, keys: string[]) => call<{ imported: MemoryItem[]; failed: { key: string; why: string }[]; counts: MemoryCounts }>(
+    'POST', `/api/lines/${lineId}/memory/import`, { keys }, asIs),
+  memoryItem: (lineId: string, id: string) => call<MemoryFull>('GET', `/api/lines/${lineId}/memory/${id}`, undefined, asIs),
+  memoryRemove: (lineId: string, id: string) => call<{ counts: MemoryCounts }>('DELETE', `/api/lines/${lineId}/memory/${id}`),
+  questions: (lineId: string) => call<{ questions: Question[]; lead: boolean; offline: boolean }>('GET', `/api/lines/${lineId}/questions`, undefined, asIs),
+  askProject: (lineId: string, q: string, lead = false) => call<Question>('POST', `/api/lines/${lineId}/questions`, { q, lead }, asIs),
+  dropQuestion: (lineId: string, id: string) => call<{ ok: boolean }>('DELETE', `/api/lines/${lineId}/questions/${id}`),
+  pages: (lineId: string) => call<{ pages: Page[] }>('GET', `/api/lines/${lineId}/pages`, undefined, asIs),
+  dropPage: (lineId: string, id: string) => call<{ ok: boolean }>('DELETE', `/api/lines/${lineId}/pages/${id}`),
+  pageUrl: (lineId: string, id: string) => `/api/lines/${lineId}/pages/${id}/view${pageLook()}`,
+  authState: () => call<AuthState>('GET', '/api/auth/state'),
+  login: (password: string) => call<{ ok: boolean }>('POST', '/api/auth/login', { password }),
+  logout: () => call<{ ok: boolean }>('POST', '/api/auth/logout'),
+  logoutAll: () => call<{ ok: boolean; ended: number }>('POST', '/api/auth/logout-all'),
+  setPassword: (password: string, old?: string) => call<AuthState>('POST', '/api/auth/password', { password, ...(old ? { old } : {}) }),
+  clearPassword: () => call<AuthState>('DELETE', '/api/auth/password'),
   updateCard: (lineId: string, note = '') => call<ProjectCard>('POST', `/api/lines/${lineId}/card`, { note }, carded),
   cancelCard: (lineId: string) => call<ProjectCard>('POST', `/api/lines/${lineId}/card/cancel`, {}, carded),
   updateCards: () => call<{ sent: string[]; skipped: { line_id: string; why: string }[] }>('POST', '/api/cards/update', {}),
@@ -407,9 +476,10 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; } // the demo is a snapshot: nothing happens live
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'question', 'page'];
   for (const t of types) es.addEventListener(t, ev => {
-    const e = localize(JSON.parse((ev as MessageEvent).data), t === 'report' ? written : t === 'card' ? carded : t === 'agent_event' || t === 'agent_delta' ? said : undefined);
+    const e = localize(JSON.parse((ev as MessageEvent).data), t === 'report' ? written : t === 'card' ? carded : t === 'agent_event' || t === 'agent_delta' ? said
+      : t === 'question' || t === 'page' ? asIs : undefined);
     onEvent(e);
     for (const fn of listeners) fn(e);
   });

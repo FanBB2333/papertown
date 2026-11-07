@@ -150,18 +150,22 @@ function LinePane({ lines, placements, onRoom }: { lines: Line[]; placements: Pl
   );
 }
 
-// the town's own model: provider, the strong and the cheap model, effort (in the chat and in settings);
-// switching lasts until the server restarts
-export function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => void }) {
+// choosing the town's own model: a new provider first, then what you picked for it
+export async function applyLlm(llm: Llm, draft: { provider: string; model_strong: string; model_cheap: string; effort: string }) {
+  const changed = draft.provider !== llm.provider;
+  const out = await api.setLlm(changed ? { provider: draft.provider } : draft);
+  return changed && (draft.model_strong || draft.model_cheap) ? api.setLlm({ model_strong: draft.model_strong, model_cheap: draft.model_cheap, effort: draft.effort }) : out;
+}
+
+// the town's own model: provider, the strong and the cheap model, effort (the settings page has the
+// same as a form of its own); switching lasts until the server restarts
+function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => void }) {
   const [draft, setDraft] = useState({ provider: llm.provider, model_strong: llm.model_strong, model_cheap: llm.model_cheap, effort: llm.effort });
   const [err, setErr] = useState('');
   const pv = llm.providers.find(x => x.id === draft.provider);
   async function apply() {
     try {
-      const changed = draft.provider !== llm.provider;
-      let out = await api.setLlm(changed ? { provider: draft.provider } : draft);
-      if (changed && (draft.model_strong || draft.model_cheap)) out = await api.setLlm({ model_strong: draft.model_strong, model_cheap: draft.model_cheap, effort: draft.effort });
-      onDone(out);
+      onDone(await applyLlm(llm, draft));
     } catch (e) {
       setErr((e as Error).message);
     }

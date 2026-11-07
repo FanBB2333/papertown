@@ -56,7 +56,7 @@ export type IconName = keyof typeof PATHS;
 
 export function Icon({ n, size = 18, className = '' }: { n: IconName; size?: number; className?: string }) {
   return (
-    <svg className={`ic ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <svg className={`ic ${className}`} width={size} height={size} style={{ ['--s' as string]: `${size}px` }} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d={PATHS[n]} />
     </svg>

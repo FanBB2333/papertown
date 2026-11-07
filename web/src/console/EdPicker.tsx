@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { tr } from '../i18n';
 import { getSettings } from '../settings';
-import { ICON_THEMES, THEMES, chooseLook, closePicker, previewLook, themeVars, useLook, type EdTheme, type IconTheme } from './edthemes';
+import { ICON_THEMES, THEMES, autoTheme, chooseLook, closePicker, previewLook, themeVars, useLook, type EdTheme, type IconTheme } from './edthemes';
 import { FileIcon, FolderIcon } from './fileicons';
 
 type Item = { kind: 'theme'; th: EdTheme } | { kind: 'icons'; id: IconTheme; name: string; desc: string } | { kind: 'head'; label: string };
@@ -29,7 +29,8 @@ function Picker({ mode }: { mode: 'theme' | 'icons' }) {
   const items = useMemo<Item[]>(() => {
     const has = (s: string) => s.toLowerCase().includes(q.trim().toLowerCase());
     if (tab === 'icons') return ICON_THEMES.filter(([id, n, d]) => has(id + n + d)).map(([id, name, desc]) => ({ kind: 'icons', id, name, desc }));
-    const out: Item[] = [];
+    const auto = autoTheme();
+    const out: Item[] = has(auto.id + auto.name) ? [{ kind: 'theme', th: auto }] : [];
     for (const [dark, label] of [[false, tr('浅色主题')], [true, tr('深色主题')]] as const) {
       const xs = THEMES.filter(th => th.dark === dark && has(th.id + th.name));
       if (xs.length) out.push({ kind: 'head', label }, ...xs.map(th => ({ kind: 'theme' as const, th })));

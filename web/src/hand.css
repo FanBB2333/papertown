@@ -85,8 +85,9 @@ body.proto-page { background: #f4eee2; }
 }
 .theme-sketch.la :is(.map-bg, .t3) { top: var(--hud-h); }
 .theme-sketch.la .hud .btn { background-color: color-mix(in srgb, var(--panel) 75%, transparent); }
-.theme-sketch.la .hud .seg button:not(.on) { color: color-mix(in srgb, var(--ink) 62%, var(--brand)); }
-.theme-sketch .brand { font-size: 20px; gap: 9px; cursor: default; }
+.theme-sketch.la .hud .seg :is(button, a):not(.on) { color: color-mix(in srgb, var(--ink) 62%, var(--brand)); }
+.theme-sketch .brand { font-size: 20px; gap: 9px; cursor: default; color: inherit; text-decoration: none; }
+.theme-sketch a.brand { cursor: pointer; }
 .theme-sketch .brand b { font-weight: 400; }
 /* the mark: it leans in a little and its chimney puffs when you point at it */
 .brand .logo-ic { width: 32px; height: 32px; margin-top: -3px; transition: transform .6s var(--spring); }
@@ -95,13 +96,13 @@ body.proto-page { background: #f4eee2; }
 .brand:hover .logo-smoke { animation: puff 1.6s var(--out) infinite; }
 @keyframes puff { 0% { opacity: 1; transform: none; } 70% { opacity: 0; transform: translate(2px, -5px) scale(1.25); } 71% { opacity: 0; transform: translateY(2px) scale(.8); } }
 .theme-sketch .seg { background: none; border: 0; padding: 0; gap: 2px; }
-.theme-sketch .seg button { position: relative; font-family: var(--head); font-size: 15px; color: var(--muted); padding: 4px 10px 7px; background: none; font-weight: 400; transition: color .3s var(--out); }
-.theme-sketch .seg button::after {
+.theme-sketch .seg :is(button, a) { position: relative; text-decoration: none; cursor: pointer; font-family: var(--head); font-size: 15px; color: var(--muted); padding: 4px 10px 7px; background: none; font-weight: 400; transition: color .3s var(--out); }
+.theme-sketch .seg :is(button, a)::after {
   content: ''; position: absolute; left: 8px; right: 8px; bottom: 0; height: 7px;
   background: var(--rule-brand) center / 100% 100% no-repeat; transform: scaleX(0); transform-origin: left; transition: transform .55s var(--spring);
 }
-.theme-sketch .seg button.on { background: none; color: var(--ink); }
-.theme-sketch .seg button.on::after { transform: scaleX(1); }
+.theme-sketch .seg :is(button, a).on { background: none; color: var(--ink); }
+.theme-sketch .seg :is(button, a).on::after { transform: scaleX(1); }
 .hud-quiet { display: flex; gap: 18px; color: var(--muted); font-size: 13px; }
 .hud-quiet b { font-family: var(--head); font-size: 15px; margin: 0 2px; }
 

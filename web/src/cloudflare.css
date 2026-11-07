@@ -1,0 +1,120 @@
+/* The Cloudflare look over the whole app: the same pages and the same class names, with Kumo's
+   colour tokens in place of the paper ones and what is hand-drawn turned flat. Every rule starts
+   at html.ui-cf, so it outweighs the ink-and-wash layer in hand.css and goes away with the
+   setting. Light and dark come from the tokens themselves (html[data-mode=dark]). The town's map
+   and 3D view are drawings, and keep their paper. */
+
+#root { isolation: isolate; }
+html.ui-cf { color-scheme: light; }
+html.ui-cf[data-mode=dark] { color-scheme: dark; }
+html.ui-cf body.proto-page { background: var(--color-kumo-canvas); }
+
+html.ui-cf :is(.theme-sketch, .pd-back) {
+  --bg: var(--color-kumo-canvas); --panel: var(--color-kumo-base); --panel2: var(--color-kumo-recessed);
+  --ink: var(--text-color-kumo-default); --muted: var(--text-color-kumo-subtle); --line: var(--color-kumo-hairline);
+  --brand: var(--color-kumo-brand); --brand-ink: #fff; --ok: var(--color-kumo-success); --warn: var(--color-kumo-warning); --bad: var(--color-kumo-danger);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --head: var(--font); --radius: 8px; --pborder: 1px solid var(--color-kumo-hairline); --pshadow: 0 1px 2px rgba(0, 0, 0, .05); --hcase: none;
+  --ink-c: var(--color-kumo-line); --hud-h: 56px;
+  --box-a: none; --box-b: none; --box-c: none; --box-brand: none; --rule: none; --rule-brand: none; --ring: none; --grain: none; --bloom: none;
+}
+/* the brand is both a fill under white and text on the page, which in the dark needs a lighter blue */
+html.ui-cf[data-mode=dark] :is(.theme-sketch, .pd-back) { --brand: #4a8dff; }
+html.ui-cf .theme-sketch { letter-spacing: 0; color: var(--ink); font-family: var(--font); }
+html.ui-cf .theme-sketch::after { display: none; }
+/* an icon is the size it asks for; the paper look draws them all large unless a rule says otherwise */
+:where(html.ui-cf) .ic { width: var(--s, 18px); height: var(--s, 18px); }
+html.ui-cf .theme-sketch :is(h1, h2, h3, h4, h5, h6, th) { font-weight: 600; }
+
+/* the top bar: a white band on a hairline, its views as underlined tabs */
+html.ui-cf .theme-sketch.la .hud { gap: 18px; padding: 0 20px; background: var(--color-kumo-base); box-shadow: inset 0 -1px 0 var(--color-kumo-hairline); }
+html.ui-cf .theme-sketch.la .hud::after { display: none; }
+html.ui-cf .theme-sketch.la .hud .btn { background-color: var(--color-kumo-control); }
+html.ui-cf .theme-sketch .brand { font-size: 15px; font-weight: 600; }
+html.ui-cf .theme-sketch .brand b { font-weight: 600; }
+html.ui-cf .theme-sketch .brand .logo-ic { width: 26px; height: 26px; margin-top: 0; }
+html.ui-cf .hud-quiet b { font-family: var(--font); font-size: 13.5px; font-weight: 600; }
+html.ui-cf .theme-sketch.la .hud nav.seg { align-self: stretch; padding: 0; background: none; border-radius: 0; gap: 4px; }
+html.ui-cf .theme-sketch.la .hud nav.seg a { display: inline-flex; align-items: center; padding: 0 10px; border-radius: 0; background: none; font-size: 14px; color: var(--muted); box-shadow: none; }
+html.ui-cf .theme-sketch.la .hud nav.seg a:hover { color: var(--ink); }
+html.ui-cf .theme-sketch.la .hud nav.seg a.on { color: var(--ink); background: none; box-shadow: inset 0 -2px 0 var(--color-kumo-brand); }
+
+/* a choice of a few: Kumo's segmented control */
+html.ui-cf .theme-sketch .seg { gap: 2px; padding: 2px; border: 0; border-radius: 8px; background: var(--color-kumo-recessed); }
+html.ui-cf .theme-sketch .seg :is(button, a) { padding: 3px 10px; border-radius: 6px; font: 500 13px/20px var(--font); color: var(--muted); text-decoration: none; transition: background-color .15s, color .15s; }
+html.ui-cf .theme-sketch .seg :is(button, a)::after { display: none; }
+html.ui-cf .theme-sketch .seg :is(button, a):hover { color: var(--ink); }
+html.ui-cf .theme-sketch .seg :is(button, a).on { background: var(--color-kumo-base); color: var(--ink); box-shadow: 0 0 0 1px var(--color-kumo-hairline), 0 1px 2px rgba(0, 0, 0, .06); }
+html.ui-cf .theme-sketch.la .hud .seg :is(button, a):not(.on) { color: var(--muted); }
+
+/* buttons, as Kumo's secondary and primary */
+html.ui-cf .theme-sketch :is(.btn, .toast, .msg-a, .job) { border: 1px solid var(--color-kumo-line); border-radius: 8px; }
+html.ui-cf .theme-sketch .btn { padding: 6px 12px; font: 500 13.5px/18px var(--font); color: var(--ink); background: var(--color-kumo-control); transition: background-color .15s, border-color .15s; }
+html.ui-cf .theme-sketch .btn:hover { transform: none; background-color: var(--color-kumo-tint); }
+html.ui-cf .theme-sketch .btn:active { transform: none; }
+html.ui-cf .theme-sketch .btn[disabled] { opacity: .5; }
+html.ui-cf .theme-sketch .btn.pri { color: #fff; background: var(--color-kumo-brand); border-color: transparent; }
+html.ui-cf .theme-sketch .btn.pri:hover { background: var(--color-kumo-brand-hover); filter: none; }
+html.ui-cf .theme-sketch .btn.on { border-color: var(--color-kumo-brand); color: var(--text-color-kumo-link); }
+
+/* flat surfaces on a hairline */
+html.ui-cf .theme-sketch :is(.pnl, .pnl-s, .proj, .mon, .backend, .tally > div, .io, .stn, .running, .ptip) { border: 1px solid var(--line) !important; border-radius: 8px; background-image: none; background-color: var(--panel); }
+html.ui-cf .theme-sketch :is(.pnl, .pnl-s, .running, .ptip) { box-shadow: var(--pshadow); }
+html.ui-cf .theme-sketch :is(.proj, .mon):hover { transform: none; border-color: var(--color-kumo-interact) !important; }
+html.ui-cf .theme-sketch :is(.proj, .mon).on { background-image: none; background-color: var(--panel); border-color: var(--color-kumo-brand) !important; transform: none; }
+html.ui-cf .theme-sketch .chip { border: 0; border-radius: 999px; background: var(--color-kumo-tint); font-size: 12px; font-weight: 500; }
+html.ui-cf .theme-sketch .chip.pri { background: var(--color-kumo-brand); color: #fff; }
+html.ui-cf .theme-sketch .chip.ok { color: var(--text-color-kumo-success); background: var(--color-kumo-success-tint); }
+html.ui-cf .theme-sketch .chip.warn { color: var(--text-color-kumo-warning); background: var(--color-kumo-warning-tint); }
+html.ui-cf .theme-sketch .chip.bad { color: var(--text-color-kumo-danger); background: var(--color-kumo-danger-tint); }
+html.ui-cf .theme-sketch .pst { border-radius: 999px; font-weight: 500; }
+html.ui-cf .theme-sketch kbd { border: 1px solid var(--color-kumo-line); border-radius: 5px; background: var(--color-kumo-recessed); }
+html.ui-cf .theme-sketch .chat-compose textarea { border-color: var(--line); background: var(--panel); }
+html.ui-cf .theme-sketch .chat-compose textarea:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent); }
+html.ui-cf .theme-sketch .toast { background: var(--panel); box-shadow: 0 8px 24px rgba(0, 0, 0, .14); }
+
+/* the rooms */
+html.ui-cf .theme-sketch .interior { background-color: var(--bg); }
+html.ui-cf .theme-sketch .in-head { padding: 14px 24px; background-image: none; box-shadow: inset 0 -1px 0 var(--line); }
+html.ui-cf .theme-sketch .in-title h1 { font-size: 20px; }
+html.ui-cf .theme-sketch .room-side { box-shadow: inset -1px 0 0 var(--line); }
+html.ui-cf .theme-sketch .room-aside { box-shadow: inset 1px 0 0 var(--line); }
+html.ui-cf .theme-sketch :is(.proj, .job, .stn, .in-back):hover { transform: none; }
+
+/* the progress page */
+html.ui-cf .pg-title h1 { font: 600 22px var(--font); }
+html.ui-cf .pc { padding: 14px 16px 12px 18px; border-radius: 10px; box-shadow: none; }
+html.ui-cf .pc:hover { transform: none; border-color: var(--color-kumo-interact); box-shadow: none; }
+html.ui-cf .pc::before { width: 3px; }
+html.ui-cf .pc-name h3 { font-weight: 600; font-size: 14.5px; }
+html.ui-cf .pc:hover .pc-name h3, html.ui-cf .pr:hover .pr-t h3 { color: var(--text-color-kumo-link); }
+html.ui-cf .pc-seq { color: var(--muted); font-weight: 500; }
+html.ui-cf .pc-metrics > div { border-radius: 6px; }
+html.ui-cf .pg-rows { border-radius: 10px; }
+html.ui-cf .pr-head { background: var(--color-kumo-elevated); font-weight: 500; }
+html.ui-cf .pr-t h3 { font-weight: 600; font-size: 14px; }
+html.ui-cf .pg-gh { font-weight: 600; font-size: 14px; }
+html.ui-cf .psec { border-radius: 10px; box-shadow: none; }
+html.ui-cf .psec-h h3 { font-size: 15px; font-weight: 600; }
+html.ui-cf .psec-h h3 .ic { color: var(--muted); }
+html.ui-cf .pj-title h1 { font: 600 22px/1.3 var(--font); }
+html.ui-cf .pd { border-radius: 10px; box-shadow: 0 16px 40px rgba(0, 0, 0, .18); }
+
+/* the landing */
+html.ui-cf .landing { background: var(--bg); }
+
+/* the map and the 3D town stay on paper; what floats over them is the app's */
+html.ui-cf .theme-sketch :is(.map-bg, .p-world) { background-color: #f4eee2; }
+html.ui-cf .theme-sketch .p-world::after { background: none; }
+html.ui-cf .theme-sketch .walk-hint { color: #6b6256; } /* it sits on the map, which stays paper in dark mode too */
+html.ui-cf .theme-sketch .zoom-ctl button { border: 1px solid var(--color-kumo-line); border-radius: 8px; background: var(--color-kumo-base); }
+html.ui-cf .theme-sketch .zoom-ctl button:hover { transform: none; }
+
+@media (max-width: 720px) {
+  html.ui-cf .theme-sketch.la { --hud-h: 52px; }
+  html.ui-cf .theme-sketch.la .hud { gap: 6px; padding: 0 12px; }
+  html.ui-cf .theme-sketch.la .hud nav.seg { gap: 0; }
+  html.ui-cf .theme-sketch.la .hud nav.seg a { padding: 0 7px; font-size: 13.5px; }
+  html.ui-cf .theme-sketch .hud .hud-gear { width: 32px; height: 32px; padding: 0; gap: 0; font-size: 0; }
+  html.ui-cf .theme-sketch .hud .chip { font-size: 11px; padding: 2px 7px; }
+}

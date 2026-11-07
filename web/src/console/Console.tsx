@@ -96,13 +96,17 @@ interface Props extends Omit<RoomActions, 'onOpen'> {
   placements: Placement[];
   tick: number;
   onRoom: (id: string, lineId?: string | null) => void; // a building's own room, over the console
+  at?: { seq?: number; mod?: string }; // where its address points: /console/<project's number>/<panel>
+  onPlace?: (seq: number, mod: string) => void; // where it is now, for its address
 }
 
 export function Console(p: Props) {
   const first = useRef(remembered()).current;
   const hp = new URLSearchParams(location.hash.slice(1));
-  const [want, setWant] = useState<string | null>(hp.get('line') ?? first.line ?? null);
-  const [mod, setMod] = useState<ModId>(isMod(hp.get('m')) ? hp.get('m') as ModId : first.mod ?? 'overview');
+  // the project its address names (known once the list is in), else one from an older link, else the last one
+  const [want, setWant] = useState<string | null>(p.at?.seq ? null : hp.get('line') ?? first.line ?? null);
+  const [seqWanted, setSeqWanted] = useState(p.at?.seq);
+  const [mod, setMod] = useState<ModId>(isMod(p.at?.mod) ? p.at!.mod as ModId : isMod(hp.get('m')) ? hp.get('m') as ModId : first.mod ?? 'overview');
   const [narrow, setNarrow] = useState(!!first.narrow);
   const [side, setSide] = useState(!!first.side); // the assistant's sidebar
   const opened = useRef(false); // you opened it, so its box takes the keys; one left open last time does not
@@ -123,7 +127,8 @@ export function Console(p: Props) {
   const lines = useMemo(() => [...p.lines].sort((a, b) => b.seq - a.seq), [p.lines]);
   const asked = useMemo(() => new Set(asks.map(a => a.line_id)), [asks]);
   // the project asked for, else the first that needs you, else the newest
-  const cur = lines.find(l => l.id === want) ?? lines.find(l => needsYou(l, asked)) ?? lines.find(l => l.status === 'running') ?? lines[0] ?? null;
+  const cur = lines.find(l => l.id === want) ?? (seqWanted ? lines.find(l => l.seq === seqWanted) : undefined)
+    ?? lines.find(l => needsYou(l, asked)) ?? lines.find(l => l.status === 'running') ?? lines[0] ?? null;
   const id = cur?.id ?? '';
   const full = useFetch(() => api.line(id), id, p.tick);
   const ws = useFetch(() => api.ws(id), id, p.tick);
@@ -201,6 +206,21 @@ export function Console(p: Props) {
     if (ref) setTimeout(() => flash(ref), 200);
   }, [go]);
   useEffect(() => listen(e => { if (e.type === 'assistant_show') show(e.target ?? {}); }), [show]);
+  // its address changed (back, forward, a link): go where it points; and the address follows where it is
+  const atLine = p.at?.seq ? lines.find(l => l.seq === p.at!.seq)?.id : undefined;
+  useEffect(() => {
+    if (!p.at || (!atLine && !isMod(p.at.mod))) return;
+    go({ line: atLine, mod: isMod(p.at.mod) ? p.at.mod as ModId : undefined }, false);
+  }, [atLine, p.at?.mod]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!seqWanted || !lines.length) return;
+    const l = lines.find(x => x.seq === seqWanted);
+    if (l) setWant(l.id);
+    setSeqWanted(undefined);
+  }, [seqWanted, lines]);
+  useEffect(() => {
+    if (cur && p.active) p.onPlace?.(cur.seq, mod);
+  }, [cur?.seq, mod, p.active]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const on = (e: Event) => show((e as CustomEvent<ShowTarget>).detail);
     addEventListener('pt-show', on);

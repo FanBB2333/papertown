@@ -26,7 +26,7 @@ const lt = (ui: Omit<Ui, 'add' | 'del' | 'pdf'>, pdf = '#e9e5df'): Ui => ({ ...u
 
 export const THEMES: EdTheme[] = [
   {
-    id: 'paper', name: tr('纸墨（默认）'), dark: false, italic: true,
+    id: 'paper', name: tr('纸墨'), dark: false, italic: true,
     ui: {
       bg: '#fdfaf4', fg: 'var(--ink)', side: 'var(--side)', tabs: 'var(--side)', tabOn: '#fdfaf4', border: 'var(--line)', muted: 'var(--muted)',
       gutter: 'color-mix(in srgb, var(--muted) 70%, transparent)', gutterOn: 'var(--ink)', line: 'color-mix(in srgb, var(--brand) 5%, transparent)',
@@ -151,7 +151,13 @@ export const THEMES: EdTheme[] = [
   },
 ];
 
-export const themeOf = (id: string) => THEMES.find(x => x.id === id) ?? THEMES[0];
+// the default goes with the look of the page: ink on paper, or plain light or dark with Cloudflare's
+function fitting() {
+  const h = document.documentElement;
+  return !h.classList.contains('ui-cf') ? 'paper' : h.dataset.mode === 'dark' ? 'dark' : 'light';
+}
+export const themeOf = (id: string) => THEMES.find(x => x.id === (id === 'auto' ? fitting() : id)) ?? THEMES[0];
+export const autoTheme = (): EdTheme => ({ ...themeOf('auto'), id: 'auto', name: tr('跟随界面（默认）') });
 
 // the CSS variables a theme sets on the panel it colours
 export function themeVars(th: EdTheme): CSSProperties {
@@ -161,7 +167,7 @@ export function themeVars(th: EdTheme): CSSProperties {
   v['--tk-com-style'] = th.italic ? 'italic' : 'normal';
   // a theme of its own colours also stands in for the page's, so what the panel borrows from the
   // page (buttons, notes, muted text) follows it; the paper theme is made of the page's colours
-  if (th.id !== 'paper') Object.assign(v, { '--ink': th.ui.fg, '--muted': th.ui.muted, '--line': th.ui.border, '--panel': th.ui.input, '--panel2': th.ui.side, '--side': th.ui.side });
+  if (!th.ui.fg.startsWith('var(')) Object.assign(v, { '--ink': th.ui.fg, '--muted': th.ui.muted, '--line': th.ui.border, '--panel': th.ui.input, '--panel2': th.ui.side, '--side': th.ui.side });
   return v as CSSProperties;
 }
 

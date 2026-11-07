@@ -1,77 +1,124 @@
-// Settings: one sheet for everything you can set from the page. Looks and motion, the 2D
-// map, the 3D walk (kept in this browser, see settings.ts), the town's own model and the
-// agents' runtimes (on the server), the demo samples, and the keys.
+// Settings: a page of its own at /settings/<section>, over whatever was open, in Cloudflare's
+// components (Kumo) whichever look the rest of the app has. Sections down the left, each a stack
+// of cards: looks and motion, the progress page, the editor, the 2D map and the 3D walk (kept in
+// this browser, see settings.ts), the town's own model and the agents' runtimes (on the server),
+// who may sign in, the demo samples, and the keys.
 
+import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Radio, Select, Sidebar, Slider, Switch, Table, Text } from '@cloudflare/kumo';
+import { ArrowCounterClockwiseIcon, CodeIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
-import { api, listen, type Hud, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
-import { DEFAULTS, resetSettings, setSettings, useSettings, type Settings as S } from '../settings';
+import { createPortal } from 'react-dom';
+import { api, listen, type AuthState, type Hud, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
+import { Logo } from '../art';
+import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
-import { ICON_THEMES, THEMES, chooseLook } from '../console/edthemes';
-import { LlmForm } from './Chat';
-import { Select } from './Select';
+import { ICON_THEMES, THEMES, autoTheme, chooseLook } from '../console/edthemes';
+import { applyLlm } from './Chat';
+import { OptionControl, Pick, PROGRESS_OPTIONS, set } from './controls';
+import { layer } from '../kumo';
 import '../settings.css';
 import { LANG, LANGS, setLang, tr } from '../i18n';
+import { go } from '../route';
 
-type Tab = 'look' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'demo' | 'keys';
-const TABS: [Tab, string, string][] = [
-  ['look', tr('外观与动效'), tr('动画、纸纹、打开时的视图')],
-  ['editor', tr('编辑器'), tr('颜色主题和文件图标')],
-  ['map', tr('平面地图'), tr('缩放、拖动、建筑名字')],
-  ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质')],
-  ['model', tr('模型'), tr('小镇员工用的大模型')],
-  ['agents', tr('员工 Agent'), tr('Paseo 和本机 pi')],
-  ['demo', tr('展示模式'), tr('样例项目和调研文章')],
-  ['keys', tr('快捷键'), tr('所有按键一览')],
+type Section = 'look' | 'progress' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'access' | 'demo' | 'keys';
+const GROUPS: [string, [Section, string, string, Phosphor][]][] = [
+  [tr('界面'), [
+    ['look', tr('外观与动效'), tr('界面风格、明暗、语言和动画'), PaletteIcon],
+    ['progress', tr('进展页'), tr('块或行、排序、分组、密度'), RowsIcon],
+    ['editor', tr('编辑器'), tr('颜色主题和文件图标'), CodeIcon],
+  ]],
+  [tr('小镇'), [
+    ['map', tr('平面地图'), tr('缩放、拖动、建筑名字'), MapTrifoldIcon],
+    ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质'), CubeIcon],
+  ]],
+  [tr('模型与员工'), [
+    ['model', tr('模型'), tr('小镇员工用的大模型'), CpuIcon],
+    ['agents', tr('员工 Agent'), tr('Paseo 和本机 pi'), RobotIcon],
+  ]],
+  [tr('系统'), [
+    ['access', tr('访问与登录'), tr('手机和其他设备的访问密码'), LockKeyIcon],
+    ['demo', tr('展示模式'), tr('样例项目和调研文章'), FlaskIcon],
+    ['keys', tr('快捷键'), tr('所有按键一览'), KeyboardIcon],
+  ]],
 ];
+const SECTIONS = GROUPS.flatMap(g => g[1]);
 
 function Row({ label, desc, children }: { label: string; desc?: string; children?: React.ReactNode }) {
   return (
     <div className="st-row">
       <div className="st-l"><b>{label}</b>{desc && <span>{desc}</span>}</div>
-      {children && <div className="st-c">{children}</div>}
+      {children != null && <div className="st-c">{children}</div>}
     </div>
   );
 }
 
-function Pick<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+function Card({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div className="st-pick" role="radiogroup">
-      {options.map(([v, l]) => <button key={v} role="radio" aria-checked={v === value} className={v === value ? 'on' : ''} onClick={() => onChange(v)}>{l}</button>)}
-    </div>
+    <LayerCard className="st-card">
+      {title && <LayerCard.Secondary>{title}</LayerCard.Secondary>}
+      <LayerCard.Primary>{children}</LayerCard.Primary>
+    </LayerCard>
   );
 }
 
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return <button role="switch" aria-checked={value} className={`st-sw${value ? ' on' : ''}`} onClick={() => onChange(!value)}><i /></button>;
-}
+const Note = ({ children }: { children: React.ReactNode }) => <Text variant="secondary" size="sm">{children}</Text>;
+const Warn = ({ children, bad }: { children: React.ReactNode; bad?: boolean }) => <Banner size="sm" variant={bad ? 'error' : 'alert'} description={children} />;
+const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => <Switch aria-label={label} checked={value} onCheckedChange={onChange} />;
 
-function Slider({ value, min, max, step, fmt, onChange }: { value: number; min: number; max: number; step: number; fmt: (v: number) => string; onChange: (v: number) => void }) {
+function Range({ label, value, min, max, step, fmt, onChange }: { label: string; value: number; min: number; max: number; step: number; fmt: (v: number) => string; onChange: (v: number) => void }) {
   return (
-    <div className="st-slide">
-      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))}
-        style={{ ['--p' as string]: `${((value - min) / (max - min)) * 100}%` }} />
+    <div className="st-range">
+      <Slider size="sm" value={value} min={min} max={max} step={step} getAriaLabel={() => label} onValueChange={v => onChange(v as number)} />
       <output>{fmt(value)}</output>
     </div>
   );
 }
 
-const set = <K extends keyof S>(k: K) => (v: S[K]) => setSettings({ [k]: v } as Partial<S>);
-
 function Look({ s }: { s: S }) {
+  const cf = s.ui === 'cloudflare';
   return (
     <>
-      <Row label={tr('语言')} desc={tr('界面文字的语言，切换后页面会重新载入')}>
-        <Pick value={LANG} options={LANGS} onChange={setLang} />
-      </Row>
-      <Row label={tr('动画')} desc={tr('柔和：动画更短更轻，适合投影或容易晕的时候')}>
-        <Pick value={s.motion} options={[['full', tr('完整')], ['calm', tr('柔和')]]} onChange={set('motion')} />
-      </Row>
-      <Row label={tr('纸纹')} desc={tr('盖在整个页面上的纸张纹理')}>
-        <Slider value={s.grain} min={0} max={1} step={0.05} fmt={v => v ? `${Math.round(v * 100)}%` : tr('关')} onChange={set('grain')} />
-      </Row>
-      <Row label={tr('打开页面时')} desc={tr('下次打开页面先看到哪种视图：中控屏是不用走动的面板，小镇可以平面或 3D')}>
-        <Pick value={s.start} options={[['cards', tr('进展')], ['console', tr('中控屏')], ['2d', tr('平面地图')], ['3d', tr('3D 漫游')]]} onChange={set('start')} />
-      </Row>
+      <Card title={tr('界面风格')}>
+        <Radio.Group appearance="card" orientation="horizontal" value={s.ui} onValueChange={v => set('ui')(v as S['ui'])} className="st-looks">
+          <Radio.Legend className="sr-only">{tr('界面风格')}</Radio.Legend>
+          <Radio.Item value="cloudflare" label="Cloudflare" description={tr('Cloudflare 的组件样式：干净的白底、细线和系统字体，整个界面都用它')} />
+          <Radio.Item value="paper" label={tr('纸本')} description={tr('墨线、水彩和手写字，Papertown 原来的样子')} />
+        </Radio.Group>
+        {cf && <Row label={tr('明暗')} desc={tr('跟随系统时，电脑切到深色这里也跟着变')}>
+          <Pick label={tr('明暗')} value={s.mode} options={[['light', tr('浅色')], ['dark', tr('深色')], ['system', tr('跟随系统')]]} onChange={set('mode')} />
+        </Row>}
+        {!cf && <Row label={tr('纸纹')} desc={tr('盖在整个页面上的纸张纹理')}>
+          <Range label={tr('纸纹')} value={s.grain} min={0} max={1} step={0.05} fmt={v => v ? `${Math.round(v * 100)}%` : tr('关')} onChange={set('grain')} />
+        </Row>}
+      </Card>
+      <Card title={tr('语言与动效')}>
+        <Row label={tr('语言')} desc={tr('界面文字的语言，切换后页面会重新载入')}>
+          <Pick label={tr('语言')} value={LANG} options={LANGS} onChange={setLang} />
+        </Row>
+        <Row label={tr('动画')} desc={tr('柔和：动画更短更轻，适合投影或容易晕的时候')}>
+          <Pick label={tr('动画')} value={s.motion} options={[['full', tr('完整')], ['calm', tr('柔和')]]} onChange={set('motion')} />
+        </Row>
+        <Row label={tr('打开页面时')} desc={tr('下次打开页面先看到哪种视图：中控屏是不用走动的面板，小镇可以平面或 3D')}>
+          <Pick label={tr('打开页面时')} value={s.start} options={[['cards', tr('进展')], ['console', tr('中控屏')], ['2d', tr('平面地图')], ['3d', tr('3D 漫游')]]} onChange={set('start')} />
+        </Row>
+      </Card>
+    </>
+  );
+}
+
+function ProgressPage({ s }: { s: S }) {
+  return (
+    <>
+      <Card title={tr('项目怎么排')}>
+        <Row label={tr('视图')} desc={tr('块：每个项目一张卡片；行：每个项目一行，能顺着一列往下比。进展页上也能直接换')}>
+          <Pick label={tr('视图')} value={s.pgView} options={[['blocks', tr('块')], ['rows', tr('行')]]} onChange={set('pgView')} />
+        </Row>
+        {PROGRESS_OPTIONS.slice(0, 2).map(o => <Row key={o.key} label={o.label} desc={o.desc}><OptionControl o={o} s={s} /></Row>)}
+      </Card>
+      <Card title={tr('显示')}>
+        {PROGRESS_OPTIONS.slice(2).map(o => <Row key={o.key} label={o.label} desc={o.desc}><OptionControl o={o} s={s} /></Row>)}
+      </Card>
+      <Note>{tr('卡片和每行显示哪些部分，在进展页的「显示」里选。')}</Note>
     </>
   );
 }
@@ -80,78 +127,130 @@ function Look({ s }: { s: S }) {
 function Editor({ s }: { s: S }) {
   return (
     <>
-      <Row label={tr('颜色主题')} desc={tr('代码和论文编辑器的配色，连同文件列表、标签页和状态栏；在编辑器里按 ⌘K ⌘T 可以边看边换')} />
-      <div className="st-themes" role="radiogroup">
-        {THEMES.map(th => (
-          <button key={th.id} role="radio" aria-checked={th.id === s.edTheme} className={`st-theme${th.id === s.edTheme ? ' on' : ''}`} onClick={() => chooseLook({ theme: th.id })}>
-            <Sample th={th} />
-            <span><b>{th.name}</b><em>{th.dark ? tr('深色') : tr('浅色')}</em></span>
-          </button>
-        ))}
-      </div>
-      <Row label={tr('文件图标')} desc={tr('文件列表和标签页里，文件名前面的图标')} />
-      <div className="st-icons" role="radiogroup">
-        {ICON_THEMES.map(([id, name, desc]) => (
-          <button key={id} role="radio" aria-checked={id === s.edIcons} className={`st-icon${id === s.edIcons ? ' on' : ''}`} onClick={() => chooseLook({ icons: id })}>
-            <IconRow id={id} />
-            <b>{name}</b><span>{desc}</span>
-          </button>
-        ))}
-      </div>
+      <Card title={tr('颜色主题')}>
+        <Note>{tr('代码和论文编辑器的配色，连同文件列表、标签页和状态栏；在编辑器里按 ⌘K ⌘T 可以边看边换')}</Note>
+        <div className="st-themes" role="radiogroup" aria-label={tr('颜色主题')}>
+          {[autoTheme(), ...THEMES].map(th => (
+            <button key={th.id} role="radio" aria-checked={th.id === s.edTheme} className={`st-theme${th.id === s.edTheme ? ' on' : ''}`} onClick={() => chooseLook({ theme: th.id })}>
+              <Sample th={th} />
+              <span><b>{th.name}</b><em>{th.dark ? tr('深色') : tr('浅色')}</em></span>
+            </button>
+          ))}
+        </div>
+      </Card>
+      <Card title={tr('文件图标')}>
+        <Note>{tr('文件列表和标签页里，文件名前面的图标')}</Note>
+        <div className="st-themes" role="radiogroup" aria-label={tr('文件图标')}>
+          {ICON_THEMES.map(([id, name, desc]) => (
+            <button key={id} role="radio" aria-checked={id === s.edIcons} className={`st-icon${id === s.edIcons ? ' on' : ''}`} onClick={() => chooseLook({ icons: id })}>
+              <IconRow id={id} />
+              <b>{name}</b><span>{desc}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
     </>
   );
 }
 
-function MapTab({ s }: { s: S }) {
+function MapSection({ s }: { s: S }) {
   return (
-    <>
+    <Card>
       <Row label={tr('顺滑缩放和拖动')} desc={tr('缩放带缓动，松手后地图会顺势滑一小段')}>
-        <Toggle value={s.smoothMap} onChange={set('smoothMap')} />
+        <Toggle label={tr('顺滑缩放和拖动')} value={s.smoothMap} onChange={set('smoothMap')} />
       </Row>
       <Row label={tr('滚轮缩放速度')}>
-        <Slider value={s.zoomSpeed} min={0.5} max={2} step={0.1} fmt={v => `${v.toFixed(1)}×`} onChange={set('zoomSpeed')} />
+        <Range label={tr('滚轮缩放速度')} value={s.zoomSpeed} min={0.5} max={2} step={0.1} fmt={v => `${v.toFixed(1)}×`} onChange={set('zoomSpeed')} />
       </Row>
       <Row label={tr('建筑名字')} desc={tr('主要：四座核心建筑和几处地标；全部：每栋都标')}>
-        <Pick value={s.mapLabels} options={[['key', tr('主要')], ['all', tr('全部')]]} onChange={set('mapLabels')} />
+        <Pick label={tr('建筑名字')} value={s.mapLabels} options={[['key', tr('主要')], ['all', tr('全部')]]} onChange={set('mapLabels')} />
       </Row>
       <Row label={tr('走动提示')} desc={tr('地图底部的按键提示')}>
-        <Toggle value={s.walkHint} onChange={set('walkHint')} />
+        <Toggle label={tr('走动提示')} value={s.walkHint} onChange={set('walkHint')} />
       </Row>
-    </>
+    </Card>
   );
 }
 
 function Walk({ s }: { s: S }) {
   return (
     <>
-      <Row label={tr('鼠标灵敏度')} desc={tr('鼠标锁在画面中间时，移动多少转多少')}>
-        <Slider value={s.sensitivity} min={0.3} max={3} step={0.05} fmt={v => `${v.toFixed(2)}×`} onChange={set('sensitivity')} />
-      </Row>
-      <Row label={tr('上下反转')} desc={tr('鼠标往前推是低头')}>
-        <Toggle value={s.invertY} onChange={set('invertY')} />
-      </Row>
-      <Row label={tr('视野')} desc={tr('越大看得越广，边缘拉伸也越明显')}>
-        <Slider value={s.fov} min={55} max={95} step={1} fmt={v => `${v}°`} onChange={set('fov')} />
-      </Row>
-      <Row label={tr('显示手')} desc={tr('画面右下角你的手和铅笔，走路时会跟着摆')}>
-        <Toggle value={s.hand} onChange={set('hand')} />
-      </Row>
-      <Row label={tr('走路时晃动')} desc={tr('视角随步子轻轻上下')}>
-        <Toggle value={s.bob} onChange={set('bob')} />
-      </Row>
-      <Row label={tr('画质')} desc={tr('低：不画阴影、降低分辨率，老电脑更流畅')}>
-        <Pick value={s.quality} options={[['low', tr('低')], ['mid', tr('中')], ['high', tr('高')]]} onChange={set('quality')} />
-      </Row>
-      <Row label={tr('建筑名字')} desc={tr('悬在建筑上方的名字')}>
-        <Toggle value={s.tags3d} onChange={set('tags3d')} />
-      </Row>
-      <Row label={tr('全屏漫游')} desc={tr('进入 3D 时自动全屏；开着面板时 Esc 先关面板，没有面板时退出全屏；再点画面继续时回到全屏')}>
-        <Toggle value={s.fullscreen3d} onChange={set('fullscreen3d')} />
-      </Row>
-      <Row label={tr('小地图')} desc={tr('右下角的小地图，点一下就过去')}>
-        <Toggle value={s.minimap} onChange={set('minimap')} />
-      </Row>
+      <Card title={tr('操作')}>
+        <Row label={tr('鼠标灵敏度')} desc={tr('鼠标锁在画面中间时，移动多少转多少')}>
+          <Range label={tr('鼠标灵敏度')} value={s.sensitivity} min={0.3} max={3} step={0.05} fmt={v => `${v.toFixed(2)}×`} onChange={set('sensitivity')} />
+        </Row>
+        <Row label={tr('上下反转')} desc={tr('鼠标往前推是低头')}>
+          <Toggle label={tr('上下反转')} value={s.invertY} onChange={set('invertY')} />
+        </Row>
+        <Row label={tr('全屏漫游')} desc={tr('进入 3D 时自动全屏；开着面板时 Esc 先关面板，没有面板时退出全屏；再点画面继续时回到全屏')}>
+          <Toggle label={tr('全屏漫游')} value={s.fullscreen3d} onChange={set('fullscreen3d')} />
+        </Row>
+      </Card>
+      <Card title={tr('画面')}>
+        <Row label={tr('视野')} desc={tr('越大看得越广，边缘拉伸也越明显')}>
+          <Range label={tr('视野')} value={s.fov} min={55} max={95} step={1} fmt={v => `${v}°`} onChange={set('fov')} />
+        </Row>
+        <Row label={tr('画质')} desc={tr('低：不画阴影、降低分辨率，老电脑更流畅')}>
+          <Pick label={tr('画质')} value={s.quality} options={[['low', tr('低')], ['mid', tr('中')], ['high', tr('高')]]} onChange={set('quality')} />
+        </Row>
+        <Row label={tr('显示手')} desc={tr('画面右下角你的手和铅笔，走路时会跟着摆')}>
+          <Toggle label={tr('显示手')} value={s.hand} onChange={set('hand')} />
+        </Row>
+        <Row label={tr('走路时晃动')} desc={tr('视角随步子轻轻上下')}>
+          <Toggle label={tr('走路时晃动')} value={s.bob} onChange={set('bob')} />
+        </Row>
+        <Row label={tr('建筑名字')} desc={tr('悬在建筑上方的名字')}>
+          <Toggle label={tr('建筑名字')} value={s.tags3d} onChange={set('tags3d')} />
+        </Row>
+        <Row label={tr('小地图')} desc={tr('右下角的小地图，点一下就过去')}>
+          <Toggle label={tr('小地图')} value={s.minimap} onChange={set('minimap')} />
+        </Row>
+      </Card>
     </>
+  );
+}
+
+// a model's name: picked from what the provider lists, or written in
+function ModelBox({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
+  return (
+    <Autocomplete items={options} label={label} value={value} onValueChange={v => onChange(String(v ?? ''))}>
+      <Autocomplete.InputGroup />
+      <Autocomplete.Content>
+        <Autocomplete.List>{(m: string) => <Autocomplete.Item key={m} value={m}>{m}</Autocomplete.Item>}</Autocomplete.List>
+      </Autocomplete.Content>
+    </Autocomplete>
+  );
+}
+
+// the town's own model: the same as the switch in the chat, as a form on the page
+function ModelForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm) => void }) {
+  const was = { provider: llm.provider, model_strong: llm.model_strong, model_cheap: llm.model_cheap, effort: llm.effort };
+  const [draft, setDraft] = useState(was);
+  const [err, setErr] = useState('');
+  const pv = llm.providers.find(x => x.id === draft.provider);
+  const changed = JSON.stringify(draft) !== JSON.stringify(was);
+  async function apply() {
+    setErr('');
+    try { onDone(await applyLlm(llm, draft)); } catch (e) { setErr((e as Error).message); }
+  }
+  return (
+    <div className="st-form">
+      <Select label={tr('供应商')} hideLabel={false} value={draft.provider} items={Object.fromEntries(llm.providers.map(x => [x.id, x.name]))} onValueChange={id => {
+        const d = llm.providers.find(x => x.id === id);
+        setDraft(x => ({ ...x, provider: String(id), model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' }));
+      }} />
+      <ModelBox label={tr('强模型（Lv.3 以上的员工、最终回答）')} value={draft.model_strong} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_strong: v }))} />
+      <ModelBox label={tr('便宜模型（其余员工）')} value={draft.model_cheap} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_cheap: v }))} />
+      {draft.provider === 'anthropic' && (
+        <Select label="effort" hideLabel={false} value={draft.effort} items={Object.fromEntries(['low', 'medium', 'high', 'xhigh', 'max'].map(x => [x, x]))} onValueChange={v => setDraft(x => ({ ...x, effort: String(v) }))} />
+      )}
+      <Note>{tr('key 照旧从环境变量读取。切换只在这次运行里有效，重启服务后按环境变量重新决定。')}{draft.provider === 'openai' ? tr(' 接口：{0}', llm.openai_base_url) : ''}</Note>
+      {err && <Warn bad>{err}</Warn>}
+      <div className="st-btns">
+        <Button variant="primary" disabled={!changed} onClick={apply}>{tr('应用')}</Button>
+        {changed && <Button onClick={() => setDraft(was)}>{tr('取消')}</Button>}
+      </div>
+    </div>
   );
 }
 
@@ -160,13 +259,20 @@ function Model() {
   const [n, setN] = useState(0);
   useEffect(() => { api.llm().then(setLlm).catch(() => {}); }, []);
   useEffect(() => listen(e => { if (e.type === 'llm') setLlm(e.llm); }), []);
-  if (!llm) return <p className="muted">{tr('读取中…')}</p>;
+  if (!llm) return <Note>{tr('读取中…')}</Note>;
   const name = llm.providers.find(x => x.id === llm.provider)?.name ?? llm.provider;
   return (
     <>
-      <p className="st-note">{tr('现在：')}<b>{name}</b> · {llm.model_strong}{llm.model_cheap !== llm.model_strong ? ` / ${llm.model_cheap}` : ''}{llm.offline ? tr('（离线模式，员工按 skill 的步骤调用工具，文字用模板）') : ''}</p>
-      <LlmForm key={n} llm={llm} onDone={l => { if (l) setLlm(l); setN(x => x + 1); }} />
-      <p className="muted small">{tr('仓库和印刷厂里的代码、写作员工用的是 Paseo 或 pi 自己的模型，在各自的房间里切换。')}</p>
+      <Card title={tr('现在')}>
+        <Row label={name} desc={`${llm.model_strong}${llm.model_cheap !== llm.model_strong ? ` / ${llm.model_cheap}` : ''}`}>
+          <Badge variant={llm.offline ? 'warning' : 'success'}>{llm.offline ? tr('离线模式') : tr('在线')}</Badge>
+        </Row>
+        {llm.offline && <Note>{tr('（离线模式，员工按 skill 的步骤调用工具，文字用模板）')}</Note>}
+      </Card>
+      <Card title={tr('切换模型')}>
+        <ModelForm key={n} llm={llm} onDone={l => { setLlm(l); setN(x => x + 1); }} />
+      </Card>
+      <Note>{tr('仓库和印刷厂里的代码、写作员工用的是 Paseo 或 pi 自己的模型，在各自的房间里切换。')}</Note>
     </>
   );
 }
@@ -201,15 +307,15 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
     <>
       <Row label={tr('{0}默认用', name)} desc={d.set ? tr('在这里选的，启动时预先选好') : tr('没选过，用环境变量 {0}', ENV[role])}>
         <div className="st-models">
-          <Select value={v.provider} label={tr('供应商')} placeholder={tr('选供应商')} options={info.providers.map(p => ({ value: p.id, label: p.label }))} onChange={id => to(id)} />
-          {!!pv?.models.length && <Select value={v.model} label={tr('模型')} options={pv.models.map(x => ({ value: x.id, label: x.name }))} onChange={id => to(v.provider, id)} />}
-          {!!m && m.thinking.length > 1 && <Select value={v.thinking} label={tr('思考强度')} options={m.thinking.map(x => ({ value: x, label: x }))} onChange={t => setV(x => ({ ...x, thinking: t }))} />}
-          {changed && <button className="btn pri" disabled={busy || !v.provider} onClick={() => save({ provider: v.provider, model: v.model || null, thinking: v.thinking || null })}>{tr('保存')}</button>}
-          {!changed && d.set && <button className="btn" disabled={busy} onClick={() => save({ provider: null })} title={ENV[role]}>{tr('改回环境变量的')}</button>}
+          <Select aria-label={tr('供应商')} size="sm" placeholder={tr('选供应商')} value={v.provider || undefined} items={Object.fromEntries(info.providers.map(p => [p.id, p.label]))} onValueChange={id => to(String(id))} />
+          {!!pv?.models.length && <Select aria-label={tr('模型')} size="sm" value={v.model} items={Object.fromEntries(pv.models.map(x => [x.id, x.name]))} onValueChange={id => to(v.provider, String(id))} />}
+          {!!m && m.thinking.length > 1 && <Select aria-label={tr('思考强度')} size="sm" value={v.thinking} items={Object.fromEntries(m.thinking.map(x => [x, x]))} onValueChange={t => setV(x => ({ ...x, thinking: String(t) }))} />}
+          {changed && <Button size="sm" variant="primary" disabled={busy || !v.provider} onClick={() => save({ provider: v.provider, model: v.model || null, thinking: v.thinking || null })}>{tr('保存')}</Button>}
+          {!changed && d.set && <Button size="sm" disabled={busy} onClick={() => save({ provider: null })} title={ENV[role]}>{tr('改回环境变量的')}</Button>}
         </div>
       </Row>
-      {gone && !changed && <p className="warn-box small">{tr('Paseo 里现在没有 {0}，启动时会退回到这个供应商的第一个模型。', [d.provider, d.model].filter(Boolean).join(' / '))}</p>}
-      {err && <p className="warn-box small">{err}</p>}
+      {gone && !changed && <Warn>{tr('Paseo 里现在没有 {0}，启动时会退回到这个供应商的第一个模型。', [d.provider, d.model].filter(Boolean).join(' / '))}</Warn>}
+      {err && <Warn bad>{err}</Warn>}
     </>
   );
 }
@@ -227,32 +333,36 @@ function Agents() {
   const st = paseo && paseo !== 'err' ? paseo.status : null;
   return (
     <>
-      <Row label="Paseo" desc={tr('托管 Claude Code、Codex、OpenCode 等 agent 的本机守护进程')}>
-        <span className={`chip ${st?.ok ? 'ok' : 'warn'}`}>{paseo === null ? tr('检查中…') : st?.ok ? tr('已连接{0}', st.version ? ` · ${st.version}` : '') : tr('未连接')}</span>
-      </Row>
-      {st && !st.ok && <p className="warn-box small">{st.note}</p>}
-      {st?.ok && (
-        <>
-          <Row label={tr('网页端')} desc={tr('房间里「完整界面」嵌入的就是它')}>
-            <span className="muted small">{st.web ?? tr('没开：paseo daemon config set features.webUi.enabled true')}</span>
-          </Row>
-          <Row label={tr('可用的供应商')} desc={tr('从 Paseo 读出来的，每隔一阵重读一次；有新模型时中控屏会问你要不要换')}>
-            <span className="st-tags">
-              {paseo !== 'err' && paseo?.providers.map(p => <span key={p.id} className="chip">{p.label} · {tr('{0} 个模型', p.models.length)}</span>)}
-              <button className="btn" disabled={reading} onClick={again}>{reading ? tr('读取中…') : tr('重新读取')}</button>
-            </span>
-          </Row>
-          {paseo && paseo !== 'err' && <div key={n}>
-            <DefaultModel role="assistant" name={tr('小助手')} info={paseo} onSaved={setPaseo} />
-            <DefaultModel role="lead" name={tr('项目负责人')} info={paseo} onSaved={setPaseo} />
-          </div>}
-        </>
-      )}
-      <Row label={tr('本机 pi')} desc={tr('跑在 tmux 里的后台终端 agent')}>
-        <span className={`chip ${pi?.ok ? 'ok' : 'warn'}`}>{pi === null ? tr('检查中…') : pi.ok ? tr('可用') : tr('不可用')}</span>
-      </Row>
-      {pi && !pi.ok && <p className="warn-box small">{pi.note}</p>}
-      <p className="muted small">{tr('雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。小助手和项目负责人的默认模型只管以后启动的，已经在跑的不受影响。')}</p>
+      <Card title="Paseo">
+        <Row label={tr('连接')} desc={tr('托管 Claude Code、Codex、OpenCode 等 agent 的本机守护进程')}>
+          <Badge variant={st?.ok ? 'success' : paseo === null ? 'neutral' : 'warning'}>{paseo === null ? tr('检查中…') : st?.ok ? tr('已连接{0}', st.version ? ` · ${st.version}` : '') : tr('未连接')}</Badge>
+        </Row>
+        {st && !st.ok && <Warn>{st.note}</Warn>}
+        {st?.ok && (
+          <>
+            <Row label={tr('网页端')} desc={tr('房间里「完整界面」嵌入的就是它')}>
+              <Note>{st.web ?? tr('没开：paseo daemon config set features.webUi.enabled true')}</Note>
+            </Row>
+            <Row label={tr('可用的供应商')} desc={tr('从 Paseo 读出来的，每隔一阵重读一次；有新模型时中控屏会问你要不要换')}>
+              <span className="st-tags">
+                {paseo !== 'err' && paseo?.providers.map(p => <Badge key={p.id} variant="outline">{p.label} · {tr('{0} 个模型', p.models.length)}</Badge>)}
+                <Button size="sm" loading={reading} onClick={again}>{reading ? tr('读取中…') : tr('重新读取')}</Button>
+              </span>
+            </Row>
+            {paseo && paseo !== 'err' && <div key={n}>
+              <DefaultModel role="assistant" name={tr('小助手')} info={paseo} onSaved={setPaseo} />
+              <DefaultModel role="lead" name={tr('项目负责人')} info={paseo} onSaved={setPaseo} />
+            </div>}
+          </>
+        )}
+      </Card>
+      <Card title={tr('本机 pi')}>
+        <Row label={tr('状态')} desc={tr('跑在 tmux 里的后台终端 agent')}>
+          <Badge variant={pi?.ok ? 'success' : pi === null ? 'neutral' : 'warning'}>{pi === null ? tr('检查中…') : pi.ok ? tr('可用') : tr('不可用')}</Badge>
+        </Row>
+        {pi && !pi.ok && <Warn>{pi.note}</Warn>}
+      </Card>
+      <Note>{tr('雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。小助手和项目负责人的默认模型只管以后启动的，已经在跑的不受影响。')}</Note>
     </>
   );
 }
@@ -273,18 +383,87 @@ function Demo({ hud }: { hud: Hud | null }) {
     }
   }
   return (
-    <>
+    <Card>
       <Row label={tr('现在')} desc={tr('没有配置模型 key 时就是展示模式')}>
-        <span className={`chip ${hud?.offline ? 'warn' : 'ok'}`}>{hud ? (hud.offline ? tr('展示模式（离线）') : tr('在线 · {0}', hud.provider)) : '…'}</span>
+        <Badge variant={hud?.offline ? 'warning' : 'success'}>{hud ? (hud.offline ? tr('展示模式（离线）') : tr('在线 · {0}', hud.provider)) : '…'}</Badge>
       </Row>
       <Row label={tr('样例项目')} desc={tr('放入几篇写到不同工序的样例论文：有的已出厂，有的停在实验或写作前，有的等你决定孵不孵化')}>
-        <button className="btn pri" disabled={busy || !hud?.offline} onClick={seed}>{busy ? tr('放入中…') : tr('放入样例项目')}</button>
+        <Button variant="primary" loading={busy} disabled={!hud?.offline} onClick={seed}>{busy ? tr('放入中…') : tr('放入样例项目')}</Button>
       </Row>
-      {!hud?.offline && <p className="muted small">{tr('接了模型以后样例也会真的调用模型、花钱，所以只在展示模式里提供。')}</p>}
-      {msg && <p className="st-note">{msg}</p>}
+      {!hud?.offline && <Note>{tr('接了模型以后样例也会真的调用模型、花钱，所以只在展示模式里提供。')}</Note>}
+      {msg && <Note>{msg}</Note>}
       <Row label={tr('调研文章')} desc={tr('图书馆的馆藏，样例项目查重和写方法时从这里找相近工作')}>
-        <span className="muted small">{tr('馆藏')} {tr('{0} 篇 · 在小镇里进图书馆翻看', hud?.library ?? '…')}</span>
+        <Note>{tr('馆藏')} {tr('{0} 篇 · 在小镇里进图书馆翻看', hud?.library ?? '…')}</Note>
       </Row>
+    </Card>
+  );
+}
+
+// who may open the town from elsewhere: the access password, and the devices signed in with it
+function Access() {
+  const [a, setA] = useState<AuthState | null>(null);
+  const [err, setErr] = useState('');
+  const [form, setForm] = useState(false);
+  const [old, setOld] = useState('');
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [msg, setMsg] = useState('');
+  const load = () => api.authState().then(setA, e => setErr((e as Error).message));
+  useEffect(() => { load(); }, []);
+  async function run(fn: () => Promise<unknown>, done?: string) {
+    setMsg('');
+    try { await fn(); await load(); if (done) setMsg(done); return true; } catch (e) { setMsg((e as Error).message); return false; }
+  }
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (pw !== pw2) { setMsg(tr('两次输入的不一样')); return; }
+    if (await run(() => api.setPassword(pw, a?.local ? undefined : old), tr('访问密码已保存。'))) { setForm(false); setOld(''); setPw(''); setPw2(''); }
+  }
+  if (err) return <Warn bad>{err}</Warn>;
+  if (!a) return <Note>{tr('加载中…')}</Note>;
+  return (
+    <>
+      <Card>
+        <Row label={tr('这台设备')} desc={a.local ? tr('运行 Papertown 的电脑：不用密码就能进') : tr('用访问密码登录的设备')}>
+          {!a.local && <Button onClick={() => run(api.logout).then(() => go('/'))}>{tr('退出登录')}</Button>}
+        </Row>
+        <Row label={tr('访问密码')} desc={a.password ? tr('手机和其他电脑在首页用它登录') : tr('还没有设置：除了这台电脑，别的设备都进不来')}>
+          {!form && <Button onClick={() => setForm(true)}>{a.password ? tr('改密码') : tr('设置密码')}</Button>}
+        </Row>
+        {form && (
+          <form className="st-form" onSubmit={save}>
+            {!a.local && <Input type="password" autoComplete="current-password" label={tr('现在的密码')} value={old} onChange={e => setOld(e.target.value)} />}
+            <Input type="password" autoComplete="new-password" label={tr('新的访问密码（至少 6 位）')} value={pw} onChange={e => setPw(e.target.value)} autoFocus />
+            <Input type="password" autoComplete="new-password" label={tr('再输一次')} value={pw2} onChange={e => setPw2(e.target.value)} />
+            <div className="st-btns">
+              <Button variant="primary" type="submit" disabled={pw.length < 6 || !pw2}>{tr('保存')}</Button>
+              <Button type="button" onClick={() => setForm(false)}>{tr('取消')}</Button>
+            </div>
+          </form>
+        )}
+        {a.password && (
+          <Row label={tr('登录过的设备')} desc={tr('{0} 个设备的登录还在有效期内（30 天）', a.sessions ?? 0)}>
+            <Button disabled={!a.sessions} onClick={() => run(api.logoutAll, tr('所有设备都要重新登录了。'))}>{tr('让它们都重新登录')}</Button>
+          </Row>
+        )}
+        {a.local && a.password && (
+          <Row label={tr('取消密码')} desc={tr('之后只有这台电脑能打开 Papertown')}>
+            <Dialog.Root>
+              <Dialog.Trigger render={p => <Button {...p} variant="secondary-destructive">{tr('取消密码')}</Button>} />
+              <Dialog size="sm" className="st-dlg">
+                <Dialog.Title>{tr('取消访问密码？')}</Dialog.Title>
+                <Dialog.Description>{tr('已经登录的设备也会被退出。')}</Dialog.Description>
+                <div className="st-btns">
+                  <Dialog.Close render={p => <Button {...p}>{tr('保留密码')}</Button>} />
+                  <Dialog.Close render={p => <Button {...p} variant="destructive" onClick={() => run(api.clearPassword, tr('访问密码取消了。'))}>{tr('取消密码')}</Button>} />
+                </div>
+              </Dialog>
+            </Dialog.Root>
+          </Row>
+        )}
+        {msg && <Note>{msg}</Note>}
+      </Card>
+      <Note>{tr('Papertown 默认只在本机监听。要用手机打开，先让它能从网络上访问（比如 tailscale serve 8000），再在手机上用这个密码登录。')}</Note>
     </>
   );
 }
@@ -301,33 +480,71 @@ const KEYS: [string, string][] = [
   ['⌘K ⌘T', tr('中控屏的编辑器里换颜色主题和文件图标')],
 ];
 
-export function SettingsPanel({ open, hud, onClose }: { open: boolean; hud: Hud | null; onClose: () => void }) {
-  const s = useSettings();
-  const [tab, setTab] = useState<Tab>('look');
-  const changed = JSON.stringify(s) !== JSON.stringify(DEFAULTS);
-  if (!open) return null;
+function Keys() {
   return (
-    <div className="st-back" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="settings pnl" role="dialog" aria-modal="true" aria-label={tr('设置')}>
-        <nav className="st-nav">
-          <h2>{tr('设置')}</h2>
-          {TABS.map(([k, name, sub]) => (
-            <button key={k} className={k === tab ? 'on' : ''} onClick={() => setTab(k)}><b>{name}</b><span>{sub}</span></button>
-          ))}
-          <button className="btn st-reset" disabled={!changed} onClick={resetSettings} title={tr('外观、地图和 3D 的设置回到默认')}>{tr('恢复默认')}</button>
-        </nav>
-        <section className="st-body" key={tab}>
-          <header><h3>{TABS.find(t => t[0] === tab)![1]}</h3><button className="sh-x" onClick={onClose} title={tr('关闭（Esc）')}>×</button></header>
-          {tab === 'look' && <Look s={s} />}
-          {tab === 'editor' && <Editor s={s} />}
-          {tab === 'map' && <MapTab s={s} />}
-          {tab === 'walk' && <Walk s={s} />}
-          {tab === 'model' && <Model />}
-          {tab === 'agents' && <Agents />}
-          {tab === 'demo' && <Demo hud={hud} />}
-          {tab === 'keys' && <div className="st-keys">{KEYS.map(([k, v]) => <div key={k}><kbd>{k}</kbd><span>{v}</span></div>)}</div>}
-        </section>
-      </div>
-    </div>
+    <LayerCard className="st-keys">
+      <Table>
+        <Table.Header><Table.Row><Table.Head>{tr('按键')}</Table.Head><Table.Head>{tr('做什么')}</Table.Head></Table.Row></Table.Header>
+        <Table.Body>{KEYS.map(([k, v]) => <Table.Row key={k}><Table.Cell><kbd>{k}</kbd></Table.Cell><Table.Cell>{v}</Table.Cell></Table.Row>)}</Table.Body>
+      </Table>
+    </LayerCard>
+  );
+}
+
+export function SettingsPage({ section, hud, onClose }: { section?: string; hud: Hud | null; onClose: () => void }) {
+  const s = useSettings();
+  const [key, name, sub] = SECTIONS.find(x => x[0] === section) ?? SECTIONS[0];
+  const show = (k: Section) => go(`/settings/${k}`, true);
+  const changed = JSON.stringify(s) !== JSON.stringify(DEFAULTS);
+  // Esc leaves the page, unless a list or dialog on it is open: that takes the Esc itself. Read on
+  // the way down, before the list has shut
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !layer.querySelector('[data-base-ui-portal] [data-open]')) onClose(); };
+    addEventListener('keydown', esc, true);
+    return () => removeEventListener('keydown', esc, true);
+  }, [onClose]);
+  return createPortal(
+    <div className="st-page" role="dialog" aria-modal="true" aria-label={tr('设置')}>
+      <Sidebar.Provider contained defaultOpen collapsible="none" mobileBreakpoint={0} className="st-shell">
+        <Sidebar className="st-nav">
+          <Sidebar.Header><span className="st-brand"><Logo /><b>Papertown</b></span></Sidebar.Header>
+          <Sidebar.Content>
+            {GROUPS.map(([label, items]) => (
+              <Sidebar.Group key={label}>
+                <Sidebar.GroupLabel>{label}</Sidebar.GroupLabel>
+                <Sidebar.Menu>
+                  {items.map(([k, n, , Ic]) => <Sidebar.MenuButton key={k} icon={Ic} active={k === key} onClick={() => show(k)}>{n}</Sidebar.MenuButton>)}
+                </Sidebar.Menu>
+              </Sidebar.Group>
+            ))}
+          </Sidebar.Content>
+          <Sidebar.Footer>
+            <Button variant="ghost" size="sm" icon={ArrowCounterClockwiseIcon} disabled={!changed} onClick={resetSettings} title={tr('这个浏览器里的设置都回到默认')}>{tr('恢复默认')}</Button>
+          </Sidebar.Footer>
+        </Sidebar>
+        <main className="st-main">
+          <header className="st-top">
+            <div className="st-where"><Text variant="heading" size="lg" as="h1">{name}</Text><Text variant="secondary" size="sm">{sub}</Text></div>
+            <Button variant="ghost" shape="square" icon={XIcon} onClick={onClose} aria-label={tr('关闭')} title={tr('关闭（Esc）')} />
+          </header>
+          <div className="st-phone-nav">
+            <Select aria-label={tr('设置')} value={key} items={Object.fromEntries(SECTIONS.map(x => [x[0], x[1]]))} onValueChange={k => show(k as Section)} />
+          </div>
+          <section className="st-body" key={key}>
+            {key === 'look' && <Look s={s} />}
+            {key === 'progress' && <ProgressPage s={s} />}
+            {key === 'editor' && <Editor s={s} />}
+            {key === 'map' && <MapSection s={s} />}
+            {key === 'walk' && <Walk s={s} />}
+            {key === 'model' && <Model />}
+            {key === 'agents' && <Agents />}
+            {key === 'access' && <Access />}
+            {key === 'demo' && <Demo hud={hud} />}
+            {key === 'keys' && <Keys />}
+          </section>
+        </main>
+      </Sidebar.Provider>
+    </div>,
+    layer,
   );
 }

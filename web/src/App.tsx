@@ -1,12 +1,12 @@
-// Papertown: the console is home for anyone who would rather click than walk: every project
-// and everything the town does, as panels. The world map is the same town, walked as a small
-// figure. The chat waits at the bottom of every page (B), a building opens full screen from the
-// inside (C), and the status view (D) sits beside the world. The town can be walked in 3D too, through
-// your own eyes; the camera flies between the map's view and yours, so either hands over to
-// the other.
+// Papertown: the projects' progress is home, a card each; the console is everything the town
+// does, as panels, for anyone who would rather click than walk. The world map is the same town,
+// walked as a small figure. The chat waits at the bottom of every page (B), a building opens full
+// screen from the inside (C), and the status view (D) sits beside the world. The town can be walked
+// in 3D too, through your own eyes; the camera flies between the map's view and yours, so either
+// hands over to the other.
 //
-//   #view=console&line=line_2&m=paper   #view=status   #open=farm   #open=depot&line=line_1   #chat   #3d
-//   — open a state directly
+// Each view has its own address (route.ts): /progress, /progress/6, /console/6/code, /town, /status.
+//   /town#open=farm   /town#open=depot&line=line_1   /town#chat   /town#3d   — open a state directly
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
@@ -14,11 +14,12 @@ import { Logo } from './art';
 import { DemoWelcome, RepoLink } from './components/Demo';
 import { Chat, type Composer, type Tab } from './components/Chat';
 import { Interior } from './components/Interior';
-import { SettingsPanel } from './components/Settings';
+import { SettingsPage } from './components/Settings';
 import { StatusView } from './components/StatusView';
 import { Console } from './console/Console';
 import { Progress } from './progress/Progress';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
+import { follow, go, href, path, PATHS, type Route, type View } from './route';
 import { getSettings, useSettings } from './settings';
 import { DEMO } from './demo';
 import { enterFull, holdEscape, leaveFull } from './fullscreen';
@@ -27,7 +28,6 @@ import './mobile.css';
 
 const Town3D = lazy(() => import('./components/Town3D'));
 
-type View = 'cards' | 'console' | 'world' | 'status';
 // the map, the 3D town, and the flights between them
 type Dim = '2d' | 'to3d' | '3d' | 'to2d';
 const PHASE = { '2d': 'off', to3d: 'enter', '3d': 'live', to2d: 'leave' } as const;
@@ -43,6 +43,13 @@ function useToasts() {
   return { toasts, push };
 }
 
+const TABS: [View, string, string | undefined][] = [
+  ['cards', tr('进展'), tr('每个项目一张卡片：进展、风险、要你决定的事')],
+  ['console', tr('中控屏'), tr('不用走动：所有项目和小镇的功能都在面板里')],
+  ['world', tr('小镇'), tr('在小镇里走动，进建筑办事；可以平面或 3D')],
+  ['status', tr('运行状态'), undefined],
+];
+
 function Gear() {
   return (
     <svg className="gear" viewBox="0 0 24 24" aria-hidden="true">
@@ -52,15 +59,17 @@ function Gear() {
   );
 }
 
-export function App() {
+// covered: the landing is over it (you went back to /); it keeps what it has open meanwhile
+export function App({ route: at, covered }: { route: Route; covered: boolean }) {
   const hp = new URLSearchParams(location.hash.slice(1));
-  // a link into the town (a building, the chat, the 3D walk) opens the town; else the view you start on
-  const [view, setView] = useState<View>(() => {
-    const v = hp.get('view');
-    if (v === 'status' || v === 'console' || v === 'world' || v === 'cards') return v;
-    const start = getSettings().start;
-    return hp.has('open') || hp.has('3d') || hp.has('chat') || (start !== 'console' && start !== 'cards') ? 'world' : start;
-  });
+  // the settings open over what was open, which stays as it was underneath
+  const settingsOpen = at.view === 'settings';
+  const under = useRef(at), leaveTo = useRef('/progress'), cameIn = useRef(false);
+  if (!settingsOpen) { under.current = at; leaveTo.current = path(); }
+  const route = under.current;
+  const last = useRef<View>('cards');
+  const view: View = route.view === 'landing' || route.view === 'settings' ? last.current : route.view;
+  last.current = view;
   const [consoleUp, setConsoleUp] = useState(view === 'console'); // mounted once shown, and kept
   const [world, setWorld] = useState<WorldState | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
@@ -83,8 +92,13 @@ export function App() {
   const [want3d, setWant3d] = useState(false); // the 3D code has been asked for
   const mapApi = useRef<MapApi | null>(null);
   const hash3d = useRef(hp.has('3d') || (getSettings().start === '3d' && !hp.has('open') && view === 'world'));
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const st = useSettings();
+  const openSettings = useCallback(() => { cameIn.current = true; go('/settings'); }, []);
+  const closeSettings = useCallback(() => {
+    if (cameIn.current) history.back();
+    else go(leaveTo.current, true);
+    cameIn.current = false;
+  }, []);
   const setSheet = useCallback((id: string | null, lineId?: string | null) => {
     setSheetId(id);
     setFocus(lineId ?? null);
@@ -192,17 +206,18 @@ export function App() {
       const t = e.target as HTMLElement | null;
       if (e.key === ',' && !e.metaKey && !e.ctrlKey && !e.altKey && !(t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))) {
         e.preventDefault();
-        setSettingsOpen(o => !o);
+        if (settingsOpen) closeSettings();
+        else openSettings();
         return;
       }
       if (e.key !== 'Escape') return;
-      if (settingsOpen) setSettingsOpen(false);
-      else if (chatOpen) setChatOpen(false);
+      if (settingsOpen) return; // the settings page takes its own Esc
+      if (chatOpen) setChatOpen(false);
       else if (sheet) leaveRoom();
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
-  }, [sheet, chatOpen, settingsOpen, leaveRoom]);
+  }, [sheet, chatOpen, settingsOpen, leaveRoom, openSettings, closeSettings]);
 
   // over the 3D walk in full screen, Esc closes what is open before it leaves full screen
   useEffect(() => holdEscape(dim === '3d' && (!!sheet || chatOpen || settingsOpen)), [dim, sheet, chatOpen, settingsOpen]);
@@ -225,8 +240,7 @@ export function App() {
       enterFull();
       (root.current?.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => {});
     }
-    setChatOpen(false); // the chat and the settings belong to the view they were opened in
-    setSettingsOpen(false);
+    setChatOpen(false); // the chat belongs to the view it was opened in
     setFrom3d(mapApi.current?.view() ?? null);
     setWant3d(true);
     setDim('to3d');
@@ -235,36 +249,44 @@ export function App() {
     if (dim !== '3d') return;
     leaveFull();
     setChatOpen(false);
-    setSettingsOpen(false);
     setDim('to2d');
   }, [dim]);
   useEffect(() => {
     if (world && hash3d.current) { hash3d.current = false; go3d(false); }
   }, [world, go3d]);
   // the console is not part of the walk: going there from the 3D town lands back on the map
-  const show = useCallback((v: View) => {
-    if (v === 'console') { setConsoleUp(true); go2d(); }
-    setView(v);
-  }, [go2d]);
+  const show = useCallback((v: View) => go(PATHS[v]), []);
+  useEffect(() => {
+    if (view !== 'console') return;
+    setConsoleUp(true);
+    go2d();
+  }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // a project's card opens the project in the console, which comes up first if it was never shown
-  const openProject = useCallback((lineId: string) => {
+  // a project opened in the console from elsewhere (its card, a piece found for a question): its
+  // address says which project and which panel; a file or a job in it opens once the console is up
+  const openProject = useCallback((lineId: string, t: { mod?: string; file?: string; job?: string } = {}) => {
+    const seq = lines.find(l => l.id === lineId)?.seq;
+    const mod = t.mod ?? (t.job ? 'exp' : t.file?.startsWith('paper:') ? 'paper' : t.file ? 'code' : 'overview');
     const wasUp = consoleUp;
-    show('console');
-    setTimeout(() => dispatchEvent(new CustomEvent('pt-show', { detail: { line: lineId, mod: 'overview' } })), wasUp ? 60 : 250);
-  }, [show, consoleUp]);
+    go(seq ? `/console/${seq}/${mod}` : PATHS.console);
+    if (t.file || t.job) setTimeout(() => dispatchEvent(new CustomEvent('pt-show', { detail: { line: lineId, file: t.file, job: t.job } })), wasUp ? 80 : 400);
+  }, [lines, consoleUp]);
+  // the console tells where it is, and its address follows without a step in the history
+  const onPlace = useCallback((seq: number, mod: string) => {
+    if (route.view === 'console') go(`/console/${seq}/${mod}`, true);
+  }, [route.view]);
 
   // the macOS app (macos/) drives the page from its menus: the settings, the view, a note
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ type?: string; view?: string; text?: string }>).detail ?? {};
-      if (d.type === 'settings') setSettingsOpen(true);
+      if (d.type === 'settings') openSettings();
       else if (d.type === 'view' && (d.view === 'cards' || d.view === 'console' || d.view === 'world' || d.view === 'status')) show(d.view);
       else if (d.type === 'toast' && d.text) push(d.text);
     };
     addEventListener('papertown:command', on);
     return () => removeEventListener('papertown:command', on);
-  }, [show, push]);
+  }, [show, push, openSettings]);
 
   // the walking hint fades once you have moved or after a while
   const [hint, setHint] = useState(true);
@@ -297,9 +319,10 @@ export function App() {
         </Suspense>
       )}
       <StatusView tick={tick} active={view === 'status'} />
-      <Progress active={view === 'cards'} toast={push} onOpen={openProject} />
+      <Progress active={view === 'cards' && !covered} seq={route.view === 'cards' ? route.seq : undefined} sub={route.view === 'cards' ? route.sub : undefined} page={route.view === 'cards' ? route.page : undefined} toast={push} onOpen={openProject} />
       {consoleUp && (
-        <Console active={view === 'console'} lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
+        <Console active={view === 'console' && !covered} at={route.view === 'console' ? route : undefined} onPlace={onPlace}
+          lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
           onRoom={(id, lineId) => openRoom(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
           onAsk={(id, name) => openChat({ kind: 'ask', building: id, name }, true)}
           onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
@@ -307,13 +330,13 @@ export function App() {
       )}
 
       <header className="hud">
-        <div className="brand"><Logo /><b>Papertown</b></div>
-        <div className="seg" role="tablist">
-          <button className={view === 'cards' ? 'on' : ''} onClick={() => show('cards')} title={tr('每个项目一张卡片：进展、风险、要你决定的事')}>{tr('进展')}</button>
-          <button className={view === 'console' ? 'on' : ''} onClick={() => show('console')} title={tr('不用走动：所有项目和小镇的功能都在面板里')}>{tr('中控屏')}</button>
-          <button className={view === 'world' ? 'on' : ''} onClick={() => show('world')} title={tr('在小镇里走动，进建筑办事；可以平面或 3D')}>{tr('小镇')}</button>
-          <button className={view === 'status' ? 'on' : ''} onClick={() => show('status')}>{tr('运行状态')}</button>
-        </div>
+        <a className="brand" href={href('/')} onClick={e => follow(e, '/')} title={tr('回到首页')}><Logo /><b>Papertown</b></a>
+        <nav className="seg" aria-label={tr('视图')}>
+          {TABS.map(([v, name, tip]) => (
+            <a key={v} href={href(PATHS[v])} className={view === v ? 'on' : ''} aria-current={view === v ? 'page' : undefined} title={tip}
+              onClick={e => follow(e, PATHS[v])}>{name}</a>
+          ))}
+        </nav>
         <div className="seg w-only" role="tablist" title={tr('平面地图和 3D 漫游之间切换，人站在同一个地方')}>
           <button className={dim === '2d' || dim === 'to2d' ? 'on' : ''} onClick={go2d}>{tr('平面')}</button>
           <button className={dim === '3d' || dim === 'to3d' ? 'on' : ''} onClick={() => go3d()}>{tr('3D 漫游')}</button>
@@ -326,7 +349,7 @@ export function App() {
           {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? tr('没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板；仓库和印刷厂的 pi 用 pi 自己的设置') : hud.model}>
             {!online ? tr('连接断开') : DEMO ? tr('静态演示') : hud.offline ? tr('离线模式') : hud.provider}</span>}
           {DEMO && <RepoLink />}
-          <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={() => setSettingsOpen(true)}><Gear />{tr('设置')}</button>
+          <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>
           <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('指挥小镇的员工，看各部门在做什么（/ 直接开始写）')}
             onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('对话')}</button>
         </div>
@@ -360,7 +383,7 @@ export function App() {
           onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
           onAdjust={id => openChat({ kind: 'adjust', lineId: id }, true)} toast={push} />
       )}
-      <SettingsPanel open={settingsOpen} hud={hud ?? null} onClose={() => setSettingsOpen(false)} />
+      {settingsOpen && <SettingsPage section={at.mod} hud={hud ?? null} onClose={closeSettings} />}
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>
       {DEMO && <DemoWelcome />}
     </div>

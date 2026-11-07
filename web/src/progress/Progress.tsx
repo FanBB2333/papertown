@@ -1,26 +1,30 @@
-// 进展: every project as one card, the same on a phone and a desk. The top of each card is what
-// Papertown knows itself (its stages, its jobs, the questions waiting for you); the body is the
-// card its lead wrote: how it goes, how far along, the next milestone, the key numbers, what was
-// done, what comes next, what is in the way and what is yours to decide. Nothing rewrites a
-// card on its own: 更新 sends the lead a request, and the card changes when it has written it
-// back. A project without a lead gets one from here, on the model set in the settings. Every card in
-// the grid is the same height and holds a summary; clicking one opens all of it.
+// 进展: every project in one list, as blocks (a card each, in a grid) or as rows (a project to a
+// line, Rows.tsx), the same on a phone and a desk. A card shows the panes you pick for all of them
+// (how it goes, what needs you, the experiments running and planned, what it is to produce, its
+// code and paper repositories, its imported memory), each in a fixed height, so every card in the
+// grid is as tall as the others. How the list is sorted, grouped and sized is in 显示 (Display.tsx).
+// What Papertown knows itself (the stages, the jobs, the repositories) is live; what the project's
+// lead writes changes only when you press 更新. Each project opens in full at /progress/<number>,
+// and asks it anything (提问) at /progress/<number>/ask, a page of its own over everything else;
+// the pages its agents wrote in HTML are at /progress/<number>/pages.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { api, listen, type Card, type Health, type PaseoDefaults, type ProjectCard } from '../api';
-import { AGENT_STATUS, STATUS } from '../components/MillRoom';
-import { tr } from '../i18n';
+import { api, listen, type CardLayout, type Pane, type PaseoDefaults, type ProjectCard } from '../api';
+import { STATUS } from '../components/MillRoom';
 import { Icon } from '../console/icons';
-import { ago } from '../console/util';
+import { tr } from '../i18n';
+import { follow, go, href } from '../route';
+import { setSettings, useSettings, type PgGroup, type PgSort, type Settings as S } from '../settings';
+import { askPath, AskPage } from './Ask';
+import { DisplayMenu, rowCols } from './Display';
+import { pagesPath, PagesView, type PageOpen } from './Pages';
+import { MemoryViewer } from './Memory';
+import { CardPane, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
+import { hitOpener, Project, type ConsoleTarget } from './Project';
+import { ProjectRows, type Group } from './Rows';
 import './progress.css';
 
 type Filter = 'all' | 'you' | 'run' | 'done';
-const HEALTH: Record<Health, string> = { ok: tr('顺利'), risk: tr('有风险'), blocked: tr('卡住了') };
-const LISTS: [keyof Pick<Card, 'need_you' | 'blockers' | 'next' | 'done'>, string][] = [
-  ['need_you', tr('要你决定')], ['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')],
-];
-const youNeeded = (c: ProjectCard) => c.asks > 0 || !!c.card?.need_you.length || ['waiting', 'paused', 'failed'].includes(c.line.status);
 const FILTERS: [Filter, string, (c: ProjectCard) => boolean][] = [
   ['all', tr('全部'), () => true],
   ['you', tr('等你'), youNeeded],
@@ -29,27 +33,60 @@ const FILTERS: [Filter, string, (c: ProjectCard) => boolean][] = [
 ];
 // what needs you first, then what is stuck, then what is moving; finished ones last
 const rank = (c: ProjectCard) => (c.line.status === 'done' ? 9 : youNeeded(c) ? 0 : c.card?.health === 'blocked' ? 1 : c.card?.health === 'risk' ? 2 : 3);
+const STATE: Record<number, string> = { 0: tr('等你'), 1: tr('卡住了'), 2: tr('有风险'), 3: tr('在做'), 9: tr('已完成') };
+const moved = (c: ProjectCard) => Math.max(Date.parse(c.line.updated_at) || 0, Date.parse(c.card?.at ?? '') || 0);
+// how far along: what its lead says, else the share of its stages that are done
+const far = (c: ProjectCard) => c.card?.progress ?? Math.round(100 * c.line.stages.filter(x => x.status === 'done').length / Math.max(1, c.line.stages.length));
+const SORTS: Record<PgSort, (a: ProjectCard, b: ProjectCard) => number> = {
+  need: (a, b) => rank(a) - rank(b) || b.line.seq - a.line.seq,
+  recent: (a, b) => moved(b) - moved(a),
+  progress: (a, b) => far(b) - far(a) || b.line.seq - a.line.seq,
+  number: (a, b) => a.line.seq - b.line.seq,
+};
+// the list in its sections, in their own order; inside one the sort still holds
+function grouped(list: ProjectCard[], by: PgGroup): Group[] {
+  if (by === 'none') return [{ key: 'all', name: '', items: list }];
+  const found = new Map<string, Group & { at: number }>();
+  for (const c of list) {
+    const { stage, stages } = c.line;
+    const [at, name] = by === 'state' ? [rank(c), STATE[rank(c)]] : stage ? [stages.findIndex(x => x.name === stage.name), stage.name] : [99, tr('全部完成')];
+    if (!found.has(name)) found.set(name, { key: name, name, at, items: [] });
+    found.get(name)!.items.push(c);
+  }
+  return [...found.values()].sort((a, b) => a.at - b.at);
+}
+const SIZES = {
+  pgCard: { narrow: '250px', mid: '300px', wide: '400px' }, pgText: { small: .92, mid: 1, large: 1.1 }, pgWidth: { narrow: '1240px', mid: '1840px', full: 'none' },
+};
+const pageLook = (s: S) => ({ ['--pg-min' as string]: SIZES.pgCard[s.pgCard], ['--pg-zoom' as string]: SIZES.pgText[s.pgText], ['--pg-max' as string]: SIZES.pgWidth[s.pgWidth] });
 
-export function Progress({ active, toast, onOpen }: { active: boolean; toast: (t: string) => void; onOpen: (lineId: string) => void }) {
+type Open = (lineId: string, t?: ConsoleTarget) => void;
+
+export function Progress({ active, seq, sub, page, toast, onOpen }: {
+  active: boolean; seq?: number; sub?: 'ask' | 'pages'; page?: string; toast: (t: string) => void; onOpen: Open;
+}) {
   const [rows, setRows] = useState<ProjectCard[] | null>(null);
+  const [layout, setLayout] = useState<CardLayout | null>(null);
   const [err, setErr] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [defs, setDefs] = useState<PaseoDefaults | null>(null);
   const [busy, setBusy] = useState(false);
-  const [detail, setDetail] = useState<string | null>(null); // the card open in full
+  const [viewer, setViewer] = useState<{ lineId: string; id: string; msg?: number } | null>(null);
   const [, setNow] = useState(0);
   const again = useRef(0);
+  const s = useSettings();
 
   useEffect(() => {
     if (!active) return;
     let alive = true;
-    const load = () => api.cards().then(r => { if (alive) { setRows(r.cards); setErr(''); } }, e => alive && setErr((e as Error).message));
+    const load = () => api.cards().then(r => { if (alive) { setRows(r.cards); setLayout(r.layout); setErr(''); } }, e => alive && setErr((e as Error).message));
     load();
     api.modelNews().then(r => alive && setDefs(r.defaults)).catch(() => {});
-    // a card written comes whole; the facts around it (stages, jobs, questions, the lead) are read again shortly after they move
+    // a card written comes whole; the facts around it (stages, jobs, questions, the lead, memory) are read again shortly after they move
     const off = listen(e => {
       if (e.type === 'card' && e.card) setRows(rs => rs && rs.map(r => (r.line.id === e.card.line.id ? e.card : r)));
-      else if (['line', 'job', 'report'].includes(e.type) || (e.type === 'agent' && e.agent?.role === 'lead')) {
+      else if (e.type === 'card_layout' && e.layout) setLayout(e.layout);
+      else if (['line', 'job', 'report', 'memory'].includes(e.type) || (e.type === 'agent' && e.agent?.role === 'lead')) {
         clearTimeout(again.current);
         again.current = window.setTimeout(load, 1500);
       }
@@ -59,12 +96,21 @@ export function Progress({ active, toast, onOpen }: { active: boolean; toast: (t
     return () => { alive = false; off(); clearInterval(t); clearTimeout(again.current); };
   }, [active]);
 
-  const sorted = useMemo(() => [...(rows ?? [])].sort((a, b) => rank(a) - rank(b) || b.line.seq - a.line.seq), [rows]);
-  const shown = sorted.filter(FILTERS.find(f => f[0] === filter)![2]);
+  const sorted = useMemo(() => [...(rows ?? [])].sort(SORTS[s.pgSort]), [rows, s.pgSort]);
+  const shown = sorted.filter(FILTERS.find(f => f[0] === filter)![2]).filter(c => s.pgDone || filter === 'done' || c.line.status !== 'done');
+  const groups = grouped(shown, s.pgGroup);
   const put = (r: ProjectCard) => setRows(rs => rs && rs.map(x => (x.line.id === r.line.id ? r : x)));
   const leads = (rows ?? []).filter(r => r.lead?.started && !r.pending).length;
   const waiting = (rows ?? []).filter(youNeeded).length;
-  const open = active ? rows?.find(r => r.line.id === detail) ?? null : null;
+  const project = seq != null ? rows?.find(r => r.line.seq === seq) : undefined;
+  const panes = layout?.panes ?? [];
+
+  // what a page links to: a file or a job in the console, or another of the project's pages
+  const opener = (p: ProjectCard) => (o: PageOpen) => {
+    if (o.file) onOpen(p.line.id, { file: /^(code|paper):/.test(o.file) ? o.file : `code:${o.file}` });
+    else if (o.job) onOpen(p.line.id, { job: o.job });
+    else if (o.page) go(pagesPath(p.line.seq, o.page));
+  };
 
   async function updateAll() {
     setBusy(true);
@@ -74,242 +120,101 @@ export function Progress({ active, toast, onOpen }: { active: boolean; toast: (t
       setRows((await api.cards()).cards);
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
+  async function choose(next: Pane[] | null) {
+    const before = layout;
+    if (layout && next) setLayout({ ...layout, panes: next });
+    try { setLayout(await api.setLayout(next)); } catch (e) { setLayout(before); toast((e as Error).message); }
+  }
 
   return (
-    <main className="p-prog">
+    <main className="p-prog" data-density={s.pgDensity} data-stages={s.pgStages ? 'on' : 'off'} style={pageLook(s)}>
       <div className="pg-wrap">
-        <header className="pg-head">
-          <div className="pg-title">
-            <h1>{tr('项目进展')}</h1>
-            <p className="muted small">
-              {rows ? tr('{0} 个项目', rows.length) : '…'}{waiting > 0 && <> · <b className="pg-wait">{tr('{0} 个等你', waiting)}</b></>}
-              {' · '}{tr('卡片由各项目的负责人填写，按「更新」才会改')}
-            </p>
-          </div>
-          <div className="pg-tools">
-            <div className="seg mini" role="tablist">
-              {FILTERS.map(([k, name, f]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{name}{rows && k !== 'all' ? ` ${rows.filter(f).length}` : ''}</button>)}
-            </div>
-            <button className="btn pri" disabled={busy || !leads} onClick={updateAll} title={tr('请每个有负责人的项目更新卡片')}>
-              <Icon n="refresh" size={14} />{busy ? tr('发送中…') : tr('全部更新')}
-            </button>
-          </div>
-        </header>
-        {err && <p className="warn-box small">{err}</p>}
-        {!rows && !err && <p className="muted">{tr('加载中…')}</p>}
-        {rows && !rows.length && <p className="muted pg-none">{tr('还没有项目。在中控屏里放入 idea，或者在 projects.json 里接入你自己的项目。')}</p>}
-        {rows && rows.length > 0 && !shown.length && <p className="muted pg-none">{tr('没有符合的项目。')}</p>}
-        <div className="pg-grid">
-          {shown.map((r, i) => <ProjectBox key={r.line.id} r={r} i={i} defs={defs} toast={toast} onChange={put} onOpen={() => onOpen(r.line.id)} onDetail={() => setDetail(r.line.id)} />)}
-        </div>
-        {open && <Detail key={open.line.id} r={open} defs={defs} toast={toast} onChange={put} onOpen={() => { setDetail(null); onOpen(open.line.id); }} onClose={() => setDetail(null)} />}
+        {seq != null ? (
+          project && sub ? null
+          : project ? <Project key={project.line.id} r={project} defs={defs} toast={toast} onChange={put} onConsole={onOpen} />
+            : <p className="muted pg-none">{rows ? <>{tr('没有项目 #{0}。', seq)} <a href={href('/progress')} onClick={e => follow(e, '/progress')}>{tr('看全部项目')}</a></> : tr('加载中…')}</p>
+        ) : (
+          <>
+            <header className="pg-head">
+              <div className="pg-title">
+                <h1>{tr('项目进展')}</h1>
+                <p className="muted small">
+                  {rows ? tr('{0} 个项目', rows.length) : '…'}{waiting > 0 && <> · <b className="pg-wait">{tr('{0} 个等你', waiting)}</b></>}
+                  {' · '}{tr('卡片由各项目的负责人填写，按「更新」才会改')}
+                </p>
+              </div>
+              <div className="pg-tools">
+                <div className="seg mini" role="tablist">
+                  {FILTERS.map(([k, name, f]) => <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{name}{rows && k !== 'all' ? ` ${rows.filter(f).length}` : ''}</button>)}
+                </div>
+                <div className="seg mini pg-view" role="radiogroup" aria-label={tr('怎么排')}>
+                  {(['blocks', 'rows'] as const).map(v => (
+                    <button key={v} role="radio" aria-checked={s.pgView === v} className={s.pgView === v ? 'on' : ''} onClick={() => setSettings({ pgView: v })}
+                      title={v === 'blocks' ? tr('每个项目一张卡片') : tr('每个项目一行')}><Icon n={v === 'blocks' ? 'cards' : 'rows'} size={14} />{v === 'blocks' ? tr('块') : tr('行')}</button>
+                  ))}
+                </div>
+                {layout && <DisplayMenu s={s} layout={layout} onPanes={choose} />}
+                <button className="btn pri" disabled={busy || !leads} onClick={updateAll} title={tr('请每个有负责人的项目更新卡片')}>
+                  <Icon n="refresh" size={14} />{busy ? tr('发送中…') : tr('全部更新')}
+                </button>
+              </div>
+            </header>
+            {err && <p className="warn-box small">{err}</p>}
+            {!rows && !err && <p className="muted">{tr('加载中…')}</p>}
+            {rows && !rows.length && <p className="muted pg-none">{tr('还没有项目。在中控屏里放入 idea，或者在 projects.json 里接入你自己的项目。')}</p>}
+            {rows && rows.length > 0 && !shown.length && <p className="muted pg-none">{tr('没有符合的项目。')}</p>}
+            {shown.length > 0 && (s.pgView === 'rows' ? <ProjectRows groups={groups} cols={rowCols(s)} defs={defs} toast={toast} onChange={put} />
+              : groups.map(g => (
+                <section key={g.key} className="pg-sec">
+                  {g.name && <h2 className="pg-gh">{g.name}<span>{g.items.length}</span></h2>}
+                  <div className="pg-grid">
+                    {g.items.map((r, i) => <ProjectBox key={r.line.id} r={r} i={i} panes={panes} defs={defs} toast={toast} onChange={put}
+                      onAsk={() => go(askPath(r.line.seq))} />)}
+                  </div>
+                </section>
+              )))}
+          </>
+        )}
       </div>
+      {active && project && sub === 'ask' && (
+        <AskPage r={project} rows={sorted} toast={toast} onOpenPage={opener(project)}
+          onOpenHit={hitOpener(project.line.id, onOpen, (id, msg) => setViewer({ lineId: project.line.id, id, msg }), () => go(`/progress/${project.line.seq}`))} />
+      )}
+      {active && project && sub === 'pages' && <PagesView r={project} pid={page} toast={toast} onOpen={opener(project)} />}
+      {viewer && <MemoryViewer lineId={viewer.lineId} id={viewer.id} msg={viewer.msg} onClose={() => setViewer(null)} />}
     </main>
   );
 }
 
-// what a card's buttons do, the same on the card and in its detail
-function useCardActs(r: ProjectCard, toast: (t: string) => void, onChange: (r: ProjectCard) => void) {
-  const [busy, setBusy] = useState(false);
-  const { line, lead } = r;
-  async function run(fn: () => Promise<ProjectCard | unknown>, done?: string) {
-    setBusy(true);
-    try {
-      const x = await fn();
-      if (x && typeof x === 'object' && 'line' in x) onChange(x as ProjectCard);
-      if (done) toast(done);
-      return true;
-    } catch (e) { toast((e as Error).message); return false; } finally { setBusy(false); }
-  }
-  return {
-    busy,
-    update: (note = '') => run(() => api.updateCard(line.id, note.trim()), tr('已经请 #{0} 的负责人更新卡片。', line.seq)),
-    cancel: () => run(() => api.cancelCard(line.id)),
-    hire: () => run(async () => {
-      const a = lead ?? await api.openAgent(line.id, 'lead');
-      await api.startAgent(a.id, { runtime: 'paseo' });
-      return api.cards().then(x => x.cards.find(y => y.line.id === line.id));
-    }, tr('#{0} 的负责人在 Paseo 里启动了，等它读完项目再按「更新」。', line.seq)),
-  };
-}
-
-function Stages({ r }: { r: ProjectCard }) {
-  const { line } = r;
-  return (
-    <div className="pc-facts">
-      <ol className="pc-stages" aria-label={tr('工序')}>
-        {line.stages.map(s => <li key={s.key} className={`s-${s.status}`} title={`${s.name} · ${{ done: tr('完成'), run: tr('进行中'), wait: tr('等你'), todo: tr('还没开始') }[s.status]}`} />)}
-      </ol>
-      <span className="small muted pc-stage">
-        {line.stage ? `${line.stage.name} · ${line.stage.status === 'wait' ? tr('等你') : line.stage.status === 'todo' ? tr('还没开始') : `${line.stage.pct}%`}` : tr('全部完成')}
-        {!!r.jobs.running && <> · {tr('{0} 个任务在跑', r.jobs.running)}</>}
-        {!!r.jobs.failed && <> · <b className="bad-t">{tr('{0} 个失败', r.jobs.failed)}</b></>}
-        {r.asks > 0 && <> · <b className="pg-wait">{tr('{0} 个问题等你', r.asks)}</b></>}
-      </span>
-    </div>
-  );
-}
-
-function Meter({ r }: { r: ProjectCard }) {
-  const card = r.card!;
-  const delta = card.progress != null && r.prev != null ? card.progress - r.prev : 0;
-  return (
-    <div className="pc-meter">
-      <span className={`pc-health h-${card.health}`}><i />{HEALTH[card.health]}</span>
-      {card.progress != null && <>
-        <span className="pc-bar" role="meter" aria-valuenow={card.progress} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${card.progress}%` }} /></span>
-        <b className="pc-pct">{card.progress}%</b>
-        {delta !== 0 && <em className={`pc-delta${delta < 0 ? ' down' : ''}`}>{delta > 0 ? '+' : ''}{delta}</em>}
-      </>}
-    </div>
-  );
-}
-
-// the card's buttons: update, or the update in flight, or a lead to set up; and the way into the console
-function Acts({ r, acts, defs, note, onOpen }: { r: ProjectCard; acts: ReturnType<typeof useCardActs>; defs: PaseoDefaults | null; note?: string; onOpen: () => void }) {
-  const live = r.lead?.started, d = defs?.lead;
-  return (
-    <div className="pc-acts" onClick={e => e.stopPropagation()}>
-      {r.pending ? (
-        <>
-          <span className="pc-pending"><i />{tr('更新中 · {0}', ago(r.pending.at))}</span>
-          <button className="btn" disabled={acts.busy} onClick={acts.cancel}>{tr('取消')}</button>
-        </>
-      ) : live ? (
-        <button className="btn pri" disabled={acts.busy} onClick={() => acts.update(note)} title={tr('请负责人读一遍项目，重写这张卡片')}><Icon n="refresh" size={14} />{tr('更新')}</button>
-      ) : (
-        <button className="btn pri" disabled={acts.busy} onClick={acts.hire} title={d?.provider ? tr('在 Paseo 里用 {0} 启动', [d.provider, d.model, d.thinking].filter(Boolean).join(' / ')) : undefined}>
-          {acts.busy ? tr('启动中…') : tr('配负责人')}
-        </button>
-      )}
-      <button className="ib pc-go" onClick={onOpen} title={tr('在中控屏里打开这个项目')} aria-label={tr('打开')}><Icon n="right" size={16} /></button>
-    </div>
-  );
-}
-
-function Who({ r }: { r: ProjectCard }) {
-  const live = r.lead?.started ? r.lead : null;
-  return (
-    <span className="pc-who small muted">
-      {live && <i className={`dot s-${live.status}`} />}
-      <span>{live ? `${tr('负责人')} ${AGENT_STATUS[live.status]}` : tr('没有负责人')}{r.card && ` · ${tr('{0}更新', ago(r.card.at))}`}</span>
-    </span>
-  );
-}
-
-// a card in the grid: all of them the same height, so it holds a summary of the card; the rest
-// is in its detail
-function ProjectBox({ r, i, defs, toast, onChange, onOpen, onDetail }: {
-  r: ProjectCard; i: number; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onOpen: () => void; onDetail: () => void;
+// a card in the grid: the panes chosen for all of them, each its fixed height; the rest is on its page
+function ProjectBox({ r, i, panes, defs, toast, onChange, onAsk }: {
+  r: ProjectCard; i: number; panes: Pane[]; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onAsk: () => void;
 }) {
   const acts = useCardActs(r, toast, onChange);
   const { line, card } = r;
-  // the one line that wants you most: what to decide, else what is in the way
-  const first = card?.need_you.length ? ['need_you', card.need_you] as const : card?.blockers.length ? ['blockers', card.blockers] as const : null;
+  const to = `/progress/${line.seq}`;
+  const open = () => go(to);
   return (
-    <article className={`pc${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} onClick={onDetail}
-      tabIndex={0} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); onDetail(); } }}
+    <article className={`pc${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} onClick={open}
+      tabIndex={0} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(); } }}
       aria-label={tr('#{0} {1}，看详情', line.seq, line.title)}>
       <header className="pc-head">
-        <span className="pc-name"><span className="pc-seq">#{line.seq}</span><h3 title={line.title}>{line.title}</h3></span>
+        <span className="pc-name"><span className="pc-seq">#{line.seq}</span>
+          <h3 title={line.title}><a href={href(to)} onClick={e => { e.stopPropagation(); follow(e, to); }} tabIndex={-1}>{line.title}</a></h3>
+        </span>
         <span className={`pst pst-${line.status}`}>{STATUS[line.status] ?? line.status}</span>
       </header>
       <Stages r={r} />
-      <div className="pc-body">
-        {card ? (
-          <>
-            <Meter r={r} />
-            <p className="pc-sum">{card.summary}</p>
-            {first && (
-              <p className={`pc-first l-${first[0]}`}>
-                <b>{first[0] === 'need_you' ? tr('要你决定') : tr('卡点')}</b><span>{first[1][0]}</span>
-                {first[1].length > 1 && <em>+{first[1].length - 1}</em>}
-              </p>
-            )}
-            {card.milestone && <p className="pc-ms"><Icon n="target" size={14} /><span>{card.milestone}</span></p>}
-            {card.metrics.length > 0 && (
-              <dl className="pc-metrics">
-                {card.metrics.slice(0, 3).map(m => <div key={m.name}><dt>{m.name}</dt><dd>{m.value}</dd></div>)}
-              </dl>
-            )}
-          </>
-        ) : (
-          <p className="pc-empty muted small">
-            {r.lead?.started ? tr('还没有卡片。按「更新」，负责人读完项目后会写第一张。') : tr('这个项目还没有负责人。配一个以后，按「更新」让它把进展写成卡片。')}
-          </p>
-        )}
+      <div className="pc-panes">
+        {panes.map(p => <CardPane key={p} pane={p} r={r} />)}
       </div>
-      <footer className="pc-foot">
+      <footer className="pc-foot" onClick={e => e.stopPropagation()}>
         <Who r={r} />
-        <Acts r={r} acts={acts} defs={defs} onOpen={onOpen} />
+        <div className="pc-acts">
+          <button className="btn pc-ask" onClick={onAsk} title={tr('问这个项目任何问题')}><Icon n="chat" size={14} /><span>{tr('提问')}</span></button>
+          <UpdateButton r={r} acts={acts} defs={defs} />
+        </div>
       </footer>
     </article>
-  );
-}
-
-// a card in full, over the page: every number and every list, and a word for the lead with 更新.
-// It is put at the app's root, since the page under it scrolls and moves on its way in, and a
-// fixed overlay inside it would scroll along.
-function Detail({ r, defs, toast, onChange, onOpen, onClose }: {
-  r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onOpen: () => void; onClose: () => void;
-}) {
-  const acts = useCardActs(r, toast, onChange);
-  const [note, setNote] = useState('');
-  const { line, card, pending } = r;
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); onClose(); } };
-    addEventListener('keydown', k, true);
-    return () => removeEventListener('keydown', k, true);
-  }, [onClose]);
-  const lists = LISTS.filter(([k]) => card?.[k].length);
-  return createPortal(
-    <div className="pd-back" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <section className={`pd${card ? ` h-${card.health}` : ''}`} role="dialog" aria-modal="true" aria-label={`#${line.seq} ${line.title}`}>
-        <span className="sheet-grip" />
-        <header className="pc-head">
-          <span className="pc-name"><span className="pc-seq">#{line.seq}</span><h3>{line.title}</h3></span>
-          <span className={`pst pst-${line.status}`}>{STATUS[line.status] ?? line.status}</span>
-          <button className="ib pd-x" onClick={onClose} title={tr('关闭（Esc）')} aria-label={tr('关闭')}><Icon n="close" size={16} /></button>
-        </header>
-        <div className="pd-body">
-          <Stages r={r} />
-          {card ? (
-            <>
-              <Meter r={r} />
-              <p className="pc-sum">{card.summary}</p>
-              {card.milestone && <p className="pc-ms"><Icon n="target" size={14} /><span><span className="muted">{tr('下一个里程碑')}</span> {card.milestone}</span></p>}
-              {card.metrics.length > 0 && (
-                <dl className="pc-metrics full">
-                  {card.metrics.map(m => <div key={m.name}><dt>{m.name}</dt><dd>{m.value}</dd>{m.note && <span className="muted small">{m.note}</span>}</div>)}
-                </dl>
-              )}
-              {lists.map(([k, name]) => (
-                <section key={k} className={`pc-list l-${k}`}>
-                  <h4>{name}</h4>
-                  <ul>{card[k].map((t, j) => <li key={j}>{t}</li>)}</ul>
-                </section>
-              ))}
-              <p className="small muted">{tr('{0}由 {1} 写', ago(card.at), card.by)}</p>
-            </>
-          ) : (
-            <p className="pc-empty muted small">
-              {r.lead?.started ? tr('还没有卡片。按「更新」，负责人读完项目后会写第一张。') : tr('这个项目还没有负责人。配一个以后，按「更新」让它把进展写成卡片。')}
-            </p>
-          )}
-          {pending?.note && <p className="small muted">{tr('附言：{0}', pending.note)}</p>}
-        </div>
-        <footer className="pd-foot">
-          {r.lead?.started && !pending && (
-            <input value={note} maxLength={300} placeholder={tr('给负责人附一句（可选），比如「重点看实验」')} onChange={e => setNote(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) acts.update(note).then(ok => ok && setNote('')); }} />
-          )}
-          <div className="pd-row">
-            <Who r={r} />
-            <Acts r={r} acts={acts} defs={defs} note={note} onOpen={onOpen} />
-          </div>
-        </footer>
-      </section>
-    </div>,
-    document.querySelector('.theme-sketch') ?? document.body,
   );
 }
