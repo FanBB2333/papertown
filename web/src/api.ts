@@ -122,7 +122,26 @@ export interface ProjectCard {
   lead: Agent | null; card: Card | null; prev: number | null; pending: { at: string; note: string } | null;
   jobs: Record<string, number>; asks: number;
   running: CardRun[]; queued: CardRun[]; repos: { code: CardRepo | null; paper: CardRepo | null }; memory: MemoryCounts;
+  checks?: { hard: CheckCounts; soft: CheckCounts };
 }
+
+// the checkpoint map (checks.py): hard checks are code and must pass; soft checks are the lead's judgement
+export type CheckStatus = 'pass' | 'warn' | 'fail' | 'none' | 'wait';
+export interface CheckCounts { pass: number; warn: number; fail: number; none: number; wait: number; total: number }
+export interface CheckFinding { file: string; line: number; text: string; hit: string; hint: string }
+export interface CheckResult { status: CheckStatus; value: number | null; ts: string; seen: string; by: string; note: string; findings: CheckFinding[]; total: number }
+export interface Check {
+  id: string; kind: 'hard' | 'soft'; stage: string; title: string; prio: string; rule: string; text: string;
+  unit?: string; max?: number; params?: { key: string; value: number; label: string }[]; every?: number;
+  custom: boolean; on: boolean; last: CheckResult | null; history: { ts: string; status: CheckStatus; value: number | null }[];
+  asked?: string | null; due?: boolean;
+}
+export interface CheckMap {
+  line_id: string; seq: number; stages: { key: string; name: string; status: 'todo' | 'run' | 'wait' | 'done'; pct: number }[];
+  checks: Check[]; summary: { hard: CheckCounts; soft: CheckCounts }; trend: { ts: string; pass: number; fail: number; total: number }[];
+  rounds: number; lead: boolean; paper: boolean; ran: string | null;
+}
+export interface CheckEdit { on?: boolean; params?: Record<string, number>; title?: string; prompt?: string; every?: number; stage?: string }
 export type Pane = 'summary' | 'attention' | 'milestone' | 'metrics' | 'running' | 'planned' | 'outputs' | 'code' | 'paper' | 'memory';
 export interface CardLayout { panes: Pane[]; default: Pane[] }
 
@@ -302,6 +321,8 @@ const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'tex
 const carded = (v: object) => said(v) || ('summary' in v && 'health' in v);
 const asIs = () => true;
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
+// a check's findings and results keep the paper's words and the lead's; the page translates their own labels
+const kept = (v: object) => ('file' in v && 'hit' in v) || ('seen' in v && 'note' in v);
 const KEEP_EVENT: Record<string, (v: object) => boolean> = { report: written, card: carded, agent_event: said, agent_delta: said, page: asIs };
 
 async function call<T>(method: string, url: string, body?: unknown, keep?: (v: object) => boolean): Promise<T> {
@@ -410,6 +431,13 @@ export const api = {
   assistantPage: (page: PageCtx) => call<{ ok: boolean }>('POST', '/api/assistant/page', { page }),
   assistantSay: (text: string, page: PageCtx | null) => call<AgentEvent>('POST', '/api/assistant/say', { text, page }),
   // an agent's conversations in Paseo: the list, a new one, going back to one
+  checks: (lineId: string) => call<CheckMap>('GET', `/api/lines/${lineId}/checks`, undefined, kept),
+  runChecks: (lineId: string) => call<CheckMap>('POST', `/api/lines/${lineId}/checks/run`, undefined, kept),
+  setCheck: (lineId: string, id: string, b: CheckEdit) => call<CheckMap>('PUT', `/api/lines/${lineId}/checks/${id}`, b, kept),
+  addCheck: (lineId: string, b: { kind: 'hard' | 'soft'; stage: string; title: string; text: string; prio: string; max: number }) =>
+    call<CheckMap>('POST', `/api/lines/${lineId}/checks`, b, kept),
+  dropCheck: (lineId: string, id: string) => call<CheckMap>('DELETE', `/api/lines/${lineId}/checks/${id}`, undefined, kept),
+  askCheck: (lineId: string, id: string) => call<{ ok: boolean }>('POST', `/api/lines/${lineId}/checks/${id}/ask`),
   convs: (id: string) => call<{ conversations: AssistantConv[] }>('GET', `/api/agents/${id}/conversations`),
   newConv: (id: string) => call<Agent>('POST', `/api/agents/${id}/conversations/new`),
   resumeConv: (id: string, ext: string) => call<Agent>('POST', `/api/agents/${id}/conversations/${encodeURIComponent(ext)}`),
@@ -436,7 +464,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);

@@ -57,17 +57,18 @@ export function useCardActs(r: ProjectCard, toast: (t: string) => void, onChange
 }
 type CardActs = ReturnType<typeof useCardActs>;
 
-export function Stages({ r, names = false }: { r: ProjectCard; names?: boolean }) {
+export function Stages({ r }: { r: ProjectCard }) {
   const { line } = r;
   return (
     <div className="pc-facts">
-      <ol className={`pc-stages${names ? ' named' : ''}`} aria-label={tr('工序')}>
-        {line.stages.map(s => <li key={s.key} className={`s-${s.status}`} title={`${s.name} · ${STAGE_ST[s.status]}`}>{names && <span>{s.name}</span>}</li>)}
+      <ol className="pc-stages" aria-label={tr('工序')}>
+        {line.stages.map(s => <li key={s.key} className={`s-${s.status}`} title={`${s.name} · ${STAGE_ST[s.status]}`} />)}
       </ol>
       <span className="small muted pc-stage">
         {line.stage ? `${line.stage.name} · ${line.stage.status === 'wait' ? tr('等你') : line.stage.status === 'todo' ? tr('还没开始') : `${line.stage.pct}%`}` : tr('全部完成')}
         {!!r.jobs.failed && <> · <b className="bad-t">{tr('{0} 个失败', r.jobs.failed)}</b></>}
         {r.asks > 0 && <> · <b className="pg-wait">{tr('{0} 个问题等你', r.asks)}</b></>}
+        {!!r.checks?.hard.fail && <> · <b className="bad-t" title={tr('关卡图上必须满足的硬检查')}>{tr('{0} 项硬检查没过', r.checks.hard.fail)}</b></>}
       </span>
     </div>
   );

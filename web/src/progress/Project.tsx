@@ -1,5 +1,6 @@
-// A project at /progress/<number>, in brief: what waits on you, its card, experiments, outputs, repositories and
-// memory, each linking to the console panel with the detail; beside them its conversation and the pages its agents wrote.
+// A project at /progress/<number>, in brief: what waits on you, its checkpoint map (the stages and the checks on
+// each), its card, experiments, outputs, repositories and memory, each linking to the console panel with the
+// detail; beside them its conversation and the pages its agents wrote.
 
 import { useEffect, useState } from 'react';
 import { type PaseoDefaults, type ProjectCard } from '../api';
@@ -9,9 +10,10 @@ import { ago } from '../console/util';
 import { tr } from '../i18n';
 import { follow, href, PATHS } from '../route';
 import { askPath, ChatBox } from './Ask';
+import { CheckMapSection } from './Checks';
 import { PagesBox } from './Pages';
 import { MemorySection, MemoryViewer } from './Memory';
-import { Meter, noCardText, OUT_STATE, repoLine, runText, Stages, UpdateButton, useCardActs, Who } from './parts';
+import { Meter, noCardText, OUT_STATE, repoLine, runText, UpdateButton, useCardActs, Who } from './parts';
 
 export interface ConsoleTarget { mod?: string; file?: string; job?: string }
 type Open = (lineId: string, t?: ConsoleTarget) => void;
@@ -58,7 +60,6 @@ export function Project({ r, defs, toast, onChange, onConsole, decide }: {
           <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏里看这个项目的细节')}><Icon n="board" size={14} />{tr('中控屏')}</button>
         </div>
       </header>
-      <Stages r={r} names />
       {wait && (
         <section className="ov-ask">
           <Icon n="bell" size={20} />
@@ -66,6 +67,7 @@ export function Project({ r, defs, toast, onChange, onConsole, decide }: {
           <div className="btns">{wait.btns}</div>
         </section>
       )}
+      <CheckMapSection r={r} toast={toast} onConsole={onConsole} />
 
       <div className="pj-grid">
         <div className="pj-main">

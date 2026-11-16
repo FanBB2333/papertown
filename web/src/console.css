@@ -613,7 +613,6 @@ li.more:hover { color: var(--brand); }
 .meter i { height: 100%; border-right: 2px solid var(--panel); transition: width .8s var(--out); }
 .meter i:last-child { border-right: 0; }
 .mono { font-family: "SF Mono", Menlo, ui-monospace, monospace; font-size: 12px; }
-.bad-t { color: var(--bad); }
 th.sortable { cursor: pointer; user-select: none; transition: color .2s; }
 th.sortable:hover, th.sortable.on { color: var(--ink); }
 th.sortable.on::after { content: ' ↓'; color: var(--brand); }

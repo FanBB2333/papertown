@@ -6,6 +6,7 @@
 .proto .sim a:hover { text-decoration: underline; }
 .k-script { background: #8a6d3b; } .k-tool { background: #7f8a99; }
 .warn-t { color: var(--warn); }
+.bad-t { color: var(--bad); }
 
 /* the 小镇 tab's switch: 中控屏, 平面, 3D */
 .hud .modes button { display: inline-flex; align-items: center; gap: 5px; }

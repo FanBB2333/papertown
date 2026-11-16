@@ -171,7 +171,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
             <div className="ak-hello">
               <span className="ak-hello-ic"><Icon n="doc" size={24} /></span>
               <h1>{pid ? tr('没有这一页了') : tr('还没有汇报和讲解')}</h1>
-              <p>{tr('项目负责人汇报、讲解，或者回答你的问题时，会把内容写成一页 HTML：表格、图、对比和分步的解释。写好的页面都放在这里，也可以全屏演示。')}</p>
+              <p>{tr('项目负责人汇报、讲解时，会把内容写成一页 HTML：表格、图、对比和分步的解释。写好的页面都放在这里，也可以全屏演示。')}</p>
               {lead ? <div className="pv-ask"><Request lineId={line.id} toast={toast} big /></div>
                 : <p className="ak-mem">{tr('这个项目还没有负责人。')} <a href={href(back)} onClick={e => follow(e, back)}>{tr('在项目页配一个')}</a></p>}
             </div>
@@ -234,7 +234,7 @@ export function PagesBox({ r, toast }: { r: ProjectCard; toast: (t: string) => v
             );
           })}
         </ul>
-      ) : pages && <p className="psec-empty muted small">{tr('负责人汇报、讲解和回答问题时写的 HTML 页面放在这里，可以全屏演示。')}</p>}
+      ) : pages && <p className="psec-empty muted small">{tr('负责人汇报和讲解时写的 HTML 页面放在这里，可以全屏演示。')}</p>}
     </section>
   );
 }

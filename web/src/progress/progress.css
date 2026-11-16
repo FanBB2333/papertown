@@ -58,14 +58,6 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pc-stages li.s-run { background: var(--brand); }
 .pc-stages li.s-wait { background: var(--warn); }
 .pc-stage { line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-stages.named { gap: 4px; }
-.pc-stages.named li { height: auto; padding-top: 6px; background: none; position: relative; }
-.pc-stages.named li::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 10%, transparent); }
-.pc-stages.named li.s-done::before { background: var(--ok); }
-.pc-stages.named li.s-run::before { background: var(--brand); }
-.pc-stages.named li.s-wait::before { background: var(--warn); }
-.pc-stages.named span { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-stages.named li:is(.s-run, .s-wait) span { color: var(--ink); }
 
 .pc-panes { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .pp { flex: none; min-width: 0; overflow: hidden; font-size: 13px; line-height: 20px; box-sizing: content-box; } /* its height is its content's: the rule above it is extra */
@@ -206,7 +198,7 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 [data-density=tight] .pr :is(.pp-list li:nth-child(n + 2), .pp-repo > :nth-child(n + 2)) { display: none; }
 [data-density=tight] .pr-acts .btn { padding-block: 1px; }
 [data-density=tight] .pg-rows:not(.folded) .pc-ask span { display: none; }
-[data-stages=off] .pc-stages:not(.named) { display: none; }
+[data-stages=off] .pc-stages { display: none; }
 
 /* ---------- a project in full ---------- */
 .pj { display: flex; flex-direction: column; gap: 14px; animation: rise-in .4s var(--out) both; }
@@ -371,7 +363,6 @@ em.src.s-claude-memory { background: color-mix(in srgb, var(--ok) 16%, transpare
   .pj-title h1 { font-size: 21px; }
   .pj-acts { width: 100%; }
   .psec { padding: 14px 14px; }
-  .pc-stages.named span { display: none; }
   .pj-upd { flex-wrap: wrap; }
   .pj-upd input { flex-basis: 100%; font-size: 15px; }
   .pd-back { place-items: end stretch; padding: 0; }
