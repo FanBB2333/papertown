@@ -142,18 +142,19 @@ export interface CheckEdit { on?: boolean; params?: Record<string, number>; titl
 export type CanvasKind = 'stage' | 'hard' | 'soft' | 'task' | 'note';
 export type TaskStatus = 'draft' | 'sent' | 'done' | 'blocked';
 export type TaskTo = 'lead' | 'coder' | 'writer';
+export interface TaskLog { ts: string; kind: 'made' | 'sent' | 'resent' | 'done' | 'blocked' | 'back' | 'marked' | 'reopened'; text: string; by: string }
 export interface CanvasNode {
   id: string; kind: CanvasKind; x: number; y: number; title?: string; text?: string;
   ref?: string; status?: string; pct?: number; // a stage: its key, state and progress; a task: its state
   check?: Check;
-  to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string;
+  to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string; log?: TaskLog[];
 }
-export interface CanvasEdge { id: string; source: string; target: string }
+export interface CanvasEdge { id: string; source: string; target: string; label?: string }
 export interface CanvasView {
   line_id: string; seq: number; title: string; nodes: CanvasNode[]; edges: CanvasEdge[]; gone: { id: string; title: string }[];
   summary: { hard: CheckCounts; soft: CheckCounts }; tasks: Record<TaskStatus, number>;
   trend: { ts: string; pass: number; fail: number; total: number }[]; rounds: number; ran: string | null;
-  lead: boolean; agents: Record<TaskTo, boolean>; added?: string;
+  lead: boolean; agents: Record<TaskTo, { there: boolean; status: string | null }>; added?: string;
 }
 export interface NewNode { kind: 'task' | 'hard' | 'soft' | 'note'; x: number; y: number; title?: string; text?: string; to?: TaskTo; prio?: string; link?: string | null; send?: boolean }
 export type Pane = 'summary' | 'attention' | 'milestone' | 'metrics' | 'running' | 'planned' | 'outputs' | 'code' | 'paper' | 'memory';
@@ -337,7 +338,7 @@ const asIs = () => true;
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
 // a check's findings and results keep the paper's words and the lead's, and tasks and notes on the canvas keep
 // yours; the page translates their own labels
-const kept = (v: object) => ('file' in v && 'hit' in v) || ('seen' in v && 'note' in v) || ['task', 'note'].includes((v as { kind?: string }).kind ?? '');
+const kept = (v: object) => ('file' in v && 'hit' in v) || ('seen' in v && 'note' in v) || ('source' in v && 'target' in v) || ['task', 'note'].includes((v as { kind?: string }).kind ?? '');
 const KEEP_EVENT: Record<string, (v: object) => boolean> = { report: written, card: carded, agent_event: said, agent_delta: said, page: asIs };
 
 async function call<T>(method: string, url: string, body?: unknown, keep?: (v: object) => boolean): Promise<T> {
@@ -455,6 +456,8 @@ export const api = {
     call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}`, b, kept),
   dropNode: (lineId: string, id: string) => call<CanvasView>('DELETE', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}`, undefined, kept),
   sendNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/send`, undefined, kept),
+  backNode: (lineId: string, id: string, text: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/back`, { text }, kept),
+  labelEdge: (lineId: string, id: string, label: string) => call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/edges/${encodeURIComponent(id)}`, { label }, kept),
   restoreNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/restore`, undefined, kept),
   moveNodes: (lineId: string, at: Record<string, [number, number]>) => call<{ ok: boolean }>('POST', `/api/lines/${lineId}/canvas/move`, { at }),
   connect: (lineId: string, source: string, target: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/edges`, { source, target }, kept),
