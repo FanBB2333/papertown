@@ -140,10 +140,9 @@ body.solo { padding: 0; background: #111; }
 .g-stage .bld:hover, .g-fs .bld:hover { filter: brightness(1.08); }
 
 .flowpath { fill: none; stroke: var(--brand); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round; opacity: .45; }
-.fdot { stroke: rgba(0,0,0,.35); stroke-width: 1.2; }
-.fd-paper { fill: #fffaf0; } .fd-egg { fill: #f2cf63; } .fd-code { fill: #d98a3d; } .fd-energy { fill: #ffd84a; } .fd-data { fill: #6fb6e0; }
-.fkey { width: 10px; height: 10px; border-radius: 50% !important; border: 1px solid rgba(0,0,0,.3); }
-.fkey.fd-paper { background: #fffaf0; } .fkey.fd-egg { background: #f2cf63; } .fkey.fd-code { background: #d98a3d; } .fkey.fd-energy { background: #ffd84a; } .fkey.fd-data { background: #6fb6e0; }
+.fd-paper { --fd: #fffaf0; } .fd-egg { --fd: #f2cf63; } .fd-code { --fd: #d98a3d; } .fd-energy { --fd: #ffd84a; } .fd-data { --fd: #6fb6e0; }
+.fdot { fill: var(--fd); stroke: rgba(0,0,0,.35); stroke-width: 1.2; }
+.fkey { width: 10px; height: 10px; border-radius: 50% !important; border: 1px solid rgba(0,0,0,.3); background: var(--fd); }
 
 .dlbl rect { fill: var(--panel); stroke: var(--line); opacity: .93; }
 .dlbl text { fill: var(--ink); font-family: var(--head); font-weight: 700; letter-spacing: .08em; }
@@ -171,7 +170,6 @@ body.solo { padding: 0; background: #111; }
 }
 .theme-night .map-bg { background: radial-gradient(ellipse at 50% 35%, #1a2440 0%, #0b0f18 72%); }
 .theme-night .flowpath { opacity: .7; }
-.theme-night .glow .m-win, .theme-night .glow .lampbulb { filter: drop-shadow(0 0 2.5px #ffb347); }
 .theme-night.glow .m-win, .theme-night.glow .lampbulb { filter: drop-shadow(0 0 2.5px #ffb347); }
 .theme-night.glow .fdot { filter: drop-shadow(0 0 4px currentColor); }
 .theme-night .fdot { stroke: rgba(255,255,255,.6); }
@@ -275,7 +273,6 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
 .verdict .chip { margin-right: 6px; }
 .msg .btns { display: flex; gap: 8px; margin-top: 10px; }
 .cost { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
-.cost a { color: var(--brand); }
 .trace { border-top: var(--pborder); padding: 10px 14px; background: var(--panel2); flex: none; }
 .trace h5 { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-family: var(--font); }
 .tr { display: grid; grid-template-columns: 50px 1fr auto; gap: 8px; align-items: center; font-size: 12px; padding: 2px 0; }
@@ -299,7 +296,7 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
 .lc .line { position: relative; padding: 16px 18px 10px; flex: none; }
 .belt { position: absolute; left: 16px; right: 16px; top: 76px; height: 12px; border-radius: 6px;
   background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 20%, transparent) 0 10px, color-mix(in srgb, var(--ink) 8%, transparent) 10px 20px); }
-.anim-ui .belt { animation: belt .9s cubic-bezier(.6, 0, .3, 1) infinite; } /* indexing: a push, then a rest */
+.anim-ui .belt { animation: belt .9s cubic-bezier(.6, 0, .3, 1) infinite; }
 @keyframes belt { to { background-position: 20px 0; } }
 .stations { position: relative; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; }
 .stn { position: relative; background: var(--panel); border: var(--pborder); border-radius: var(--radius); box-shadow: var(--pshadow); padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
@@ -368,7 +365,7 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
 .lead-steps li.todo { opacity: .6; }
 .inset .mapbox { height: 214px; border-radius: var(--radius); overflow: hidden; border: var(--pborder); margin: 6px 0 10px; }
 
-/* ---------- prototype: A as home, B as chat drawer, C as building detail, D as status view ---------- */
+/* ---------- prototype ---------- */
 body.proto-page { padding: 0; overflow: hidden; }
 .proto { position: fixed; inset: 0; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.5; }
 .proto h1, .proto h2, .proto h3, .proto h4, .proto h5, .proto h6 { font-family: var(--head); text-transform: var(--hcase); margin: 0; }
@@ -459,7 +456,6 @@ body.proto-page { padding: 0; overflow: hidden; }
 .io small { color: var(--muted); font-size: 12px; }
 .io .go { color: var(--muted); }
 .real { font-size: 13.5px; line-height: 1.65; margin-bottom: 12px !important; }
-.kv + .real { margin-top: 10px !important; font-size: 12.5px; }
 .p-sheet .btns { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .ptip { position: fixed; z-index: 20; width: 280px; padding: 10px 12px; pointer-events: none; font-size: 12.5px; }
@@ -479,14 +475,8 @@ body.proto-page { padding: 0; overflow: hidden; }
 <script type="module">
 
 // ---- theme.js ----
-// Art styles. One palette definition feeds both the gallery (as CSS with color-mix)
-// and the asset export (resolved to plain colors so the SVG files work anywhere).
-//
-// Material spec:
-//   ['acc']            the sprite's accent colour
-//   ['mix', p, base]   p% accent mixed with base
-//   ['fixed', colour]
-//   ['alpha', a]       accent at alpha a
+// Art styles: one palette feeds the pages (CSS with color-mix) and the asset export (plain colours).
+// Material spec: ['acc'] accent · ['mix', p, base] p% accent in base · ['fixed', colour] · ['alpha', a]
 
 export const THEMES = {
   paper: {
@@ -624,8 +614,6 @@ export const THEMES = {
 
 export const THEME_ORDER = ['paper', 'day', 'blueprint', 'night'];
 
-// ---------- CSS for the browser ----------
-
 function specCSS(spec) {
   switch (spec[0]) {
     case 'acc': return 'var(--accent)';
@@ -635,6 +623,7 @@ function specCSS(spec) {
   }
 }
 
+// the theme's rules, scoped to .theme-<key>
 export function themeCSS(t) {
   const s = `.theme-${t.key}`;
   const u = t.ui;
@@ -644,7 +633,6 @@ export function themeCSS(t) {
   for (const [m, spec] of Object.entries(t.mats)) css += `${s} .m-${m}{--c:${specCSS(spec)}}`;
   css += `${s} .f-l{fill:var(--c)}${s} .f-t{fill:color-mix(in srgb,var(--c),white ${t.shade[0]}%)}` +
     `${s} .f-r{fill:color-mix(in srgb,var(--c),black ${t.shade[1]}%)}`;
-  // hand-drawn sprites: the wash carries no stroke, the separate ink line does
   const shapes = `:is(polygon,path,ellipse,circle,rect):not(.ln):not(.ln2):not(.hl):not(.smoke):not(.beam):not(.shadow):not(.nost):not(.ink)${t.ink ? ':not(.wash)' : ''}`;
   css += t.stroke
     ? `${s} .sp ${shapes}{stroke:${specCSS(t.stroke)};stroke-width:${t.strokeW};stroke-linejoin:round}`
@@ -655,8 +643,6 @@ export function themeCSS(t) {
   css += `${s} .sp .t-sign{fill:${t.text}}${s} .sp .smoke{fill:${t.smoke}}${s} .sp .hl{fill:${t.hl}}${s} .sp .beam{fill:${t.beam}}`;
   return css;
 }
-
-// ---------- resolved colours for the exported SVG files ----------
 
 function parseC(c) {
   if (c === 'transparent') return [0, 0, 0, 0];
@@ -692,9 +678,10 @@ function specColor(spec, accent) {
   }
 }
 
-// one material's base colour (the left-face fill) as a plain colour string
+// a material's base (left-face) colour as a plain colour string
 export function matColor(t, mat, accent) { return toC(specColor(t.mats[mat], accent)); }
 
+// bakes the theme's colours into sprite markup as fill/stroke attributes, for the exported files
 export function resolveSVG(markup, accent, t) {
   const WHITE = [255, 255, 255, 1], BLACK = [0, 0, 0, 1];
   const stroke = t.stroke ? toC(specColor(t.stroke, accent)) : null;
@@ -733,13 +720,11 @@ export function resolveSVG(markup, accent, t) {
 export const TW = 64, TH = 32, ZU = 26;
 const HW = TW / 2, HH = TH / 2, R2 = Math.SQRT2;
 export const iso = (x, y, z = 0) => [(x - y) * HW, (x + y) * HH - z * ZU];
-const r1 = n => Math.round(n * 10) / 10;
+export const r1 = n => Math.round(n * 10) / 10;
 const pt = p => `${r1(p[0])},${r1(p[1])}`;
 
-// Hand-drawn mode: every polygon comes out as a slightly wobbly wash of colour plus a
-// separate ink line drawn over it, a little off register and overshooting the corners,
-// like a sketch coloured in afterwards. The wobble is seeded by the coordinates, so the
-// same shape always draws the same way and shared edges get the same stroke.
+// Hand-drawn mode: a wobbly wash plus a separate ink line, seeded by the coordinates so
+// a shape always draws the same way.
 let HAND = false;
 export function handDrawn(on = true) { HAND = on; }
 export const isHand = () => HAND;
@@ -788,8 +773,8 @@ function inkPath(P) {
   return d;
 }
 
+// Collects one sprite's SVG markup; k scales it (the core buildings stand larger than life).
 export class Pen {
-  // k draws everything k times its size: the core buildings stand larger than life
   constructor(k = 1) { this.k = k; this.o = []; this.bb = [1e9, 1e9, -1e9, -1e9]; }
   I(x, y, z = 0) { const k = this.k; return iso(x * k, y * k, z * k); }
   grow(x, y) {
@@ -797,7 +782,6 @@ export class Pen {
     if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y;
   }
   P(x, y, z = 0) { const p = this.I(x, y, z); this.grow(p[0], p[1]); return p; }
-  raw(s) { this.o.push(s); return this; }
   poly(pts, cls) {
     const P = pts.map(q => this.P(q[0], q[1], q[2]));
     if (!HAND) {
@@ -822,7 +806,6 @@ export class Pen {
   }
   circ(cx, cy, r, cls) { return this.ell(cx, cy, r, r, cls); }
 
-  // ---- solids ----
   box(x, y, z, w, d, h, m) {
     this.poly([[x, y + d, z], [x + w, y + d, z], [x + w, y + d, z + h], [x, y + d, z + h]], `${m} f-l`);
     this.poly([[x + w, y, z], [x + w, y + d, z], [x + w, y + d, z + h], [x + w, y, z + h]], `${m} f-r`);
@@ -901,7 +884,6 @@ export class Pen {
     return this;
   }
 
-  // ---- facade details ----
   winL(Y, x0, z0, w, h, m = 'm-win') { return this.poly([[x0, Y, z0], [x0 + w, Y, z0], [x0 + w, Y, z0 + h], [x0, Y, z0 + h]], `${m} f-l`); }
   winR(X, y0, z0, w, h, m = 'm-win') { return this.poly([[X, y0, z0], [X, y0 + w, z0], [X, y0 + w, z0 + h], [X, y0, z0 + h]], `${m} f-r`); }
   rowL(Y, x0, x1, z, n, w, h, m) { const g = (x1 - x0 - n * w) / (n - 1 || 1); for (let i = 0; i < n; i++) this.winL(Y, x0 + i * (w + g), z, w, h, m); return this; }
@@ -958,18 +940,15 @@ export class Pen {
     return this.winL(y + 1.33, x + 0.05, 0.24, 0.26, 0.12, 'm-glass');
   }
 
-  svg(cls = '', style = '', pad = 6) {
+  svg(cls, style, pad = 6) {
     const [x0, y0, x1, y1] = this.bb;
     const vb = `${r1(x0 - pad)} ${r1(y0 - pad)} ${r1(x1 - x0 + pad * 2)} ${r1(y1 - y0 + pad * 2)}`;
-    return { vb, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, body: `<g class="sp ${cls}"${style ? ` style="${style}"` : ''}>${this.o.join('')}</g>` };
+    return { vb, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, body: `<g class="sp ${cls}" style="${style}">${this.o.join('')}</g>` };
   }
 }
 
-// ---------- districts & buildings ----------
-
-// The town is laid out as a 3×3 grid: the four core buildings each have a corner yard,
-// the strips between two yards hold the buildings that serve both, and the square in
-// the middle is where an idea becomes a project. `dir` is where the area sits.
+// The town's 3×3 grid of areas: core yards in the corners, shared strips between them,
+// the idea square in the middle. `dir` is where the area sits.
 export const DISTRICTS = {
   camp: { name: '造纸厂大本营', en: 'Base Camp', dir: '北', color: '#a8743f' },
   code: { name: '仓库', en: 'Code Depot', dir: '东', color: '#4f8a3d' },
@@ -1389,8 +1368,6 @@ export const BUILDINGS = {
   },
 };
 
-// ---------- props & terrain ----------
-
 export const PROPS = {
   tree_round: { name: '圆冠树', w: 1, d: 1, draw(p) {
     p.box(0.45, 0.45, 0, 0.1, 0.1, 0.42, 'm-trunk');
@@ -1425,8 +1402,6 @@ export const PROPS = {
   tile_sand: { name: '沙滩', w: 1, d: 1, draw(p) { p.box(0, 0, -0.15, 1, 1, 0.15, 'm-sand'); } },
 };
 
-// ---------- flat icons: items & workers (48×48) ----------
-
 const sheet = (x, y, w, h, m = 'm-white') => `<rect class="${m} f-l" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>`;
 
 export const ITEMS = {
@@ -1459,7 +1434,6 @@ export const ITEMS = {
     '<ellipse class="m-acc f-t" cx="24" cy="12" rx="14" ry="6"/><path class="ln m-white" d="M10 24c0 3.5 6 6 14 6s14-2.5 14-6"/>' },
 };
 
-const badge = inner => `<circle class="m-white f-l" cx="36.5" cy="35" r="8"/>${inner}`;
 export const WORKERS = {
   hatcher: { name: '孵化员', rep: '查重、写撞车报告', accent: '#e2b84a', mark: '<ellipse class="m-acc f-l" cx="36.5" cy="35.5" rx="3.2" ry="4.2"/>' },
   scout: { name: '调研员', rep: '检索文献、整理 related work', accent: '#5f7f9e', mark: '<circle class="ln m-acc" cx="35.5" cy="34" r="3.2"/><path class="ln m-acc" d="M38 36.5l3 3"/>' },
@@ -1470,81 +1444,58 @@ export const WORKERS = {
   keeper: { name: '仓管员', rep: '维护仓库：回 issue、管 release', accent: '#c47a3a', mark: '<rect class="ln m-acc" x="32.5" y="31.5" width="8" height="7" rx="1"/><path class="ln m-acc" d="M32.5 34.5h8"/>' },
 };
 
-// ---------- standalone SVG helpers ----------
-
-export function drawBuilding(type, o = {}) {
-  const b = BUILDINGS[type], p = new Pen();
-  b.draw(p, o);
-  return p;
-}
+const withHTML = s => ({ ...s, html: `<svg class="sp-svg" viewBox="${s.vb}" xmlns="http://www.w3.org/2000/svg">${s.body}</svg>` });
+const icon = (accent, body) =>
+  `<svg class="sp-svg ic" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><g class="sp" style="--accent:${accent}">${body}</g></svg>`;
 
 export function spriteSVG(type, o = {}) {
-  const b = BUILDINGS[type], p = drawBuilding(type, o);
-  const s = p.svg(`b-${type}`, `--accent:${o.accent || b.accent}`);
-  return { ...s, html: `<svg class="sp-svg" viewBox="${s.vb}" xmlns="http://www.w3.org/2000/svg">${s.body}</svg>` };
+  const b = BUILDINGS[type], p = new Pen();
+  b.draw(p, o);
+  return withHTML(p.svg(`b-${type}`, `--accent:${o.accent || b.accent}`));
 }
 
 export function propSVG(key) {
   const p = new Pen();
   PROPS[key].draw(p);
-  const s = p.svg(`p-${key}`, '--accent:#c47a3a');
-  return { ...s, html: `<svg class="sp-svg" viewBox="${s.vb}" xmlns="http://www.w3.org/2000/svg">${s.body}</svg>` };
+  return withHTML(p.svg(`p-${key}`, '--accent:#c47a3a'));
 }
 
 export function itemSVG(key) {
-  const it = ITEMS[key];
-  return `<svg class="sp-svg ic" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><g class="sp" style="--accent:${it.accent}">${it.svg}</g></svg>`;
+  return icon(ITEMS[key].accent, ITEMS[key].svg);
 }
 
 export function workerBody(key) {
-  const w = WORKERS[key];
   return '<ellipse class="shadow" cx="24" cy="44" rx="13" ry="3"/>' +
     '<path class="m-acc f-l" d="M9 44c0-10 6.5-16 15-16s15 6 15 16Z"/><path class="m-acc f-r" d="M24 28c8.5 0 15 6 15 16H24Z"/>' +
     '<circle class="m-egg f-l" cx="24" cy="17" r="9.5"/><circle class="m-dark f-l nost" cx="20.8" cy="17.5" r="1.3"/><circle class="m-dark f-l nost" cx="27.2" cy="17.5" r="1.3"/>' +
-    badge(w.mark);
+    '<circle class="m-white f-l" cx="36.5" cy="35" r="8"/>' + WORKERS[key].mark;
 }
 
 export function workerSVG(key) {
-  return `<svg class="sp-svg ic" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><g class="sp" style="--accent:${WORKERS[key].accent}">${workerBody(key)}</g></svg>`;
+  return icon(WORKERS[key].accent, workerBody(key));
 }
 
 // ---- sample.js ----
-// Sample data for the open-source depot district. None of these repos exist; replace
-// this list with real repositories (e.g. from the GitHub API) once data is connected.
-// Ids stay fixed so the map and links don't change when the data does.
-//
-// to: buildings that take code from this repo
+// Sample repositories for the prototype's depot district; none of them exist.
+// to: the buildings that take code from the repo.
 
 export const SAMPLE_REPOS = [
-  { id: 'depot_a', label: 'sg-kit', repo: 'sample-lab/sg-kit', accent: '#4f8a3d',
-    desc: '场景图构建与增量更新的工具包', lang: 'Python', stars: 128, issues: 3, prs: 1, release: 'v0.3.1', updated: '2 天前',
-    to: ['farm', 'mill'] },
-  { id: 'depot_b', label: 'vla-bench', repo: 'sample-lab/vla-bench', accent: '#7a5aa6',
-    desc: '长程操作任务的评测脚本和 baseline', lang: 'Python', stars: 342, issues: 7, prs: 2, release: 'v1.2.0', updated: '今天',
-    to: ['farm'] },
-  { id: 'depot_c', label: 'paper-tpl', repo: 'sample-lab/paper-tpl', accent: '#2f8f9d',
-    desc: '会议投稿用的 LaTeX 模板和画图脚本', lang: 'TeX', stars: 56, issues: 1, prs: 0, release: 'v2.0', updated: '1 周前',
-    to: ['press'] },
+  { id: 'depot_a', label: 'sg-kit', to: ['farm', 'mill'] },
+  { id: 'depot_b', label: 'vla-bench', to: ['farm'] },
+  { id: 'depot_c', label: 'paper-tpl', to: ['press'] },
 ];
 
 // ---- world.js ----
-// The Papertown map: placements on a 24×24 isometric grid, ground tiles, props,
-// logistics flows and labels. renderMap() returns one <svg> string.
-//
-// The board is a 3×3 grid of areas. The four core buildings each own a 7×7 yard in a
-// corner (造纸厂 at the top of the screen, then clockwise 仓库, 实验农场, 印刷厂) and
-// are drawn larger than life. The strips between two neighbouring yards hold the small
-// buildings that serve both, and the square in the middle is where an idea is written
-// down, checked and handed to the mill. A ring road joins the yards in work order:
-// mill → depot → farm → press → mill. The far shores are sea, with a dock in each of
-// the two strips that touch it.
+// The Papertown map on a 24×24 isometric grid: four core buildings in 7×7 corner yards
+// joined by a ring road (mill → depot → farm → press), shared buildings in the strips
+// between, the idea square in the middle. renderMap() returns one <svg> string.
 
 
 
 export const N = 24;
 
 // the core buildings, and how many times their sprite size they are drawn
-export const SCALE = { mill: 1.6, depot: 1.6, farm: 1.5, press: 2.2 };
+const SCALE = { mill: 1.6, depot: 1.6, farm: 1.5, press: 2.2 };
 const YARD = [4.5, 19.5]; // yard centres along each axis
 export const RING = [4, 19]; // the ring road's rows and columns
 
@@ -1554,22 +1505,22 @@ export const PLACEMENTS = [
   { id: 'depot', type: 'depot', x: 17, y: 3, name: '仓库', label: 'code' },
   { id: 'farm', type: 'farm', x: 17, y: 17 },
   { id: 'press', type: 'press', x: 2, y: 17 },
-  // 造纸厂 ↔ 印刷厂: papers come in to be read and go out once printed
+  // 造纸厂 ↔ 印刷厂
   { id: 'dock_arxiv', type: 'dock_arxiv', x: 0, y: 9 },
   { id: 'customs', type: 'customs', x: 1, y: 12 },
   { id: 'library', type: 'library', x: 5, y: 9 },
   { id: 'qa', type: 'qa', x: 5, y: 13 },
   { id: 'lighthouse', type: 'lighthouse', x: 0, y: 12 },
-  // 造纸厂 ↔ 仓库: a method turns into code
+  // 造纸厂 ↔ 仓库
   { id: 'dock_github', type: 'dock_github', x: 11, y: 0 },
   { id: 'logistics', type: 'logistics', x: 14, y: 1 },
   { id: 'market', type: 'market', x: 10, y: 5 },
-  // 仓库 ↔ 实验农场: tested code, datasets and compute
+  // 仓库 ↔ 实验农场
   { id: 'workshop', type: 'workshop', x: 16, y: 9 },
   { id: 'coldstore', type: 'coldstore', x: 16, y: 13 },
   { id: 'power', type: 'power', x: 20, y: 9 },
   { id: 'power_sim', type: 'power_sim', x: 20, y: 13 },
-  // 实验农场 ↔ 印刷厂: results become a paper
+  // 实验农场 ↔ 印刷厂
   { id: 'newspaper', type: 'newspaper', x: 11, y: 16 },
   { id: 'weather', type: 'weather', x: 9, y: 20 },
   { id: 'bank', type: 'bank', x: 13, y: 20 },
@@ -1577,7 +1528,7 @@ export const PLACEMENTS = [
   { id: 'cityhall', type: 'cityhall', x: 11, y: 11 },
   { id: 'hatchery', type: 'hatchery', x: 9, y: 8 },
   { id: 'genealogy', type: 'genealogy', x: 8, y: 12 },
-  // what the agents know and what they can reach: skills, MCP tools (and the library's RAG)
+  // skills and MCP tools
   { id: 'academy', type: 'academy', x: 13, y: 8 },
   { id: 'exchange', type: 'exchange', x: 15, y: 11 },
 ];
@@ -1634,9 +1585,11 @@ function yardOutline(r, inset = 0.3, rad = 1.3) {
   return pts;
 }
 
+const accentOf = pl => pl.accent || BUILDINGS[pl.type].accent;
+
 // each core building's yard as an outline in tile coordinates, with its accent
 export function yards(places) {
-  return places.filter(p => SCALE[p.type]).map(pl => ({ id: pl.id, pts: yardOutline(yardOf(pl)), accent: pl.accent || BUILDINGS[pl.type].accent }));
+  return places.filter(p => SCALE[p.type]).map(pl => ({ id: pl.id, pts: yardOutline(yardOf(pl)), accent: accentOf(pl) }));
 }
 
 const CORE_FEET = PLACEMENTS.filter(p => SCALE[p.type]).map(footprint);
@@ -1657,8 +1610,7 @@ export function tileMat(x, y) {
   return hash(x, y) < 0.3 ? 'grass2' : 'grass';
 }
 
-const f1 = n => Math.round(n * 10) / 10;
-const sp = (x, y, z = 0) => iso(x, y, z).map(f1).join(',');
+const sp = (x, y, z = 0) => iso(x, y, z).map(r1).join(',');
 
 function textWidth(s, size) {
   let w = 0;
@@ -1668,19 +1620,21 @@ function textWidth(s, size) {
 
 function pill(x, y, text, cls, size = 12, style = '') {
   const w = textWidth(text, size) + 16, h = size + 9;
-  // hand-drawn: a wobbly tag with an ink outline instead of a perfect capsule
-  const shape = isHand()
-    ? (() => { const P = [[-w / 2, -h], [w / 2, -h], [w / 2 + 2, -h / 2], [w / 2, 0], [-w / 2, 0], [-w / 2 - 2, -h / 2]]; const d = handPath(P); return `<path class="tag" d="${d.wash}"/><path class="tag-ink" d="${d.ink}"/>`; })()
-    : `<rect x="${f1(-w / 2)}" y="${-h}" width="${f1(w)}" height="${h}" rx="${h / 2}"/>`;
-  return `<g class="${cls}"${style ? ` style="${style}"` : ''} transform="translate(${f1(x)},${f1(y)})">${shape}` +
-    `<text x="0" y="${f1(-h / 2 + size * 0.36)}" font-size="${size}" text-anchor="middle">${text}</text></g>`;
+  let shape;
+  if (isHand()) {
+    const d = handPath([[-w / 2, -h], [w / 2, -h], [w / 2 + 2, -h / 2], [w / 2, 0], [-w / 2, 0], [-w / 2 - 2, -h / 2]]);
+    shape = `<path class="tag" d="${d.wash}"/><path class="tag-ink" d="${d.ink}"/>`;
+  } else {
+    shape = `<rect x="${r1(-w / 2)}" y="${-h}" width="${r1(w)}" height="${h}" rx="${h / 2}"/>`;
+  }
+  return `<g class="${cls}"${style ? ` style="${style}"` : ''} transform="translate(${r1(x)},${r1(y)})">${shape}` +
+    `<text x="0" y="${r1(-h / 2 + size * 0.36)}" font-size="${size}" text-anchor="middle">${text}</text></g>`;
 }
 
 export function placementName(pl) { return pl.name || BUILDINGS[pl.type].name; }
 
-// trees, and for 'full' lamps and boats, kept clear of the buildings and their yards; the
-// same every time. k is the painter-sort key.
-// decor: 'full'; 'light' a few trees; 'none'.
+// Trees (plus lamps and boats for 'full', a few trees for 'light') kept clear of the
+// buildings and their yards, the same every time; k is the painter-sort key.
 export function decorItems(places, decor = 'full') {
   const items = [];
   if (decor === 'none') return items;
@@ -1693,7 +1647,7 @@ export function decorItems(places, decor = 'full') {
   for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
     const m = tileMat(x, y);
     if (!m.startsWith('grass') || blocked.has(`${x},${y}`)) continue;
-    const rim = x >= N - 1 || y >= N - 1; // the near shore, where a few trees frame the board
+    const rim = x >= N - 1 || y >= N - 1;
     if (hash(x, y, 3) < (rim ? 0.55 : 0.18) * (light ? 0.3 : 1)) {
       const jx = (hash(x, y, 4) - 0.5) * 0.3, jy = (hash(x, y, 5) - 0.5) * 0.3;
       items.push({ k: x + y + 1, prop: hash(x, y, 6) < 0.5 ? 'tree_pine' : 'tree_round', x: x + jx, y: y + jy });
@@ -1706,55 +1660,40 @@ export function decorItems(places, decor = 'full') {
   return items;
 }
 
-// placements: live placements from the server (default: the static design ones); a
-// placement's `key` decides whether it is labelled, `status: 'busy'` marks it working,
-// `core` puts a pad under it and dims everything that is not core.
-// notes: placement id -> text appended to its label.
-// decor: 'full' trees, lamps and boats; 'light' a few trees kept clear of core buildings; 'none'.
-// dashes: centre lines on the roads.
+// placements: live ones from the server (default PLACEMENTS); a placement's `key` decides its
+// label, `status: 'busy'` marks it working, `core` dims everything else. notes: id -> label suffix.
 export function renderMap(o = {}) {
   const opt = { labels: 'key', anim: true, objects: true, flows: true, districts: true, decor: 'full', dashes: true, highlight: null, note: '', notes: {}, vb: '-790 -150 1580 950', ...o };
   const places = opt.placements || PLACEMENTS;
   const hasCore = places.some(p => p.core);
-  const accent = pl => pl.accent || BUILDINGS[pl.type].accent;
   const out = [];
 
-  // board edge
   const edge = new Pen();
   edge.poly([[0, N, -0.6], [N, N, -0.6], [N, N, 0], [0, N, 0]], 'm-edge f-l');
   edge.poly([[N, 0, -0.6], [N, N, -0.6], [N, N, 0], [N, 0, 0]], 'm-edge f-r');
   out.push(`<g class="sp">${edge.o.join('')}</g>`);
 
-  // ground tiles merged per material
-  const groups = {};
+  const groups = {}, dash = [], waves = [];
   for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
     const m = tileMat(x, y);
-    (groups[m] = groups[m] || []).push(`M${sp(x, y)}L${sp(x + 1, y)}L${sp(x + 1, y + 1)}L${sp(x, y + 1)}Z`);
-  }
-  out.push(`<g class="sp ground">${Object.entries(groups).map(([m, d]) => `<path class="m-${m} f-l tile nost" d="${d.join('')}"/>`).join('')}</g>`);
-
-  // road centre dashes (one per tile, along the ring) and water ripples
-  const dash = [], waves = [];
-  for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
-    const m = tileMat(x, y);
+    (groups[m] ??= []).push(`M${sp(x, y)}L${sp(x + 1, y)}L${sp(x + 1, y + 1)}L${sp(x, y + 1)}Z`);
     if (m === 'road') {
       if (RING.includes(y)) dash.push(`M${sp(x + 0.22, y + 0.5)}L${sp(x + 0.78, y + 0.5)}`);
       if (RING.includes(x)) dash.push(`M${sp(x + 0.5, y + 0.22)}L${sp(x + 0.5, y + 0.78)}`);
     } else if (m === 'water' && hash(x, y, 7) < 0.4) {
       const [cx, cy] = iso(x + 0.5, y + 0.5);
-      waves.push(`M${f1(cx - 9)},${f1(cy)}q4.5,-4 9,0t9,0`);
+      waves.push(`M${r1(cx - 9)},${r1(cy)}q4.5,-4 9,0t9,0`);
     }
   }
+  out.push(`<g class="sp ground">${Object.entries(groups).map(([m, d]) => `<path class="m-${m} f-l tile nost" d="${d.join('')}"/>`).join('')}</g>`);
   out.push(`<g class="sp">${opt.dashes ? `<path class="ln m-white roaddash" d="${dash.join('')}"/>` : ''}<path class="ln m-white wave" d="${waves.join('')}"/></g>`);
 
-  // focus ring under the highlighted building
   const hl = opt.highlight && places.find(p => p.id === opt.highlight);
   if (hl) {
     const f = footprint(hl), [cx, cy] = iso(f.x + f.w / 2, f.y + f.d / 2, 0.05), rx = (f.w + f.d) / 2 * 32 * 1.25;
-    out.push(`<ellipse class="focus" cx="${f1(cx)}" cy="${f1(cy)}" rx="${f1(rx)}" ry="${f1(rx / 2)}"/>`);
+    out.push(`<ellipse class="focus" cx="${r1(cx)}" cy="${r1(cy)}" rx="${r1(rx)}" ry="${r1(rx / 2)}"/>`);
   }
 
-  // each core building's yard: a rounded square of tinted ground filling its corner
   if (opt.objects) {
     for (const { pts, accent: acc } of yards(places)) {
       if (isHand()) {
@@ -1766,7 +1705,6 @@ export function renderMap(o = {}) {
     }
   }
 
-  // flows run on the roads, under the buildings
   if (opt.flows) {
     for (const fl of FLOWS) {
       const d = 'M' + fl.pts.map(([x, y]) => sp(x, y, 0.15)).join('L');
@@ -1774,17 +1712,16 @@ export function renderMap(o = {}) {
       const dots = opt.anim ? [0, 0.5] : [0.35];
       for (const k of dots) {
         if (opt.anim) {
-          out.push(`<circle class="fdot fd-${fl.kind}" r="5.5"><animateMotion dur="${fl.dur}s" begin="-${f1(fl.dur * k)}s" repeatCount="indefinite" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines=".42 0 .3 1" path="${d}"/></circle>`);
+          out.push(`<circle class="fdot fd-${fl.kind}" r="5.5"><animateMotion dur="${fl.dur}s" begin="-${r1(fl.dur * k)}s" repeatCount="indefinite" calcMode="spline" keyPoints="0;1" keyTimes="0;1" keySplines=".42 0 .3 1" path="${d}"/></circle>`);
         } else {
-          const [x, y] = fl.pts[Math.min(1, fl.pts.length - 1)];
+          const [x, y] = fl.pts[1];
           const [sx, sy] = iso(x, y, 0.15);
-          out.push(`<circle class="fdot fd-${fl.kind}" r="5.5" cx="${f1(sx)}" cy="${f1(sy)}"/>`);
+          out.push(`<circle class="fdot fd-${fl.kind}" r="5.5" cx="${r1(sx)}" cy="${r1(sy)}"/>`);
         }
       }
     }
   }
 
-  // objects, painter-sorted by footprint centre
   if (opt.objects) {
     const objs = places.map(pl => { const f = footprint(pl); return { k: f.x + f.w / 2 + f.y + f.d / 2, pl }; });
     objs.push(...decorItems(places, opt.decor));
@@ -1796,17 +1733,16 @@ export function renderMap(o = {}) {
         b.draw(p, pl);
         const [tx, ty] = iso(pl.x, pl.y);
         const cls = `${pl.id === opt.highlight ? ' is-hl' : ''}${pl.status === 'busy' ? ' is-busy' : ''}${pl.core ? ' is-core' : hasCore ? ' is-dim' : ''}`;
-        out.push(`<g class="sp bld${cls}" data-b="${pl.type}" data-id="${pl.id}" style="--accent:${accent(pl)}" transform="translate(${f1(tx)},${f1(ty)})"><g class="bld-in">${p.o.join('')}</g></g>`);
+        out.push(`<g class="sp bld${cls}" data-b="${pl.type}" data-id="${pl.id}" style="--accent:${accentOf(pl)}" transform="translate(${r1(tx)},${r1(ty)})"><g class="bld-in">${p.o.join('')}</g></g>`);
       } else {
         const p = new Pen();
         PROPS[ob.prop].draw(p);
         const [tx, ty] = iso(ob.x, ob.y);
-        out.push(`<g transform="translate(${f1(tx)},${f1(ty)})"><g class="sp ${ob.cls || ''}" style="--accent:#c47a3a">${p.o.join('')}</g></g>`);
+        out.push(`<g transform="translate(${r1(tx)},${r1(ty)})"><g class="sp ${ob.cls || ''}" style="--accent:#c47a3a">${p.o.join('')}</g></g>`);
       }
     }
   }
 
-  // labels on top
   if (opt.districts) {
     for (const [k, x, y, z] of DISTRICT_LABELS) {
       const [sx, sy] = iso(x, y, z);
@@ -1821,7 +1757,7 @@ export function renderMap(o = {}) {
       const [sx, sy] = iso(f.x + f.w / 2, f.y + f.d / 2, b.h * scaleOf(pl) + 0.5);
       const note = (isHl && opt.note) || opt.notes[pl.id];
       const text = note ? `${placementName(pl)} · ${note}` : placementName(pl);
-      out.push(isHl ? pill(sx, sy, text, 'blbl hl', 12) : pl.core ? pill(sx, sy, text, 'blbl core', 13, `--accent:${accent(pl)}`) : pill(sx, sy, text, 'blbl', 12));
+      out.push(isHl ? pill(sx, sy, text, 'blbl hl', 12) : pl.core ? pill(sx, sy, text, 'blbl core', 13, `--accent:${accentOf(pl)}`) : pill(sx, sy, text, 'blbl', 12));
     }
   }
 
@@ -1837,7 +1773,7 @@ export function renderMap(o = {}) {
 
 export const LOGO = '<svg class="logo-ic" viewBox="0 0 32 32"><path class="lg1" d="M4 14L16 5l12 9v13H4Z"/><path class="lg2" d="M16 5l12 9v13H16Z"/><path class="lg3" d="M12 27v-7h8v7"/><path class="lg3" d="M9 4h7l-3 3H9Z"/></svg>';
 export const ava = (role, lv) => `<span class="ava" title="${WORKERS[role].name}${lv ? ' Lv.' + lv : ''}">${workerSVG(role)}</span>`;
-export const DEMO = '<span class="demo-tag">示意数据</span>';
+const DEMO = '<span class="demo-tag">示意数据</span>';
 
 // the life of one paper; each stage happens in a building
 export const STAGES = [
@@ -1860,11 +1796,10 @@ export const TRACE = [
   ['LLM', '生成撞车报告', '3.2k tok'],
 ];
 
-// ---------- workbench (B): chat + trace + composer ----------
-
 export const traceRow = t => `<div class="tr"><span class="k k-${t[0].toLowerCase()}">${t[0]}</span><code>${t[1]}</code><em>${t[2]}</em></div>`;
 
-// extra: more panes (data-pane="line" / "trace") that the prototype's tabs switch to
+// The B workbench (chat, trace, composer); extra: more panes (data-pane="line" / "trace")
+// that the prototype's tabs switch to.
 export function benchHTML({ closable = false, extra = '' } = {}) {
   return `<div class="bench-tabs"><a class="on" data-tab="chat">对话</a><a data-tab="line">流水线</a><a data-tab="trace">调用轨迹</a>${closable ? '<button class="bench-x" data-act="drawer-close" title="收起 Esc">×</button>' : ''}</div>
     <div class="bench-pane" data-pane="chat">
@@ -1890,8 +1825,6 @@ export function benchHTML({ closable = false, extra = '' } = {}) {
     </div>${extra}
     <div class="composer"><input placeholder="描述你的 idea，或给工厂下订单…"><button class="btn pri" data-act="send">发送</button></div>`;
 }
-
-// ---------- production line (C) ----------
 
 const ST_CHIP = {
   done: () => '<span class="chip ok">完成</span>',
@@ -1944,9 +1877,7 @@ export function millPanels() {
     </div>`;
 }
 
-// ---------- daily paper (D) ----------
-// plain: drop the world metaphor and name things as they are (the prototype's status view)
-
+// The D daily paper; plain drops the world metaphor (the prototype's status view).
 export function dailyBody({ plain = false, map = '' } = {}) {
   const w = (plainName, worldName) => plain ? plainName : worldName;
   const news = [
@@ -2014,7 +1945,9 @@ export function dailyBody({ plain = false, map = '' } = {}) {
     </div>`;
 }
 
-// ---------- the four gallery layouts (1280×800) ----------
+export const LEGEND = `<h4>区域</h4>${Object.values(DISTRICTS).map(d => `<div class="lg-row"><i style="background:${d.color}"></i>${d.name}<em>${d.dir}</em></div>`).join('')}` +
+  `<h4>物流</h4>${Object.entries(FLOW_KINDS).map(([k, v]) => `<div class="lg-row"><i class="fkey fd-${k}"></i>${v}</div>`).join('')}`;
+export const TICKER = 'arXiv 码头今日卸货 48 篇，其中 6 篇与你相关 · 方法设计师 D-03 升至 Lv.3 · 质检所在造纸厂 #2 的草稿里发现 1 处匿名问题 · 算力电厂排队 2 个任务';
 
 function layoutA(still) {
   return `<div class="ui la">
@@ -2029,12 +1962,7 @@ function layoutA(still) {
       </div>
       <div class="hud-r"><span class="bell">3</span><span class="me">你</span></div>
     </header>
-    <aside class="legend pnl">
-      <h4>区域</h4>
-      ${Object.values(DISTRICTS).map(d => `<div class="lg-row"><i style="background:${d.color}"></i>${d.name}<em>${d.dir}</em></div>`).join('')}
-      <h4>物流</h4>
-      ${Object.entries(FLOW_KINDS).map(([k, v]) => `<div class="lg-row"><i class="fkey fd-${k}"></i>${v}</div>`).join('')}
-    </aside>
+    <aside class="legend pnl">${LEGEND}</aside>
     <div class="bcard pnl">
       <div class="bc-head">${spriteSVG('mill').html}<div><small>学术工业区</small><h3>造纸厂 #1</h3><p>VLA × 结构化场景图做长程规划</p></div></div>
       <div class="stages">${STAGES.map(s => `<span class="st ${s.st}">${s.short}</span>`).join('')}</div>
@@ -2043,7 +1971,7 @@ function layoutA(still) {
       <div class="bc-btns"><button class="btn pri">进入工厂</button><button class="btn">查看调用轨迹</button></div>
     </div>
     <button class="newidea btn pri">${itemSVG('egg')}放入一颗新 idea</button>
-    <div class="ticker pnl"><b>世界日报</b><span>arXiv 码头今日卸货 48 篇，其中 6 篇与你相关 · 方法设计师 D-03 升至 Lv.3 · 质检所在造纸厂 #2 的草稿里发现 1 处匿名问题 · 算力电厂排队 2 个任务</span></div>
+    <div class="ticker pnl"><b>世界日报</b><span>${TICKER}</span></div>
     <div class="minimap pnl">${renderMap({ objects: false, flows: false, districts: false, anim: false, labels: 'none' })}<i class="mm-view"></i></div>
     ${DEMO}
   </div>`;
@@ -2129,11 +2057,9 @@ const THEME_DIMS = ['契合 Papertown', '投影可读性', '辨识度', '美术�
 const THEME_SCORE = { paper: [5, 4, 4, '中'], day: [3, 5, 2, '低'], blueprint: [3, 3, 4, '低'], night: [3, 2, 5, '中（发光特效）'] };
 const stars = n => typeof n === 'number' ? `<span class="stars">${'★'.repeat(n)}<s>${'★'.repeat(5 - n)}</s></span>` : n;
 
-// ---------- state ----------
-
 const KEY = 'papertown-design-v1';
 let saved = {};
-try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { saved = {}; }
+try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { /* storage unavailable or corrupt */ }
 const S = {
   layout: saved.view?.layout || 'B',
   theme: saved.view?.theme || 'paper',
@@ -2146,8 +2072,6 @@ const hp = new URLSearchParams(location.hash.slice(1));
 if (L(hp.get('layout'))) S.layout = hp.get('layout');
 if (THEMES[hp.get('theme')]) S.theme = hp.get('theme');
 const SOLO = hp.has('solo');
-
-// ---------- page ----------
 
 const style = document.createElement('style');
 style.textContent = THEME_ORDER.map(k => themeCSS(THEMES[k])).join('\n');
@@ -2199,7 +2123,41 @@ app.innerHTML = `
   <button class="g-close" data-act="close">关闭 Esc</button>
   <div class="g-fs glow" id="fs"></div>
 </div>`;
-  wire();
+
+  document.addEventListener('click', async e => {
+    const c = e.target.closest('[data-layout],[data-theme],[data-act],[data-atab]');
+    if (!c) return;
+    if (c.dataset.layout) { S.layout = c.dataset.layout; save(); renderLayoutCards(); renderPreview(); }
+    else if (c.dataset.theme) { S.theme = c.dataset.theme; save(); renderLayoutCards(); renderThemeCards(); renderPreview(); renderAssets(); }
+    else if (c.dataset.atab) { S.assetTab = c.dataset.atab; renderAssets(); }
+    else {
+      const act = c.dataset.act;
+      if (act === 'pick-layout') { S.pick.layout = S.layout; save(); renderLayoutCards(); renderPreview(); renderBar(); toast(`已选定布局 ${S.layout}`); }
+      if (act === 'pick-theme') { S.pick.theme = S.theme; save(); renderThemeCards(); renderPreview(); renderBar(); toast(`已选定${THEMES[S.theme].name}风格`); }
+      if (act === 'copy') toast(await copyText(resultText()) ? '已复制，粘贴给 Claude 即可' : '复制失败，请手动选择文字');
+      if (act === 'clear') { S.pick = { layout: null, theme: null, note: '' }; save(); renderLayoutCards(); renderThemeCards(); renderPreview(); renderBar(); }
+      if (act === 'full') openFull();
+      if (act === 'close') $('full').hidden = true;
+    }
+    fitAll();
+  });
+
+  $('note').addEventListener('input', e => { S.pick.note = e.target.value; save(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape') $('full').hidden = true; });
+  addEventListener('resize', fitAll);
+
+  const tip = $('tip');
+  $('frame').addEventListener('mousemove', e => {
+    const g = e.target.closest('[data-b]');
+    if (!g) { tip.hidden = true; return; }
+    const pl = PLACEMENTS.find(p => p.id === g.dataset.id), b = BUILDINGS[g.dataset.b];
+    tip.innerHTML = `<b>${placementName(pl)}</b><span>${DISTRICTS[b.district].name}</span><p>${b.rep}</p><em>${b.tech}</em>`;
+    const r = $('frame').getBoundingClientRect();
+    const x = Math.min(e.clientX - r.left + 14, r.width - 280);
+    tip.style.left = `${x}px`; tip.style.top = `${e.clientY - r.top + 14}px`; tip.hidden = false;
+  });
+  $('frame').addEventListener('mouseleave', () => { tip.hidden = true; });
+
   renderLayoutCards(); renderThemeCards(); renderPreview(); renderCompare(); renderAssets(); renderBar();
   requestAnimationFrame(fitAll);
 }
@@ -2254,7 +2212,6 @@ function renderPreview() {
       <div class="g-pc"><ul class="pros">${t.pros.map(x => `<li>${x}</li>`).join('')}</ul><ul class="cons">${t.cons.map(x => `<li>${x}</li>`).join('')}</ul></div>
       <button class="g-btn${pickedT ? ' ghost' : ''}" data-act="pick-theme">${pickedT ? '✓ 已选定这个风格' : '选定这个风格'}</button>
     </div>`;
-  fitAll();
 }
 
 function renderCompare() {
@@ -2308,8 +2265,7 @@ function fitAll() {
     el.style.height = `${800 * s}px`;
     el.firstElementChild.style.transform = `scale(${s})`;
   });
-  const fs = $('fs');
-  if (!$('full').hidden) fs.style.transform = `scale(${Math.min(innerWidth / 1280, innerHeight / 800) * 0.94})`;
+  if (!$('full').hidden) $('fs').style.transform = `scale(${Math.min(innerWidth / 1280, innerHeight / 800) * 0.94})`;
 }
 
 function resultText() {
@@ -2322,7 +2278,7 @@ async function copyText(text) {
   const ta = document.createElement('textarea');
   ta.value = text; document.body.appendChild(ta); ta.select();
   let ok = false;
-  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  try { ok = document.execCommand('copy'); } catch { /* unsupported */ }
   ta.remove();
   return ok;
 }
@@ -2338,50 +2294,7 @@ function openFull() {
   fs.className = `g-fs glow theme-${S.theme}`;
   fs.innerHTML = L(S.layout).render(false);
   $('full').hidden = false;
-  fitAll();
 }
-
-// ---------- events ----------
-
-function wire() {
-
-document.addEventListener('click', async e => {
-  const c = e.target.closest('[data-layout],[data-theme],[data-act],[data-atab]');
-  if (!c) return;
-  if (c.dataset.layout) { S.layout = c.dataset.layout; save(); renderLayoutCards(); renderPreview(); }
-  else if (c.dataset.theme) { S.theme = c.dataset.theme; save(); renderLayoutCards(); renderThemeCards(); renderPreview(); renderAssets(); }
-  else if (c.dataset.atab) { S.assetTab = c.dataset.atab; renderAssets(); }
-  else {
-    const act = c.dataset.act;
-    if (act === 'pick-layout') { S.pick.layout = S.layout; save(); renderLayoutCards(); renderPreview(); renderBar(); toast(`已选定布局 ${S.layout}`); }
-    if (act === 'pick-theme') { S.pick.theme = S.theme; save(); renderThemeCards(); renderPreview(); renderBar(); toast(`已选定${THEMES[S.theme].name}风格`); }
-    if (act === 'copy') toast(await copyText(resultText()) ? '已复制，粘贴给 Claude 即可' : '复制失败，请手动选择文字');
-    if (act === 'clear') { S.pick = { layout: null, theme: null, note: '' }; save(); renderLayoutCards(); renderThemeCards(); renderPreview(); renderBar(); }
-    if (act === 'full') openFull();
-    if (act === 'close') $('full').hidden = true;
-  }
-  fitAll();
-});
-
-$('note').addEventListener('input', e => { S.pick.note = e.target.value; save(); });
-addEventListener('keydown', e => { if (e.key === 'Escape') $('full').hidden = true; });
-addEventListener('resize', fitAll);
-
-const tip = $('tip');
-$('frame').addEventListener('mousemove', e => {
-  const g = e.target.closest('[data-b]');
-  if (!g) { tip.hidden = true; return; }
-  const pl = PLACEMENTS.find(p => p.id === g.dataset.id), b = BUILDINGS[g.dataset.b];
-  tip.innerHTML = `<b>${placementName(pl)}</b><span>${DISTRICTS[b.district].name}</span><p>${b.rep}</p><em>${b.tech}</em>`;
-  const r = $('frame').getBoundingClientRect();
-  const x = Math.min(e.clientX - r.left + 14, r.width - 280);
-  tip.style.left = `${x}px`; tip.style.top = `${e.clientY - r.top + 14}px`; tip.hidden = false;
-});
-$('frame').addEventListener('mouseleave', () => { tip.hidden = true; });
-
-}
-
-// ---------- start ----------
 
 if (SOLO) {
   document.body.className = 'solo';

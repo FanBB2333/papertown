@@ -11,11 +11,9 @@ const THEME_DIMS = ['契合 Papertown', '投影可读性', '辨识度', '美术�
 const THEME_SCORE = { paper: [5, 4, 4, '中'], day: [3, 5, 2, '低'], blueprint: [3, 3, 4, '低'], night: [3, 2, 5, '中（发光特效）'] };
 const stars = n => typeof n === 'number' ? `<span class="stars">${'★'.repeat(n)}<s>${'★'.repeat(5 - n)}</s></span>` : n;
 
-// ---------- state ----------
-
 const KEY = 'papertown-design-v1';
 let saved = {};
-try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { saved = {}; }
+try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { /* storage unavailable or corrupt */ }
 const S = {
   layout: saved.view?.layout || 'B',
   theme: saved.view?.theme || 'paper',
@@ -28,8 +26,6 @@ const hp = new URLSearchParams(location.hash.slice(1));
 if (L(hp.get('layout'))) S.layout = hp.get('layout');
 if (THEMES[hp.get('theme')]) S.theme = hp.get('theme');
 const SOLO = hp.has('solo');
-
-// ---------- page ----------
 
 const style = document.createElement('style');
 style.textContent = THEME_ORDER.map(k => themeCSS(THEMES[k])).join('\n');
@@ -81,7 +77,41 @@ app.innerHTML = `
   <button class="g-close" data-act="close">关闭 Esc</button>
   <div class="g-fs glow" id="fs"></div>
 </div>`;
-  wire();
+
+  document.addEventListener('click', async e => {
+    const c = e.target.closest('[data-layout],[data-theme],[data-act],[data-atab]');
+    if (!c) return;
+    if (c.dataset.layout) { S.layout = c.dataset.layout; save(); renderLayoutCards(); renderPreview(); }
+    else if (c.dataset.theme) { S.theme = c.dataset.theme; save(); renderLayoutCards(); renderThemeCards(); renderPreview(); renderAssets(); }
+    else if (c.dataset.atab) { S.assetTab = c.dataset.atab; renderAssets(); }
+    else {
+      const act = c.dataset.act;
+      if (act === 'pick-layout') { S.pick.layout = S.layout; save(); renderLayoutCards(); renderPreview(); renderBar(); toast(`已选定布局 ${S.layout}`); }
+      if (act === 'pick-theme') { S.pick.theme = S.theme; save(); renderThemeCards(); renderPreview(); renderBar(); toast(`已选定${THEMES[S.theme].name}风格`); }
+      if (act === 'copy') toast(await copyText(resultText()) ? '已复制，粘贴给 Claude 即可' : '复制失败，请手动选择文字');
+      if (act === 'clear') { S.pick = { layout: null, theme: null, note: '' }; save(); renderLayoutCards(); renderThemeCards(); renderPreview(); renderBar(); }
+      if (act === 'full') openFull();
+      if (act === 'close') $('full').hidden = true;
+    }
+    fitAll();
+  });
+
+  $('note').addEventListener('input', e => { S.pick.note = e.target.value; save(); });
+  addEventListener('keydown', e => { if (e.key === 'Escape') $('full').hidden = true; });
+  addEventListener('resize', fitAll);
+
+  const tip = $('tip');
+  $('frame').addEventListener('mousemove', e => {
+    const g = e.target.closest('[data-b]');
+    if (!g) { tip.hidden = true; return; }
+    const pl = PLACEMENTS.find(p => p.id === g.dataset.id), b = BUILDINGS[g.dataset.b];
+    tip.innerHTML = `<b>${placementName(pl)}</b><span>${DISTRICTS[b.district].name}</span><p>${b.rep}</p><em>${b.tech}</em>`;
+    const r = $('frame').getBoundingClientRect();
+    const x = Math.min(e.clientX - r.left + 14, r.width - 280);
+    tip.style.left = `${x}px`; tip.style.top = `${e.clientY - r.top + 14}px`; tip.hidden = false;
+  });
+  $('frame').addEventListener('mouseleave', () => { tip.hidden = true; });
+
   renderLayoutCards(); renderThemeCards(); renderPreview(); renderCompare(); renderAssets(); renderBar();
   requestAnimationFrame(fitAll);
 }
@@ -136,7 +166,6 @@ function renderPreview() {
       <div class="g-pc"><ul class="pros">${t.pros.map(x => `<li>${x}</li>`).join('')}</ul><ul class="cons">${t.cons.map(x => `<li>${x}</li>`).join('')}</ul></div>
       <button class="g-btn${pickedT ? ' ghost' : ''}" data-act="pick-theme">${pickedT ? '✓ 已选定这个风格' : '选定这个风格'}</button>
     </div>`;
-  fitAll();
 }
 
 function renderCompare() {
@@ -190,8 +219,7 @@ function fitAll() {
     el.style.height = `${800 * s}px`;
     el.firstElementChild.style.transform = `scale(${s})`;
   });
-  const fs = $('fs');
-  if (!$('full').hidden) fs.style.transform = `scale(${Math.min(innerWidth / 1280, innerHeight / 800) * 0.94})`;
+  if (!$('full').hidden) $('fs').style.transform = `scale(${Math.min(innerWidth / 1280, innerHeight / 800) * 0.94})`;
 }
 
 function resultText() {
@@ -204,7 +232,7 @@ async function copyText(text) {
   const ta = document.createElement('textarea');
   ta.value = text; document.body.appendChild(ta); ta.select();
   let ok = false;
-  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  try { ok = document.execCommand('copy'); } catch { /* unsupported */ }
   ta.remove();
   return ok;
 }
@@ -220,50 +248,7 @@ function openFull() {
   fs.className = `g-fs glow theme-${S.theme}`;
   fs.innerHTML = L(S.layout).render(false);
   $('full').hidden = false;
-  fitAll();
 }
-
-// ---------- events ----------
-
-function wire() {
-
-document.addEventListener('click', async e => {
-  const c = e.target.closest('[data-layout],[data-theme],[data-act],[data-atab]');
-  if (!c) return;
-  if (c.dataset.layout) { S.layout = c.dataset.layout; save(); renderLayoutCards(); renderPreview(); }
-  else if (c.dataset.theme) { S.theme = c.dataset.theme; save(); renderLayoutCards(); renderThemeCards(); renderPreview(); renderAssets(); }
-  else if (c.dataset.atab) { S.assetTab = c.dataset.atab; renderAssets(); }
-  else {
-    const act = c.dataset.act;
-    if (act === 'pick-layout') { S.pick.layout = S.layout; save(); renderLayoutCards(); renderPreview(); renderBar(); toast(`已选定布局 ${S.layout}`); }
-    if (act === 'pick-theme') { S.pick.theme = S.theme; save(); renderThemeCards(); renderPreview(); renderBar(); toast(`已选定${THEMES[S.theme].name}风格`); }
-    if (act === 'copy') toast(await copyText(resultText()) ? '已复制，粘贴给 Claude 即可' : '复制失败，请手动选择文字');
-    if (act === 'clear') { S.pick = { layout: null, theme: null, note: '' }; save(); renderLayoutCards(); renderThemeCards(); renderPreview(); renderBar(); }
-    if (act === 'full') openFull();
-    if (act === 'close') $('full').hidden = true;
-  }
-  fitAll();
-});
-
-$('note').addEventListener('input', e => { S.pick.note = e.target.value; save(); });
-addEventListener('keydown', e => { if (e.key === 'Escape') $('full').hidden = true; });
-addEventListener('resize', fitAll);
-
-const tip = $('tip');
-$('frame').addEventListener('mousemove', e => {
-  const g = e.target.closest('[data-b]');
-  if (!g) { tip.hidden = true; return; }
-  const pl = PLACEMENTS.find(p => p.id === g.dataset.id), b = BUILDINGS[g.dataset.b];
-  tip.innerHTML = `<b>${placementName(pl)}</b><span>${DISTRICTS[b.district].name}</span><p>${b.rep}</p><em>${b.tech}</em>`;
-  const r = $('frame').getBoundingClientRect();
-  const x = Math.min(e.clientX - r.left + 14, r.width - 280);
-  tip.style.left = `${x}px`; tip.style.top = `${e.clientY - r.top + 14}px`; tip.hidden = false;
-});
-$('frame').addEventListener('mouseleave', () => { tip.hidden = true; });
-
-}
-
-// ---------- start ----------
 
 if (SOLO) {
   document.body.className = 'solo';

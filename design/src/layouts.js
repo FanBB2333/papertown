@@ -6,7 +6,7 @@ import { renderMap, FLOW_KINDS } from './world.js';
 
 export const LOGO = '<svg class="logo-ic" viewBox="0 0 32 32"><path class="lg1" d="M4 14L16 5l12 9v13H4Z"/><path class="lg2" d="M16 5l12 9v13H16Z"/><path class="lg3" d="M12 27v-7h8v7"/><path class="lg3" d="M9 4h7l-3 3H9Z"/></svg>';
 export const ava = (role, lv) => `<span class="ava" title="${WORKERS[role].name}${lv ? ' Lv.' + lv : ''}">${workerSVG(role)}</span>`;
-export const DEMO = '<span class="demo-tag">示意数据</span>';
+const DEMO = '<span class="demo-tag">示意数据</span>';
 
 // the life of one paper; each stage happens in a building
 export const STAGES = [
@@ -29,11 +29,10 @@ export const TRACE = [
   ['LLM', '生成撞车报告', '3.2k tok'],
 ];
 
-// ---------- workbench (B): chat + trace + composer ----------
-
 export const traceRow = t => `<div class="tr"><span class="k k-${t[0].toLowerCase()}">${t[0]}</span><code>${t[1]}</code><em>${t[2]}</em></div>`;
 
-// extra: more panes (data-pane="line" / "trace") that the prototype's tabs switch to
+// The B workbench (chat, trace, composer); extra: more panes (data-pane="line" / "trace")
+// that the prototype's tabs switch to.
 export function benchHTML({ closable = false, extra = '' } = {}) {
   return `<div class="bench-tabs"><a class="on" data-tab="chat">对话</a><a data-tab="line">流水线</a><a data-tab="trace">调用轨迹</a>${closable ? '<button class="bench-x" data-act="drawer-close" title="收起 Esc">×</button>' : ''}</div>
     <div class="bench-pane" data-pane="chat">
@@ -59,8 +58,6 @@ export function benchHTML({ closable = false, extra = '' } = {}) {
     </div>${extra}
     <div class="composer"><input placeholder="描述你的 idea，或给工厂下订单…"><button class="btn pri" data-act="send">发送</button></div>`;
 }
-
-// ---------- production line (C) ----------
 
 const ST_CHIP = {
   done: () => '<span class="chip ok">完成</span>',
@@ -113,9 +110,7 @@ export function millPanels() {
     </div>`;
 }
 
-// ---------- daily paper (D) ----------
-// plain: drop the world metaphor and name things as they are (the prototype's status view)
-
+// The D daily paper; plain drops the world metaphor (the prototype's status view).
 export function dailyBody({ plain = false, map = '' } = {}) {
   const w = (plainName, worldName) => plain ? plainName : worldName;
   const news = [
@@ -183,7 +178,9 @@ export function dailyBody({ plain = false, map = '' } = {}) {
     </div>`;
 }
 
-// ---------- the four gallery layouts (1280×800) ----------
+export const LEGEND = `<h4>区域</h4>${Object.values(DISTRICTS).map(d => `<div class="lg-row"><i style="background:${d.color}"></i>${d.name}<em>${d.dir}</em></div>`).join('')}` +
+  `<h4>物流</h4>${Object.entries(FLOW_KINDS).map(([k, v]) => `<div class="lg-row"><i class="fkey fd-${k}"></i>${v}</div>`).join('')}`;
+export const TICKER = 'arXiv 码头今日卸货 48 篇，其中 6 篇与你相关 · 方法设计师 D-03 升至 Lv.3 · 质检所在造纸厂 #2 的草稿里发现 1 处匿名问题 · 算力电厂排队 2 个任务';
 
 function layoutA(still) {
   return `<div class="ui la">
@@ -198,12 +195,7 @@ function layoutA(still) {
       </div>
       <div class="hud-r"><span class="bell">3</span><span class="me">你</span></div>
     </header>
-    <aside class="legend pnl">
-      <h4>区域</h4>
-      ${Object.values(DISTRICTS).map(d => `<div class="lg-row"><i style="background:${d.color}"></i>${d.name}<em>${d.dir}</em></div>`).join('')}
-      <h4>物流</h4>
-      ${Object.entries(FLOW_KINDS).map(([k, v]) => `<div class="lg-row"><i class="fkey fd-${k}"></i>${v}</div>`).join('')}
-    </aside>
+    <aside class="legend pnl">${LEGEND}</aside>
     <div class="bcard pnl">
       <div class="bc-head">${spriteSVG('mill').html}<div><small>学术工业区</small><h3>造纸厂 #1</h3><p>VLA × 结构化场景图做长程规划</p></div></div>
       <div class="stages">${STAGES.map(s => `<span class="st ${s.st}">${s.short}</span>`).join('')}</div>
@@ -212,7 +204,7 @@ function layoutA(still) {
       <div class="bc-btns"><button class="btn pri">进入工厂</button><button class="btn">查看调用轨迹</button></div>
     </div>
     <button class="newidea btn pri">${itemSVG('egg')}放入一颗新 idea</button>
-    <div class="ticker pnl"><b>世界日报</b><span>arXiv 码头今日卸货 48 篇，其中 6 篇与你相关 · 方法设计师 D-03 升至 Lv.3 · 质检所在造纸厂 #2 的草稿里发现 1 处匿名问题 · 算力电厂排队 2 个任务</span></div>
+    <div class="ticker pnl"><b>世界日报</b><span>${TICKER}</span></div>
     <div class="minimap pnl">${renderMap({ objects: false, flows: false, districts: false, anim: false, labels: 'none' })}<i class="mm-view"></i></div>
     ${DEMO}
   </div>`;

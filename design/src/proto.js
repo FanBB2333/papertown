@@ -1,24 +1,20 @@
-// Interactive prototype of the chosen design: layout A (world-first), paper-craft style.
-// The world map is the home screen. Chat is the B workbench sliding in from the side,
-// clicking a building opens its C-style production line, and the HUD switches to a
-// D-style status view that drops the world metaphor.
+// Interactive prototype of the chosen design (layout A, paper-craft): the world map as home,
+// the B workbench as a chat drawer, C-style building details and a D-style status view.
 //
 //   prototype.html#theme=paper&view=status&open=mill&chat
 
 import { THEMES, THEME_ORDER, themeCSS } from './theme.js';
 import { BUILDINGS, DISTRICTS, ITEMS, WORKERS, spriteSVG, itemSVG } from './sprites.js';
-import { renderMap, PLACEMENTS, FLOW_KINDS, placementName } from './world.js';
-import { LOGO, ava, STAGES, TRACE, traceRow, benchHTML, pipelineHTML, millPanels, dailyBody } from './layouts.js';
+import { renderMap, PLACEMENTS, placementName } from './world.js';
+import { LOGO, ava, STAGES, TRACE, LEGEND, TICKER, traceRow, benchHTML, pipelineHTML, millPanels, dailyBody } from './layouts.js';
 import { SAMPLE_REPOS } from './sample.js';
-
-// ---------- what happens inside each building ----------
-// stations: the building's own production line; st is done / run / todo.
-// from / to: [placement id, item] pairs, shown as incoming and outgoing goods.
 
 const st = (name, out, s, team = []) => ({ name, out, st: s, team });
 const repoGoods = b => SAMPLE_REPOS.filter(r => r.to.includes(b)).map(r => [r.id, 'crate']);
-const [REPO_A, REPO_B] = SAMPLE_REPOS;
+const REPO_B = SAMPLE_REPOS[1];
 
+// What happens inside each building: stations are its production line (st: done / run / todo);
+// from / to are [placement id, item] pairs for incoming and outgoing goods.
 const BUILDING_FLOWS = {
   dock_arxiv: { job: '今日到货 48 篇',
     stations: [st('船靠岸', 'notes', 'done'), st('卸货', 'tex', 'done'), st('送海关', 'notes', 'run', ['scout']), st('入馆', 'notes', 'todo')],
@@ -148,18 +144,8 @@ const BUILDING_FLOWS = {
     real: '会议 DDL 和日程。' },
 };
 
-// the sample repos all live in the one depot now
-const place = id => PLACEMENTS.find(p => p.id === id) || PLACEMENTS.find(p => p.type === id) ||
+const place = id => PLACEMENTS.find(p => p.id === id) ||
   (SAMPLE_REPOS.some(r => r.id === id) ? PLACEMENTS.find(p => p.type === 'depot') : undefined);
-
-// a depot takes its job and outgoing goods from its repo
-function flowOf(pl) {
-  const f = BUILDING_FLOWS[pl.type], r = SAMPLE_REPOS.find(x => x.id === pl.id);
-  if (!r) return f;
-  return { ...f, repo: r, job: `${r.issues} 个 open issue`, to: [...r.to.map(b => [b, 'crate']), ...f.to] };
-}
-
-// ---------- page ----------
 
 const style = document.createElement('style');
 style.textContent = THEME_ORDER.map(k => themeCSS(THEMES[k])).join('\n');
@@ -168,6 +154,7 @@ document.head.appendChild(style);
 const hp = new URLSearchParams(location.hash.slice(1));
 const theme = THEMES[hp.get('theme')] ? hp.get('theme') : 'paper';
 const BASE = { x: -790, y: -150, w: 1580, h: 950 };
+const MIN_W = 420, MAX_W = BASE.w * 1.5;
 
 const RUNNING = [
   { id: 'mill', title: '造纸厂 #1 · VLA 场景图规划', step: '方法设计', pct: 60 },
@@ -200,12 +187,7 @@ app.innerHTML = `
   </header>
 
   <div class="lg-bar w-only"><button class="btn" data-act="legend">图例</button><span class="p-hint pnl">点建筑看流水线 · 拖动平移 · 滚轮缩放</span></div>
-  <aside class="legend pnl w-only" id="legend" hidden>
-    <h4>区域</h4>
-    ${Object.values(DISTRICTS).map(d => `<div class="lg-row"><i style="background:${d.color}"></i>${d.name}<em>${d.dir}</em></div>`).join('')}
-    <h4>物流</h4>
-    ${Object.entries(FLOW_KINDS).map(([k, v]) => `<div class="lg-row"><i class="fkey fd-${k}"></i>${v}</div>`).join('')}
-  </aside>
+  <aside class="legend pnl w-only" id="legend" hidden>${LEGEND}</aside>
 
   <aside class="running pnl w-only">
     <h4>进行中</h4>
@@ -213,7 +195,7 @@ app.innerHTML = `
   </aside>
 
   <button class="newidea btn pri w-only" data-act="newidea">${itemSVG('egg')}放入一颗新 idea</button>
-  <div class="ticker pnl w-only" data-view="status" title="打开运行状态"><b>世界日报</b><span>arXiv 码头今日卸货 48 篇，其中 6 篇与你相关 · 方法设计师 D-03 升至 Lv.3 · 质检所在造纸厂 #2 的草稿里发现 1 处匿名问题 · 算力电厂排队 2 个任务</span></div>
+  <div class="ticker pnl w-only" data-view="status" title="打开运行状态"><b>世界日报</b><span>${TICKER}</span></div>
   <div class="minimap pnl w-only" id="minimap">
     ${renderMap({ objects: false, flows: false, districts: false, anim: false, labels: 'none' }).replace('</svg>', '<rect class="mm-rect" id="mm-rect"/></svg>')}
     <div class="mm-zoom"><button data-zoom="in" title="放大">＋</button><button data-zoom="out" title="缩小">－</button><button data-zoom="reset" title="复位">⟲</button></div>
@@ -237,8 +219,6 @@ app.innerHTML = `
 const $ = id => document.getElementById(id);
 const root = $('proto');
 
-// ---------- views ----------
-
 function setView(v) {
   root.dataset.mode = v;
   root.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
@@ -246,8 +226,6 @@ function setView(v) {
   $('tip').hidden = true;
   if (v === 'world') requestAnimationFrame(applyVB);
 }
-
-// ---------- building detail (C) ----------
 
 function openDetail(key) {
   const pl = place(key);
@@ -274,7 +252,7 @@ function openDetail(key) {
       `<span class="chip">${b.tech}</span><span class="chip pri">方法设计 60%</span><span class="chip">预算 $0.42 / $1.00</span>`) +
       pipelineHTML(STAGES) + `<section class="detail">${millPanels()}</section>`;
   } else {
-    const f = flowOf(pl), r = f.repo;
+    const f = BUILDING_FLOWS[pl.type];
     const cur = f.stations.find(s => s.st === 'run') || f.stations[f.stations.length - 1];
     const team = [...new Set(f.stations.flatMap(s => s.team))];
     const goods = (list, dir) => list.length ? list.map(([id, it]) => {
@@ -300,17 +278,8 @@ function openDetail(key) {
           <div class="io-list">${goods(f.from, '来自')}${goods(f.to, '送往')}</div>
         </div>
         <div class="pnl">
-          ${r ? `<h4>仓库信息 <span class="chip">示例数据</span></h4>
-          <dl class="kv">
-            <dt>仓库</dt><dd>${r.repo}</dd>
-            <dt>简介</dt><dd>${r.desc}</dd>
-            <dt>语言</dt><dd>${r.lang} · ★ ${r.stars}</dd>
-            <dt>Issue</dt><dd>${r.issues} 个 open · ${r.prs} 个 PR</dd>
-            <dt>Release</dt><dd>${r.release} · ${r.updated}更新</dd>
-          </dl>
-          <p class="real muted">${f.real}接入后换成你自己的仓库。</p>`
-          : `<h4>现实里对应什么</h4>
-          <p class="real">${f.real}</p>`}
+          <h4>现实里对应什么</h4>
+          <p class="real">${f.real}</p>
           <div class="btns"><button class="btn pri" data-act="ask" data-ask="${pl.id}">问问这里的员工</button><button class="btn" data-view="status">看运行状态</button></div>
         </div>
       </section>`;
@@ -324,10 +293,7 @@ function openDetail(key) {
 
 const closeDetail = () => { $('modal').hidden = true; };
 
-// ---------- chat drawer (B) ----------
-
-const chatEl = () => root.querySelector('.chat');
-const input = () => root.querySelector('.composer input');
+const chatEl = root.querySelector('.chat'), input = root.querySelector('.composer input');
 
 function setTab(t) {
   $('drawer').dataset.show = t;
@@ -337,8 +303,8 @@ function setTab(t) {
 function openChat({ focus = false, placeholder } = {}) {
   root.classList.add('chat-open');
   setTab('chat');
-  if (placeholder) input().placeholder = placeholder;
-  if (focus) setTimeout(() => input().focus(), 280);
+  if (placeholder) input.placeholder = placeholder;
+  if (focus) setTimeout(() => input.focus(), 280);
 }
 const closeChat = () => root.classList.remove('chat-open');
 
@@ -346,40 +312,37 @@ function addMsg(html, cls) {
   const m = document.createElement('div');
   m.className = `msg ${cls}`;
   m.innerHTML = html;
-  chatEl().appendChild(m);
-  chatEl().scrollTop = chatEl().scrollHeight;
+  chatEl.appendChild(m);
+  chatEl.scrollTop = chatEl.scrollHeight;
   return m;
 }
 
 const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 function send() {
-  const v = input().value.trim();
+  const v = input.value.trim();
   if (!v) return;
-  input().value = '';
+  input.value = '';
   addMsg(esc(v), 'mine');
   const typing = addMsg('<span class="typing"><i></i><i></i><i></i></span>', 'bot');
   setTimeout(() => {
     typing.innerHTML = `<div class="who">${ava('hatcher', 2)}<b>孵化员 H-01</b></div>
       <p>收到。我先去图书馆和 arXiv 码头查有没有撞车的工作，报告出来会贴在这里。</p>
       <div class="cost">原型里这是一条预设回复</div>`;
-    chatEl().scrollTop = chatEl().scrollHeight;
+    chatEl.scrollTop = chatEl.scrollHeight;
     const rows = [['SKILL', 'hatchery/novelty-check', '加载 SKILL.md'], ['MCP', `arxiv.search("${v.slice(0, 24)}")`, '检索中…']];
     $('trace-all').insertAdjacentHTML('afterbegin', rows.map(r => traceRow(r.map(esc))).join(''));
   }, 700);
 }
 
 function ask(id) {
-  const pl = place(id), f = BUILDING_FLOWS[pl.type] && flowOf(pl);
+  const pl = place(id), f = BUILDING_FLOWS[pl.type];
   const role = pl.type === 'mill' ? 'designer' : f.stations.flatMap(s => s.team)[0] || 'scout';
   const cur = f && (f.stations.find(s => s.st === 'run') || f.stations[0]);
-  openChat({ placeholder: `问问${placementName(pl)}…` });
+  openChat({ focus: true, placeholder: `问问${placementName(pl)}…` });
   addMsg(`<div class="who">${ava(role)}<b>${WORKERS[role].name} · ${placementName(pl)}</b></div>
     <p>${pl.type === 'mill' ? '方法草案写到 v0.3 了，还差 baseline 的对比设计。想先看哪部分？' : `这里现在是「${f.job}」，进行到「${cur.name}」。想问什么？`}</p>`, 'bot');
-  setTimeout(() => input().focus(), 280);
 }
-
-// ---------- pan & zoom ----------
 
 const mapSvg = $('world').querySelector('svg');
 const mmSvg = $('minimap').querySelector('svg');
@@ -388,11 +351,9 @@ let vb = { ...BASE };
 function aspect() { const r = mapSvg.getBoundingClientRect(); return r.height / r.width || BASE.h / BASE.w; }
 
 function applyVB() {
-  const minW = 420, maxW = BASE.w * 1.5;
   const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
-  vb.w = Math.min(maxW, Math.max(minW, vb.w));
+  vb.w = Math.min(MAX_W, Math.max(MIN_W, vb.w));
   vb.h = vb.w * aspect();
-  // keep the centre over the board
   const ncx = Math.min(BASE.x + BASE.w, Math.max(BASE.x, cx)), ncy = Math.min(BASE.y + BASE.h, Math.max(BASE.y, cy));
   vb.x = ncx - vb.w / 2; vb.y = ncy - vb.h / 2;
   mapSvg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
@@ -417,7 +378,7 @@ function svgPoint(svg, cx, cy) {
 
 function zoomAt(k, cx, cy) {
   const before = svgPoint(mapSvg, cx, cy);
-  const nw = Math.min(BASE.w * 1.5, Math.max(420, vb.w * k));
+  const nw = Math.min(MAX_W, Math.max(MIN_W, vb.w * k));
   const s = nw / vb.w;
   vb.x = before.x - (before.x - vb.x) * s;
   vb.y = before.y - (before.y - vb.y) * s;
@@ -457,8 +418,6 @@ mmSvg.addEventListener('click', e => {
   applyVB();
 });
 
-// ---------- hover tooltip ----------
-
 function hover(e) {
   const tip = $('tip');
   const g = root.dataset.mode === 'world' && $('modal').hidden && e.target.closest?.('.p-world [data-b]');
@@ -468,8 +427,6 @@ function hover(e) {
   const x = Math.min(e.clientX + 16, innerWidth - 300), y = Math.min(e.clientY + 16, innerHeight - 140);
   tip.style.left = `${x}px`; tip.style.top = `${y}px`; tip.hidden = false;
 }
-
-// ---------- events ----------
 
 root.addEventListener('click', e => {
   const t = e.target;
@@ -502,8 +459,6 @@ addEventListener('keydown', e => {
   else if (root.classList.contains('chat-open')) closeChat();
 });
 addEventListener('resize', applyVB);
-
-// ---------- start ----------
 
 setView(hp.get('view') === 'status' ? 'status' : 'world');
 fitBoard();

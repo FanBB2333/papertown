@@ -133,10 +133,9 @@ body.solo { padding: 0; background: #111; }
 .g-stage .bld:hover, .g-fs .bld:hover { filter: brightness(1.08); }
 
 .flowpath { fill: none; stroke: var(--brand); stroke-width: 2; stroke-dasharray: 2 7; stroke-linecap: round; opacity: .45; }
-.fdot { stroke: rgba(0,0,0,.35); stroke-width: 1.2; }
-.fd-paper { fill: #fffaf0; } .fd-egg { fill: #f2cf63; } .fd-code { fill: #d98a3d; } .fd-energy { fill: #ffd84a; } .fd-data { fill: #6fb6e0; }
-.fkey { width: 10px; height: 10px; border-radius: 50% !important; border: 1px solid rgba(0,0,0,.3); }
-.fkey.fd-paper { background: #fffaf0; } .fkey.fd-egg { background: #f2cf63; } .fkey.fd-code { background: #d98a3d; } .fkey.fd-energy { background: #ffd84a; } .fkey.fd-data { background: #6fb6e0; }
+.fd-paper { --fd: #fffaf0; } .fd-egg { --fd: #f2cf63; } .fd-code { --fd: #d98a3d; } .fd-energy { --fd: #ffd84a; } .fd-data { --fd: #6fb6e0; }
+.fdot { fill: var(--fd); stroke: rgba(0,0,0,.35); stroke-width: 1.2; }
+.fkey { width: 10px; height: 10px; border-radius: 50% !important; border: 1px solid rgba(0,0,0,.3); background: var(--fd); }
 
 .dlbl rect { fill: var(--panel); stroke: var(--line); opacity: .93; }
 .dlbl text { fill: var(--ink); font-family: var(--head); font-weight: 700; letter-spacing: .08em; }
@@ -164,7 +163,6 @@ body.solo { padding: 0; background: #111; }
 }
 .theme-night .map-bg { background: radial-gradient(ellipse at 50% 35%, #1a2440 0%, #0b0f18 72%); }
 .theme-night .flowpath { opacity: .7; }
-.theme-night .glow .m-win, .theme-night .glow .lampbulb { filter: drop-shadow(0 0 2.5px #ffb347); }
 .theme-night.glow .m-win, .theme-night.glow .lampbulb { filter: drop-shadow(0 0 2.5px #ffb347); }
 .theme-night.glow .fdot { filter: drop-shadow(0 0 4px currentColor); }
 .theme-night .fdot { stroke: rgba(255,255,255,.6); }
@@ -268,7 +266,6 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
 .verdict .chip { margin-right: 6px; }
 .msg .btns { display: flex; gap: 8px; margin-top: 10px; }
 .cost { font-size: 11.5px; color: var(--muted); margin-top: 8px; }
-.cost a { color: var(--brand); }
 .trace { border-top: var(--pborder); padding: 10px 14px; background: var(--panel2); flex: none; }
 .trace h5 { font-size: 12px; color: var(--muted); margin-bottom: 4px; font-family: var(--font); }
 .tr { display: grid; grid-template-columns: 50px 1fr auto; gap: 8px; align-items: center; font-size: 12px; padding: 2px 0; }
@@ -292,7 +289,7 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
 .lc .line { position: relative; padding: 16px 18px 10px; flex: none; }
 .belt { position: absolute; left: 16px; right: 16px; top: 76px; height: 12px; border-radius: 6px;
   background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 20%, transparent) 0 10px, color-mix(in srgb, var(--ink) 8%, transparent) 10px 20px); }
-.anim-ui .belt { animation: belt .9s cubic-bezier(.6, 0, .3, 1) infinite; } /* indexing: a push, then a rest */
+.anim-ui .belt { animation: belt .9s cubic-bezier(.6, 0, .3, 1) infinite; }
 @keyframes belt { to { background-position: 20px 0; } }
 .stations { position: relative; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; }
 .stn { position: relative; background: var(--panel); border: var(--pborder); border-radius: var(--radius); box-shadow: var(--pshadow); padding: 8px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
@@ -361,7 +358,7 @@ kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); 
 .lead-steps li.todo { opacity: .6; }
 .inset .mapbox { height: 214px; border-radius: var(--radius); overflow: hidden; border: var(--pborder); margin: 6px 0 10px; }
 
-/* ---------- prototype: A as home, B as chat drawer, C as building detail, D as status view ---------- */
+/* ---------- prototype ---------- */
 body.proto-page { padding: 0; overflow: hidden; }
 .proto { position: fixed; inset: 0; overflow: hidden; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.5; }
 .proto h1, .proto h2, .proto h3, .proto h4, .proto h5, .proto h6 { font-family: var(--head); text-transform: var(--hcase); margin: 0; }
@@ -452,7 +449,6 @@ body.proto-page { padding: 0; overflow: hidden; }
 .io small { color: var(--muted); font-size: 12px; }
 .io .go { color: var(--muted); }
 .real { font-size: 13.5px; line-height: 1.65; margin-bottom: 12px !important; }
-.kv + .real { margin-top: 10px !important; font-size: 12.5px; }
 .p-sheet .btns { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .ptip { position: fixed; z-index: 20; width: 280px; padding: 10px 12px; pointer-events: none; font-size: 12.5px; }

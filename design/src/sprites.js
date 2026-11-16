@@ -5,13 +5,11 @@
 export const TW = 64, TH = 32, ZU = 26;
 const HW = TW / 2, HH = TH / 2, R2 = Math.SQRT2;
 export const iso = (x, y, z = 0) => [(x - y) * HW, (x + y) * HH - z * ZU];
-const r1 = n => Math.round(n * 10) / 10;
+export const r1 = n => Math.round(n * 10) / 10;
 const pt = p => `${r1(p[0])},${r1(p[1])}`;
 
-// Hand-drawn mode: every polygon comes out as a slightly wobbly wash of colour plus a
-// separate ink line drawn over it, a little off register and overshooting the corners,
-// like a sketch coloured in afterwards. The wobble is seeded by the coordinates, so the
-// same shape always draws the same way and shared edges get the same stroke.
+// Hand-drawn mode: a wobbly wash plus a separate ink line, seeded by the coordinates so
+// a shape always draws the same way.
 let HAND = false;
 export function handDrawn(on = true) { HAND = on; }
 export const isHand = () => HAND;
@@ -60,8 +58,8 @@ function inkPath(P) {
   return d;
 }
 
+// Collects one sprite's SVG markup; k scales it (the core buildings stand larger than life).
 export class Pen {
-  // k draws everything k times its size: the core buildings stand larger than life
   constructor(k = 1) { this.k = k; this.o = []; this.bb = [1e9, 1e9, -1e9, -1e9]; }
   I(x, y, z = 0) { const k = this.k; return iso(x * k, y * k, z * k); }
   grow(x, y) {
@@ -69,7 +67,6 @@ export class Pen {
     if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y;
   }
   P(x, y, z = 0) { const p = this.I(x, y, z); this.grow(p[0], p[1]); return p; }
-  raw(s) { this.o.push(s); return this; }
   poly(pts, cls) {
     const P = pts.map(q => this.P(q[0], q[1], q[2]));
     if (!HAND) {
@@ -94,7 +91,6 @@ export class Pen {
   }
   circ(cx, cy, r, cls) { return this.ell(cx, cy, r, r, cls); }
 
-  // ---- solids ----
   box(x, y, z, w, d, h, m) {
     this.poly([[x, y + d, z], [x + w, y + d, z], [x + w, y + d, z + h], [x, y + d, z + h]], `${m} f-l`);
     this.poly([[x + w, y, z], [x + w, y + d, z], [x + w, y + d, z + h], [x + w, y, z + h]], `${m} f-r`);
@@ -173,7 +169,6 @@ export class Pen {
     return this;
   }
 
-  // ---- facade details ----
   winL(Y, x0, z0, w, h, m = 'm-win') { return this.poly([[x0, Y, z0], [x0 + w, Y, z0], [x0 + w, Y, z0 + h], [x0, Y, z0 + h]], `${m} f-l`); }
   winR(X, y0, z0, w, h, m = 'm-win') { return this.poly([[X, y0, z0], [X, y0 + w, z0], [X, y0 + w, z0 + h], [X, y0, z0 + h]], `${m} f-r`); }
   rowL(Y, x0, x1, z, n, w, h, m) { const g = (x1 - x0 - n * w) / (n - 1 || 1); for (let i = 0; i < n; i++) this.winL(Y, x0 + i * (w + g), z, w, h, m); return this; }
@@ -230,18 +225,15 @@ export class Pen {
     return this.winL(y + 1.33, x + 0.05, 0.24, 0.26, 0.12, 'm-glass');
   }
 
-  svg(cls = '', style = '', pad = 6) {
+  svg(cls, style, pad = 6) {
     const [x0, y0, x1, y1] = this.bb;
     const vb = `${r1(x0 - pad)} ${r1(y0 - pad)} ${r1(x1 - x0 + pad * 2)} ${r1(y1 - y0 + pad * 2)}`;
-    return { vb, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, body: `<g class="sp ${cls}"${style ? ` style="${style}"` : ''}>${this.o.join('')}</g>` };
+    return { vb, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2, body: `<g class="sp ${cls}" style="${style}">${this.o.join('')}</g>` };
   }
 }
 
-// ---------- districts & buildings ----------
-
-// The town is laid out as a 3×3 grid: the four core buildings each have a corner yard,
-// the strips between two yards hold the buildings that serve both, and the square in
-// the middle is where an idea becomes a project. `dir` is where the area sits.
+// The town's 3×3 grid of areas: core yards in the corners, shared strips between them,
+// the idea square in the middle. `dir` is where the area sits.
 export const DISTRICTS = {
   camp: { name: '造纸厂大本营', en: 'Base Camp', dir: '北', color: '#a8743f' },
   code: { name: '仓库', en: 'Code Depot', dir: '东', color: '#4f8a3d' },
@@ -661,8 +653,6 @@ export const BUILDINGS = {
   },
 };
 
-// ---------- props & terrain ----------
-
 export const PROPS = {
   tree_round: { name: '圆冠树', w: 1, d: 1, draw(p) {
     p.box(0.45, 0.45, 0, 0.1, 0.1, 0.42, 'm-trunk');
@@ -697,8 +687,6 @@ export const PROPS = {
   tile_sand: { name: '沙滩', w: 1, d: 1, draw(p) { p.box(0, 0, -0.15, 1, 1, 0.15, 'm-sand'); } },
 };
 
-// ---------- flat icons: items & workers (48×48) ----------
-
 const sheet = (x, y, w, h, m = 'm-white') => `<rect class="${m} f-l" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>`;
 
 export const ITEMS = {
@@ -731,7 +719,6 @@ export const ITEMS = {
     '<ellipse class="m-acc f-t" cx="24" cy="12" rx="14" ry="6"/><path class="ln m-white" d="M10 24c0 3.5 6 6 14 6s14-2.5 14-6"/>' },
 };
 
-const badge = inner => `<circle class="m-white f-l" cx="36.5" cy="35" r="8"/>${inner}`;
 export const WORKERS = {
   hatcher: { name: '孵化员', rep: '查重、写撞车报告', accent: '#e2b84a', mark: '<ellipse class="m-acc f-l" cx="36.5" cy="35.5" rx="3.2" ry="4.2"/>' },
   scout: { name: '调研员', rep: '检索文献、整理 related work', accent: '#5f7f9e', mark: '<circle class="ln m-acc" cx="35.5" cy="34" r="3.2"/><path class="ln m-acc" d="M38 36.5l3 3"/>' },
@@ -742,40 +729,33 @@ export const WORKERS = {
   keeper: { name: '仓管员', rep: '维护仓库：回 issue、管 release', accent: '#c47a3a', mark: '<rect class="ln m-acc" x="32.5" y="31.5" width="8" height="7" rx="1"/><path class="ln m-acc" d="M32.5 34.5h8"/>' },
 };
 
-// ---------- standalone SVG helpers ----------
-
-export function drawBuilding(type, o = {}) {
-  const b = BUILDINGS[type], p = new Pen();
-  b.draw(p, o);
-  return p;
-}
+const withHTML = s => ({ ...s, html: `<svg class="sp-svg" viewBox="${s.vb}" xmlns="http://www.w3.org/2000/svg">${s.body}</svg>` });
+const icon = (accent, body) =>
+  `<svg class="sp-svg ic" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><g class="sp" style="--accent:${accent}">${body}</g></svg>`;
 
 export function spriteSVG(type, o = {}) {
-  const b = BUILDINGS[type], p = drawBuilding(type, o);
-  const s = p.svg(`b-${type}`, `--accent:${o.accent || b.accent}`);
-  return { ...s, html: `<svg class="sp-svg" viewBox="${s.vb}" xmlns="http://www.w3.org/2000/svg">${s.body}</svg>` };
+  const b = BUILDINGS[type], p = new Pen();
+  b.draw(p, o);
+  return withHTML(p.svg(`b-${type}`, `--accent:${o.accent || b.accent}`));
 }
 
 export function propSVG(key) {
   const p = new Pen();
   PROPS[key].draw(p);
-  const s = p.svg(`p-${key}`, '--accent:#c47a3a');
-  return { ...s, html: `<svg class="sp-svg" viewBox="${s.vb}" xmlns="http://www.w3.org/2000/svg">${s.body}</svg>` };
+  return withHTML(p.svg(`p-${key}`, '--accent:#c47a3a'));
 }
 
 export function itemSVG(key) {
-  const it = ITEMS[key];
-  return `<svg class="sp-svg ic" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><g class="sp" style="--accent:${it.accent}">${it.svg}</g></svg>`;
+  return icon(ITEMS[key].accent, ITEMS[key].svg);
 }
 
 export function workerBody(key) {
-  const w = WORKERS[key];
   return '<ellipse class="shadow" cx="24" cy="44" rx="13" ry="3"/>' +
     '<path class="m-acc f-l" d="M9 44c0-10 6.5-16 15-16s15 6 15 16Z"/><path class="m-acc f-r" d="M24 28c8.5 0 15 6 15 16H24Z"/>' +
     '<circle class="m-egg f-l" cx="24" cy="17" r="9.5"/><circle class="m-dark f-l nost" cx="20.8" cy="17.5" r="1.3"/><circle class="m-dark f-l nost" cx="27.2" cy="17.5" r="1.3"/>' +
-    badge(w.mark);
+    '<circle class="m-white f-l" cx="36.5" cy="35" r="8"/>' + WORKERS[key].mark;
 }
 
 export function workerSVG(key) {
-  return `<svg class="sp-svg ic" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><g class="sp" style="--accent:${WORKERS[key].accent}">${workerBody(key)}</g></svg>`;
+  return icon(WORKERS[key].accent, workerBody(key));
 }

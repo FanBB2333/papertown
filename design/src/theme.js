@@ -1,11 +1,5 @@
-// Art styles. One palette definition feeds both the gallery (as CSS with color-mix)
-// and the asset export (resolved to plain colors so the SVG files work anywhere).
-//
-// Material spec:
-//   ['acc']            the sprite's accent colour
-//   ['mix', p, base]   p% accent mixed with base
-//   ['fixed', colour]
-//   ['alpha', a]       accent at alpha a
+// Art styles: one palette feeds the pages (CSS with color-mix) and the asset export (plain colours).
+// Material spec: ['acc'] accent · ['mix', p, base] p% accent in base · ['fixed', colour] · ['alpha', a]
 
 export const THEMES = {
   paper: {
@@ -143,8 +137,6 @@ export const THEMES = {
 
 export const THEME_ORDER = ['paper', 'day', 'blueprint', 'night'];
 
-// ---------- CSS for the browser ----------
-
 function specCSS(spec) {
   switch (spec[0]) {
     case 'acc': return 'var(--accent)';
@@ -154,6 +146,7 @@ function specCSS(spec) {
   }
 }
 
+// the theme's rules, scoped to .theme-<key>
 export function themeCSS(t) {
   const s = `.theme-${t.key}`;
   const u = t.ui;
@@ -163,7 +156,6 @@ export function themeCSS(t) {
   for (const [m, spec] of Object.entries(t.mats)) css += `${s} .m-${m}{--c:${specCSS(spec)}}`;
   css += `${s} .f-l{fill:var(--c)}${s} .f-t{fill:color-mix(in srgb,var(--c),white ${t.shade[0]}%)}` +
     `${s} .f-r{fill:color-mix(in srgb,var(--c),black ${t.shade[1]}%)}`;
-  // hand-drawn sprites: the wash carries no stroke, the separate ink line does
   const shapes = `:is(polygon,path,ellipse,circle,rect):not(.ln):not(.ln2):not(.hl):not(.smoke):not(.beam):not(.shadow):not(.nost):not(.ink)${t.ink ? ':not(.wash)' : ''}`;
   css += t.stroke
     ? `${s} .sp ${shapes}{stroke:${specCSS(t.stroke)};stroke-width:${t.strokeW};stroke-linejoin:round}`
@@ -174,8 +166,6 @@ export function themeCSS(t) {
   css += `${s} .sp .t-sign{fill:${t.text}}${s} .sp .smoke{fill:${t.smoke}}${s} .sp .hl{fill:${t.hl}}${s} .sp .beam{fill:${t.beam}}`;
   return css;
 }
-
-// ---------- resolved colours for the exported SVG files ----------
 
 function parseC(c) {
   if (c === 'transparent') return [0, 0, 0, 0];
@@ -211,9 +201,10 @@ function specColor(spec, accent) {
   }
 }
 
-// one material's base colour (the left-face fill) as a plain colour string
+// a material's base (left-face) colour as a plain colour string
 export function matColor(t, mat, accent) { return toC(specColor(t.mats[mat], accent)); }
 
+// bakes the theme's colours into sprite markup as fill/stroke attributes, for the exported files
 export function resolveSVG(markup, accent, t) {
   const WHITE = [255, 255, 255, 1], BLACK = [0, 0, 0, 1];
   const stroke = t.stroke ? toC(specColor(t.stroke, accent)) : null;

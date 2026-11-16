@@ -1,6 +1,5 @@
-// Builds design/index.html (the design gallery) and design/prototype.html (the chosen
-// design), each one self-contained file that opens offline by double-click, and exports
-// the sprite library to assets/ in the paper-craft palette.
+// Builds design/index.html (gallery) and design/prototype.html as self-contained offline
+// pages, and exports the sprite library to assets/ in the paper-craft palette.
 //
 //   node design/build.mjs
 
@@ -8,14 +7,13 @@ import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { THEMES, THEME_ORDER, resolveSVG } from './src/theme.js';
-import { BUILDINGS, PROPS, ITEMS, WORKERS, DISTRICTS, TW, TH, ZU, drawBuilding, Pen, workerBody } from './src/sprites.js';
+import { BUILDINGS, PROPS, ITEMS, WORKERS, DISTRICTS, TW, TH, ZU, spriteSVG, propSVG, workerBody } from './src/sprites.js';
 import { PLACEMENTS } from './src/world.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const src = f => readFile(join(here, 'src', f), 'utf8');
 
-// ---------- index.html (design gallery) and prototype.html (chosen design) ----------
 const strip = s => s.replace(/^import .*$/gm, '');
 const css = await src('style.css');
 const template = await src('template.html');
@@ -33,7 +31,6 @@ for (const [file, title, entry] of PAGES) {
   await writeFile(join(here, file), html);
 }
 
-// ---------- assets ----------
 const T = THEMES.paper;
 const out = join(root, 'assets');
 await rm(join(out, 'sprites'), { recursive: true, force: true });
@@ -53,16 +50,13 @@ const manifest = {
 };
 
 for (const [type, b] of Object.entries(BUILDINGS)) {
-  const p = drawBuilding(type, { label: type === 'depot' ? 'repo' : undefined });
-  const s = p.svg(`b-${type}`, `--accent:${b.accent}`);
+  const s = spriteSVG(type);
   const file = `assets/sprites/buildings/${type}.svg`;
   await writeFile(join(root, file), standalone(s.vb, s.w, s.h, resolveSVG(s.body, b.accent, T)));
   manifest.buildings.push({ type, name: b.name, en: b.en, district: b.district, footprint: [b.w, b.d], height: b.h, accent: b.accent, represents: b.rep, tech: b.tech, later: !!b.later, file });
 }
 for (const [key, pr] of Object.entries(PROPS)) {
-  const p = new Pen();
-  pr.draw(p);
-  const s = p.svg(`p-${key}`, '--accent:#c47a3a');
+  const s = propSVG(key);
   const file = `assets/sprites/props/${key}.svg`;
   await writeFile(join(root, file), standalone(s.vb, s.w, s.h, resolveSVG(s.body, '#c47a3a', T)));
   manifest.props.push({ key, name: pr.name, footprint: [pr.w, pr.d], file });
@@ -79,7 +73,6 @@ for (const [key, w] of Object.entries(WORKERS)) {
 }
 await writeFile(join(out, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 
-// ---------- assets/README.md ----------
 const row = cells => `| ${cells.join(' | ')} |`;
 const md = [
   '# Papertown 素材',
