@@ -20,7 +20,6 @@ def test_references_need_the_skill_loaded_first(town):
     assert not err and "verdict.py" in content
     content, _, err = town.tools.call(ctx, "read_reference", {"skill": "novelty-check", "path": "references/novelty-rubric.md"})
     assert not err and "已被做过" in content
-    # nothing outside the skill folder is readable
     _, _, err = town.tools.call(ctx, "read_reference", {"skill": "novelty-check", "path": "../../pyproject.toml"})
     assert err
 

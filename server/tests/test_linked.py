@@ -31,8 +31,7 @@ QUEUE = {
 }
 
 
-# the queue's database further back: a live job again (the live reading wins), an old run of the project
-# found by its command, with a result and a secret in its environment, and someone else's
+# nvidb's history: a live job again (the live reading wins), an old run found by its command, someone else's
 HISTORY = [
     {"id": 7, "name": "train", "state": "pending", "workdir": "/home/me/repos/proj-code"},
     {"id": 3, "name": "ablation", "state": "completed", "node": "box", "gpu_ids": [0], "workdir": None, "submitter": "codex:x",
@@ -76,6 +75,12 @@ def git_repo(path, files):
         subprocess.run(["git", "-C", str(path), *cmd], check=True)
 
 
+def linked_settings(tmp, code, paper, **kw):
+    """Settings whose projects.json links the project "proj" to these code and paper repos."""
+    (tmp / "projects.json").write_text(json.dumps({"projects": [{"key": "proj", "code": str(code), "paper": str(paper)}]}))
+    return make_settings(tmp, projects=str(tmp / "projects.json"), **kw)
+
+
 def test_gpus_and_a_linked_project(tmp_path):
     code, paper = tmp_path / "proj-code", tmp_path / "proj-paper"
     git_repo(code, {"README.md": "# Proj\n\nA project that merges layers of several models, searched by co-evolution over layer bags.\n",
@@ -85,8 +90,7 @@ def test_gpus_and_a_linked_project(tmp_path):
                      "sections/abs.tex": "\\begin{abstract}We merge models~\\cite{a}.\\end{abstract}",
                      "refs.bib": "@article{a,\n title={{Merging} Things},\n author={A and B},\n year={2025},\n eprint={2501.01234}\n}\n"
                                  "@inproceedings{b, title = \"Other\", author = {C}, booktitle = {ICML}, year = 2024}\n"})
-    s = make_settings(tmp_path, nvidb_bin=str(fake_nvidb(tmp_path)), projects=str(tmp_path / "projects.json"))
-    (tmp_path / "projects.json").write_text(json.dumps({"projects": [{"key": "proj", "code": str(code), "paper": str(paper)}]}))
+    s = linked_settings(tmp_path, code, paper, nvidb_bin=str(fake_nvidb(tmp_path)))
     app = create_app(s)
     with TestClient(app) as c:
         town = app.state.town
@@ -94,12 +98,10 @@ def test_gpus_and_a_linked_project(tmp_path):
         assert g["ok"] and g["summary"] == {"nodes": 1, "up": 1, "gpus": 2, "idle": 1, "room": 1, "free_mb": 27000, "total_mb": 49128}
         assert [x["state"] for x in g["nodes"][0]["gpus"]] == ["idle", "full"] and g["nodes"][0]["gpus"][0]["name"] == "RTX 4090"
         assert "hostname" not in g["nodes"][0] and all("env" not in j for j in g["jobs"])
-        # read in the background every few seconds: each card's trend, and since when each process has been seen
         busy = g["nodes"][0]["gpus"][1]
         assert g["poll_s"] == 10 and g["polled_at"] and busy["trend"][-1][1:] == [97, 20000]
         assert busy["procs"] == [{"pid": 1, "user": "me", "name": "python", "mem_mb": 20000, "managed": True, "job_id": 7,
                                   "job_name": "train", "seen_since": busy["procs"][0]["seen_since"], "earlier": True}]
-        # the lanes of the machines shown, and the jobs waiting in them even when the job list leaves them out
         assert [(ln["name"], ln["running"], ln["queued"]) for ln in g["lanes"]] == [("box:1", [7], [10])]
         assert next(j for j in g["jobs"] if j["id"] == 10)["lane"] == "box:1" and g["pools"] == []
         nv = next(b for b in c.get("/api/jobs").json()["backends"] if b["id"] == "nvidb")
@@ -113,12 +115,11 @@ def test_gpus_and_a_linked_project(tmp_path):
         assert info["paper"]["sections"] == ["Introduction", "Method"] and info["paper"]["abstract"] == "We merge models ."
         assert info["paper"]["bib"] == 2 and info["paper"]["pdf"] is False
         exp = next(x for x in line["stages"] if x["key"] == "exp")
-        assert exp["status"] == "run" and "1 个在跑" in exp["note"]  # train and eval by workdir, proj-smoke by submitter
+        assert exp["status"] == "run" and "1 个在跑" in exp["note"]
         board = c.get("/api/jobs", params={"line_id": line["id"]}).json()["jobs"]
         assert {j["name"]: (j["status"], j["progress"]) for j in board} == {
             "train": ("running", 30), "eval": ("queued", 0), "proj-smoke": ("done", 100), "ablation": ("done", 100)}
         assert c.get("/api/jobs/nvidb-7").json()["cwd"] == "/home/me/repos/proj-code"
-        # one job in full, with its events but never its environment; the run's result reaches the data
         j = c.get("/api/nvidb/jobs/3").json()
         assert j["result"] == {"acc": 0.91} and j["events"][0]["kind"] == "job_started" and "ablate.py" in j["command"]
         assert "env" not in j and "SECRET" not in json.dumps(j)
@@ -130,21 +131,19 @@ def test_gpus_and_a_linked_project(tmp_path):
         assert [(r["title"], r["url"]) for r in refs] == [("Merging Things", "https://arxiv.org/abs/2501.01234"),
                                                           ("Other", "https://scholar.google.com/scholar?q=Other")]
         assert c.get(f"/api/lines/{line['id']}/linked/pdf").status_code == 404
-        # the pipeline leaves it alone, and nvidb is not submitted to from here
         assert c.post(f"/api/lines/{line['id']}/resume").status_code == 400
         assert c.post("/api/jobs", json={"name": "x", "command": "true", "backend": "nvidb", "line_id": line["id"]}).status_code == 400
 
-        # an agent works in the repo itself, but its guide and tools stay in Papertown's directory
         a = town.agents.ensure(line["id"], "coder")
         assert a["cwd"] == str(code)
         town.agents._guide(a, "paseo")
         pt = town.agents._tools(a)
         assert (code / "AGENTS.md").read_text() == "the repo's own rules\n" and not (code / "CLAUDE.md").exists()
         assert not (code / ".papertown").exists() and pt.is_relative_to(s.projects_dir)
-        intro = town.agents.brief(a["id"])  # the linked guide, not the pipeline's: no draft method, nvidb for the GPUs
+        intro = town.agents.brief(a["id"])
         assert "工作目录就是仓库本身" in intro and "nvidb job submit" in intro and "方法草案" not in intro
         assert subprocess.run(["git", "-C", str(code), "status", "--porcelain"], capture_output=True, text=True).stdout == ""
-        assert town.linked.sync() == []  # a second start adds nothing
+        assert town.linked.sync() == []
 
 
 def test_nvidb_missing(tmp_path):

@@ -7,7 +7,6 @@ import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -50,7 +49,7 @@ def test_mcp_servers_are_added_switched_and_removed(tmp_path, monkeypatch):
         assert r.status_code == 200
         s = wait_for(c, "echo", "ok")
         assert s["source"] == "town" and s["env"] == ["TOKEN"] and s["tools"] == [{"name": "echo", "description": "Say it back."}]
-        assert "from-the-environment" not in r.text  # only the names of env entries are sent
+        assert "from-the-environment" not in r.text
         assert town.mcp.call("echo", "echo", {"text": "hi"}) == "hi"
         saved = json.loads((tmp_path / "var" / "mcp.json").read_text())
         assert saved["mcpServers"]["echo"]["env"] == {"TOKEN": "${ECHO_TOKEN}"}
@@ -74,7 +73,7 @@ def test_rag_settings_bound_and_persist(tmp_path):
         hits = c.get("/api/rag/search", params={"q": "sparse attention"}).json()
         assert hits["method"] == "coverage" and len(hits["hits"]) <= 30
         assert c.get("/api/rag/search", params={"q": " "}).status_code == 400
-    with TestClient(create_app(s)) as c:  # read back after a restart
+    with TestClient(create_app(s)) as c:
         assert c.get("/api/rag").json()["opts"]["top_k"] == 30
 
 
@@ -113,15 +112,13 @@ def test_skills_are_layered_per_project_and_conversation(tmp_path, monkeypatch):
         got = set_("session", "skill.plotting.enabled", "true", agent_id=a["id"])
         assert got == {"note-taking": (False, "project"), "plotting": (True, "session")}
 
-        # the project's scope is in Papertown's directory for it, the conversation's in skim's sessions
         assert (town.s.projects_dir / line["id"] / ".skim" / "config").exists()
         assert (home / ".skim" / "sessions" / f"papertown-{a['id']}.config").exists()
-        # applied: linked into the agent's own skills directory, and listed in its brief
         linked = town.skim.skills_dir(a)
         assert (linked / "plotting").is_symlink() and not (linked / "note-taking").exists()
         assert "## 技能" in town.brief(line["id"], "coder") and str(linked / "plotting" / "SKILL.md") in town.brief(line["id"], "coder")
 
-        assert set_("project", "skill.note-taking.enabled", None)["note-taking"] == (True, "global")  # unset falls back
+        assert set_("project", "skill.note-taking.enabled", None)["note-taking"] == (True, "global")
         assert c.post("/api/skim/config", json={"scope": "session", "key": "skill.plotting.enabled", "value": "maybe",
                                                 "line_id": line["id"], "agent_id": a["id"]}).status_code == 400
 

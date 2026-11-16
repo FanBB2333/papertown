@@ -1,4 +1,9 @@
+import re
+import shlex
+import subprocess
+import sys
 import time
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -40,7 +45,7 @@ def test_bridge_mirrors_a_pi_session(tmp_path):
         wait_for(town, line_id, {"waiting"})
         a = c.post("/api/agents", json={"line_id": line_id, "role": "coder"}).json()
         assert a["status"] == "stopped" and "token" not in a and a["attach"].startswith("tmux -L papertown")
-        assert c.post(f"/api/agents/{a['id']}/say", json={"text": "hi"}).status_code == 400  # no pi on this machine
+        assert c.post(f"/api/agents/{a['id']}/say", json={"text": "hi"}).status_code == 400
 
         token = town.agents.get(a["id"])["token"]
         assert c.post(f"/api/bridge/{a['id']}/events", json={"events": []}).status_code == 403
@@ -65,7 +70,7 @@ def test_bridge_mirrors_a_pi_session(tmp_path):
         j = c.post(f"/api/bridge/{a['id']}/jobs", json={"name": "smoke", "command": "echo PROGRESS 100"}, headers=h).json()
         assert j["line_id"] == line_id and j["submitted_by"] == a["id"]
         assert wait_job(town, j["id"])["status"] == "done"
-        assert c.get(f"/api/agents?role=coder").json()["roster"][0]["agent"]["id"] == a["id"]
+        assert c.get("/api/agents?role=coder").json()["roster"][0]["agent"]["id"] == a["id"]
 
 
 def test_bridge_reports_state_and_runs_commands(tmp_path):
@@ -86,7 +91,6 @@ def test_bridge_reports_state_and_runs_commands(tmp_path):
         assert st["model"]["id"] == "m2" and st["thinking"] == "off" and len(st["models"]) == 2 and got["agent"]["model"] == "p/m2"
         assert got["events"][-1]["data"]["text"] == "模型换成 p/m2。"
 
-        # a slash command for a pi that is running goes to its bridge, not to the model
         town.agents.alive = lambda _a: True
         ev = c.post(f"/api/agents/{a['id']}/say", json={"text": "/model p/m1"}).json()
         assert ev["data"]["cmd"] and town.agents.take(a["id"]) == [{"id": ev["data"]["mid"], "kind": "cmd", "name": "model", "args": "p/m1"}]
@@ -94,6 +98,42 @@ def test_bridge_reports_state_and_runs_commands(tmp_path):
         town.agents._tmux = lambda *args: typed.append(args)
         c.post(f"/api/agents/{a['id']}/say", json={"text": "/settings"})
         assert ("send-keys", "-t", f"pt-{a['id']}", "-l", "/settings") in typed and not town.agents.take(a["id"])
+
+
+def test_pi_start_uses_node_entrypoint_and_resumes_session(town, tmp_path, monkeypatch):
+    bin_dir = tmp_path / "pi bin"
+    bin_dir.mkdir()
+    entry = bin_dir / "cli.js"
+    entry.touch()
+    (bin_dir / "node").touch()
+    pi = bin_dir / "pi"
+    pi.symlink_to(entry)
+    agents = town.agents
+    agents.pi, agents.tmux = str(pi), "tmux"
+    monkeypatch.setattr(agents, "_watch_start", lambda _: None)
+    calls = []
+
+    def tmux(*args):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, int(args[0] == "has-session"), "", "")
+
+    monkeypatch.setattr(agents, "_tmux", tmux)
+    line = town.pipeline.submit_idea(IDEA)
+    wait_for(town, line["id"], {"waiting"})
+    agent = agents.ensure(line["id"], "coder")
+    started = agents.start(agent["id"], runtime="pi")
+    assert started["status"] == "starting" and started["runtime"] == "pi"
+    launch = next(args for args in calls if args[0] == "new-session")
+    argv = shlex.split(launch[-1].split("; code=$?", 1)[0])
+    assert argv[:2] == [str(bin_dir / "node"), str(entry)]
+    assert Path(argv[argv.index("-e") + 1]).name == "bridge.ts"
+    assert "--continue" not in argv
+    sessions = Path(argv[argv.index("--session-dir") + 1])
+    (sessions / "previous.jsonl").touch()
+    calls.clear()
+    agents.start(agent["id"], runtime="pi")
+    launch = next(args for args in calls if args[0] == "new-session")
+    assert "--continue" in shlex.split(launch[-1].split("; code=$?", 1)[0])
 
 
 FAKE_PASEO = r"""#!/bin/sh
@@ -109,12 +149,17 @@ esac
 """
 
 
-def test_paseo_agents_are_created_driven_and_followed(tmp_path):
+def with_paseo(tmp_path, script=FAKE_PASEO, **kw):
+    """An app whose paseo is the fake `script`, and the log of how it was called."""
     fake = tmp_path / "bin" / "paseo"
     fake.parent.mkdir()
-    fake.write_text(FAKE_PASEO)
+    fake.write_text(script)
     fake.chmod(0o755)
-    app = create_app(make_settings(tmp_path, paseo_bin=str(fake)))
+    return create_app(make_settings(tmp_path, paseo_bin=str(fake), **kw)), fake.parent / "calls.log"
+
+
+def test_paseo_agents_are_created_driven_and_followed(tmp_path):
+    app, calls = with_paseo(tmp_path)
     with TestClient(app) as c:
         town = app.state.town
         line_id = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
@@ -126,24 +171,21 @@ def test_paseo_agents_are_created_driven_and_followed(tmp_path):
         r = c.post(f"/api/agents/{a['id']}/start", json={"runtime": "paseo", "provider": "pi", "model": "openai-codex/gpt-5.6-luna", "thinking": "high"}).json()
         assert r["runtime"] == "paseo" and r["ext_id"] == "pa-1" and r["attach"] is None
         cwd = town.agents.get(a["id"])["cwd"]
-        from pathlib import Path
         assert ".papertown/pt" in (Path(cwd) / "AGENTS.md").read_text() and (Path(cwd) / ".papertown" / "pt").exists()
-        run = next(l for l in (fake.parent / "calls.log").read_text().splitlines() if l.startswith("run"))
+        run = next(l for l in calls.read_text().splitlines() if l.startswith("run"))
         assert "--provider pi" in run and "--model openai-codex/gpt-5.6-luna" in run and "papertown.agent=" + a["id"] in run and "PAPERTOWN_AGENT_TOKEN=" in run
 
-        # while it works a message steers it, or waits in the town until it is done
         assert c.post(f"/api/agents/{a['id']}/say", json={"text": "先跑测试"}).json()["data"]["steered"] is True
         held = c.post(f"/api/agents/{a['id']}/say", json={"text": "再补文档", "mode": "queue"}).json()
         assert held["data"]["held"] and not held["data"]["delivered"]
         c.post(f"/api/agents/{a['id']}/abort")
-        log = (fake.parent / "calls.log").read_text()
+        log = calls.read_text()
         assert log.count("send pa-1 --no-wait --prompt-file") == 1 and "stop pa-1" in log
 
-        # the watcher follows Paseo's status, and hands it what was queued once it is idle
         t0 = time.time()
         while town.db.val("select json_extract(data, '$.held') from agent_events where id = ?", held["id"]) and time.time() - t0 < 15:
             time.sleep(0.2)
-        assert (fake.parent / "calls.log").read_text().count("send pa-1 --no-wait --prompt-file") == 2
+        assert calls.read_text().count("send pa-1 --no-wait --prompt-file") == 2
         while town.agents.get(a["id"])["status"] != "idle" and time.time() - t0 < 25:
             time.sleep(0.2)
         assert town.agents.get(a["id"])["status"] == "idle"
@@ -191,16 +233,13 @@ def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
 
         a = c.post("/api/agents/import", json={"line_id": first, "role": "coder", "ext_id": "conv-1"}).json()
         assert a["runtime"] == "paseo" and a["ext_id"] == "conv-1" and a["model"] == "claude/claude-haiku-5-5"
-        assert town.agents.get(a["id"])["cwd"] == str(own)  # the conversation keeps its own directory
-        assert not any(own.iterdir())  # and nothing is written there
+        assert town.agents.get(a["id"])["cwd"] == str(own)
+        assert not any(own.iterdir())
         assert link.labels["conv-1"]["papertown.agent"] == a["id"]
 
-        # the brief tells it where pt is; pt finds the town through link.json, without PAPERTOWN_* env
         sent = []
         town.agents.paseo.send = lambda ext, text: sent.append(text)
         c.post(f"/api/agents/{a['id']}/brief")
-        import json, re, subprocess, sys
-        from pathlib import Path
         pt = Path(re.search(r"`(\S+/pt) brief`", sent[0]).group(1))
         assert pt.parent.parent == Path(town.agents._workdir(first, "coder"))
         r = subprocess.run([sys.executable, "-c", "import runpy, sys; print(*runpy.run_path(sys.argv[1])['link']())", str(pt)],
@@ -209,7 +248,7 @@ def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
         assert url == town.s.url and agent_id == a["id"]
         job = c.post(f"/api/bridge/{a['id']}/jobs", json={"name": "smoke", "command": "echo PROGRESS 100"},
                      headers={"x-papertown-token": token}).json()
-        assert job["cwd"] == str(own)  # experiments run where the conversation works
+        assert job["cwd"] == str(own)
 
         seq = town.pipeline.line(first)["seq"]
         convs = c.get("/api/paseo/conversations").json()["conversations"]
@@ -220,7 +259,7 @@ def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
 
         t = c.get(f"/api/agents/{a['id']}/timeline").json()
         assert [i["kind"] for i in t["items"]] == ["user", "tool"] and t["paseo"]["permissions"][0]["id"] == "req-1"
-        assert t["agent"]["status"] == "working"  # waiting on a permission counts as busy
+        assert t["agent"]["status"] == "working"
 
         assert c.post(f"/api/agents/{a['id']}/permit", json={"request_id": "req-1", "allow": True}).json() == {"ok": True}
         assert link.permits == [("conv-1", "req-1", True)]

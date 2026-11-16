@@ -32,8 +32,8 @@ def test_api_flow(tmp_path):
         deps = c.get("/api/departments").json()
         assert [d["id"] for d in deps][:3] == ["hatchery", "market", "mill"]
         here = next(d for d in deps if any(x["id"] == line_id for x in d["lines"]))
-        assert here["state"] == "wait" and here["worker"]["id"]  # the idea waits for you, and someone there answers
-        assert next(d for d in deps if d["id"] == "power")["state"] == "off"  # no nvidb here
+        assert here["state"] == "wait" and here["worker"]["id"]
+        assert next(d for d in deps if d["id"] == "power")["state"] == "off"
 
         msgs = c.get("/api/messages").json()
         assert any(m["kind"] == "report" for m in msgs)

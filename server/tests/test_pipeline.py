@@ -16,7 +16,7 @@ def test_idea_to_paper_offline(town):
     assert all(0 <= s["similarity"] <= 1 for s in report["similar"])
 
     snap = town.pipeline.hatch(line["id"])
-    assert snap["mill_id"] == "mill"  # one base camp for every project
+    assert snap["mill_id"] == "mill"
     assert [b["id"] for b in town.db.q("select id from buildings where type = 'mill'")] == ["mill"]
     ln = wait_for(town, line["id"], {"done", "failed"})
     assert ln["status"] == "done", ln["note"]
@@ -28,7 +28,7 @@ def test_idea_to_paper_offline(town):
     table = town.pipeline.item(line["id"], "exp")
     assert table["simulated"] is True and table["rows"][-1]["method"] == "Ours"
     jobs = town.farm.list(line["id"])
-    assert [(j["backend"], j["status"]) for j in jobs] == [("sim", "done")]  # mirrored onto the farm board
+    assert [(j["backend"], j["status"]) for j in jobs] == [("sim", "done")]
     notes = town.agents.events(f"monitor-{line['id']}")
     assert notes and "跑完了" in notes[-1]["data"]["text"]
     assert "main.tex" in snap["files"] and "refs.bib" in snap["files"]
@@ -45,7 +45,7 @@ def test_cannot_hatch_twice_or_too_short(town):
         town.pipeline.submit_idea("短")
     line = town.pipeline.submit_idea(IDEA)
     with pytest.raises(LineError):
-        town.pipeline.hatch(line["id"])  # still hatching
+        town.pipeline.hatch(line["id"])
     wait_for(town, line["id"], {"waiting"})
     town.pipeline.adjust(line["id"], IDEA + "，只在真实机器人上验证")
     wait_for(town, line["id"], {"waiting"})

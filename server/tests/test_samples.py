@@ -6,8 +6,9 @@ from fastapi.testclient import TestClient
 from papertown import samples
 from papertown.api import create_app
 from papertown.pipeline import NAMES
+from papertown.town import Town
 
-from .conftest import make_settings
+from .conftest import make_settings, wait_for
 
 
 def settle(town, ids, timeout=90):
@@ -39,25 +40,19 @@ def test_samples_park_along_the_line_and_resume(town):
         else:
             assert ln["status"] == "paused" and NAMES[u] in ln["note"]
             assert stage[u] != "done" and ln["hold"] is None
-    # a second press adds nothing
     assert samples.seed(town)["added"] == []
 
-    # 「继续」 runs a parked sample on to the end
     parked = next(ln for idea, ln in by.items() if until[idea] == "review")
     town.pipeline.resume(parked["id"])
-    t0 = time.time()
-    while town.pipeline.line(parked["id"])["status"] != "done" and time.time() - t0 < 60:
-        time.sleep(0.05)
+    wait_for(town, parked["id"], {"done"})
     assert town.pipeline.line(parked["id"])["status"] == "done"
 
-    # what the paper read and cites, from the library
     got = samples.papers_of(town, parked["id"])
     assert got["survey"] and got["survey"][0].get("closest") and got["survey"][0]["note"]
     assert got["references"] and all("arxiv.org" in r["url"] for r in got["references"])
 
 
 def test_samples_only_offline(tmp_path):
-    from papertown.town import Town
     t = Town(make_settings(tmp_path, provider="openai", openai_api_key="x"))
     with pytest.raises(samples.SampleError):
         samples.seed(t)
@@ -67,7 +62,7 @@ def test_library_shelf_and_first_start(tmp_path):
     app = create_app(make_settings(tmp_path, samples=True))
     with TestClient(app) as c:
         town = app.state.town
-        assert town.db.val("select count(*) from lines") == len(samples.SAMPLES)  # an empty offline town gets them
+        assert town.db.val("select count(*) from lines") == len(samples.SAMPLES)
         shelf = c.get("/api/library").json()
         assert shelf["total"] == town.library.count() and len(shelf["papers"]) == 60
         labels = {t["label"] for t in shelf["topics"]}

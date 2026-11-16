@@ -9,13 +9,14 @@ from papertown.town import Town
 
 
 def make_settings(tmp: Path, **kw) -> Settings:
+    """Mock settings under tmp: tests never start a real pi or touch Paseo, nor read your agents' conversations."""
     skills = tmp / "skills"
     if not skills.exists():
         shutil.copytree(SERVER_DIR / "skills", skills)
     base = dict(provider="mock", data_dir=tmp / "var", skills_dir=skills, arxiv_port=False, sim_gpu_seconds=0.05,
                 compile_tex=False, samples=False, pi_bin=str(tmp / "no-pi"), nvidb_bin=str(tmp / "no-nvidb"), skim_bin=str(tmp / "no-skim"),
-                paseo_bin=str(tmp / "no-paseo"), paseo_url="http://127.0.0.1:9",  # tests never start a real pi or touch Paseo
-                claude_home=str(tmp / "no-claude"), codex_home=str(tmp / "no-codex"))  # nor read your agents' conversations
+                paseo_bin=str(tmp / "no-paseo"), paseo_url="http://127.0.0.1:9",
+                claude_home=str(tmp / "no-claude"), codex_home=str(tmp / "no-codex"))
     return Settings(**(base | kw))
 
 

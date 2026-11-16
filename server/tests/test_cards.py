@@ -17,16 +17,15 @@ def test_a_card_is_written_by_the_lead_only_when_you_ask(tmp_path):
         wait_for(town, lid, {"waiting"})
         row = c.get("/api/cards").json()["cards"][0]
         assert row["line"]["id"] == lid and row["card"] is None and row["lead"] is None and row["pending"] is None
-        assert c.post(f"/api/lines/{lid}/card", json={}).status_code == 400  # no lead yet
+        assert c.post(f"/api/lines/{lid}/card", json={}).status_code == 400
 
         lead = c.post("/api/agents", json={"line_id": lid, "role": "lead"}).json()
         c.post(f"/api/agents/{lead['id']}/start", json={"runtime": "paseo", "provider": "codex"})
         h = {"x-papertown-token": town.agents.get(lead["id"])["token"]}
         assert "现在没有人让你更新卡片" in c.get(f"/api/bridge/{lead['id']}/card", headers=h).json()["text"]
         r = c.post(f"/api/bridge/{lead['id']}/card", json={"card": CARD}, headers=h)
-        assert r.status_code == 400 and "没有人让你更新" in r.json()["detail"]  # nobody asked: refused
+        assert r.status_code == 400 and "没有人让你更新" in r.json()["detail"]
 
-        # you press 更新: the lead gets a <card> message
         row = c.post(f"/api/lines/{lid}/card", json={"note": "重点看实验"}).json()
         assert row["pending"]["note"] == "重点看实验"
         msg = [e for e in town.agents.events(lead["id"]) if e["kind"] == "user"][-1]["data"]["text"]
@@ -40,10 +39,8 @@ def test_a_card_is_written_by_the_lead_only_when_you_ask(tmp_path):
         row = c.get("/api/cards").json()["cards"][0]
         assert row["pending"] is None and row["card"]["health"] == "risk" and row["card"]["metrics"][0]["value"] == "71.2"
         assert row["card"]["at"] and row["lead"]["id"] == lead["id"] and row["prev"] is None
-        # once written, it waits for the next 更新
         assert c.post(f"/api/bridge/{lead['id']}/card", json={"card": CARD}, headers=h).status_code == 400
 
-        # 更新全部 asks every lead that is there; the old card goes along, and comes back as the one before
         assert c.post("/api/cards/update").json()["sent"] == [lid]
         msg = [e for e in town.agents.events(lead["id"]) if e["kind"] == "user"][-1]["data"]["text"]
         assert "没变的可以照抄" in msg and "基线复现完了" in msg

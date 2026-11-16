@@ -1,14 +1,9 @@
 import asyncio
 import json
-import socket
-import threading
-import time
 
 import pytest
-import uvicorn
 from textual.widgets import DataTable
 
-from papertown.api import create_app
 from papertown.tui.app import Main, Papertown
 from papertown.tui.client import Api
 from papertown.tui.edthemes import Prefs, role_for
@@ -16,14 +11,13 @@ from papertown.tui.texlex import BibtexLexer, LatexLexer
 from papertown.tui.views.ide import EdTextArea, Editor, FileTree, Ide, LookPicker
 from papertown.tui.widgets import Confirm
 
-from .conftest import make_settings
-from .test_linked import git_repo
-from .test_tui import until
+from .test_linked import git_repo, linked_settings
+from .test_tui import serving, until
 
 
 def roles(lexer, text: str) -> list[tuple[str | None, str]]:
     toks = list(lexer.get_tokens_unprocessed(text))
-    assert "".join(v for _, _, v in toks) == text  # every character, once
+    assert "".join(v for _, _, v in toks) == text
     return [(role_for(t), v) for _, t, v in toks if v.strip()]
 
 
@@ -48,23 +42,9 @@ def linked(tmp_path, monkeypatch):
     code, paper = tmp_path / "proj-code", tmp_path / "proj-paper"
     git_repo(code, {"README.md": "# Proj\n", "src/run.py": "def run():\n    return 1\n"})
     git_repo(paper, {"main.tex": "\\section{Intro}\nWe show $x^2$.\n", "refs.bib": "@article{a,\n  title = {T},\n}\n"})
-    (tmp_path / "projects.json").write_text(json.dumps({"projects": [{"key": "proj", "code": str(code), "paper": str(paper)}]}))
-    s = make_settings(tmp_path, projects=str(tmp_path / "projects.json"))
-    for k, v in {"PAPERTOWN_DATA_DIR": s.data_dir, "PAPERTOWN_SKILLS_DIR": s.skills_dir, "PAPERTOWN_NVIDB_BIN": s.nvidb_bin,
-                 "PAPERTOWN_SKIM_BIN": s.skim_bin, "PAPERTOWN_PROVIDER": "mock"}.items():
-        monkeypatch.setenv(k, str(v))
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    srv = uvicorn.Server(uvicorn.Config(create_app(s), host="127.0.0.1", port=port, log_level="warning"))
-    th = threading.Thread(target=srv.run, daemon=True)
-    th.start()
-    t0 = time.time()
-    while not srv.started and time.time() - t0 < 30:
-        time.sleep(0.05)
-    yield f"http://127.0.0.1:{port}", code, s.data_dir
-    srv.should_exit = True
-    th.join(10)
+    s = linked_settings(tmp_path, code, paper)
+    with serving(s, monkeypatch) as url:
+        yield url, code, s.data_dir
 
 
 def test_tui_reads_edits_and_colours_a_projects_files(linked):
@@ -80,40 +60,40 @@ def test_tui_reads_edits_and_colours_a_projects_files(linked):
             await until(pilot, lambda: lid in [k.value for k in table.rows])
             table.focus()
             table.move_cursor(row=table.get_row_index(lid))
-            await pilot.press("right_square_bracket", "right_square_bracket")  # 概览 → 调研 → 代码
+            await pilot.press("right_square_bracket", "right_square_bracket")
             ide = app.screen.query_one("#code", Ide)
             tree = ide.query_one(FileTree)
             await until(pilot, lambda: "src/run.py" in [k.value for k in tree.rows])
-            assert [k.value for k in tree.rows] == ["d:src", "src/run.py", "README.md"]  # folders first, a small tree open
+            assert [k.value for k in tree.rows] == ["d:src", "src/run.py", "README.md"]
             assert app.screen.query_one("#pj-left").has_class("slim")
 
             tree.focus()
             tree.move_cursor(row=0)
-            await pilot.press("left")  # ← closes the folder, → opens it again
+            await pilot.press("left")
             assert [k.value for k in tree.rows] == ["d:src", "README.md"]
             await pilot.press("right", "down", "enter")
             await until(pilot, lambda: ide.opened == "src/run.py" and ide.viewer.has_focus)
 
-            await pilot.press("E")  # the editor, coloured by the same roles
+            await pilot.press("E")
             await until(pilot, lambda: isinstance(app.screen, Editor))
             ta = app.screen.query_one(EdTextArea)
             assert {name for line in ta._highlights.values() for _, _, name in line} >= {"kw", "fn"}
             ta.text = "def run():\n    return 2\n"
-            await pilot.press("ctrl+s")  # saves through the town, and stays open
+            await pilot.press("ctrl+s")
             await until(pilot, lambda: (code / "src/run.py").read_text() == "def run():\n    return 2\n")
             assert isinstance(app.screen, Editor)
             ta.insert("# not kept\n", (0, 0))
             await pilot.press("escape")
             await until(pilot, lambda: isinstance(app.screen, Confirm))
-            await pilot.press("q")  # a dialog's keys are its own: q does not quit from here
+            await pilot.press("q")
             await pilot.pause(0.3)
             assert isinstance(app.screen, Confirm)
             await pilot.press("y")
             await until(pilot, lambda: isinstance(app.screen, Main))
             assert (code / "src/run.py").read_text() == "def run():\n    return 2\n"
-            await until(pilot, lambda: "M" in str(tree.get_cell("src/run.py", "mark")))  # git's state, read here
+            await until(pilot, lambda: "M" in str(tree.get_cell("src/run.py", "mark")))
 
-            await pilot.press("T")  # the looks: tried on while moving, put back with Esc, kept with Enter
+            await pilot.press("T")
             await until(pilot, lambda: isinstance(app.screen, LookPicker))
             await pilot.press("down")
             await until(pilot, lambda: app.prefs.ed_theme != "paper")
@@ -125,7 +105,7 @@ def test_tui_reads_edits_and_colours_a_projects_files(linked):
             assert chosen != "paper" and ide.has_class(f"ed-{app.ed.key}")
             assert json.loads((data_dir / "tui.json").read_text())["ed_theme"] == chosen
 
-            await pilot.press("z")  # 专注: the list of projects out of the way
+            await pilot.press("z")
             assert not app.screen.query_one("#pj-left").display and app.prefs.focus
             await pilot.press("z")
             assert pj.query_one("#pj-left").display
