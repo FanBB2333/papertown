@@ -160,6 +160,14 @@ class EdgeIn(BaseModel):
     target: str
 
 
+class EdgeSetIn(BaseModel):
+    label: str = Field(default="", max_length=80)
+
+
+class BackIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class TaskIn(BaseModel):
     id: str = Field(min_length=1, max_length=40)
     status: str
@@ -859,6 +867,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def canvas_send(line_id: str, node_id: str):
         return canvas(town.canvas.send, line_id, node_id)
 
+    @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/back")
+    def canvas_back(line_id: str, node_id: str, body: BackIn):
+        return canvas(town.canvas.back, line_id, node_id, body.text)
+
     @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/restore")
     def canvas_restore(line_id: str, node_id: str):
         return canvas(town.canvas.restore, line_id, node_id)
@@ -870,6 +882,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/lines/{line_id}/canvas/edges")
     def canvas_connect(line_id: str, body: EdgeIn):
         return canvas(town.canvas.connect, line_id, body.source, body.target)
+
+    @app.put("/api/lines/{line_id}/canvas/edges/{edge_id}")
+    def canvas_label(line_id: str, edge_id: str, body: EdgeSetIn):
+        return canvas(town.canvas.label, line_id, edge_id, body.label)
 
     @app.delete("/api/lines/{line_id}/canvas/edges/{edge_id}")
     def canvas_disconnect(line_id: str, edge_id: str):

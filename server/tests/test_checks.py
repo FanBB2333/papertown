@@ -162,6 +162,15 @@ def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
         assert said[-1][0] == lead
         sent = said[-1][1]
         assert f'<task id="{tid}">' in sent and "补消融实验" in sent and "软检查 design「实验设计」" in sent and f"pt task {tid} done" in sent
+        assert v["agents"]["lead"]["there"] and not v["agents"]["coder"]["there"]
+
+        # a line can say what it means, and the agent reads that too
+        edge = next(e["id"] for e in v["edges"] if {e["source"], e["target"]} == {tid, "check:design"})
+        v = c.put(f"/api/lines/{lid}/canvas/edges/{edge}", json={"label": "做完要通过"}).json()
+        assert next(e for e in v["edges"] if e["id"] == edge)["label"] == "做完要通过"
+        c.post(f"/api/lines/{lid}/canvas/nodes/{tid}/send")
+        assert "［线上写着：做完要通过］" in said[-1][1] and "按新的来" in said[-1][1]
+        assert c.post(f"/api/lines/{lid}/canvas/nodes/{tid}/back", json={"text": "不行"}).status_code == 400  # nothing returned yet
         assert tid in town.canvas.tasks_text(lead)
         r = town.canvas.close(lead, tid, "done", "三个消融都跑了，Mean-5 各降 1.2 到 2.0")
         assert "完成" in r["text"]
@@ -169,6 +178,12 @@ def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
         assert node["status"] == "done" and node["result"].startswith("三个消融")
         assert town.leads.reports(lid, 5)[-1]["data"]["text"].startswith("画布上的任务「补消融实验」完成")
         assert town.leads._facts(lid)[f"task:{tid}"][0] == "done"
+
+        # sent back with what is wrong: under way again, and the node keeps the whole story
+        v = c.post(f"/api/lines/{lid}/canvas/nodes/{tid}/back", json={"text": "还差重排模块的消融"}).json()
+        node = next(n for n in v["nodes"] if n["id"] == tid)
+        assert node["status"] == "sent" and "还差重排模块的消融" in said[-1][1] and "你上次回的是：三个消融" in said[-1][1]
+        assert [x["kind"] for x in node["log"]] == ["made", "sent", "resent", "done", "back"] and node["log"][-1]["text"] == "还差重排模块的消融"
 
         # tidying puts stages and checks back where they started; the task stays where the user left it
         v = c.post(f"/api/lines/{lid}/canvas/tidy").json()

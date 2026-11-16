@@ -3,10 +3,13 @@
 Nodes are the stages of the research loop, hard and soft checks (checks.py), tasks the user gives an agent, and
 notes. Nothing fixes where a node sits or what it connects to: the user moves, adds, edits and wires them. A task
 node is a job for the lead, the coder or the writer: sending it delivers a <task> message with what the node is
-wired to, and the agent closes it with `pt task <id> done|blocked "…"`, which also goes to the user as a report.
+wired to, and the agent closes it with `pt task <id> done|blocked "…"`, which also goes to the user as a report;
+the user can send a result back with what is wrong, and the node keeps a log of all of it. A line can carry a
+few words of its own.
 A soft check comes due once a stage it is wired to has been reached (always, when it is wired to none).
 
-    data/projects/<project>/canvas.json   nodes (id, kind, x, y and what each kind keeps), edges, what was removed
+    data/projects/<project>/canvas.json   nodes (id, kind, x, y and what each kind keeps), edges (and their labels),
+                                          what was removed
 """
 
 from __future__ import annotations
@@ -27,7 +30,12 @@ TASK = {"draft": "还没发", "sent": "已经发给它", "done": "完成", "bloc
 TO = ("lead", "coder", "writer")
 STAGE = {"todo": "没开始", "run": "进行中", "wait": "等用户", "done": "完成"}
 STEP, DROP, ROW, CHECK_W, STAGE_W = 400, 300, 52, 176, 168  # the first layout: see _first_layout
-NODES_MAX, EDGES_MAX = 300, 800
+NODES_MAX, EDGES_MAX, LOG_MAX = 300, 800, 40
+
+
+def _log(n: dict, kind: str, text: str = "", by: str = "你") -> None:
+    """A line in a task's log: made, sent, resent, done, blocked, back (sent back by the user), marked, reopened."""
+    n["log"] = [*(n.get("log") or []), {"ts": now(), "kind": kind, "text": clip(text, 600), "by": by}][-LOG_MAX:]
 
 
 class CanvasError(Exception):
@@ -184,6 +192,7 @@ class Canvas:
                 out |= {"kind": c["kind"], "ref": n["ref"], "title": c["title"], "check": c}
             elif n["kind"] == "task":
                 out |= {k: n.get(k) for k in ("title", "text", "to", "status", "sent_at", "done_at", "result", "by", "created_at")}
+                out["log"] = n.get("log") or []
             else:
                 out |= {"text": n.get("text") or ""}
             nodes.append(out)
@@ -195,7 +204,8 @@ class Canvas:
                 "edges": [e for e in d["edges"] if e["source"] in ids and e["target"] in ids], "gone": gone,
                 "summary": cv["summary"], "tasks": {k: sum(1 for t in tasks if t["status"] == k) for k in TASK},
                 "trend": cv["trend"], "rounds": cv["rounds"], "ran": cv["ran"], "lead": cv["lead"],
-                "agents": {r: bool(self.town.leads.agent(line_id, r)) for r in TO}}
+                "agents": {r: {"there": bool(a), "status": a["status"] if a else None}
+                           for r in TO for a in [self.town.leads.agent(line_id, r)]}}
 
     # editing
 
@@ -215,7 +225,8 @@ class Canvas:
                 if to not in TO:
                     raise CanvasError("任务交给 lead（项目负责人）、coder（代码员工）或 writer（写作员工）")
                 node = {"id": self._id(d, "t"), "kind": "task", "title": title, "text": text[:4000], "to": to, "status": "draft",
-                        "created_at": now(), "sent_at": None, "done_at": None, "result": "", "by": ""}
+                        "created_at": now(), "sent_at": None, "done_at": None, "result": "", "by": "", "log": []}
+                _log(node, "made")
             elif kind == "note":
                 if not text:
                     raise CanvasError("备注是空的")
@@ -264,6 +275,7 @@ class Canvas:
                         raise CanvasError("只能标成完成，或者重新打开")
                     n |= {"status": status, "done_at": now() if status == "done" else None, "by": "你" if status == "done" else "",
                           "result": n.get("result") if status == "done" else ""}
+                    _log(n, "marked" if status == "done" else "reopened")
             elif n["kind"] == "note":
                 if text is not None:
                     if not text.strip():
@@ -337,6 +349,22 @@ class Canvas:
         self._changed(line_id)
         return self.view(line_id)
 
+    def label(self, line_id: str, edge_id: str, text: str) -> dict:
+        """A few words on a line (none takes them off)."""
+        with self._lock:
+            d = self._load(line_id)
+            e = next((x for x in d["edges"] if x["id"] == edge_id), None)
+            if not e:
+                raise CanvasError("画布上没有这条线")
+            text = clip(text, 40)
+            if text:
+                e["label"] = text
+            else:
+                e.pop("label", None)
+            self._save(line_id, d)
+        self._changed(line_id)
+        return self.view(line_id)
+
     def disconnect(self, line_id: str, edge_id: str) -> dict:
         with self._lock:
             d = self._load(line_id)
@@ -370,24 +398,27 @@ class Canvas:
         cv = self.town.checks.view(line_id)
         stages = {s["key"]: s for s in cv["stages"]}
         checks = {c["id"]: c for c in cv["checks"]}
-        near = [e["target"] if e["source"] == node["id"] else e["source"] for e in d["edges"] if node["id"] in (e["source"], e["target"])]
+        near = {(e["target"] if e["source"] == node["id"] else e["source"]): e.get("label") for e in d["edges"] if node["id"] in (e["source"], e["target"])}
         out = []
         for n in d["nodes"]:
             if n["id"] not in near:
                 continue
+            what = ""
             if n["kind"] == "stage" and n["ref"] in stages:
                 s = stages[n["ref"]]
-                out.append(f"工序「{s['name']}」（{STAGE.get(s['status'], s['status'])}）")
+                what = f"工序「{s['name']}」（{STAGE.get(s['status'], s['status'])}）"
             elif n["kind"] in ("hard", "soft") and n["ref"] in checks:
                 c = checks[n["ref"]]
                 last = c["last"] or {}
                 st = CHECK_STATUS.get(last.get("status") or ("wait" if c["kind"] == "soft" else "none"))
                 val = "" if last.get("value") is None else f"，{int(last['value'])} {c.get('unit') or '处'}"
-                out.append(f"{'硬' if c['kind'] == 'hard' else '软'}检查 {c['id']}「{c['title']}」（现在{st}{val}）：{c['text']}")
+                what = f"{'硬' if c['kind'] == 'hard' else '软'}检查 {c['id']}「{c['title']}」（现在{st}{val}）：{c['text']}"
             elif n["kind"] == "task":
-                out.append(f"任务 {n['id']}「{n['title']}」（给{ROLES[n['to']]['name']}，{TASK[n['status']]}）")
+                what = f"任务 {n['id']}「{n['title']}」（给{ROLES[n['to']]['name']}，{TASK[n['status']]}）"
             elif n["kind"] == "note":
-                out.append(f"备注：{clip(n.get('text'), 300)}")
+                what = f"备注：{clip(n.get('text'), 300)}"
+            if what:
+                out.append(what + (f"［线上写着：{near[n['id']]}］" if near[n["id"]] else ""))
         return out
 
     def send(self, line_id: str, node_id: str) -> dict:
@@ -412,6 +443,32 @@ class Canvas:
                          f"`.papertown/pt task {n['id']} blocked \"原因\"`。没有 pt 就在回复里说清楚。", "</task>"]
             self.town.agents.say(a["id"], "\n".join(body), "queue", origin="papertown")
             n |= {"status": "sent", "sent_at": now(), "done_at": None, "result": "", "by": ""}
+            _log(n, "resent" if again else "sent", by=f"给{ROLES[n['to']]['name']}")
+            self._save(line_id, d)
+        self._changed(line_id)
+        return self.view(line_id)
+
+    def back(self, line_id: str, node_id: str, text: str) -> dict:
+        """Send a task back: the agent hears what is wrong with what it returned, and the task is under way again."""
+        text = str(text or "").strip()
+        if not text:
+            raise CanvasError("写上哪里不行、要怎么改")
+        with self._lock:
+            d = self._load(line_id)
+            n = self._node(d, node_id)
+            if n["kind"] != "task" or n["status"] not in ("done", "blocked"):
+                raise CanvasError("只有交回了结果的任务能退回")
+            a = self.town.leads.agent(line_id, n["to"])
+            if not a:
+                raise CanvasError(f"这个项目的{ROLES[n['to']]['name']}还没有启动")
+            body = [f'<task id="{n["id"]}">', f"用户看了你对画布上「{n['title']}」这件事交回的结果，退回来了：", "", text[:4000]]
+            if n.get("result"):
+                body += ["", f"你上次回的是：{clip(n['result'], 600)}"]
+            body += ["", f"按用户说的接着做，做完再运行 `.papertown/pt task {n['id']} done \"结果\"`，卡住了运行 "
+                         f"`.papertown/pt task {n['id']} blocked \"原因\"`。", "</task>"]
+            self.town.agents.say(a["id"], "\n".join(body), "queue", origin="papertown")
+            n |= {"status": "sent", "sent_at": now(), "done_at": None, "by": ""}
+            _log(n, "back", text)
             self._save(line_id, d)
         self._changed(line_id)
         return self.view(line_id)
@@ -435,6 +492,7 @@ class Canvas:
             if a["role"] != "lead" and n["to"] != a["role"]:
                 raise CanvasError(f"这件事是给{ROLES[n['to']]['name']}的")
             n |= {"status": status, "done_at": now(), "result": text[:4000], "by": self.town.leads._who(a)}
+            _log(n, status, text, by=n["by"])
             self._save(lid, d)
         self.town.leads.report(agent_id, f"画布上的任务「{n['title']}」{TASK[status]}：{text}", key=status == "blocked")
         self._changed(lid)
