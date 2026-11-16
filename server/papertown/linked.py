@@ -1,20 +1,12 @@
-"""Projects of your own, linked in from local repositories: the code in one git repo, the
-paper (a LaTeX repo, e.g. an Overleaf clone) in another. Each becomes a project in the
-town, shown on every core building's floor and in its details.
-
-They are listed in a JSON file that stays on this machine, by default `projects.json` in
-the data directory (PAPERTOWN_PROJECTS to point elsewhere):
+"""Projects of your own, linked in from local repositories (the code in one, the LaTeX paper in
+another), listed in `projects.json` in the data directory (PAPERTOWN_PROJECTS to point elsewhere):
 
     {"projects": [{"key": "my-proj", "code": "~/repos/my-code", "paper": "~/repos/overleaf/my-paper",
                    "match": ["my-code", "my-proj"]}]}
 
-`match` picks the project's experiments out of nvidb's queue (by working directory, job name
-or submitter; by default the code repo's folder name and the key).
-
-The repositories are only read: git commands run with --no-optional-locks and nothing is
-written into them by Papertown itself. A coding or writing agent hired for the project
-works in the repository, so what it changes is real; its Papertown files (the pt tool, its
-guide) live in Papertown's own project directory instead.
+`match` picks the project's experiments out of nvidb's queue (by working directory, job name or
+submitter; by default the code repo's folder name and the key). The repositories are only read:
+git runs with --no-optional-locks and Papertown writes nothing into them.
 """
 
 from __future__ import annotations
@@ -43,9 +35,9 @@ def _home(p: str | Path) -> str:
     return "~" + s[len(h):] if s.startswith(h) else s
 
 
-def _git(repo: Path, *args: str) -> str:
+def _git(repo: Path, *args: str, timeout: float = 10) -> str:
     try:
-        r = subprocess.run(["git", "--no-optional-locks", "-C", str(repo), *args], capture_output=True, text=True, timeout=10)
+        r = subprocess.run(["git", "--no-optional-locks", "-C", str(repo), *args], capture_output=True, text=True, timeout=timeout)
         return r.stdout if r.returncode == 0 else ""
     except (OSError, subprocess.TimeoutExpired):
         return ""
@@ -58,8 +50,6 @@ def _commits(repo: Path, n: int) -> list[dict]:
         out.append({"hash": h, "when": when, "author": who, "subject": subject})
     return out
 
-
-# ---------- LaTeX, just enough to show a paper ----------
 
 def _braced(s: str, i: int) -> tuple[str, int]:
     """The {...} group starting at s[i] == '{'."""
@@ -97,10 +87,10 @@ def _strip_comments(s: str) -> str:
 
 
 def _main_tex(repo: Path) -> Path | None:
+    """The .tex with \\documentclass: the one with a compiled PDF next to it, else main.tex, else the largest."""
     cands = [p for p in repo.glob("*.tex") if "\\documentclass" in p.read_text(encoding="utf-8", errors="ignore")]
     if not cands:
         return None
-    # the one with a compiled PDF next to it, else main.tex, else the largest
     cands.sort(key=lambda p: (not p.with_suffix(".pdf").exists(), p.stem != "main", -p.stat().st_size))
     return cands[0]
 
@@ -159,11 +149,7 @@ class Linked:
         self._cache: dict[str, tuple[float, dict]] = {}
         self._lock = threading.Lock()
 
-    # ---------- the list ----------
-
     def config(self) -> list[dict]:
-        if not self.path.exists():
-            return []
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -218,8 +204,6 @@ class Linked:
                                           "pct": 100 if st == "done" else 0, "note": notes.get(key)})
         self.town.bus.publish("line", line=self.town.pipeline.snapshot(line_id))
         return line_id
-
-    # ---------- what is in the repos ----------
 
     def _cached(self, key: str, fn) -> dict:
         with self._lock:
@@ -315,8 +299,6 @@ class Linked:
                         "authors": ", ".join(authors[:3]) + (" et al." if len(authors) > 3 else ""), "snippet": e["venue"],
                         "url": url, "tags": [], "topic": "参考文献"})
         return out
-
-    # ---------- its experiments, from nvidb ----------
 
     def jobs(self, line_id: str) -> list[dict]:
         p = self.of(line_id)

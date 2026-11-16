@@ -1,7 +1,6 @@
-"""Provider-neutral conversation types. Each adapter converts them to its own wire format.
+"""Provider-neutral conversation types that each adapter converts to its own wire format.
 
-Assistant turns keep the provider's native content in `raw` so it can be replayed
-unchanged (Claude's thinking blocks must come back exactly as they were sent).
+Assistant turns keep the provider's native content in `raw`: Claude's thinking blocks must be replayed exactly.
 """
 
 from __future__ import annotations
@@ -59,12 +58,12 @@ class Reply:
 
 @dataclass
 class ScriptHint:
-    """What the scripted provider needs to act like an agent: the skills it may load,
-    the tool plan those skills declare, how to fill arguments and the final answer.
-    Real providers ignore it."""
+    """What the scripted provider needs to act like an agent (real providers ignore it): the skills it
+    may load, the plan as (skill, allowed-tools entry) pairs, args(plan key, results so far) giving a
+    call's arguments or None to skip it, and the finishing tool with its payload."""
     skills: list[str]
-    plan: list[tuple[str, str]]  # (skill, allowed-tools entry), e.g. ("novelty-check", "run_script(verdict.py)")
-    args: Callable[[str, dict], dict | None]  # (plan key, results so far) -> arguments, None to skip
+    plan: list[tuple[str, str]]
+    args: Callable[[str, dict], dict | None]
     finish: str
     payload: Callable[[dict], dict]
 
@@ -76,7 +75,7 @@ class ProviderError(Exception):
 
 
 class Provider(ABC):
-    name: str = "base"
+    name: str
 
     @abstractmethod
     def complete(self, *, model: str, system: str, turns: list[Turn], tools: list[ToolSpec],

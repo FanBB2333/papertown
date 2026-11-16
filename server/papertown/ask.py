@@ -1,18 +1,7 @@
-"""Questions about a project, answered from what the project holds: its card and its lead's
-reports, its stages, its experiments, the files in its code and paper repositories, and the
-conversations and notes imported from earlier agent sessions (history.py).
-
-Finding: BM25 over all of it, cut into pieces (a file in windows of lines, a paper in
-paragraphs, a conversation in turns). Chinese is matched in pairs of characters, code names
-are split at case and underscores, and a Chinese question also asks in English (the
-library's glossary and a few words of the trade). The repositories are cut and counted once
-and again only when a file changes.
-
-Answering: with a model, from the pieces found, citing them as [n]; offline, the sentences in
-them that say the most about the question. Or the project's lead answers: it gets the
-question with the pieces as a start, reads the project itself and writes back with
-`pt reply`, in a few words or as an HTML page (pages.py). Every question and its answer is
-kept with the project.
+"""Questions about a project, answered from what it holds (card, reports, stages, jobs, code and
+paper files, imported memory). BM25 over pieces of all of it finds what is relevant; a model
+answers citing the pieces as [n], offline the best sentences in them are quoted, or the lead
+answers with `pt reply`, in a few words or as a page.
 
     data/projects/<project>/questions.json
 """
@@ -31,12 +20,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .agents import AgentError
-from .db import now
+from .db import now, read_json, write_json
 from .library import GLOSSARY, STOP, stem
 from .linked import plain
 from .pages import PageError, title_of
 from .llm import ProviderError, Turn
-from .workspace import _text, list_files
+from .workspace import WsError, _text, list_files
 
 if TYPE_CHECKING:
     from .town import Town
@@ -49,7 +38,7 @@ TEXT_EXT = {".py", ".sh", ".bash", ".zsh", ".md", ".txt", ".rst", ".yaml", ".yml
             ".sty", ".cls", ".mk", ".cmake"}
 TEXT_NAMES = {"Makefile", "Dockerfile", "README", "LICENSE"}
 FILE_MAX, JSON_MAX, FILES_MAX, REPO_CHARS = 300_000, 60_000, 2500, 30_000_000
-LINES, PIECE = 40, 1400  # a code window; a paragraph group, a conversation turn
+LINES, PIECE = 40, 1400  # lines in a code window; characters in a prose piece
 K1, B = 1.2, 0.75
 QSTOP = {"什么", "怎么", "现在", "这个", "那个", "一个", "哪些", "哪个", "是不", "不是", "有没", "没有", "可以", "我们", "你们", "目前",
          "如何", "为什", "为何", "多少", "是否", "一下", "情况", "怎样", "了吗", "的是", "项目"}
@@ -81,7 +70,7 @@ def terms(text: str) -> list[str]:
             continue
         out.append(stem(lw))
         parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|\d+", w)
-        if len(parts) > 1:  # camelCase: its words too
+        if len(parts) > 1:
             out += [stem(p.lower()) for p in parts if len(p) > 1 and p.lower() not in STOP]
     return out
 
@@ -124,6 +113,7 @@ class Source:
 
 
 def search(sources: list[Source], q: str, k: int = 8) -> list[tuple[Doc, float, list[str]]]:
+    """The k best pieces by BM25, at most two from one file or conversation and no text twice."""
     qt = query_terms(q)
     if not qt:
         return []
@@ -139,14 +129,13 @@ def search(sources: list[Source], q: str, k: int = 8) -> list[tuple[Doc, float, 
             tf, dl = s.tfs[i], s.lens[i]
             hit = [t for t in idf if tf.get(t)]
             score = sum(qt[t] * idf[t] * tf[t] * (K1 + 1) / (tf[t] + K1 * (1 - B + B * dl / avg)) for t in hit)
-            score *= WEIGHT.get(s.docs[i].kind, 1.0) * (1 + 0.15 * (len(hit) - 1))  # more of the question met, more weight
+            score *= WEIGHT.get(s.docs[i].kind, 1.0) * (1 + 0.15 * (len(hit) - 1))
             if len(phrase) >= 4 and phrase in re.sub(r"\s+", "", s.docs[i].text.lower()):
                 score *= 1.4
             out.append((s.docs[i], score, hit))
     out.sort(key=lambda x: -x[1])
-    # a few pieces of one file or one conversation at most, so the answer draws on more than one place
     seen: Counter = Counter()
-    said: set[str] = set()  # the same text twice (a stage handed on twice) is one piece
+    said: set[str] = set()
     picked = []
     for d, sc, hit in out:
         key = (d.kind, d.ref.get("file", "").rsplit(":", 1)[0], d.ref.get("memory"))
@@ -178,8 +167,6 @@ def best_sentences(text: str, hit: list[str], n: int = 2) -> str:
     scored = sorted(range(len(parts)), key=lambda i: -sum(parts[i].lower().count(t) for t in hit))[:n]
     return " … ".join(parts[i][:240] for i in sorted(scored))
 
-
-# ---------- cutting things into pieces ----------
 
 def _words(v, depth: int = 0) -> list[str]:
     """What a stage handed on (a JSON body), as its sentences: the text in it, not its brackets and keys."""
@@ -252,13 +239,13 @@ def repo_docs(kind: str, files: list[tuple[str, Path, int, float]]) -> list[Doc]
             text = None
         if not text:
             continue
-        if p.suffix == ".tex" and "\\begin{document}" in text:  # the preamble is packages, not the paper (its lines stay, empty, for the numbers)
+        if p.suffix == ".tex" and "\\begin{document}" in text:  # the preamble's lines stay, empty, so cited line numbers hold
             head, _, body = text.partition("\\begin{document}")
             text = "\n" * head.count("\n") + body
         total += len(text)
         prose = p.suffix in (".md", ".tex", ".txt", ".rst", ".bib") or kind == "paper"
         pieces = _paragraphs(rel, text, kind) if prose else _windows(rel, text, kind)
-        if p.suffix == ".tex":  # what the paper says, without its commands
+        if p.suffix == ".tex":
             pieces = [Doc(d.kind, d.title, t, d.where, d.ref) for d in pieces if (t := plain(d.text))]
         docs += pieces
     return docs
@@ -274,7 +261,7 @@ def memory_docs(items) -> list[Doc]:
             continue
         msgs = m.get("messages") or []
         i = 0
-        while i < len(msgs):  # a turn: what was asked and the answer to it
+        while i < len(msgs):
             turn = [msgs[i]]
             if msgs[i]["role"] == "user" and i + 1 < len(msgs) and msgs[i + 1]["role"] == "assistant":
                 turn.append(msgs[i + 1])
@@ -290,15 +277,13 @@ class Asker:
         self.town = town
         self.s = town.s
         self._lock = threading.Lock()
-        self._roots: dict[tuple[str, str], tuple[str, Source]] = {}  # (project, code|paper) -> (its files' signature, pieces)
+        self._roots: dict[tuple[str, str], tuple[str, Source]] = {}
         self._mem: dict[str, tuple[float, Source]] = {}
-
-    # ---------- the pieces ----------
 
     def _root(self, line_id: str, which: str) -> Source | None:
         try:
             root = self.town.workspace.root(line_id, which)
-        except Exception:  # noqa: BLE001 - no project
+        except (OSError, WsError):
             root = None
         if not root:
             return None
@@ -326,7 +311,7 @@ class Asker:
     def _live(self, line_id: str) -> Source:
         """What changes all the time and is small: the card, the project, its reports, its jobs."""
         docs: list[Doc] = []
-        card, line = self.town.cards._read(line_id).get("card"), self.town.pipeline.snapshot(line_id) or {}
+        card, line = self.town.cards._read(line_id).get("card"), self.town.pipeline.snapshot(line_id)
         if card:
             parts = [card["summary"], f"下一个里程碑：{card.get('milestone') or ''}"]
             for k, name in (("need_you", "要你决定"), ("blockers", "卡点"), ("next", "接下来"), ("done", "最近完成")):
@@ -335,13 +320,12 @@ class Asker:
             parts += [f"规划中的实验：{x['name']}（{x.get('goal') or ''}，{x.get('when') or ''}）" for x in card.get("plans") or []]
             parts += [f"预期产出：{x['name']}（{x.get('due') or ''}，{x.get('state')}）" for x in card.get("outputs") or []]
             docs.append(Doc("card", "进展卡片", "\n".join(parts), (card.get("at") or "")[:16].replace("T", " "), {"card": True}))
-        if line:
-            docs.append(Doc("line", line.get("title") or "", f"{line.get('title')}\n{line.get('idea') or ''}\n{line.get('note') or ''}",
-                            f"#{line.get('seq')}", {"mod": "overview"}))
-            for st in line.get("stages") or []:
-                if st.get("note"):
-                    docs.append(Doc("line", f"工序 · {st['name']}", st["note"], st["name"], {"mod": "overview"}))
-        names = {st["key"]: st["name"] for st in line.get("stages") or []}
+        docs.append(Doc("line", line["title"] or "", f"{line['title']}\n{line['idea'] or ''}\n{line['note'] or ''}",
+                        f"#{line['seq']}", {"mod": "overview"}))
+        for st in line["stages"]:
+            if st["note"]:
+                docs.append(Doc("line", f"工序 · {st['name']}", st["note"], st["name"], {"mod": "overview"}))
+        names = {st["key"]: st["name"] for st in line["stages"]}
         for r in self.town.db.q("select stage, body from items where line_id = ? order by created_at desc", line_id):
             name = names.get(r["stage"], r["stage"])
             docs.append(Doc("line", f"{name}的产出", "\n".join(_words(r["body"]))[:6000], name, {"mod": "overview"}))
@@ -374,24 +358,16 @@ class Asker:
                  "snippet": snippet(d.text, hit), "terms": hit, "_text": d.text}
                 for i, (d, sc, hit) in enumerate(search(self.sources(line_id), q, k))]
 
-    # ---------- answering ----------
-
     def _path(self, line_id: str) -> Path:
         return self.s.projects_dir / line_id / "questions.json"
 
     def questions(self, line_id: str) -> list[dict]:
-        try:
-            v = json.loads(self._path(line_id).read_text(encoding="utf-8"))
-            return v if isinstance(v, list) else []
-        except (OSError, ValueError):
-            return []
+        return read_json(self._path(line_id), [])
 
     def _save(self, line_id: str, rows: list[dict]) -> None:
         p = self._path(line_id)
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(rows[-KEEP:], ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        tmp.replace(p)
+        write_json(p, rows[-KEEP:])
 
     def _put(self, line_id: str, rec: dict) -> dict:
         with self._lock:
@@ -434,12 +410,12 @@ class Asker:
                                                 max_tokens=1500)
                 c = self.town.bank.charge(None, line_id, self.town.provider.name, model, r.usage)
                 self.town.trace("LLM", model, f"问答 · ${c:.4f}", int((time.monotonic() - t0) * 1000), line_id=line_id)
-                if r.text.strip():
-                    return r.text.strip(), model
+                if t := r.text.strip():
+                    return t, model
             except ProviderError as e:
                 self.town.trace("LLM", model, f"问答没答出来，改用摘录：{e}", 0, line_id=line_id)
         lines, seen = [], set()
-        for h in hits:  # four places, each saying something the others did not
+        for h in hits:
             t = best_sentences(h["_text"], h["terms"])
             if t not in seen:
                 seen.add(t)
@@ -464,12 +440,12 @@ class Asker:
         rec = next((r for r in self.questions(a["line_id"]) if r["id"] == qid), None)
         if not rec:
             raise AskError(f"没有问题 {qid}")
-        text = text.strip()
-        if not text and not (html or "").strip():
+        text, html = text.strip(), (html or "").strip()
+        if not text and not html:
             raise AskError("回答是空的")
         by = a.get("model") or "项目负责人"
         rec["lead"] = (rec.get("lead") or {}) | {"text": text[:12000], "at": now(), "by": by}
-        if html and html.strip():
+        if html:
             try:
                 page = self.town.pages.publish(a["line_id"], html, title=title_of(html) or f"回答：{rec['q'][:60]}", kind="answer", by=by,
                                                agent=agent_id, question=qid)

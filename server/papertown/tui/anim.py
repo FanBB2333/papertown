@@ -1,8 +1,6 @@
-"""How the TUI moves, after Claude Code's terminal: while something works, a star turns
-(· ✢ ✳ ✶ ✻ ✽ and back) and a gleam runs along the words saying what, the seconds count beside it, and
-the star warms towards red when nothing has been heard for a while. Numbers count up to their value,
-bars fill, and what just changed glows and fades back. Everything is drawn from one clock (the app's
-`t`), so nothing here keeps state of its own except the tweens."""
+"""How the TUI moves, after Claude Code's terminal: a turning star and a gleam along the words while
+something works, counters that count up, bars that fill and changes that glow and fade. Everything is
+drawn from the app's one clock `t`."""
 
 from __future__ import annotations
 
@@ -18,7 +16,7 @@ SPARK = "▁▂▃▄▅▆▇█"
 
 
 def star(t: float, speed: float = 4) -> str:
-    # 4 glyphs a second suits what repaints on the beat (3 frames); the 12 fps strips ask for 8
+    """the turning star at time t, `speed` glyphs a second"""
     return FRAMES[int(t * speed) % len(FRAMES)]
 
 
@@ -38,7 +36,8 @@ def breathe(t: float, period: float = 2.4) -> float:
     return (1 - math.cos(t / period * 2 * math.pi)) / 2
 
 
-def _width(ch: str) -> int:
+def char_width(ch: str) -> int:
+    """terminal cells a character takes: two for wide (Chinese) ones"""
     return 2 if unicodedata.east_asian_width(ch) in "WF" else 1
 
 
@@ -46,8 +45,9 @@ def gleam(text: str, t: float, base: str, hi: str, period: float = 2.2, width: f
     """The words with a light passing along them, left to right, once a period."""
     cells, x = [], 0
     for ch in text:
-        cells.append(x + _width(ch) / 2)
-        x += _width(ch)
+        w = char_width(ch)
+        cells.append(x + w / 2)
+        x += w
     head = (t % period) / period * (x + 2 * width) - width
     out = Text()
     for ch, c in zip(text, cells):
@@ -104,11 +104,6 @@ def dur(seconds: float | None) -> str:
     if s < 86400:
         return f"{s // 3600}h {s % 3600 // 60:02d}m"
     return f"{s // 86400}d {s % 86400 // 3600}h"
-
-
-def ago(ts: str | None) -> str:
-    s = seconds_since(ts)
-    return "—" if s is None else ("刚刚" if s < 5 else f"{dur(s).split(' ')[0]}前")
 
 
 def clock(ts: str | None) -> str:

@@ -1,11 +1,5 @@
-"""A line is one paper's life, idea to shipped PDF, in eight stages across the town:
-
-    idea(cityhall) -> hatch(hatchery) -> [you decide] -> team(market) -> method(mill)
-      -> exp(farm) -> write(press) -> review(qa) -> ship(dock_arxiv)
-
-Each line runs in its own thread. Progress is written to the database and published on
-the event bus, so the map, the drawer and the status page update live. If the server
-restarts mid-line, the line is paused and can be resumed from its current stage.
+"""A line is one paper's life, idea to shipped PDF, in eight stages across the town.
+Each line runs in its own thread and publishes its progress on the event bus; a restart pauses it at its current stage.
 """
 
 from __future__ import annotations
@@ -16,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from . import stages
 from .db import now
-from .market import ROLES, title
+from .market import title
 
 if TYPE_CHECKING:
     from .town import Town
@@ -36,6 +30,10 @@ NAMES = {k: name for k, name, *_ in STAGES}
 MAX_REVISIONS = 1
 
 
+def _short(text: str) -> str:
+    return text if len(text) <= 24 else text[:23] + "…"
+
+
 class LineError(Exception):
     pass
 
@@ -46,8 +44,6 @@ class Pipeline:
         self.db = town.db
         self._active: set[str] = set()
         self._lock = threading.Lock()
-
-    # ---------- reading ----------
 
     def line(self, line_id: str) -> dict:
         ln = self.db.one("select * from lines where id = ?", line_id)
@@ -65,7 +61,7 @@ class Pipeline:
             return None
         rows = self.db.q("select * from stages where line_id = ? order by idx", line_id)
         workers = {w["id"]: w for w in self.town.market.all()}
-        team = (ln["plan"] or {}).get("team", {}) if ln["plan"] else {}
+        plan = ln["plan"] or {}
         out_stages = []
         for r in rows:
             ids = r["workers"] or []
@@ -74,24 +70,20 @@ class Pipeline:
                                "workers": [{"id": i, "role": workers[i]["role"], "level": workers[i]["level"],
                                             "title": title(workers[i])} for i in ids if i in workers],
                                "started_at": r["started_at"], "ended_at": r["ended_at"]})
-        done = sum(1 for r in rows if r["status"] == "done")
+        linked = self.town.linked.summary(line_id) if ln["linked"] else None
+        if linked:
+            self.town.linked.overlay(line_id, out_stages)
+        done = sum(1 for r in out_stages if r["status"] == "done")
         cur = next((r for r in out_stages if r["status"] in ("run", "wait")), None)
         items = self.db.q("select id, kind, stage, building, title, created_at from items where line_id = ? order by created_at", line_id)
         files = [f for f in ("main.tex", "refs.bib", "main.pdf", "paper.zip") if (self.town.press.root / line_id / f).exists()]
-        linked = self.town.linked.summary(line_id) if ln.get("linked") else None
-        if linked:
-            self.town.linked.overlay(line_id, out_stages)
-            done = sum(1 for r in out_stages if r["status"] == "done")
-            cur = next((r for r in out_stages if r["status"] in ("run", "wait")), None)
         return {**{k: ln[k] for k in ("id", "seq", "title", "idea", "budget", "spent", "status", "stage", "mill_id", "verdict",
                                        "revisions", "note", "created_at", "updated_at")},
-                "pct": round(100 * done / len(STAGES)), "current": cur, "stages": out_stages, "team": team, "linked": linked,
-                "reason": (ln["plan"] or {}).get("reason") if ln["plan"] else None, "items": items, "files": files}
+                "pct": round(100 * done / len(STAGES)), "current": cur, "stages": out_stages, "team": plan.get("team", {}), "linked": linked,
+                "reason": plan.get("reason"), "items": items, "files": files}
 
     def lines(self) -> list[dict]:
         return [self.snapshot(r["id"]) for r in self.db.q("select id from lines order by seq desc")]
-
-    # ---------- writing ----------
 
     def _publish(self, line_id: str) -> None:
         self.town.bus.publish("line", line=self.snapshot(line_id))
@@ -149,8 +141,6 @@ class Pipeline:
         with self._lock:
             return line_id in self._active
 
-    # ---------- the idea ----------
-
     def submit_idea(self, text: str, budget: float | None = None) -> dict:
         text = text.strip()
         if len(text) < 4:
@@ -158,9 +148,8 @@ class Pipeline:
         budget = float(budget or self.town.s.default_line_budget)
         seq = (self.db.val("select max(seq) from lines") or 0) + 1
         line_id = f"line_{seq}"
-        short = text if len(text) <= 24 else text[:23] + "…"
         with self.db.lock:
-            self.db.insert("lines", {"id": line_id, "seq": seq, "title": short, "idea": text, "budget": budget, "spent": 0,
+            self.db.insert("lines", {"id": line_id, "seq": seq, "title": _short(text), "idea": text, "budget": budget, "spent": 0,
                                      "status": "hatching", "stage": "idea", "revisions": 0, "created_at": now(), "updated_at": now()})
             for i, (key, _, b, _) in enumerate(STAGES):
                 self.db.insert("stages", {"line_id": line_id, "idx": i, "key": key, "status": "todo", "building": b, "workers": [], "pct": 0})
@@ -174,8 +163,7 @@ class Pipeline:
         ln = self.line(line_id)
         if ln["status"] not in ("waiting", "failed", "paused"):
             raise LineError("只有等你决定的 idea 才能调整")
-        short = text if len(text) <= 24 else text[:23] + "…"
-        self._set_line(line_id, idea=text.strip(), title=short, status="hatching", verdict=None)
+        self._set_line(line_id, idea=text.strip(), title=_short(text), status="hatching", verdict=None)
         self.town.message(line_id, "user", None, "text", {"text": f"调整 idea：{text}"})
         self._spawn(line_id, self._hatch)
         return self.snapshot(line_id)
@@ -192,8 +180,6 @@ class Pipeline:
         self._say(line_id, worker, report.get("summary") or report.get("verdict", ""), kind="report", report=report,
                   cost=round(res.cost, 4), steps=res.steps, degraded=res.degraded, skills=res.skills)
         self._publish(line_id)
-
-    # ---------- you decide: hatch into a mill ----------
 
     def hatch(self, line_id: str) -> dict:
         ln = self.line(line_id)
@@ -238,15 +224,12 @@ class Pipeline:
             self.db.x("update stages set status = 'todo', pct = 0 where line_id = ? and status = 'run'", ln["id"])
         self.db.x("update buildings set status = 'idle' where status = 'busy'")
 
-    # ---------- production ----------
-
     def _team(self, line_id: str, key: str) -> list[dict]:
         ln = self.line(line_id)
         return [self.town.market.get(i) for i in (ln["plan"] or {}).get("team", {}).get(key, [])]
 
     def _held(self, line_id: str, key: str) -> bool:
-        """A demo sample can be parked before a stage, to show a paper part way along. The
-        hold is used up: 「继续」 runs the line on from there."""
+        """Park a demo sample before a stage once, to show a paper part way along."""
         if self.db.val("select hold from lines where id = ?", line_id) != key:
             return False
         self._set_line(line_id, status="paused", hold=None, note=f"展示样例停在「{NAMES[key]}」之前，点「继续」接着跑")
@@ -338,7 +321,6 @@ class Pipeline:
         self.town.save_item(line_id, "pdf", "ship", "dock_arxiv", "出厂包", {"zip": z.name, "files": files})
         self._stage(line_id, "ship", "done")
 
-        # settle: quality per worker, then the market's ROI and levels
         ln = self.line(line_id)
         rv = self.item(line_id, "review") or {}
         reviews = rv.get("reviews", [])

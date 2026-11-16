@@ -1,6 +1,5 @@
-"""日报: the town's daily report, the page's 运行状态: the headlines, every project and how far it
-is, what came into the library, who went up or down, where the calls and the money went. The bars
-grow in when the page opens."""
+"""日报: the town's daily report (the web page's 运行状态): headlines, projects, new papers, staff
+changes, calls and spending, with bars that grow in when the page opens."""
 
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ from ..widgets import Pane, Place
 
 
 class Daily(Place):
-    key, title, animated = "daily", "日报", True
+    key, title = "daily", "日报"
     BINDINGS = [Binding("o", "open", "在浏览器里看", show=False)]
 
     def __init__(self) -> None:
@@ -48,7 +47,7 @@ class Daily(Place):
     def paint(self, layout: bool = True) -> None:
         p, t, s, k = self.pal, self.town.t, self.s, self.grow.value
         if not s or s.get("error"):
-            self.query_one("#dl-page", Pane).show(Text(s.get("error", "加载中…") if s else "加载中…", style=p["muted"]))
+            self.query_one("#dl-page", Pane).show(Text(s.get("error") or "加载中…", style=p["muted"]))
             return
         hud = s.get("hud") or {}
         parts: list[Any] = [Text.assemble(("Papertown 日报", f"bold {p['ink']}"), (f"   第 {hud.get('day', 1)} 天 · {datetime.now():%Y-%m-%d}", p["muted"])), Text()]
@@ -132,7 +131,7 @@ class Daily(Place):
         if not self.town.beat:
             return
         if self.grow.step(3 / 12) or any(x.get("status") in ("running", "hatching", "waiting") for x in self.s.get("projects") or []):
-            self.paint(layout=False)  # bars growing, marks turning: the page keeps its lines
+            self.paint(layout=False)
 
     def hints(self) -> list[tuple[str, str]]:
         return [("o", "在浏览器里看")]

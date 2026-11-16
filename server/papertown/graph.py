@@ -1,11 +1,5 @@
-"""The genealogy hall: a graph over papers (and, later, repos).
-
-Edges:
-  cites    paper -> reference, from Semantic Scholar (`papertown ingest --refs`, needs
-           network and ideally S2_API_KEY; the public API rate-limits hard)
-  similar  paper <-> paper, the top lexical neighbours, computed at ingest so the graph
-           is never empty offline. These are "close to", not "descends from", and the
-           UI labels them that way.
+"""The genealogy hall: a graph over papers. `cites` edges come from Semantic Scholar (`papertown ingest --refs`);
+`similar` edges link each paper to its top lexical neighbours at ingest, so the graph is never empty offline.
 """
 
 from __future__ import annotations
@@ -29,14 +23,11 @@ class Genealogy:
     def add(self, src: str, dst: str, kind: str, weight: float = 1.0, title: str | None = None) -> None:
         self.db.x("insert or ignore into edges(src, dst, kind, weight, title) values (?,?,?,?,?)", src, dst, kind, weight, title)
 
-    def link_similar(self, papers: list[dict], k: int = 3) -> int:
-        n = 0
+    def link_similar(self, papers: list[dict], k: int = 3) -> None:
         for p in papers:
             for other, w in self.library.similar_to(p, k):
                 if w >= 0.3:
                     self.add(f"arxiv:{p['arxiv_id']}", f"arxiv:{other['arxiv_id']}", "similar", w)
-                    n += 1
-        return n
 
     def fetch_references(self, arxiv_ids: list[str], timeout: float = 30) -> int:
         """One batch call per 500 papers. Raises httpx errors (429 without a key is common)."""

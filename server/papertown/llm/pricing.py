@@ -1,7 +1,5 @@
-"""USD per million tokens (input, output). The bank prices every call with this table.
-
-Claude prices are Anthropic's first-party rates. Other providers vary by plan and
-region, so they default to 0 until set: PAPERTOWN_PRICES='{"deepseek-chat": [0.27, 1.1]}'.
+"""USD per million tokens (input, output), which the bank prices every call with. Models not listed
+cost 0 until set, e.g. PAPERTOWN_PRICES='{"deepseek-chat": [0.27, 1.1]}'.
 """
 
 from __future__ import annotations
@@ -17,7 +15,6 @@ PRICES: dict[str, tuple[float, float]] = {
     "claude-opus-5": (5.0, 25.0),
     "claude-sonnet-5-5": (2.0, 10.0),
     "claude-haiku-5-5": (0.10, 0.50),
-    "scripted": (0.0, 0.0),
 }
 
 try:

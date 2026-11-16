@@ -1,14 +1,11 @@
-"""One function per stage of a paper's life. Each builds an AgentTask for the worker on
-duty: the prompt, the submit tool, and the offline answer (arguments for each tool the
-skill declares, and a final answer assembled from what those tools returned).
-
-Offline answers never invent facts: they only rearrange retrieval hits, script outputs
-and the simulated results table, and they say when they are templated.
+"""One function per stage of a paper's life, each building an AgentTask for the worker on duty.
+Offline answers only rearrange retrieval hits, script outputs and the simulated results, and say so.
 """
 
 from __future__ import annotations
 
 import re
+import time
 from typing import TYPE_CHECKING
 
 from .agent import AgentTask, run_agent
@@ -23,18 +20,17 @@ PERSONAS = [("方法派", "methodologist"), ("实验派", "empiricist"), ("读�
 
 
 def _hits(v) -> list[dict]:
-    return (v or {}).get("hits", []) if isinstance(v, dict) else []
+    return v.get("hits", []) if isinstance(v, dict) else []
 
 
-def _keywords(text: str) -> str:
-    return expand(text)
+def _verdict_args(sc: dict) -> dict:
+    return {"candidates": [{"id": h["paper_id"], "title": h["title"], "similarity": h["similarity"]} for h in sc["hits"]],
+            "method": sc["method"]}
 
 
 def _arxiv_query(text: str) -> str:
     return " ".join(f'"{p}"' if " " in p else p for p in phrases(text)[:4])
 
-
-# ---------------------------------------------------------------- hatch
 
 REPORT = ToolSpec("submit_report", "提交撞车报告。", obj(
     ["verdict", "gap"],
@@ -49,14 +45,11 @@ REPORT = ToolSpec("submit_report", "提交撞车报告。", obj(
 
 def hatch(town: "Town", line: dict, worker: dict) -> tuple[dict, object]:
     idea = line["idea"]
-    q = _keywords(idea) or idea
+    q = expand(idea) or idea
 
     def scored(r: dict) -> dict:
         ids = [h["arxiv_id"] for h in _hits(r.get("library_search")) + _hits(r.get("arxiv_search"))]
         return town.library.rescore(idea, ids)
-
-    def cands(r: dict) -> list[dict]:
-        return [{"id": h["paper_id"], "title": h["title"], "similarity": h["similarity"]} for h in scored(r)["hits"]]
 
     def args(key: str, r: dict):
         if key == "library_search":
@@ -64,12 +57,10 @@ def hatch(town: "Town", line: dict, worker: dict) -> tuple[dict, object]:
         if key == "arxiv_search":
             return {"query": _arxiv_query(idea), "max_results": 8}
         if key == "genealogy_expand":
-            ids = [c["id"] for c in sorted(cands(r), key=lambda c: -c["similarity"])[:3]]
+            ids = [h["paper_id"] for h in scored(r)["hits"][:3]]
             return {"paper_ids": ids, "depth": 1} if ids else None
         if key == "run_script:verdict.py":
-            sc = scored(r)
-            return {"candidates": [{"id": h["paper_id"], "title": h["title"], "similarity": h["similarity"]} for h in sc["hits"]],
-                    "method": sc["method"]}
+            return _verdict_args(scored(r))
         return None
 
     def payload(r: dict) -> dict:
@@ -77,31 +68,27 @@ def hatch(town: "Town", line: dict, worker: dict) -> tuple[dict, object]:
         sc = scored(r)
         hits = {h["paper_id"]: h for h in sc["hits"]}
         top = [hits[c["id"]] for c in v.get("ranked", []) if c["id"] in hits][:3]
-        terms = sc["terms"]
-        covered = {t for h in top for t in h.get("matched", [])}
-        missing = [t for t in terms if t not in covered]
+        covered = {t for h in top for t in h["matched"]}
+        missing = [t for t in sc["terms"] if t not in covered]
         similar = [{"paper_id": h["paper_id"], "title": h["title"], "similarity": h["similarity"],
-                    "note": f"共用关键词：{', '.join(h.get('matched', [])[:5]) or '无'}；{h['year']} 年，{h['authors']}"} for h in top]
+                    "note": f"共用关键词：{', '.join(h['matched'][:5]) or '无'}；{h['year']} 年，{h['authors']}"} for h in top]
         verdict = v.get("verdict", "可孵化")
+        summary = v.get("summary", verdict)
         gap = (f"最相近的工作里没有出现：{', '.join(missing[:6])}。" if missing else "关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。")
         sugg = {"已被做过": ["换一个没被验证过的任务或场景", "把已有方法当 baseline，找它的失败案例作为切入点"],
                 "需调整": [f"围绕「{', '.join(missing[:3]) or '验证设定'}」收窄问题", "先精读最相近的两篇，确认差异是本质的"],
                 "可孵化": ["立项时把最相近的工作列为 baseline", "尽早确定评测设定，避免和相近工作比不到一起"]}[verdict]
         return {"verdict": verdict, "similar": similar, "gap": gap, "suggestions": sugg,
-                "summary": f"{v.get('summary', verdict)}。离线模式：说明由检索结果拼成，没有经过模型理解。" if town.s.offline
-                else v.get("summary", verdict)}
+                "summary": f"{summary}。离线模式：说明由检索结果拼成，没有经过模型理解。" if town.s.offline else summary}
 
     prompt = f"新 idea（来自市政厅）：\n{idea}\n\n预算：${line['budget']:.2f}\n请查重并写撞车报告。"
     task = AgentTask(worker=worker, stage="hatch", building="孵化场", prompt=prompt, finish=REPORT, payload=payload, args=args,
                      line_id=line["id"], required=["verdict", "gap"], budget=line["budget"] * 0.15)
     res = run_agent(town, task)
     report = dict(res.payload)
-    # deterministic parts win over the model: every candidate is re-scored against the whole
-    # idea and verdict.py decides on those numbers, whatever the agent searched or concluded
+    # the verdict comes from verdict.py on candidates re-scored against the whole idea, not from the model
     sc = scored(res.results)
-    final = town.skills.run_script("novelty-check", "verdict.py", {
-        "candidates": [{"id": h["paper_id"], "title": h["title"], "similarity": h["similarity"]} for h in sc["hits"]],
-        "method": sc["method"]})
+    final = town.skills.run_script("novelty-check", "verdict.py", _verdict_args(sc))
     if report.get("verdict") != final["verdict"]:
         report["verdict_note"] = f"结论以 verdict.py 为准（agent 给的是「{report.get('verdict')}」）"
     report["verdict"] = final["verdict"]
@@ -115,8 +102,6 @@ def hatch(town: "Town", line: dict, worker: dict) -> tuple[dict, object]:
     report["candidates"] = sc["hits"][:8]
     return report, res
 
-
-# ---------------------------------------------------------------- method
 
 DRAFT = ToolSpec("submit_draft", "提交方法草案。", obj(
     ["title", "problem", "mechanism", "baselines", "metrics"],
@@ -137,13 +122,13 @@ def _metrics(snippets: list[str]) -> list[str]:
 
 def method(town: "Town", line: dict, worker: dict, report: dict) -> tuple[dict, object]:
     idea, gap = line["idea"], report.get("gap", "")
-    q = _keywords(f"{idea} {gap}")
+    q = expand(f"{idea} {gap}")
 
     def args(key: str, r: dict):
         if key == "library_search":
             return {"query": q, "top_k": 6}
         if key == "repo_search":
-            return {"query": f"{_keywords(idea)} baseline benchmark metrics"}
+            return {"query": f"{expand(idea)} baseline benchmark metrics"}
         return None
 
     def payload(r: dict) -> dict:
@@ -173,8 +158,6 @@ def method(town: "Town", line: dict, worker: dict, report: dict) -> tuple[dict, 
     return dict(res.payload), res
 
 
-# ---------------------------------------------------------------- experiment
-
 RESULTS = ToolSpec("submit_results", "提交实验结果分析。", obj(
     ["job_id", "analysis"], job_id=s("gpu_submit 返回的任务 id"), analysis=s("结果分析"), concerns=arr("不足或疑点")))
 
@@ -187,7 +170,8 @@ def experiment(town: "Town", line: dict, worker: dict, draft: dict) -> tuple[dic
         if key == "gpu_status":
             return {}
         if key == "gpu_submit":
-            free = (r.get("gpu_status") or {}).get("gpus", 1) - (r.get("gpu_status") or {}).get("busy", 0)
+            st = r.get("gpu_status") or {}
+            free = st.get("gpus", 1) - st.get("busy", 0)
             return {"name": "main", "config": config, "gpus": 2 if free >= 2 else 1}
         if key == "gpu_wait":
             job = r.get("gpu_submit") or {}
@@ -214,15 +198,13 @@ def experiment(town: "Town", line: dict, worker: dict, draft: dict) -> tuple[dic
                      line_id=line["id"], required=["job_id", "analysis"], budget=line["budget"] * 0.12)
     res = run_agent(town, task)
     job = town.plant.jobs.get(res.payload.get("job_id", ""))
-    if not job:  # the model never submitted: run the main experiment ourselves
+    if not job:
         job = town.plant.submit(line["id"], "main", config, 1)
         town.trace("TOOL", "power.submit(main)", "实验员没有提交，由流水线代为提交", 0, line_id=line["id"])
     job = town.plant.wait(job.id)
     table = dict(job.result or {}, job_id=job.id, analysis=res.payload.get("analysis", ""), concerns=res.payload.get("concerns", []))
     return table, res
 
-
-# ---------------------------------------------------------------- write
 
 PAPER = ToolSpec("submit_paper", "提交这一版初稿的说明（正文已通过 press_typeset 排版）。",
                  obj(["summary"], summary=s("这一版写了什么、还缺什么")))
@@ -261,9 +243,9 @@ def write(town: "Town", line: dict, worker: dict, report: dict, draft: dict, tab
         if key == "paper_get":
             return {"ids": cite_ids} if cite_ids else None
         if key == "press_typeset":
-            got = r.get("paper_get") or {}
+            got = r.get("paper_get")
             papers = got.get("papers", []) if isinstance(got, dict) else []
-            secs = sections(lib.get(cite_ids) if not papers else [dict(p, arxiv_id=p["arxiv_id"]) for p in papers])
+            secs = sections(papers or lib.get(cite_ids))
             return {"title": draft.get("title", "Untitled"), "abstract": secs.pop("abstract"), "sections": secs, "cite_ids": cite_ids}
         return None
 
@@ -282,14 +264,12 @@ def write(town: "Town", line: dict, worker: dict, report: dict, draft: dict, tab
                      line_id=line["id"], required=["summary"], budget=line["budget"] * 0.30)
     res = run_agent(town, task)
     tex = town.db.one("select * from items where line_id = ? and kind = 'tex' order by created_at desc, rowid desc limit 1", line["id"])
-    if not tex:  # the model never typeset: do it from the template so the line can go on
+    if not tex:  # the model never typeset: use the template so the line can go on
         a = args("press_typeset", {})
         info = town.press.typeset(line["id"], a["title"], a["abstract"], a["sections"], a["cite_ids"], table)
         tex = town.save_item(line["id"], "tex", "write", "press", a["title"], {**a, "typeset": info})
     return dict(tex["body"], summary=res.payload.get("summary", "")), res
 
-
-# ---------------------------------------------------------------- review
 
 REVIEW = ToolSpec("submit_review", "提交审稿意见。", obj(
     ["overall", "decision"],
@@ -304,7 +284,6 @@ def format_check(town: "Town", line: dict, tex: dict) -> dict:
     args = {"tex": town.press.read(line["id"]), "pages": info.get("pages"), "page_limit": 9, "cited": info.get("cited", 0)}
     if not info.get("compiled") and not town.press.compile_tex:
         args["pages"] = max(1, info.get("words", 0) // 550)  # no TeX installed: estimate from length
-    import time
     t0 = time.monotonic()
     out = town.skills.run_script("anonymity-check", "check.py", args)
     town.trace("SCRIPT", "anonymity-check/scripts/check.py", out.get("summary", ""), int((time.monotonic() - t0) * 1000), line_id=line["id"])
@@ -335,7 +314,7 @@ def review(town: "Town", line: dict, worker: dict, k: int, report: dict, table: 
         own = {"read_reference:references/personas.md", "read_reference:references/rubric.md"}
         refs = [v for kk, v in r.items() if kk.startswith("read_reference:") and kk not in own and isinstance(v, str)]
         items = [ln[2:].strip() for ref in refs for ln in ref.splitlines() if ln.startswith("- ")][:3]
-        for name in extra:  # a hot-plugged skill: its checklist items become open questions
+        for name in extra:
             weak += [f"{name}：请写明{x}" for x in items] or [f"{name}：已检查"]
         overall = max(1, round((novelty + soundness + clarity) / 3) - (1 if blocking else 0))
         return {"scores": {"novelty": novelty, "soundness": soundness, "clarity": clarity}, "overall": overall,
@@ -353,12 +332,12 @@ def review(town: "Town", line: dict, worker: dict, k: int, report: dict, table: 
     return out, res
 
 
-# ---------------------------------------------------------------- ask (chat with a building's worker)
-
 REPLY = ToolSpec("reply", "回复用户。", obj(["text"], text=s("回复内容，中文")))
 
 
 def ask(town: "Town", worker: dict, building: dict, question: str, line: dict | None, context: str) -> tuple[dict, object]:
+    """A building's worker answers the user."""
+
     def payload(r: dict) -> dict:
         items = r.get("line_items") or []
         last = items[-1] if isinstance(items, list) and items else None

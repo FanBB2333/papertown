@@ -4,16 +4,15 @@ it gives to states, so a project or a job reads the same in both."""
 from __future__ import annotations
 
 import re
-import unicodedata
 
 import rich._wrap
 from rich.text import Text
 from textual.theme import Theme
 
-from .anim import breathe, mix, star
+from .anim import breathe, char_width, mix, star
 
-# Rich wraps only at spaces, so a run of Chinese is one long word and "相似度 0.85，16 篇候选……" breaks
-# after "16". Let it break between any two Chinese characters too, keeping punctuation with its neighbour.
+# Rich wraps only at spaces, so a run of Chinese never breaks: let it break between Han characters too,
+# keeping punctuation with its neighbour.
 _HAN = r"⺀-⿿぀-ヿ㐀-䶿一-鿿豈-﫿가-힯"
 _OPEN = "（「『【《〈“‘"
 _CLOSE = "，。、；：！？）」』】》〉”’…"
@@ -21,7 +20,7 @@ rich._wrap.re_word = re.compile(rf"\s*[{_OPEN}]*[{_HAN}][{_CLOSE}]*\s*"
                                 rf"|\s*[{_OPEN}]*[^\s{_HAN}{_OPEN}{_CLOSE}]+[{_CLOSE}]*\s*"
                                 rf"|\s*[{_OPEN}{_CLOSE}]+\s*")
 
-# the page's colours (web/src/hand.css), lifted for a dark terminal; and as they are, on paper
+# web/src/hand.css's colours: lifted for a dark terminal, and as they are on paper
 PALETTES: dict[str, dict[str, str]] = {
     "papertown": dict(brand="#d9804f", hi="#ffd2b0", ink="#ece2d3", muted="#93846f", faint="#54493d", ok="#8cb878", warn="#e0ad4c",
                       bad="#e0705a", info="#7eaedc", bg="#1b1714", panel="#24201b", raised="#302922",
@@ -55,7 +54,7 @@ WORKER = {"active": "在岗", "frozen": "冻结"}
 
 
 def doing(d: dict) -> str:
-    """What a department is doing. One the server has no words for says 空闲 even while its jobs run; count them instead."""
+    """What a department is doing; when the server says 空闲 while its jobs run, count the jobs instead."""
     running = sum(1 for j in d.get("jobs") or [] if j.get("status") == "running")
     if d.get("state") == "busy" and d.get("job") == "空闲" and running:
         return f"{running} 个任务在跑"
@@ -68,12 +67,22 @@ def job_state(s: str | None) -> str:
             "cancelled": "cancelled"}.get(s or "", "failed")
 
 
+def busy_mark(t: float, p: dict[str, str]) -> Text:
+    """the turning star of something at work"""
+    return Text(star(t), style=f"bold {p['run']}")
+
+
+def wait_mark(t: float, p: dict[str, str]) -> Text:
+    """the breathing half-moon of something waiting on you"""
+    return Text("◐", style=f"bold {mix(p['warn'], p['hi'], breathe(t) * 0.6)}")
+
+
 def line_mark(status: str, t: float, p: dict[str, str]) -> Text:
-    """a project's state as one animated cell: the star while it works, a breathing half-moon while it waits on you"""
+    """a project's state as one animated cell"""
     if status in ("running", "hatching"):
-        return Text(star(t), style=f"bold {p['run']}")
+        return busy_mark(t, p)
     if status == "waiting":
-        return Text("◐", style=f"bold {mix(p['warn'], p['hi'], breathe(t) * 0.6)}")
+        return wait_mark(t, p)
     sign, color = {"paused": ("‖", "muted"), "failed": ("✕", "bad"), "done": ("✓", "done"), "dropped": ("⊘", "muted"),
                    "linked": ("⇄", "info")}.get(status, ("·", "muted"))
     return Text(sign, style=p[color])
@@ -81,22 +90,22 @@ def line_mark(status: str, t: float, p: dict[str, str]) -> Text:
 
 def job_mark(state: str, t: float, p: dict[str, str]) -> Text:
     if state == "running":
-        return Text(star(t), style=f"bold {p['run']}")
-    sign = {"done": "✓", "failed": "✕", "queued": "◷", "cancelled": "⊘"}.get(state, "·")
-    return Text(sign, style=p.get(state if state != "cancelled" else "queued", p["muted"]))
+        return busy_mark(t, p)
+    sign = {"done": "✓", "failed": "✕", "queued": "◷", "cancelled": "⊘"}[state]
+    return Text(sign, style=p["queued" if state == "cancelled" else state])
 
 
 def stage_mark(status: str, t: float, p: dict[str, str]) -> Text:
     if status == "run":
-        return Text(star(t), style=f"bold {p['run']}")
+        return busy_mark(t, p)
     if status == "wait":
-        return Text("◐", style=f"bold {mix(p['warn'], p['hi'], breathe(t) * 0.6)}")
+        return wait_mark(t, p)
     sign, color = {"done": ("✓", "ok"), "fail": ("✕", "bad")}.get(status, ("○", "faint"))
     return Text(sign, style=p[color])
 
 
 def cells(s: str) -> int:
-    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in s)
+    return sum(char_width(c) for c in s)
 
 
 def clip(s: str | None, width: int) -> str:
@@ -106,7 +115,7 @@ def clip(s: str | None, width: int) -> str:
         return s
     out, w = "", 0
     for c in s:
-        cw = 2 if unicodedata.east_asian_width(c) in "WF" else 1
+        cw = char_width(c)
         if w + cw > width - 1:
             break
         out += c
@@ -128,8 +137,8 @@ def money(v: float | None) -> str:
 def size(n: int | None) -> str:
     if n is None:
         return "—"
-    for unit in ("B", "K", "M", "G"):
-        if n < 1024 or unit == "G":
+    for unit in ("B", "K", "M"):
+        if n < 1024:
             return f"{n:.0f}{unit}" if unit == "B" else f"{n:.1f}{unit}"
         n /= 1024
     return f"{n:.1f}G"

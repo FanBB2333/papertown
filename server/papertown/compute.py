@@ -1,9 +1,6 @@
-"""Power plants: where experiments get their GPUs.
-
-Only the simulated plant is built so far. It accepts jobs, "runs" them for a few
-seconds with progress events, and returns a results table generated from a seeded
-random model. Every number it produces is marked simulated, and the paper and the
-UI say so; a real GPU backend implements the same three calls (status/submit/wait).
+"""Power plants: where experiments get their GPUs. The simulated plant "runs" jobs for a few seconds
+and returns a seeded random results table; every number it produces is marked simulated, and the paper
+and the UI say so. A real GPU backend implements the same status/submit/wait.
 """
 
 from __future__ import annotations
@@ -13,7 +10,7 @@ import random
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Callable
 
 
@@ -27,7 +24,6 @@ class Job:
     status: str = "queued"
     progress: int = 0
     result: dict | None = None
-    created: float = field(default_factory=time.time)
 
 
 class SimulatedPlant:
@@ -58,7 +54,7 @@ class SimulatedPlant:
         return job
 
     def _run(self, job: Job) -> None:
-        while True:  # wait for free cards
+        while True:
             with self._lock:
                 used = sum(j.gpus for j in self.jobs.values() if j.status == "running")
                 if used + job.gpus <= self.total:
@@ -86,7 +82,7 @@ class SimulatedPlant:
 
 
 def simulate_results(job: Job) -> dict:
-    """Seeded by line + job name, so a replay gives the same table."""
+    """Seeded by line + job name, so a replay gives the same table; ours leads on most metrics, not all."""
     cfg = job.config
     methods = [str(m) for m in (cfg.get("baselines") or ["Baseline"])][:4] + [str(cfg.get("method") or "Ours")]
     metrics = [str(m) for m in (cfg.get("metrics") or ["Success rate (%)"])][:4]
@@ -100,7 +96,6 @@ def simulate_results(job: Job) -> dict:
             base = rng.uniform(38, 62)
             vals.append(round(base + (rng.uniform(4, 9) if is_ours else rng.uniform(-6, 2)), 1))
         rows.append({"method": m, "values": vals, "ours": is_ours})
-    # keep "ours" ahead of every baseline on most metrics, but not uniformly
     for k in range(len(metrics)):
         best = max(r["values"][k] for r in rows[:-1])
         if rows[-1]["values"][k] <= best and rng.random() < 0.75:

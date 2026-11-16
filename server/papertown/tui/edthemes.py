@@ -1,11 +1,6 @@
-"""The editor's looks in the TUI, the same as the web page's (web/src/console/edthemes.ts): a colour
-theme for the code and paper pages (the file list, the viewer, the editor and their status line) and
-a file icon theme for the list of files. 纸墨, the default, is the TUI's own palette, dark or on paper
-as the TUI is; the others are VS Code's and their families'.
-
-A theme colours the widgets through the classes css() writes (one .ed-… per theme, swapped on the
-page), and the text through the roles the lexers give each token (texlex.py, role_for()). What was
-chosen, with the TUI's own theme, is kept in tui.json in the data directory."""
+"""The editor's colour and file icon themes, as the web page has them (web/src/console/edthemes.ts):
+widgets are coloured through the .ed-… classes css() writes, text through the roles of its tokens.
+What was chosen is kept in tui.json in the data directory."""
 
 from __future__ import annotations
 
@@ -69,7 +64,7 @@ def _paper(dark: bool) -> EdTheme:
 
 
 THEMES: list[EdTheme] = [
-    _paper(False),  # stands for both: resolve() gives the one that goes with the TUI's own theme
+    _paper(False),  # stands for both: resolve() picks the one matching the TUI theme
     EdTheme("light", "经典浅色", False, _ui("#ffffff", "#3b3b3b", "#f8f8f8", "#e5e5e5", "#6f6f6f", "#6e7681", "#171184", "#f5f5f5", "#add6ff",
                                          "#005fb8", "#007acc", "#ffffff", "#e4e6f1", ("#895503", "#587c0c", "#ad0707"), False), dict(
         kw="#0000ff", ctl="#af00db", str="#a31515", esc="#ee0000", num="#098658", con="#0000ff", com="#008000", fn="#795e26", type="#267f99",
@@ -123,8 +118,6 @@ def resolve(theme_id: str, app_dark: bool) -> EdTheme:
         return PAPER[app_dark]
     return next((t for t in THEMES if t.id == theme_id), PAPER[app_dark])
 
-
-# ---------- the text ----------
 
 T = Token
 STD: dict[_TokenType, str] = {
@@ -205,14 +198,14 @@ LANGS = {".tex": ("LaTeX", None), ".sty": ("LaTeX", None), ".cls": ("LaTeX", Non
          ".sql": ("SQL", "sql"), ".r": ("R", "r"), ".jl": ("Julia", "julia"), ".lua": ("Lua", "lua"), ".diff": ("Diff", "diff"),
          ".patch": ("Diff", "diff")}
 NAMES = {"makefile": ("Makefile", "make"), "dockerfile": ("Dockerfile", "docker"), ".gitignore": ("Ignore", "text")}
-WRAPPED = {"LaTeX", "BibTeX", "Markdown", "纯文本"}  # prose: shown wrapped unless you say otherwise
+WRAPPED = {"LaTeX", "BibTeX", "Markdown", "纯文本"}
 
 
 def language(path: str) -> tuple[str, Lexer | None]:
     """a file's language, by its name, and the lexer that reads it (None: plain text)"""
     p = Path(path)
     name, alias = NAMES.get(p.name.lower()) or LANGS.get(p.suffix.lower()) or ("纯文本", None)
-    opts = dict(stripnl=False, ensurenl=True, tabsize=4)  # the lines as they are, so the numbers stay right
+    opts = dict(stripnl=False, ensurenl=True, tabsize=4)  # keep the lines as they are, so line numbers stay right
     if name == "LaTeX":
         return name, LatexLexer(**opts)
     if name == "BibTeX":
@@ -222,8 +215,6 @@ def language(path: str) -> tuple[str, Lexer | None]:
     except ClassNotFound:
         return name, None
 
-
-# ---------- file icons ----------
 
 ICON_THEMES = [("dots", "色点", "文件名前一个小色块，最安静（默认）"), ("glyphs", "字标", "彩色的类型缩写，像 Seti"),
                ("badges", "徽章", "实心的类型色块，常见文件夹各有颜色"), ("none", "无图标", "只有文件名")]
@@ -285,17 +276,14 @@ def folder_icon(name: str, icons: str, th: EdTheme) -> Text:
     if icons != "badges":
         return Text()
     c = FOLDER.get(name.lower(), "#c09a5b")
-    return Text.assemble(("   ", f"on {mix(c, '#ffffff', 0.15) if th.dark else c}"), " ")  # the folder's colour, as the files' badges are
+    return Text.assemble(("   ", f"on {mix(c, '#ffffff', 0.15) if th.dark else c}"), " ")
 
 
 GIT = {"modified": ("M", "gitMod"), "renamed": ("R", "gitMod"), "added": ("A", "gitAdd"), "untracked": ("U", "gitAdd"), "deleted": ("D", "gitDel")}
 
 
-# ---------- the widgets' colours ----------
-
 def css() -> str:
-    """one class per theme for what Textual draws itself: the file list, the viewer, the status line
-    and the editor; the text in them takes its colours from the roles above"""
+    """one class per theme for what Textual draws itself: the file list, the viewer, the status line and the editor"""
     out = []
     for th in [*THEMES, PAPER[True]]:
         u, c = th.ui, f".ed-{th.key}"
@@ -316,14 +304,14 @@ def css() -> str:
     return "".join(out)
 
 
-# ---------- what was chosen ----------
-
 @dataclass
 class Prefs:
-    theme: str = "papertown"  # the TUI's own: dark, or on paper
+    """the looks chosen last time; focus is the projects page without its list"""
+
+    theme: str = "papertown"
     ed_theme: str = "paper"
     ed_icons: str = "dots"
-    focus: bool = False  # the projects page without its list
+    focus: bool = False
 
     @staticmethod
     def load(path: Path) -> "Prefs":

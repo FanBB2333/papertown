@@ -1,6 +1,5 @@
-"""arXiv API client. Parses the Atom feed into plain dicts.
+"""arXiv API client that parses the Atom feed into plain dicts.
 
-Used by the arXiv dock MCP server (ports/arxiv_server.py) and by `papertown ingest`.
 The API asks for at most one request every 3 seconds; callers that loop must sleep.
 """
 
@@ -67,7 +66,6 @@ def search(query: str, max_results: int = 10, sort: str = "relevance", timeout: 
               "sortBy": sort, "sortOrder": "descending"}
     hits = _get(params, timeout)
     if not hits and " AND " in q:
-        # fall back to any-term matching when the conjunction is too strict
         hits = _get({**params, "search_query": q.replace(" AND ", " OR ")}, timeout)
     return hits
 

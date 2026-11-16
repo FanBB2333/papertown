@@ -1,15 +1,6 @@
-"""The experiment farm: one job board for every experiment, whoever submitted it.
-
-Backends behind the same submit / list / cancel calls:
-  sim    the simulated plant the offline pipeline uses (compute.py); mirrored here
-  local  a shell command run in the project's code workspace, output kept as a log
-  nvidb  the shared GPU queue; not wired up yet, listed so the board shows where it goes
-
-A local job reports progress by printing `PROGRESS <0-100>` and its result by printing
-`RESULT {json}` or writing `$PAPERTOWN_JOB_DIR/result.json`.
-
-Each project also gets a monitor on the farm: a small built-in agent that watches its
-jobs and writes a note when one is queued, starts, passes halfway, finishes or fails.
+"""The experiment farm: one job board for every experiment (local commands, the simulated plant, nvidb read only),
+with a monitor per project that notes each job's progress. A local job prints `PROGRESS <0-100>` and
+`RESULT {json}`, or writes $PAPERTOWN_JOB_DIR/result.json.
 """
 
 from __future__ import annotations
@@ -54,13 +45,8 @@ class Farm:
         self._slots = threading.Semaphore(max(1, town.s.local_jobs))
 
     def recover(self) -> None:
-        for j in self.db.q("select id from jobs where backend != 'sim' and status in ('queued', 'running')"):
+        for j in self.db.q("select id from jobs where status in ('queued', 'running')"):
             self._set(j["id"], status="failed", note="服务重启，任务被中断", ended_at=now())
-        # the simulated plant keeps jobs in memory only
-        for j in self.db.q("select id from jobs where backend = 'sim' and status in ('queued', 'running')"):
-            self._set(j["id"], status="failed", note="服务重启，任务被中断", ended_at=now())
-
-    # ---------- reading ----------
 
     def get(self, job_id: str, tail: int = 0) -> dict | None:
         j = self.db.one("select * from jobs where id = ?", job_id)
@@ -85,14 +71,12 @@ class Farm:
         nv = self.town.nvidb.status()
         for b in out:
             if b["id"] == "nvidb":
-                sm = nv.get("summary")
+                sm = nv["summary"]
                 b["ready"] = nv["ok"]
-                b["active"] = (nv.get("counts") or {}).get("running", 0)
+                b["active"] = nv["counts"].get("running", 0)
                 b["note"] = (f"{sm['up']}/{sm['nodes']} 台机器在线 · {sm['gpus']} 张卡 · {sm['idle']} 张空闲，{sm['room']} 张还放得下任务"
-                             f"（只读：提交用 nvidb job submit）") if nv["ok"] and sm else nv["note"]
+                             f"（只读：提交用 nvidb job submit）") if nv["ok"] else nv["note"]
         return out
-
-    # ---------- submitting ----------
 
     def submit(self, line_id: str | None, name: str, command: str, backend: str = "local", submitted_by: str | None = None,
                cwd: str | None = None) -> dict:
@@ -100,8 +84,6 @@ class Farm:
             raise FarmError(f"没有这个后端：{backend}")
         if backend == "nvidb":
             raise FarmError("nvidb 只读接入：在这里看显卡和任务，提交请在终端里用 nvidb job submit")
-        if not BACKENDS[backend]["ready"]:
-            raise FarmError(f"{BACKENDS[backend]['name']} 还没接入，先用 local")
         if backend == "sim":
             raise FarmError("模拟电厂只给离线流水线用")
         command = (command or "").strip()
@@ -182,8 +164,6 @@ class Farm:
             else:
                 self._set(job_id, status="failed", result=result, ended_at=now(), note=f"退出码 {code}")
 
-    # ---------- the simulated plant, mirrored ----------
-
     def sync_sim(self, job: Job) -> None:
         row = self.db.one("select id, status from jobs where id = ?", job.id)
         fields = {"status": job.status, "progress": job.progress, "result": job.result}
@@ -199,8 +179,6 @@ class Farm:
         else:
             self._set(job.id, **fields)
 
-    # ---------- changes and the monitors ----------
-
     def _set(self, job_id: str, **fields) -> None:
         before = self.db.one("select status, progress from jobs where id = ?", job_id)
         self.db.update("jobs", {"id": job_id}, **fields)
@@ -208,19 +186,17 @@ class Farm:
 
     def _changed(self, job_id: str, before: dict | None = None) -> None:
         j = self.get(job_id)
-        if not j:
-            return
         self.town.bus.publish("job", job=j)
         if j["line_id"]:
             self._monitor(j, before)
 
     def _monitor(self, j: dict, before: dict | None) -> None:
-        status, prev = j["status"], (before or {}).get("status")
+        status = j["status"]
         note = None
-        where = BACKENDS.get(j["backend"], {}).get("name", j["backend"])
         if before is None:
+            where = BACKENDS.get(j["backend"], {}).get("name", j["backend"])
             note = f"收到任务「{j['name']}」，排进{where}的队列。"
-        elif status != prev:
+        elif status != before["status"]:
             if status == "running":
                 note = f"「{j['name']}」开始跑了。"
             elif status == "done":
@@ -230,7 +206,7 @@ class Farm:
                 note = f"「{j['name']}」失败：{j.get('note') or ''}" + (f"，日志最后一行：{tail[-1][:120]}" if tail else "")
             elif status == "cancelled":
                 note = f"「{j['name']}」被取消了。"
-        elif (before or {}).get("progress", 0) < 50 <= j["progress"] < 100:
+        elif before["progress"] < 50 <= j["progress"] < 100:
             note = f"「{j['name']}」过半了（{j['progress']}%）。"
         if note:
             self.town.agents.monitor_note(j["line_id"], note, job_id=j["id"])

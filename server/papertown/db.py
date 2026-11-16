@@ -1,7 +1,5 @@
-"""SQLite storage. One file holds the world, the pipelines, the ledger and the library.
-
-Connections are per thread (pipelines run in worker threads); WAL keeps readers and
-the single writer out of each other's way.
+"""SQLite storage: one file holds the world, the pipelines, the ledger and the library.
+Connections are per thread (pipelines run in worker threads); WAL keeps readers and the writer apart.
 """
 
 from __future__ import annotations
@@ -9,9 +7,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 SCHEMA = """
 create table if not exists meta(k text primary key, v text);
@@ -73,18 +71,16 @@ create table if not exists repo_docs(id integer primary key autoincrement, repo_
 create virtual table if not exists repo_fts using fts5(
   path, text, content='repo_docs', content_rowid='id', tokenize='porter unicode61');
 
--- experiments on the farm: simulated pipeline runs and jobs the coding agents submit
 create table if not exists jobs(
   id text primary key, line_id text, name text, backend text, status text, progress integer default 0,
   command text, cwd text, config text, result text, note text, submitted_by text,
   created_at text, started_at text, ended_at text);
--- pi agents (coder in the depot, writer in the press) and the farm's monitors, one per project
 create table if not exists agents(
   id text primary key, line_id text, role text, status text, tmux text, cwd text, token text,
   model text, cost real default 0, created_at text, updated_at text);
 create table if not exists agent_events(id integer primary key autoincrement, agent_id text, ts text, kind text, data text);
 
--- what the agents in a project report to you, and the questions they ask you (leads.py)
+-- reports from a project's agents, and the questions they ask you (leads.py)
 create table if not exists reports(id integer primary key autoincrement, line_id text, agent_id text, ts text, kind text, data text);
 
 create index if not exists agent_events_agent on agent_events(agent_id, id);
@@ -95,18 +91,39 @@ create index if not exists messages_line on messages(line_id, id);
 create index if not exists ledger_ts on ledger(ts);
 """
 
-# (table, column, declaration) for columns added to existing tables
+# (table, column, declaration) for columns added to tables after they first shipped
 ADDED = [("agents", "runtime", "text"), ("agents", "ext_id", "text"), ("lines", "hold", "text"), ("lines", "linked", "text")]
 
 JSON_COLS = {"team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result", "linked"}
+
+
+JSONValue = TypeVar("JSONValue", dict, list)
+
+
+def read_json(path: Path, default: JSONValue) -> JSONValue:
+    """Read a persisted JSON container, falling back on missing, invalid or wrong-shaped data."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, type(default)) else default
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path: Path, data: dict | list, *, mode: int | None = None) -> None:
+    """Replace a JSON file atomically, applying private permissions before it becomes visible."""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    if mode is not None:
+        tmp.chmod(mode)
+    tmp.replace(path)
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def dumps(v: Any) -> str:
-    return json.dumps(v, ensure_ascii=False)
+def week_ago() -> str:
+    return (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(timespec="seconds")
 
 
 def _row(r: sqlite3.Row | None) -> dict | None:
@@ -126,7 +143,7 @@ class DB:
         self.lock = threading.RLock()  # serialises multi-statement writes
         with self.lock:
             self.conn.executescript(SCHEMA)
-            for table, col, decl in ADDED:  # columns added after a table first shipped
+            for table, col, decl in ADDED:
                 if col not in {r[1] for r in self.conn.execute(f"pragma table_info({table})")}:
                     self.conn.execute(f"alter table {table} add column {col} {decl}")
             self.conn.commit()
@@ -154,7 +171,7 @@ class DB:
 
     def x(self, sql: str, *args: Any) -> int:
         with self.lock:
-            cur = self.conn.execute(sql, [dumps(a) if isinstance(a, (dict, list)) else a for a in args])
+            cur = self.conn.execute(sql, [json.dumps(a, ensure_ascii=False) if isinstance(a, (dict, list)) else a for a in args])
             self.conn.commit()
             return cur.lastrowid
 
@@ -170,9 +187,8 @@ class DB:
         where = " and ".join(f"{k} = ?" for k in key)
         self.x(f"update {table} set {sets} where {where}", *fields.values(), *key.values())
 
-    def get_meta(self, k: str, default: str | None = None) -> str | None:
-        v = self.val("select v from meta where k = ?", k)
-        return default if v is None else v
+    def get_meta(self, k: str) -> str | None:
+        return self.val("select v from meta where k = ?", k)
 
     def set_meta(self, k: str, v: str) -> None:
         self.x("insert into meta(k, v) values(?, ?) on conflict(k) do update set v = excluded.v", k, v)

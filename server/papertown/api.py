@@ -1,7 +1,4 @@
-"""HTTP API and the live event stream. Serves the built web app too, when there is one.
-
-    uv run papertown serve            # http://127.0.0.1:8000
-"""
+"""HTTP API and the live event stream; serves the built web app too, when there is one."""
 
 from __future__ import annotations
 
@@ -10,6 +7,7 @@ import json
 import threading
 from contextlib import asynccontextmanager
 from typing import Literal
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -42,7 +40,7 @@ FILES = {"main.tex", "refs.bib", "main.pdf", "paper.zip"}
 
 
 class SkimIn(BaseModel):
-    scope: str  # global | project | session
+    scope: str
     key: str = Field(min_length=3, max_length=200)
     value: str | None = None  # None unsets the key
     line_id: str | None = None
@@ -53,12 +51,12 @@ class BoundsIn(BaseModel):
     line_id: str | None = None  # none: the global level
     role: str | None = None  # with line_id: one of the project's workers
     rules: list[dict] = []
-    off: list[str] = []  # inherited rules this level switches off
+    off: list[str] = []
 
 
 class LeadIn(BaseModel):
-    supervise: bool | None = None  # check-ins when something happens in the project
-    every: int | None = Field(default=None, ge=10, le=1440)  # minutes of quiet before one comes anyway
+    supervise: bool | None = None
+    every: int | None = Field(default=None, ge=10, le=1440)
 
 
 class AnswerIn(BaseModel):
@@ -68,7 +66,7 @@ class AnswerIn(BaseModel):
 class TellIn(BaseModel):
     to: str = Field(min_length=1, max_length=80)
     text: str = Field(min_length=1, max_length=8000)
-    now: bool = False  # into what it is doing, instead of after it
+    now: bool = False
     line: str | None = None
 
 
@@ -87,7 +85,7 @@ class PasswordIn(BaseModel):
 
 
 class CardAsk(BaseModel):
-    note: str = Field(default="", max_length=300)  # a word for the lead along with it
+    note: str = Field(default="", max_length=300)
 
 
 class CardIn(BaseModel):
@@ -104,20 +102,20 @@ class MemoryIn(BaseModel):
 
 class QuestionIn(BaseModel):
     q: str = Field(min_length=1, max_length=1000)
-    lead: bool = False  # the project's lead answers too
+    lead: bool = False
 
 
 class ReplyIn(BaseModel):
     id: str
     text: str = Field(default="", max_length=20000)
-    html: str | None = Field(default=None, max_length=PAGE_MAX)  # the answer as a page
+    html: str | None = Field(default=None, max_length=PAGE_MAX)
 
 
 class PublishIn(BaseModel):
     html: str = Field(min_length=1, max_length=PAGE_MAX)
     title: str = Field(default="", max_length=200)
     kind: str = "explain"
-    line: str | None = None  # the assistant names the project
+    line: str | None = None
 
 
 class ReportIn(BaseModel):
@@ -173,7 +171,7 @@ class PermitIn(BaseModel):
 
 
 class StartIn(BaseModel):
-    runtime: str | None = None  # pi (tmux) | paseo
+    runtime: str | None = None
     provider: str | None = None
     model: str | None = None
     thinking: str | None = None
@@ -193,7 +191,7 @@ class SaveIn(BaseModel):
 
 class SayIn(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
-    mode: Literal["steer", "queue"] | None = None  # while it works: into what it is doing, or after it
+    mode: Literal["steer", "queue"] | None = None
 
 
 class JobIn(BaseModel):
@@ -267,9 +265,19 @@ def job_text(j: dict, log: str = "") -> str:
     return out
 
 
+def mapped(*errors: type[Exception]):
+    """A caller that turns the given errors into HTTP errors: their own status, else 400."""
+    def call(fn, *args):
+        try:
+            return fn(*args)
+        except errors as e:
+            raise HTTPException(getattr(e, "status", 400), str(e)) from e
+    return call
+
+
 class Pages(StaticFiles):
-    """The built page, at every address the page has (/progress, /console/6/code, ...): a path
-    that is no file gets index.html, and the page routes it itself."""
+    """The built web app at every address it routes itself: a path that is no file gets index.html.
+    Only assets/ is content-hashed, so the rest is no-cache; fonts allow any origin for the agents' sandboxed pages."""
 
     async def get_response(self, path: str, scope):
         try:
@@ -278,15 +286,20 @@ class Pages(StaticFiles):
             if e.status_code != 404 or path.startswith("api") or "." in path.rsplit("/", 1)[-1]:
                 raise
             r = await super().get_response("index.html", scope)
-        if not path.startswith("assets/"):  # only the built files change their name with a new build
+        if not path.startswith("assets/"):
             r.headers["Cache-Control"] = "no-cache"
-        if path.endswith((".woff2", ".woff")):  # the town's font, for the agents' pages in their sandbox too
+        if path.endswith((".woff2", ".woff")):
             r.headers["Access-Control-Allow-Origin"] = "*"
         return r
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     town = Town(settings)
+    authed, guard, ws, farm = mapped(AuthError), mapped(LineError), mapped(WsError), mapped(FarmError)
+    agents, assistant = mapped(AgentError), mapped(AgentError, ActError)
+    leads = mapped(LeadError, AgentError, CardError)
+    known = mapped(HistoryError, AskError, AgentError, CardError, PageError)
+    skim, mcp = mapped(SkimError), mapped(McpError)
 
     async def watch_skills():
         while True:
@@ -308,14 +321,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     auth = Auth(town.s.data_dir)
     app.add_middleware(Gate, auth=auth)
 
-    # ---------- signing in: this machine goes straight in, other devices with the password ----------
-
-    def authed(fn, *args):
-        try:
-            return fn(*args)
-        except AuthError as e:
-            raise HTTPException(e.status, str(e)) from e
-
+    # signing in
     @app.get("/api/auth/state")
     def auth_state(request: Request):
         return auth.state(request.scope)
@@ -348,12 +354,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def auth_password_clear(request: Request):
         authed(auth.clear_password, request.scope)
         return auth.state(request.scope)
-
-    def guard(fn, *args):
-        try:
-            return fn(*args)
-        except LineError as e:
-            raise HTTPException(400, str(e)) from e
 
     @app.get("/api/health")
     def health():
@@ -413,14 +413,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "这个项目的论文还没有编译好的 PDF")
         return FileResponse(p, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{p.name}"'})
 
-    # ---------- a project's files and data, for the console ----------
-
-    def ws(fn, *args):
-        try:
-            return fn(*args)
-        except WsError as e:
-            raise HTTPException(e.status, str(e)) from e
-
+    # a project's files and data, for the console
     @app.get("/api/lines/{line_id}/ws")
     def ws_info(line_id: str):
         return ws(town.workspace.info, line_id)
@@ -462,10 +455,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/samples")
     def put_samples():
-        try:
-            return samples.seed(town)
-        except samples.SampleError as e:
-            raise HTTPException(400, str(e)) from e
+        return mapped(samples.SampleError)(samples.seed, town)
 
     @app.get("/api/lines/{line_id}/files/{name}")
     def file(line_id: str, name: str):
@@ -474,21 +464,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "文件不存在")
         return FileResponse(p, filename=f"{line_id}-{name}")
 
+    def latest(table: str, line_id: str | None, limit: int) -> list[dict]:
+        where = " where line_id = ?" if line_id else ""
+        return town.db.q(f"select * from {table}{where} order by id desc limit ?", *([line_id] if line_id else []), limit)[::-1]
+
     @app.get("/api/messages")
     def messages(limit: int = 80, line_id: str | None = None):
-        rows = town.db.q("select * from messages" + (" where line_id = ?" if line_id else "") + " order by id desc limit ?",
-                         *([line_id] if line_id else []), min(limit, 300))
+        rows = latest("messages", line_id, min(limit, 300))
         workers = {w["id"]: w for w in town.market.all()}
         for r in rows:
             w = workers.get(r["worker_id"])
             r["worker"] = {"id": w["id"], "role": w["role"], "level": w["level"]} if w else None
-        return rows[::-1]
+        return rows
 
     @app.get("/api/trace")
     def trace(limit: int = 60, line_id: str | None = None):
-        rows = town.db.q("select * from trace" + (" where line_id = ?" if line_id else "") + " order by id desc limit ?",
-                         *([line_id] if line_id else []), min(limit, 500))
-        return rows[::-1]
+        return latest("trace", line_id, min(limit, 500))
 
     @app.post("/api/chat")
     def chat(body: ChatIn):
@@ -523,14 +514,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def departments():
         return status_mod.departments(town)
 
-    # ---------- the farm ----------
-
-    def farm(fn, *args):
-        try:
-            return fn(*args)
-        except FarmError as e:
-            raise HTTPException(400, str(e)) from e
-
+    # the farm
     @app.get("/api/jobs")
     def jobs(line_id: str | None = None, external: bool = True):
         # external=false: only the farm's own (the TUI reads nvidb's itself)
@@ -550,7 +534,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/jobs/{job_id}")
     def job(job_id: str, tail: int = 200):
-        if job_id.startswith("nvidb-"):  # one of a linked project's jobs in nvidb's queue
+        if job_id.startswith("nvidb-"):
             j = next((x for x in town.linked.farm_jobs() if x["id"] == job_id), None)
             if not j:
                 raise HTTPException(404, "nvidb 里没有这个任务了")
@@ -568,14 +552,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def job_cancel(job_id: str):
         return farm(town.farm.cancel, job_id)
 
-    # ---------- agents ----------
-
-    def agents(fn, *args):
-        try:
-            return fn(*args)
-        except AgentError as e:
-            raise HTTPException(400, str(e)) from e
-
+    # agents
     @app.get("/api/agents")
     def agent_roster(role: str):
         if role not in ROLES:
@@ -620,7 +597,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(400, str(e)) from e
         linked = {a["ext_id"]: f"#{a['seq']} 的{ROLES[a['role']]['name']}" for a in town.db.q(
             "select a.ext_id, a.role, l.seq from agents a join lines l on l.id = a.line_id where a.runtime = 'paseo' and a.ext_id is not null")}
-        # the console's assistant is no project's to take, nor are the conversations it set aside
+        # the assistant's own conversations are not for a project to take
         mine = [c for c in rows if (c.get("labels") or {}).get("papertown.role") != ASSISTANT]
         return {"conversations": [c | {"linked": linked.get(c["id"])} for c in mine]}
 
@@ -635,10 +612,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/llm")
     def set_llm(body: LlmIn):
-        try:
-            return town.set_llm(body.provider, body.model_strong, body.model_cheap, body.effort)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from e
+        return mapped(ValueError)(town.set_llm, body.provider, body.model_strong, body.model_cheap, body.effort)
 
     @app.get("/api/paseo")
     def paseo(fresh: bool = False):
@@ -653,13 +627,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             m.learn(providers)
         return {"status": st, "providers": providers, "defaults": m.defaults(), "news": m.news()}
 
-    # what the assistant and the leads start on, and the models Paseo started offering since
     @app.post("/api/paseo/defaults")
     def paseo_default(body: DefaultIn):
-        try:
-            return town.paseo_models.set_default(body.role, body.provider, body.model, body.thinking)
-        except ModelError as e:
-            raise HTTPException(400, str(e)) from e
+        return mapped(ModelError)(town.paseo_models.set_default, body.role, body.provider, body.model, body.thinking)
 
     @app.get("/api/paseo/news")
     def paseo_news():
@@ -686,29 +656,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         agents(town.agents.abort, agent_id)
         return {"ok": True}
 
-    # ---------- work boundaries: global, project, worker ----------
-
+    # work boundaries: global, project, worker
     @app.get("/api/bounds")
     def bounds(line_id: str | None = None):
         return town.bounds.view(line_id)
 
     @app.put("/api/bounds")
     def bounds_save(body: BoundsIn):
-        try:
-            return town.bounds.save(body.line_id, body.role, body.rules, body.off)
-        except BoundsError as e:
-            raise HTTPException(400, str(e)) from e
+        return mapped(BoundsError)(town.bounds.save, body.line_id, body.role, body.rules, body.off)
 
-    # ---------- each project's lead, its reports and its questions ----------
-
-    def leads(fn, *args):
-        try:
-            return fn(*args)
-        except (LeadError, AgentError, CardError) as e:
-            raise HTTPException(400, str(e)) from e
-
-    # ---------- the 进展 page: each project's card, written by its lead when you ask ----------
-
+    # the 进展 page: each project's card, lead, reports, questions, memory and pages
     @app.get("/api/cards")
     def cards():
         return {"cards": town.cards.all(), "layout": town.cards.layout()}
@@ -732,14 +689,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/lines/{line_id}/card/cancel")
     def card_cancel(line_id: str):
         return leads(town.cards.cancel, line_id)
-
-    # ---------- a project's memory from earlier agent conversations, and questions about it ----------
-
-    def known(fn, *args):
-        try:
-            return fn(*args)
-        except (HistoryError, AskError, AgentError, CardError, PageError) as e:
-            raise HTTPException(400, str(e)) from e
 
     @app.get("/api/lines/{line_id}/memory")
     def memory(line_id: str):
@@ -777,7 +726,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def question_remove(line_id: str, qid: str):
         return known(town.asker.remove, line_id, qid)
 
-    # pages the agents write in HTML: reports, explainers, answers; /view is the page itself, sandboxed
     @app.get("/api/lines/{line_id}/pages")
     def pages(line_id: str):
         return {"pages": town.pages.all(line_id), "kinds": PAGE_KINDS}
@@ -788,7 +736,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             html = town.pages.html(line_id, pid)
         except PageError as e:
             raise HTTPException(404, str(e)) from e
-        font = next(iter(sorted(town.s.web_dist.glob("assets/lxgwwenkaigbscreen-*.css"))), None)
+        font = min(town.s.web_dist.glob("assets/lxgwwenkaigbscreen-*.css"), default=None)
         origin = f"{request.headers.get('x-forwarded-proto') or request.url.scheme}://{request.headers.get('host') or request.url.netloc}"
         return HTMLResponse(render_page(html, f"/assets/{font.name}" if font else "", look),
                             headers={"Content-Security-Policy": page_csp(origin if font else ""), "X-Content-Type-Options": "nosniff",
@@ -813,23 +761,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/reports")
     def reports(line_id: str | None = None, limit: int = 30):
+        n = min(max(limit, 1), 200)
         if line_id:
-            return {"reports": town.leads.reports(line_id, min(max(limit, 1), 200)), "asks": town.leads.asks(line_id)}
-        return {"reports": town.db.q("select * from reports where kind = 'report' order by id desc limit ?", min(max(limit, 1), 200))[::-1],
+            return {"reports": town.leads.reports(line_id, n), "asks": town.leads.asks(line_id)}
+        return {"reports": town.db.q("select * from reports where kind = 'report' order by id desc limit ?", n)[::-1],
                 "asks": town.leads.asks()}
 
     @app.post("/api/reports/{report_id}/answer")
     def report_answer(report_id: int, body: AnswerIn):
         return leads(town.leads.answer, report_id, body.text)
 
-    # ---------- the console's assistant, in the sidebar ----------
-
-    def assistant(fn, *args):
-        try:
-            return fn(*args)
-        except (AgentError, ActError) as e:
-            raise HTTPException(400, str(e)) from e
-
+    # the console's assistant, in the sidebar
     @app.get("/api/assistant")
     def assistant_view():
         return town.assistant.view()
@@ -859,8 +801,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def assistant_resume(body: ResumeIn):
         return assistant(town.assistant.resume, body.id)
 
-    # ---------- the bridge inside each pi ----------
-
+    # the bridge inside each agent
     def bridged(agent_id: str, token: str | None) -> dict:
         try:
             return town.agents.check(agent_id, token)
@@ -876,22 +817,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/bridge/{agent_id}/inbox")
     async def bridge_inbox(agent_id: str, wait: float = 20, x_papertown_token: str | None = Header(default=None)):
         bridged(agent_id, x_papertown_token)
-        t0 = asyncio.get_running_loop().time()
-        while not town.agents.has_mail(agent_id) and asyncio.get_running_loop().time() - t0 < min(wait, 25):
+        loop = asyncio.get_running_loop()
+        t0 = loop.time()
+        while not town.agents.has_mail(agent_id) and loop.time() - t0 < min(wait, 25):
             await asyncio.sleep(0.25)
         return {"messages": town.agents.take(agent_id)}
 
     @app.get("/api/bridge/{agent_id}/brief")
     def bridge_brief(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
-        if a["role"] == ASSISTANT:  # no project of its own: the one named, else the one on your screen
+        if a["role"] == ASSISTANT:
             return {"text": assistant(town.assistant.brief, line)}
         return {"text": town.brief(a["line_id"], a["role"])}
 
     @app.get("/api/bridge/{agent_id}/rules")
     def bridge_rules(agent_id: str, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
-        return {"text": town.bounds.text(a["role"], a["line_id"], str(town.agents.pt(a)) if a.get("runtime") == "paseo" else None)}
+        return {"text": town.bounds.text(a["role"], a["line_id"], str(town.agents.pt(a)) if a["runtime"] == "paseo" else None)}
 
     def helper(agent_id: str, token: str | None) -> dict:
         a = bridged(agent_id, token)
@@ -912,7 +854,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/bridge/{agent_id}/ask")
     def bridge_ask(agent_id: str, body: AskIn, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
-        if a["role"] != ASSISTANT:  # an agent in a project asks in the project, where you see it
+        if a["role"] != ASSISTANT:
             q = leads(town.leads.ask, agent_id, body.question, body.choices)
             return {"text": f"已经问了用户（问题 {q['id']}），他的回答会作为一条 <answer> 消息发给你。先做别的，或者结束这一轮。"}
         town.assistant.ask(body.question, body.choices, body.point)
@@ -922,7 +864,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """The project an agent asks about: its own; the assistant names one, else the one on your screen."""
         if a["role"] != ASSISTANT:
             return a["line_id"]
-        lid = assistant(town.assistant._line, line)["id"] if line else (town.assistant.page.get("line") or {}).get("id")
+        lid = assistant(town.assistant.line_id, line)
         if not lid:
             raise HTTPException(400, "说一下是哪个项目")
         return lid
@@ -957,7 +899,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             words = body.to.replace(":", " ").split()
             line = next((w for w in words if w.lstrip("#").isdigit() or w.startswith("line_")), body.line)
             role = next((w for w in words if w != line), None)
-            return acted(town.assistant.act, "tell", {"line": line or (town.assistant.page.get("line") or {}).get("id"), "role": role,
+            return acted(town.assistant.act, "tell", {"line": line or town.assistant.line_id(None), "role": role,
                                                        "text": body.text, "now": body.now}, "")
         return {"text": leads(town.leads.tell, agent_id, body.to, body.text, body.now)}
 
@@ -990,7 +932,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/bridge/{agent_id}/recall")
     def bridge_recall(agent_id: str, q: str, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
-        if not a.get("line_id"):
+        if not a["line_id"]:
             raise HTTPException(400, "你没有自己的项目：检索要在一个项目里")
         return {"text": known(town.asker.recall, a["line_id"], q)}
 
@@ -1004,15 +946,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/bridge/{agent_id}/publish")
     def bridge_publish(agent_id: str, body: PublishIn, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
-        line_id = a.get("line_id")
+        line_id = a["line_id"]
         if a["role"] == ASSISTANT and body.line:
-            try:
-                line_id = town.assistant._line(body.line)["id"]
-            except ActError as e:
-                raise HTTPException(400, str(e)) from e
+            line_id = assistant(town.assistant._line, body.line)["id"]
         if not line_id:
             raise HTTPException(400, "说一下是哪个项目：--line <项目>")
-        p = known(town.pages.publish, line_id, body.html, body.title, body.kind, a.get("model") or a.get("name") or "", agent_id)
+        p = known(town.pages.publish, line_id, body.html, body.title, body.kind, a["model"] or "", agent_id)
         return {"text": f"页面发布了（{p['id']}「{p['title']}」），用户在「进展」里这个项目的「汇报与讲解」看。"}
 
     @app.post("/api/bridge/{agent_id}/show")
@@ -1041,12 +980,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         kind, rule = town.bounds.policy(a["role"], a["line_id"], "job.submit")
         if kind == "never":
             raise HTTPException(403, f"你的工作边界不让你提交实验任务：{rule['text']}")
+        backend = body.backend or "local"
         if kind == "ask":
             q = leads(town.leads.ask, agent_id, f"{town.leads._who(a)}想提交实验任务「{body.name}」：{body.command[:300]}，可以吗？", ["可以", "不可以"],
-                      {"action": "job.submit", "name": body.name, "command": body.command, "backend": body.backend or "local"})
-            return {"id": None, "name": body.name, "backend": body.backend or "local", "status": "asking",
+                      {"action": "job.submit", "name": body.name, "command": body.command, "backend": backend})
+            return {"id": None, "name": body.name, "backend": backend, "status": "asking",
                     "text": f"按你的工作边界（{rule['text']}），提交前要先问用户。已经问了（问题 {q['id']}），他同意后会替你提交，结果会告诉你。"}
-        return farm(town.farm.submit, a["line_id"], body.name, body.command, body.backend or "local", agent_id, a["cwd"])
+        return farm(town.farm.submit, a["line_id"], body.name, body.command, backend, agent_id, a["cwd"])
 
     @app.get("/api/bridge/{agent_id}/jobs")
     def bridge_jobs(agent_id: str, x_papertown_token: str | None = Header(default=None)):
@@ -1068,8 +1008,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         town.skills.refresh()
         return [s.summary() for s in town.skills.all()]
 
-    # ---------- the skill academy: skim, layered per project and conversation ----------
-
+    # the skill academy: skim, layered per project and conversation
     @app.get("/api/skim")
     def skim_status(fresh: bool = False):
         st = town.skim.status(fresh)
@@ -1081,79 +1020,55 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/skim/resolve")
     def skim_resolve(line_id: str | None = None, agent_id: str | None = None):
-        try:
-            return town.skim.resolve(line_id, agent_id)
-        except SkimError as e:
-            raise HTTPException(400, str(e)) from e
+        return skim(town.skim.resolve, line_id, agent_id)
 
     @app.post("/api/skim/config")
     def skim_config(body: SkimIn):
-        try:
-            town.skim.set(body.scope, body.key, body.value, body.line_id, body.agent_id)
-            town.skim.apply_all(None if body.scope == "global" else body.line_id)
-            return town.skim.resolve(body.line_id, body.agent_id)
-        except SkimError as e:
-            raise HTTPException(400, str(e)) from e
+        skim(town.skim.set, body.scope, body.key, body.value, body.line_id, body.agent_id)
+        skim(town.skim.apply_all, None if body.scope == "global" else body.line_id)
+        return skim(town.skim.resolve, body.line_id, body.agent_id)
 
-    # ---------- the MCP exchange ----------
-
-    def mcp_view():
+    # the MCP exchange
+    @app.get("/api/mcp")
+    def mcp_status():
         return {"servers": town.mcp.info(), "town_file": str(town.mcp.town_file), "config_file": town.s.mcp_config or None,
                 "self": {"mcpServers": {"papertown": {"command": "uv", "args": ["--directory", str(SERVER_DIR), "run", "papertown", "mcp"]}}}}
 
-    @app.get("/api/mcp")
-    def mcp_status():
-        return mcp_view()
-
     @app.post("/api/mcp/servers")
     def mcp_add(body: McpServerIn):
-        try:
-            town.mcp.add(body.name, body.command, body.args, body.env)
-        except McpError as e:
-            raise HTTPException(400, str(e)) from e
-        return mcp_view()
+        mcp(town.mcp.add, body.name, body.command, body.args, body.env)
+        return mcp_status()
 
     @app.post("/api/mcp/servers/{name}/toggle")
     def mcp_toggle(name: str, body: ToggleIn):
-        try:
-            town.mcp.toggle(name, body.enabled)
-        except McpError as e:
-            raise HTTPException(400, str(e)) from e
-        return mcp_view()
+        mcp(town.mcp.toggle, name, body.enabled)
+        return mcp_status()
 
     @app.post("/api/mcp/servers/{name}/restart")
     def mcp_restart(name: str):
         if name not in town.mcp.servers():
             raise HTTPException(400, "这个 MCP server 没有启用")
         town.mcp.restart(name)
-        return mcp_view()
+        return mcp_status()
 
     @app.delete("/api/mcp/servers/{name}")
     def mcp_remove(name: str):
-        try:
-            town.mcp.remove(name)
-        except McpError as e:
-            raise HTTPException(400, str(e)) from e
-        return mcp_view()
+        mcp(town.mcp.remove, name)
+        return mcp_status()
 
-    # ---------- the library as the RAG room ----------
-
-    def rag_view():
-        from urllib.parse import urlparse
+    # the library as the RAG room
+    @app.get("/api/rag")
+    def rag_status():
         lib = town.library
         return {"stats": lib.stats(), "opts": lib.opts, "limits": {k: list(v) for k, v in RAG_LIMITS.items()},
                 "index": "SQLite FTS5 · BM25 召回 + 关键词覆盖率打分",
                 "embed": {"configured": lib.embedder is not None, "model": town.s.embed_model or None,
                           "host": urlparse(town.s.embed_base_url).netloc or None}}
 
-    @app.get("/api/rag")
-    def rag_status():
-        return rag_view()
-
     @app.post("/api/rag")
     def rag_set(body: RagIn):
         town.library.set_opts(**body.model_dump())
-        return rag_view()
+        return rag_status()
 
     @app.get("/api/rag/search")
     def rag_search(q: str, k: int | None = None):

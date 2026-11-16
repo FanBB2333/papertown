@@ -1,9 +1,5 @@
-"""World state: what stands where, and what each building shows when you open it.
-
-Placements come from assets/manifest.json (generated from design/src/world.js): the four
-core buildings each have a corner yard (the mill is the base camp for every project, the
-depot holds every project's code, the farm runs the experiments, the press writes the
-papers), and the small buildings stand between the two yards they serve.
+"""World state: what stands where (from assets/manifest.json, generated from design/src/world.js),
+and what each building shows when you open it.
 """
 
 from __future__ import annotations
@@ -16,7 +12,7 @@ from .db import now
 if TYPE_CHECKING:
     from .town import Town
 
-# What each building actually runs on today, where that differs from the design label.
+# What each building runs on, where that differs from the design label.
 TECH = {
     "mill": "Skills + agent 编队", "farm": "Skill · 电厂接口", "press": "Skill · latexmk", "market": "组织编译 · ROI 升降级",
     "power": "nvidb · GPU 队列（只读）", "power_sim": "模拟 GPU 后端", "dock_arxiv": "MCP · arXiv", "library": "RAG · BM25 + 覆盖率",
@@ -25,7 +21,7 @@ TECH = {
 # The four buildings the main map is about; they are labelled and highlighted, the rest recede.
 CORE = {"mill", "farm", "press", "depot"}
 
-# Buildings backed by working code. The rest are scenery for now and say so.
+# Buildings backed by working code; the rest are scenery and say so.
 LIVE = {"dock_arxiv", "customs", "hatchery", "mill", "farm", "press", "qa", "depot", "library", "genealogy",
         "market", "cityhall", "bank", "newspaper", "power_sim", "power", "academy", "exchange"}
 
@@ -138,9 +134,8 @@ class World:
                                      "label": p.get("label"), "accent": p.get("accent"), "status": "idle", "created_at": now()})
 
     def _migrate(self, placements: list[dict]) -> None:
-        """Bring the town in line with the manifest: towns from before the base camp had a
-        mill per paper and a depot per repo, so fold those; then put every building where
-        the current layout has it (nobody moves buildings by hand, the design does)."""
+        """Bring the town in line with the manifest: fold the per-paper mills and per-repo depots of towns from
+        before the base camp, then put every building where the layout has it."""
         self.db.x("delete from buildings where type in ('mill', 'depot') and id not in ('mill', 'depot')")
         self.db.x("update lines set mill_id = 'mill' where mill_id is not null and mill_id != 'mill'")
         self.db.x("update stages set building = 'mill' where building like 'mill_%'")
@@ -149,8 +144,6 @@ class World:
                 self.db.update("buildings", {"id": p["id"]}, x=p["x"], y=p["y"])
             else:
                 self._place(p)
-
-    # ---------- placements ----------
 
     def name(self, b: dict) -> str:
         return b.get("name") or self.types[b["type"]]["name"]
@@ -181,8 +174,6 @@ class World:
             return
         self.db.update("buildings", {"id": b["id"]}, status=status)
         self.town.bus.publish("building", id=b["id"], status=status, line_id=line_id)
-
-    # ---------- what a building shows ----------
 
     def sheet(self, bid: str) -> dict | None:
         b = self.get(bid)
@@ -219,11 +210,7 @@ class World:
                            " where s.building = ? and s.status = 'run' order by s.started_at desc limit 1", btype)
 
     def _goods(self, pairs: list) -> list[list[str]]:
-        out = []
-        for target, item in pairs:
-            if self.get(target):
-                out.append([target, item])
-        return out
+        return [[target, item] for target, item in pairs if self.get(target)]
 
     def _recent(self, btype: str) -> bool:
         return bool(self.db.val("select 1 from stages where building = ? and status = 'done' limit 1", btype))
@@ -245,7 +232,7 @@ class World:
         if t == "customs":
             return f"已放行 {town.library.count()} 篇"
         if t == "dock_arxiv":
-            n = self.db.val("select count(*) from papers where source = 'arxiv'") or 0
+            n = self.db.val("select count(*) from papers where source = 'arxiv'")
             return f"arXiv 端口{'已连接' if town.mcp.clients.get('arxiv') else '未连接'} · 累计拉货 {n} 篇"
         if t == "genealogy":
             g = town.genealogy.stats()
@@ -253,7 +240,7 @@ class World:
         if t == "market":
             return f"{len(town.market.all())} 名员工"
         if t == "cityhall":
-            return f"{self.db.val('select count(*) from lines') or 0} 个项目"
+            return f"{self.db.val('select count(*) from lines')} 个项目"
         if t == "bank":
             s = town.bank.summary()
             return f"本周 ${s['week']:.2f} / ${s['budget']:.0f}"
@@ -261,18 +248,18 @@ class World:
             return town.plant.status()["summary"]
         if t == "power":
             nv = town.nvidb.status()
-            sm = nv.get("summary")
-            if not nv["ok"] or not sm:
+            if not nv["ok"]:
                 return f"nvidb 未连接：{nv['note']}"
-            return f"{sm['up']} 台机器 · {sm['gpus']} 张卡 · {sm['idle']} 张空闲 · {(nv.get('counts') or {}).get('running', 0)} 个任务在跑"
+            sm = nv["summary"]
+            return f"{sm['up']} 台机器 · {sm['gpus']} 张卡 · {sm['idle']} 张空闲 · {nv['counts'].get('running', 0)} 个任务在跑"
         if t == "depot":
-            n = self.db.val("select count(*) from agents where role = 'coder' and status in ('idle', 'working', 'starting')") or 0
+            n = self.db.val("select count(*) from agents where role = 'coder' and status in ('idle', 'working', 'starting')")
             return f"{n} 个代码员工在线"
         if t == "newspaper":
             return "运行状态页"
         return "空闲"
 
     def _mill(self, b: dict) -> dict:
-        n = self.db.val("select count(*) from lines where status = 'running'") or 0
-        total = self.db.val("select count(*) from lines where status != 'dropped'") or 0
+        n = self.db.val("select count(*) from lines where status = 'running'")
+        total = self.db.val("select count(*) from lines where status != 'dropped'")
         return {"job": f"{n} 个项目在跑，共 {total} 个" if total else "空闲 · 放入一颗 idea 后开工", "line": None, "stations": []}

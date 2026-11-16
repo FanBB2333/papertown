@@ -1,9 +1,6 @@
-"""Scripted provider for offline mode, tests and the demo fallback.
-
-It behaves like a careful agent with no imagination: load each skill it was offered,
-call the tools that skill declares in `allowed-tools` in order, then submit the answer
-the stage builds from the tool results. Every call goes through the real tools, so the
-trace, the ledger and the outputs are genuine; only the prose is templated.
+"""Scripted provider for offline mode, tests and the demo: it loads each offered skill, calls the
+tools the skill declares in `allowed-tools` in order through the real tools, then submits the answer
+the stage builds from the results. Only the prose is templated.
 """
 
 from __future__ import annotations
@@ -24,13 +21,8 @@ def parse_entry(entry: str) -> tuple[str, str | None]:
 
 
 def plan_key(name: str, args: dict) -> str:
-    if name == "load_skill":
-        return f"load_skill:{args.get('name', '')}"
-    if name == "run_script":
-        return f"run_script:{args.get('script', '')}"
-    if name == "read_reference":
-        return f"read_reference:{args.get('path', '')}"
-    return name
+    field = {"load_skill": "name", "run_script": "script", "read_reference": "path"}.get(name)
+    return f"{name}:{args.get(field, '')}" if field else name
 
 
 def _load(content: str):

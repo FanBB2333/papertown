@@ -1,16 +1,6 @@
-"""A project's files, for the console: its code (the linked code repository, or the
-project's own code directory) and its paper (the linked paper repository, or the press's
-directory for it). You list, read and save them from the console; nothing here acts on its
-own. A path never leaves the root it is given in, `.git` is off limits and only text is
-saved.
-
-A linked paper compiles into Papertown's own build directory (latexmk -outdir), so its
-repository gets no build files; the press's papers compile where they are, as the press
-does itself.
-
-Also the project's experiment data in one place: the results its experiment stage
-reported, the datasets and metrics its method names, the results its jobs handed back, and
-the data files in its code.
+"""A project's code and paper files for the console, and its experiment data in one place. A path
+never leaves its root, `.git` is off limits and only text is saved. A linked paper compiles into
+Papertown's own build directory (latexmk -outdir), so its repository gets no build files.
 """
 
 from __future__ import annotations
@@ -23,7 +13,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .linked import _home, _main_tex
+from .linked import _git, _home, _main_tex
 
 if TYPE_CHECKING:
     from .town import Town
@@ -46,14 +36,6 @@ class WsError(Exception):
     def __init__(self, status: int, msg: str):
         super().__init__(msg)
         self.status = status
-
-
-def _git(root: Path, *args: str) -> str:
-    try:
-        r = subprocess.run(["git", "--no-optional-locks", "-C", str(root), *args], capture_output=True, text=True, timeout=15)
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    return r.stdout if r.returncode == 0 else ""
 
 
 def _text(p: Path) -> str | None:
@@ -80,7 +62,7 @@ def inside(root: Path, rel: str) -> Path:
 
 def git_status(root: Path) -> dict[str, str]:
     out = {}
-    for ln in _git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all").split("\0"):
+    for ln in _git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", timeout=15).split("\0"):
         if len(ln) > 3:
             code = (ln[0] if ln[0] not in " ?" else ln[1]) if ln[:2] != "??" else "?"
             out[ln[3:]] = STATUS.get(code, "modified")
@@ -89,10 +71,9 @@ def git_status(root: Path) -> dict[str, str]:
 
 def list_files(root: Path, press: bool = False) -> dict:
     """The files under root: git's own list in a repository (with each file's state), otherwise a
-    walk that leaves out hidden and tool directories; and in the press's paper, no build files.
-    Also what the TUI calls for a workspace on this machine."""
+    walk that leaves out hidden and tool directories; with `press`, no LaTeX build files."""
     if (root / ".git").exists():
-        names = [n for n in _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0") if n]
+        names = [n for n in _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", timeout=15).split("\0") if n]
         status = git_status(root)
     else:
         names, status = [], {}
@@ -127,12 +108,19 @@ def read_file(root: Path, rel: str) -> dict:
             "too_big": size > MAX_READ, "text": text}
 
 
+def repo_info(root: Path, *, timeout: float = 15) -> dict:
+    """A directory's path and name, and for a git repository its branch and uncommitted changes."""
+    d: dict = {"path": _home(root), "name": root.name, "git": (root / ".git").exists()}
+    if d["git"]:
+        d["branch"] = _git(root, "rev-parse", "--abbrev-ref", "HEAD", timeout=timeout).strip() or None
+        d["dirty"] = len(_git(root, "status", "--porcelain", timeout=timeout).splitlines())
+    return d
+
+
 class Workspace:
     def __init__(self, town: "Town"):
         self.town = town
         self.s = town.s
-
-    # ---------- where things are ----------
 
     def root(self, line_id: str, which: str) -> Path | None:
         if which not in ROOTS:
@@ -141,19 +129,17 @@ class Workspace:
             raise WsError(404, "没有这个项目")
         linked = self.town.linked.of(line_id)
         if linked:
-            d = linked.get("code" if which == "code" else "paper")
-            return Path(d).expanduser() if d and Path(d).expanduser().is_dir() else None
-        d = self.s.projects_dir / line_id / "code" if which == "code" else self.s.press_dir / line_id
-        return d if d.is_dir() else None
+            d = linked.get(which)
+            d = Path(d).expanduser() if d else None
+        else:
+            d = self.s.projects_dir / line_id / "code" if which == "code" else self.s.press_dir / line_id
+        return d if d and d.is_dir() else None
 
     def _need(self, line_id: str, which: str) -> Path:
         r = self.root(line_id, which)
         if not r:
             raise WsError(404, "这个项目还没有代码目录" if which == "code" else "这个项目还没有论文")
         return r
-
-    def _path(self, root: Path, rel: str) -> Path:
-        return inside(root, rel)
 
     def info(self, line_id: str) -> dict:
         out: dict = {"line_id": line_id, "linked": bool(self.town.linked.of(line_id)), "latexmk": bool(shutil.which("latexmk"))}
@@ -162,11 +148,7 @@ class Workspace:
             if not r:
                 out[which] = None
                 continue
-            git = (r / ".git").exists()
-            d = {"path": _home(r), "name": r.name, "git": git}
-            if git:
-                d["branch"] = _git(r, "rev-parse", "--abbrev-ref", "HEAD").strip() or None
-                d["dirty"] = len(_git(r, "status", "--porcelain").splitlines())
+            d = repo_info(r)
             if which == "paper":
                 main = self._main(line_id, r)
                 d["main"] = main.relative_to(r).as_posix() if main else None
@@ -174,21 +156,16 @@ class Workspace:
             out[which] = d
         return out
 
-    # ---------- files ----------
-
     def tree(self, line_id: str, which: str) -> dict:
         root = self._need(line_id, which)
         return {"root": which, **list_files(root, press=which == "paper" and not self.town.linked.of(line_id))}
-
-    def _status(self, root: Path) -> dict[str, str]:
-        return git_status(root)
 
     def read(self, line_id: str, which: str, rel: str) -> dict:
         return read_file(self._need(line_id, which), rel)
 
     def save(self, line_id: str, which: str, rel: str, text: str) -> dict:
         root = self._need(line_id, which)
-        p = self._path(root, rel)
+        p = inside(root, rel)
         data = text.encode("utf-8")
         if len(data) > MAX_SAVE:
             raise WsError(400, "文件太大，没有保存")
@@ -196,15 +173,13 @@ class Workspace:
             raise WsError(400, "这不是文本文件，没有保存")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
-        st = self._status(root).get(rel) if (root / ".git").exists() else None
+        st = git_status(root).get(rel) if (root / ".git").exists() else None
         return {"path": rel, "size": len(data), "mtime": p.stat().st_mtime, **({"status": st} if st else {})}
 
     def diff(self, line_id: str, which: str, rel: str) -> dict:
         root = self._need(line_id, which)
-        self._path(root, rel)
-        return {"path": rel, "diff": _git(root, "diff", "--no-color", "--", rel)[:200_000] if (root / ".git").exists() else ""}
-
-    # ---------- the paper ----------
+        inside(root, rel)
+        return {"path": rel, "diff": _git(root, "diff", "--no-color", "--", rel, timeout=15)[:200_000] if (root / ".git").exists() else ""}
 
     def _main(self, line_id: str, root: Path) -> Path | None:
         if self.town.linked.of(line_id):
@@ -224,7 +199,7 @@ class Workspace:
         t0 = time.time()
         if not self.town.linked.of(line_id):
             r = self.town.press.compile(root)
-            return {"ok": r["compiled"], "log": r.get("log", ""), "pages": r.get("pages"), "seconds": round(time.time() - t0, 1)}
+            return {"ok": r["compiled"], "log": r["log"], "pages": r.get("pages"), "seconds": round(time.time() - t0, 1)}
         out = self._build(line_id)
         out.mkdir(parents=True, exist_ok=True)
         try:
@@ -249,8 +224,6 @@ class Workspace:
         cands = [p for p in ([self._build(line_id) / f"{main.stem}.pdf", main.with_suffix(".pdf")] if main else [root / "main.pdf"])
                  if p.exists()]
         return max(cands, key=lambda p: p.stat().st_mtime) if cands else None
-
-    # ---------- the experiment data ----------
 
     def data(self, line_id: str) -> dict:
         if not self.town.db.one("select id from lines where id = ?", line_id):
@@ -277,13 +250,12 @@ class Workspace:
         files = []
         root = self.root(line_id, "code")
         if root:
-            for f in self.tree(line_id, "code")["files"]:
+            for f in list_files(root)["files"]:
                 parts = [x.lower() for x in Path(f["path"]).parts[:-1]]
                 ext = Path(f["path"]).suffix.lower()
-                if ext in DATA_EXT and (ext not in (".json",) or any(x in DATA_DIRS for x in parts)):
+                if ext in DATA_EXT and (ext != ".json" or any(x in DATA_DIRS for x in parts)):
                     files.append({**f, "kind": "processed" if any(x in ("results", "result", "metrics", "outputs", "output", "eval", "evals") for x in parts)
                                   else "raw" if any(x in ("data", "datasets") for x in parts) else "other",
                                   "mtime": (root / f["path"]).stat().st_mtime})
             files.sort(key=lambda f: -f["mtime"])
         return {"meta": meta, "results": results, "runs": runs[:200], "files": files[:300]}
-

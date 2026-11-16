@@ -1,10 +1,8 @@
-"""Refresh the bundled seed library (papertown/data/seed_papers.jsonl) from the arXiv API.
+"""Refresh the demo's bundled seed library (papertown/data/seed_papers.jsonl) from the arXiv API.
 
     uv run python scripts/fetch_seed.py
 
-arXiv metadata (titles, abstracts) is released under CC0. The topics are the ones the
-demo touches; add queries here to widen the seed. Running `papertown ingest` against a
-live server is the way to grow a real library — this file only keeps the demo offline.
+arXiv metadata (titles, abstracts) is released under CC0.
 """
 
 from __future__ import annotations
@@ -44,7 +42,7 @@ seen: dict[str, dict] = {}
 for q in QUERIES:
     try:
         hits = arxiv_api.search(q, max_results=PER_QUERY)
-    except Exception as e:  # keep what we have; the API is flaky under load
+    except Exception as e:
         print(f"skip {q!r}: {e}", file=sys.stderr)
         hits = []
     for h in hits:

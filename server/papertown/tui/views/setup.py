@@ -1,5 +1,5 @@
-"""配置: how the town is set up: the skills its staff follow, the MCP lines their tools come
-through, the library they search, and the models they think with."""
+"""配置: how the town is set up: its staff's skills, the MCP servers behind their tools, the library
+they search and the models they use."""
 
 from __future__ import annotations
 
@@ -19,12 +19,13 @@ from ..anim import bar, breathe, mix
 from ..client import ApiError
 from ..look import clip
 from ..widgets import Bar, Confirm, Form, Pane, Place, Prompt, row_key, sync_rows
+from . import cycle, tabs
 
 PAGES = [("skills", "技能"), ("mcp", "MCP"), ("library", "图书馆"), ("models", "模型")]
 
 
 class Setup(Place):
-    key, title, animated = "setup", "配置", True
+    key, title = "setup", "配置"
     BINDINGS = [
         Binding("left_square_bracket", "page(-1)", "上一页", show=False), Binding("right_square_bracket", "page(1)", "下一页", show=False),
         Binding("t", "toggle", "启用/停用", show=False), Binding("r", "restart", "重连", show=False), Binding("n", "add", "添加", show=False),
@@ -72,10 +73,7 @@ class Setup(Place):
 
     def paint_tabs(self) -> None:
         p = self.pal
-        out = Text()
-        for k, label in PAGES:
-            out.append(f" {label} ", style=f"bold {p['brand']} underline" if k == self.page else p["muted"])
-            out.append(" ")
+        out = tabs(PAGES, self.page, p)
         out.append("   [ ] 换页", style=p["faint"])
         self.query_one("#su-tabs", Static).update(out, layout=False)
 
@@ -84,7 +82,6 @@ class Setup(Place):
         api = self.town.api
         try:
             if self.page == "skills":
-                # as `papertown skills` and `skim skill list` show them, read here
                 self.skills, self.skim = await asyncio.gather(self.town.local.town_skills(), self.town.local.skim_store())
                 self.paint_skills()
             elif self.page == "mcp":
@@ -99,15 +96,12 @@ class Setup(Place):
         except ApiError as e:
             self.town.notify(str(e), severity="error")
 
-    # ---------- skills ----------
-
     def paint_skills(self) -> None:
         p = self.pal
         rows = [(f"town:{s['name']}", (Text(clip(s["name"], 26), style=p["ink"]), Text(clip("、".join(s.get("roles") or []), 28), style=p["muted"])))
                 for s in self.skills]
         rows += [(f"skim:{s['name']}", (Text(clip(s["name"], 26), style=p["muted"]), Text("skim", style=p["faint"]))) for s in self.skim.get("store") or []]
-        table = self.query_one("#su-skills", DataTable)
-        sync_rows(table, rows)
+        sync_rows(self.query_one("#su-skills", DataTable), rows)
         self.peek_skill()
 
     @on(DataTable.RowHighlighted, "#su-skills")
@@ -126,8 +120,6 @@ class Setup(Place):
                 parts.append(Text.assemble((f"{label}  ", p["muted"]), ("、".join(s[k]), p["ink"])))
         parts += [Text(), Text("技能文件改了会自动重新加载（热插拔）", style=p["faint"])]
         self.query_one("#su-skill", Pane).show(Padding(Group(*parts), (0, 1)))
-
-    # ---------- MCP ----------
 
     def servers(self) -> list[dict]:
         return self.mcp.get("servers") or []
@@ -172,8 +164,6 @@ class Setup(Place):
                                           for x in ((k, f"bold {p['brand']}"), (f" {w}   ", p["muted"]))])]
         self.query_one("#su-server", Pane).show(Padding(Group(*parts), (0, 1)))
 
-    # ---------- library ----------
-
     def paint_library(self) -> None:
         p, r = self.pal, self.rag
         st, opts = r.get("stats") or {}, r.get("opts") or {}
@@ -214,8 +204,6 @@ class Setup(Place):
         if h and h.get("url"):
             self.town.open_url(h["url"])
 
-    # ---------- models ----------
-
     def paint_models(self) -> None:
         p, m = self.pal, self.llm
         parts: list[Any] = [Text.assemble(("现在用  ", p["muted"]), (f"{m.get('provider')}", f"bold {p['ink']}"),
@@ -231,17 +219,12 @@ class Setup(Place):
         parts += [Text(), Text.assemble(("e", f"bold {p['brand']}"), (" 换模型（key 放在 ~/.secrets.zsh 之类的环境里，这里不收）", p["muted"]))]
         self.query_one("#models", Pane).show(Padding(Group(*parts), (1, 2)))
 
-    # ---------- the clock, keys ----------
-
     def tick(self, t: float) -> None:
         if self.page == "mcp" and self.town.beat:
             table = self.query_one("#su-mcp", DataTable)
             for s in self.servers():
                 if s.get("enabled") and s.get("state") not in ("ok", "error"):
-                    try:
-                        table.update_cell(s["name"], "mark", self.mcp_mark(s, t))
-                    except Exception:
-                        pass
+                    table.update_cell(s["name"], "mark", self.mcp_mark(s, t))
 
     def on_town_event(self, ev: dict) -> None:
         if self.is_mounted and self.town.place == "setup" and ev.get("type") in ("skills", "llm", "library"):
@@ -259,8 +242,7 @@ class Setup(Place):
         return {"building": {"skills": "academy", "mcp": "exchange", "library": "library"}.get(self.page)}
 
     def action_page(self, step: int) -> None:
-        keys = [k for k, _ in PAGES]
-        self.page = keys[(keys.index(self.page) + step) % len(keys)]
+        self.page = cycle(PAGES, self.page, step)
         self.query_one("#su-pages", ContentSwitcher).current = self.page
         self.town.paint_hints()
         self.run_worker(self.load(), exclusive=True, group="su-page", exit_on_error=False)

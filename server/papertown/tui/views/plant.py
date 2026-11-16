@@ -1,6 +1,5 @@
-"""电厂: the GPUs, as nvidb reports them (read here with `nvidb queue status --no-tick`; read only):
-each machine and card, how full and how busy, who is on it, and each lane's running job and queue in
-the order it will run."""
+"""电厂: the GPUs as nvidb reports them (read only): each machine and card, how full and busy, who is on
+it, and each lane's running jobs and queue in the order they will run."""
 
 from __future__ import annotations
 
@@ -15,15 +14,15 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Static
 
-from ..anim import Tween, bar, dur, seconds_since, spark, star
-from ..look import JOB, clip, gb, job_mark, job_state
+from ..anim import Tween, bar, dur, seconds_since, spark
+from ..look import JOB, busy_mark, clip, gb, job_mark, job_state
 from ..widgets import Bar, Pane, Place, row_key, sync_rows
 
 STATE = {"full": "满", "idle": "空闲", "room": "有空", "busy": "忙"}
 
 
 class Plant(Place):
-    key, title, animated = "plant", "电厂", True
+    key, title = "plant", "电厂"
     BINDINGS = [Binding("R", "fresh", "现在就问 nvidb"), Binding("v", "procs", "进程")]
 
     def __init__(self) -> None:
@@ -31,7 +30,7 @@ class Plant(Place):
         self.g: dict = {}
         self.lane: str | None = None
         self.procs = True
-        self.fill: dict[str, Tween] = {}  # each card's memory bar, easing to its value
+        self.fill: dict[str, Tween] = {}
 
     def compose(self) -> ComposeResult:
         yield Bar(id="pl-sum", classes="chips")
@@ -49,7 +48,7 @@ class Plant(Place):
         self.set_interval(5, self.refresh_soon)
 
     async def load(self, fresh: bool = False) -> None:
-        self.g = await self.town.local.gpus(fresh)  # nvidb queue status --json --no-tick, run here
+        self.g = await self.town.local.gpus(fresh)
         self.paint()
 
     def job(self, jid: Any) -> dict | None:
@@ -62,7 +61,7 @@ class Plant(Place):
         rows = []
         for ln in self.g.get("lanes") or []:
             run = [self.job(i) for i in ln.get("running") or []]
-            mark = Text(star(self.town.t), style=f"bold {p['run']}") if run else Text("‖" if ln.get("paused") else "·", style=p["muted"])
+            mark = busy_mark(self.town.t, p) if run else Text("‖" if ln.get("paused") else "·", style=p["muted"])
             rows.append((ln["name"], (mark, Text(clip(ln["name"], 18), style=p["ink"]),
                                       Text(clip(", ".join((j or {}).get("name", "?") for j in run) or ("暂停" if ln.get("paused") else "—"), 18), style=p["muted"]),
                                       Text(str(len(ln.get("queued") or [])), style=p["warn"] if ln.get("queued") else p["faint"]))))
@@ -103,7 +102,7 @@ class Plant(Place):
             pane.show(Padding(Text(self.g.get("note") or "没有接入 nvidb：这里显示模拟电厂", style=p["muted"]), (1, 2)))
             return
         parts: list[Any] = []
-        room = max(0, min(20, pane.content_size.width - 76))  # the trend gets what the row has left
+        room = max(0, min(20, pane.content_size.width - 76))
         for n in nodes:
             up = n.get("state") == "up"
             parts.append(Text.assemble(("● " if up else "○ ", p["ok"] if up else p["bad"]), (n["name"], f"bold {p['ink']}"),
@@ -116,7 +115,7 @@ class Plant(Place):
                 tw.set((c.get("mem_used_mb") or 0) / total)
                 busy = any(x.get("managed") for x in c.get("procs") or [])
                 row = Text("  ")
-                row.append(star(t) if busy else "·", style=f"bold {p['run']}" if busy else p["faint"])
+                row.append_text(busy_mark(t, p) if busy else Text("·", style=p["faint"]))
                 row.append(f" GPU{c['index']} ", style=p["ink"])
                 row.append(f"{clip(c.get('name'), 16):<16} ", style=p["muted"])
                 full = c.get("state") == "full"
@@ -162,7 +161,7 @@ class Plant(Place):
         pane.show(Padding(Group(*parts), (0, 1)))
 
     def tick(self, t: float) -> None:
-        moving = any(tw.step(1 / 12) for tw in self.fill.values())  # bars easing: every frame, for the moment it takes
+        moving = any(tw.step(1 / 12) for tw in self.fill.values())
         if moving or (self.town.beat and self.g.get("lanes")):
             self.paint_nodes(layout=False)
             self.paint_summary()
@@ -170,14 +169,11 @@ class Plant(Place):
             table = self.query_one("#pl-lanes", DataTable)
             for ln in self.g.get("lanes") or []:
                 if ln.get("running"):
-                    try:
-                        table.update_cell(ln["name"], "mark", Text(star(t), style=f"bold {self.pal['run']}"))
-                    except Exception:
-                        pass
+                    table.update_cell(ln["name"], "mark", busy_mark(t, self.pal))
 
     @work(exclusive=True, group="pl-load")
     async def refresh_soon(self) -> None:
-        if self.town.place == "plant":  # the TUI's own reader keeps it fresh; this repaints what it read
+        if self.town.place == "plant":
             await self.load()
 
     def hints(self) -> list[tuple[str, str]]:

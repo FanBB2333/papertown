@@ -1,13 +1,5 @@
-"""Skill registry. Each worker skill is a folder with a SKILL.md (Agent Skills format):
-
-    skills/novelty-check/
-      SKILL.md          frontmatter: name, description, allowed-tools, metadata.roles
-      references/*.md   read on demand with read_reference
-      scripts/*.py      run with run_script (JSON on stdin, JSON on stdout)
-
-Progressive disclosure: an agent's system prompt only carries name + description; the
-body, references and scripts are loaded when the agent asks for them. The folder is
-rescanned before every agent run, so dropping a new skill in is a hot plug.
+"""Skill registry: each worker skill is a folder with a SKILL.md (Agent Skills format; frontmatter name, description,
+allowed-tools, metadata.roles), references/*.md and scripts/*.py (JSON on stdin and stdout). Rescanned before every run.
 """
 
 from __future__ import annotations

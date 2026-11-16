@@ -1,12 +1,5 @@
-"""The agent loop every worker runs.
-
-The system prompt lists only the name and description of the skills the worker's role
-may use; the model loads a skill's body, references and scripts through tools when it
-needs them. The loop ends when the model calls the stage's submit tool. Every model
-call is booked at the bank and every tool call lands in the trace.
-
-If the model fails (provider error, budget exhausted, no submission) the stage still
-gets an answer: the same template the offline provider uses, marked degraded.
+"""The agent loop every worker runs, until the model calls the stage's submit tool.
+If the model fails (provider error, budget, no submission) the stage gets the offline template, marked degraded.
 """
 
 from __future__ import annotations
@@ -61,7 +54,6 @@ class AgentTask:
 @dataclass
 class AgentResult:
     payload: dict
-    run_id: str
     steps: int
     cost: float
     degraded: str | None
@@ -75,10 +67,7 @@ def run_agent(town: "Town", task: AgentTask) -> AgentResult:
     skills = [town.skills.get(n) for n in task.skills] if task.skills is not None else town.skills.for_role(w["role"])
     plan = task.plan if task.plan is not None else [(s.name, e) for s in skills for e in s.allowed]
 
-    names = list(BASE_TOOLS) if skills else []
-    for _, entry in plan:
-        names.append(parse_entry(entry)[0])
-    names += task.extra_tools
+    names = (BASE_TOOLS if skills else []) + [parse_entry(entry)[0] for _, entry in plan] + task.extra_tools
     names = [x for x in dict.fromkeys(names) if town.tools.has(x)]
     specs = [town.tools.spec(x) for x in names] + [task.finish]
 
@@ -91,7 +80,7 @@ def run_agent(town: "Town", task: AgentTask) -> AgentResult:
     run_id = f"run_{uuid.uuid4().hex[:10]}"
     town.db.insert("runs", {"id": run_id, "line_id": task.line_id, "stage": task.stage, "worker_id": w["id"],
                             "provider": provider.name, "model": model, "status": "running", "started_at": now()})
-    ctx = ToolCtx(town, run_id=run_id, line_id=task.line_id, stage=task.stage, worker=w)
+    ctx = ToolCtx(town, run_id=run_id, line_id=task.line_id)
     hint = ScriptHint(skills=[s.name for s in skills], plan=plan, args=task.args, finish=task.finish.name, payload=task.payload)
 
     turns = [Turn("user", text=task.prompt)]
@@ -152,4 +141,4 @@ def run_agent(town: "Town", task: AgentTask) -> AgentResult:
 
     town.db.update("runs", {"id": run_id}, status="degraded" if degraded else "done", steps=steps, ended_at=now(),
                    error=degraded)
-    return AgentResult(final, run_id, steps, spent, degraded, sorted(ctx.loaded), results)
+    return AgentResult(final, steps, spent, degraded, sorted(ctx.loaded), results)

@@ -1,17 +1,6 @@
-"""The GPUs on your own machines, read from nvidb's job queue. Read only.
-
-nvidb keeps every node's cards, what runs on them, its queue of jobs and the lanes they
-wait in (a lane: one GPU, or a few, and the order it runs its jobs) in one SQLite file,
-kept fresh by its keeper. Papertown's main process prints it with `nvidb queue status
---json --no-tick`, which never contacts the nodes itself, every few seconds in the
-background (PAPERTOWN_NVIDB_POLL), so a page always gets the latest reading at once. From
-those readings it keeps what nvidb itself does not: the last hour of each card's
-utilisation and memory, and when it first saw each process on a card, which for work the
-queue did not start is the only clue to how long it has been running. A project's own jobs
-also come from the queue's history (`nvidb job ls --json --no-tick -n …`, the newest ones,
-read every minute or so), and one job in full from `nvidb job show --json --no-tick`, its
-environment left out. Nothing is submitted, cancelled or acknowledged from here; jobs are
-still submitted with `nvidb job submit`.
+"""The GPUs on your own machines, read only from nvidb's job queue with `--json --no-tick` commands that never
+contact the nodes, polled in the background. Adds what nvidb does not keep: each card's last hour of utilisation
+and memory, and when each process on a card was first seen.
 """
 
 from __future__ import annotations
@@ -38,6 +27,12 @@ STATE = {"pending": "queued", "running": "running", "completed": "done", "failed
          "timeout": "failed", "cancelled": "cancelled"}
 
 
+def mentions(job: dict, patterns: list[str]) -> bool:
+    """Whether a queue job mentions any of a linked project's names or paths."""
+    hay = " ".join(str(job.get(k) or "") for k in ("workdir", "name", "submitter", "notes", "command")).lower()
+    return any(p.lower() in hay for p in patterns if p)
+
+
 def _gpu(g: dict) -> dict:
     total = g.get("mem_total_mb") or 0
     used = g.get("mem_used_mb") or 0
@@ -49,7 +44,7 @@ def _gpu(g: dict) -> dict:
         "index": g.get("index"), "name": (g.get("name") or "").removeprefix("NVIDIA "), "mem_total_mb": total, "mem_used_mb": used,
         "free_mb": free, "util_percent": util, "temperature_c": g.get("temperature_c"), "queue_mem_mb": g.get("queue_mem_mb") or 0,
         "external_mem_mb": g.get("external_mem_mb") or 0, "reserved_mb": g.get("reserved_mb") or 0, "attribution": g.get("attribution"),
-        "state": state, "updated_at": g.get("updated_at"),  # when the keeper last looked at the card
+        "state": state, "updated_at": g.get("updated_at"),
         "procs": [{"pid": p.get("pid"), "user": p.get("user"), "name": Path(p.get("name") or "").name, "mem_mb": p.get("mem_mb"),
                    "managed": p.get("managed"), "job_id": p.get("job_id"), "job_name": p.get("job_name")}
                   for p in g.get("processes") or [] if (p.get("mem_mb") or 0) > 64],
@@ -75,12 +70,11 @@ def _job(j: dict) -> dict:
         "notes": (j.get("notes") or "")[:400], "held": bool(j.get("held")), "created_at": j.get("created_at"),
         "started_at": j.get("started_at"), "finished_at": j.get("finished_at"), "elapsed_s": j.get("elapsed_s"),
         "exit_code": j.get("exit_code"), "last_error": (j.get("last_error") or "")[:400],
-        # where it may go: a lane, a pool, or any card that fits; what it waits for
         "pool": j.get("pool"), "lane_seq": j.get("lane_seq"), "node_constraint": j.get("node_constraint"),
         "gpu_constraint": j.get("gpu_constraint") or [], "gpus": j.get("gpus", 1), "priority": j.get("priority") or 0,
         "depends_on": j.get("depends_on") or [], "held_reason": j.get("held_reason"), "gpu_mem_mb": j.get("gpu_mem_mb"),
         "max_runtime_s": j.get("max_runtime_s"), "progress_at": j.get("progress_at"),
-        "result": _result(j.get("result")),  # what a finished job handed back in result.json
+        "result": _result(j.get("result")),
     }
 
 
@@ -94,7 +88,7 @@ def _result(r):
 def _lane(ln: dict) -> dict:
     return {"name": ln["name"], "node": ln.get("node"), "gpu_ids": ln.get("gpu_ids") or [], "paused": bool(ln.get("paused")),
             "concurrency": ln.get("concurrency") or 1, "runner_up": ln.get("runner_up"), "blocked": ln.get("blocked"),
-            "running": [j["id"] for j in ln.get("running") or []], "queued": [j["id"] for j in ln.get("queued") or []]}  # in running order
+            "running": [j["id"] for j in ln.get("running") or []], "queued": [j["id"] for j in ln.get("queued") or []]}
 
 
 class Nvidb:
@@ -112,7 +106,7 @@ class Nvidb:
         self._halt = threading.Event()
         self._trend: dict[str, deque] = {}  # "node:gpu" -> (when, util %, memory used MB), oldest first
         self._seen: dict[tuple, float] = {}  # (node, gpu, pid) -> when Papertown first saw that process
-        self._first = 0.0  # Papertown's first reading: what was already there then started earlier
+        self._first = 0.0  # Papertown's first reading: processes already there then are marked `earlier`
 
     def _usable(self) -> bool:
         return bool(self.s.nvidb and self.bin and Path(self.bin).exists())
@@ -194,7 +188,7 @@ class Nvidb:
                 key = f"{n['name']}:{g['index']}"
                 t = _epoch(g.get("updated_at")) or now
                 tr = self._trend.setdefault(key, deque())
-                if not tr or t > tr[-1][0]:  # a new look at the card, not the same one read again
+                if not tr or t > tr[-1][0]:
                     tr.append((t, g["util_percent"], g["mem_used_mb"]))
                 while tr and tr[0][0] < now - TREND_S:
                     tr.popleft()
@@ -204,7 +198,6 @@ class Nvidb:
                     k = (n["name"], g["index"], p.get("pid") or p.get("name"))  # WSL may name no pid
                     here.add(k)
                     seen = self._seen.setdefault(k, now)
-                    # first seen by Papertown; `earlier` when it was already there at Papertown's first reading
                     p["seen_since"], p["earlier"] = _iso(seen), seen <= self._first
         up = {n["name"] for n in nodes if n["state"] == "up"}  # a card that could not be read keeps what it had
         for k in [k for k in self._seen if k[0] in up and k not in here]:
@@ -212,7 +205,7 @@ class Nvidb:
 
     def history(self) -> list[dict]:
         """The newest jobs in the queue's database, finished ones included; [] when it can't be read."""
-        if not self.s.nvidb or not self.bin or not Path(self.bin).exists():
+        if not self._usable():
             return []
         with self._hist_lock:
             if time.time() - self._hist_at < HIST_TTL:
@@ -228,7 +221,7 @@ class Nvidb:
 
     def show(self, job_id: int) -> dict | None:
         """One job in full, with its events: what a person reads to see why it ran the way it did."""
-        if not self.s.nvidb or not self.bin or not Path(self.bin).exists():
+        if not self._usable():
             return None
         try:
             r = subprocess.run([self.bin, "job", "show", str(int(job_id)), "--json", "--no-tick"], capture_output=True, text=True, timeout=15)
@@ -252,8 +245,7 @@ class Nvidb:
         for j in self.status()["jobs"] + self.history():
             if j["id"] in seen:
                 continue
-            hay = " ".join(str(j.get(k) or "") for k in ("workdir", "name", "submitter", "notes", "command")).lower()
-            if any(p in hay for p in pats):
+            if mentions(j, pats):
                 seen.add(j["id"])
                 out.append(j)
         return sorted(out, key=lambda j: -j["id"])

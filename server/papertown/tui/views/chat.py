@@ -1,6 +1,5 @@
-"""对话: what the town says (each department's reports and answers, what you said to it), with the
-calls behind it if you want them; and the console's assistant, its conversation and the actions it
-asks you to approve."""
+"""对话: the town's conversation (with the calls behind it, if you want them) and the console's
+assistant, its conversation and the actions it asks you to approve."""
 
 from __future__ import annotations
 
@@ -19,12 +18,13 @@ from ..anim import clock, mix
 from ..client import ApiError
 from ..look import clip
 from ..widgets import Bar, Pane, Place, Prompt, transcript, writing
+from . import tabs
 
 PAGES = [("town", "小镇"), ("assistant", "小助手")]
 
 
 class Chat(Place):
-    key, title, animated = "chat", "对话", True
+    key, title = "chat", "对话"
     BINDINGS = [
         Binding("left_square_bracket,right_square_bracket", "page", "换页", show=False), Binding("t", "trace", "调用记录"),
         Binding("p", "project", "项目"), Binding("y", "act(True)", "批准", show=False), Binding("N", "act(False)", "不批", show=False),
@@ -36,7 +36,7 @@ class Chat(Place):
         self.page = "town"
         self.trace = False
         self.project: str | None = None
-        self.assistant: dict | None = None
+        self.assistant: dict = {}
         self.items: list[dict] = []
         self.seen = 0
 
@@ -61,10 +61,7 @@ class Chat(Place):
 
     def paint_tabs(self) -> None:
         p = self.pal
-        out = Text()
-        for k, label in PAGES:
-            out.append(f" {label} ", style=f"bold {p['brand']} underline" if k == self.page else p["muted"])
-            out.append(" ")
+        out = tabs(PAGES, self.page, p)
         if self.page == "town":
             out.append(f"   项目：{'全部' if not self.project else self.seq(self.project)}", style=p["faint"])
             out.append("   调用记录：" + ("显示" if self.trace else "不显示"), style=p["faint"])
@@ -72,10 +69,10 @@ class Chat(Place):
         self.query_one("#ch-tabs", Static).update(out, layout=False)
 
     def seq(self, line_id: str | None) -> str:
-        ln = next((x for x in self.town.lines if x["id"] == line_id), None)
-        return f"#{ln['seq']}" if ln else (line_id or "")
+        seq = self.town.line_seq(line_id)
+        return f"#{seq}" if seq is not None else (line_id or "")
 
-    def message(self, m: dict, t: float) -> list[Any]:
+    def message(self, m: dict, t: float) -> list[Text]:
         p = self.pal
         body = m.get("body") or {}
         role, kind = m.get("role"), m.get("kind")
@@ -95,7 +92,7 @@ class Chat(Place):
             head.append(f"  {self.seq(m['line_id'])}", style=p["brand"])
         head.append(f"  {clock(m.get('ts'))}", style=p["faint"])
         text = body.get("text") or body.get("note") or body.get("title") or ""
-        lines: list[Any] = [head]
+        lines = [head]
         if text:
             lines.append(Text(f"  {clip(text, 1200) if len(text) > 1200 else text}", style=p["bad"] if kind == "error" else p["ink"]))
         rep = body.get("report") or {}
@@ -106,8 +103,7 @@ class Chat(Place):
         glow = self.town.glow.k(("msg", m["id"]), t)
         if glow:
             for x in lines:
-                if isinstance(x, Text):
-                    x.stylize(f"on {mix(p['bg'], p['brand'], glow * 0.3)}")
+                x.stylize(f"on {mix(p['bg'], p['brand'], glow * 0.3)}")
         return lines
 
     def paint_town(self, scroll: bool = False, layout: bool = True) -> None:
@@ -135,20 +131,21 @@ class Chat(Place):
 
     def paint_assistant(self) -> None:
         p, t = self.pal, self.town.t
-        a = (self.assistant or {}).get("agent") or {}
+        a = self.assistant.get("agent") or {}
         head = Text.assemble(("✦ ", f"bold {p['brand']}"), ("小助手", f"bold {p['ink']}"),
                              (f"  {a.get('status', '')} · {a.get('model') or ''}" if a else "  还没启动：在底下的框里问它，它就会开工", p["muted"]))
         parts: list[Any] = [head, Text()]
         parts += transcript(self.items[-60:], p, self.town.theme == "papertown")
         parts += writing(self.town.streaming.get("assistant"), t, p)
-        for q in (self.assistant or {}).get("asks") or []:
-            if not q.get("data", q).get("answer"):
-                d = q.get("data", q)
-                parts += [Text.assemble((" 它在问 ", f"bold {p['bg']} on {p['info']}"), (f" {d.get('question', '')}", p["ink"]))]
-                if d.get("choices"):
-                    parts.append(Text("  " + " / ".join(d["choices"]), style=p["muted"]))
-                parts.append(Text("  在底下的框里回答", style=p["faint"]))
-        for act in (self.assistant or {}).get("acts") or []:
+        for q in self.assistant.get("asks") or []:
+            d = q.get("data", q)
+            if d.get("answer"):
+                continue
+            parts += [Text.assemble((" 它在问 ", f"bold {p['bg']} on {p['info']}"), (f" {d.get('question', '')}", p["ink"]))]
+            if d.get("choices"):
+                parts.append(Text("  " + " / ".join(d["choices"]), style=p["muted"]))
+            parts.append(Text("  在底下的框里回答", style=p["faint"]))
+        for act in self.assistant.get("acts") or []:
             d = act.get("data") or {}
             if d.get("status") == "pending":
                 parts += [Text(), Text.assemble((" 它想 ", f"bold {p['bg']} on {p['warn']}"), (f" {d.get('title') or d.get('action')}", f"bold {p['ink']}")),
@@ -163,7 +160,7 @@ class Chat(Place):
             return
         if self.page == "town" and len(self.town.messages) != self.seen:
             self.paint_town()
-        elif self.page == "town" and self.town.glow.live:  # new ones fading in: the same lines, other colours
+        elif self.page == "town" and self.town.glow.at:
             self.paint_town(layout=False)
         elif self.page == "assistant" and "assistant" in self.town.streaming:
             self.paint_assistant()
@@ -183,12 +180,10 @@ class Chat(Place):
     async def refresh_assistant(self) -> None:
         await self.load()
 
-    # ---------- doing things ----------
-
     def hints(self) -> list[tuple[str, str]]:
         if self.page == "assistant":
             out = [("[ ]", "换页"), ("C", "新对话"), ("H", "历史")]
-            if any((a.get("data") or {}).get("status") == "pending" for a in (self.assistant or {}).get("acts") or []):
+            if any((a.get("data") or {}).get("status") == "pending" for a in self.assistant.get("acts") or []):
                 out += [("y", "批准"), ("N", "不批")]
             return out
         return [("[ ]", "换页"), ("p", "按项目看"), ("t", "调用记录"), ("G", "到底")]
@@ -220,7 +215,7 @@ class Chat(Place):
         self.query_one(f"#{self.page}", Pane).scroll_end(animate=False)
 
     async def action_act(self, allow: bool) -> None:
-        pending = [a for a in (self.assistant or {}).get("acts") or [] if (a.get("data") or {}).get("status") == "pending"]
+        pending = [a for a in self.assistant.get("acts") or [] if (a.get("data") or {}).get("status") == "pending"]
         if self.page != "assistant" or not pending:
             return
         try:

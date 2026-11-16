@@ -7,6 +7,7 @@ import json
 import uuid
 from pathlib import Path
 
+from . import samples
 from .agents import Agents
 from .assistant import Assistant
 from .bank import Bank
@@ -22,7 +23,7 @@ from .events import EventBus
 from .farm import Farm, summarize
 from .leads import Leads
 from .graph import Genealogy
-from .library import Embedder, Library
+from .library import Embedder, Library, terms_of
 from .linked import Linked
 from .llm import make_provider
 from .market import Market
@@ -40,6 +41,13 @@ from .world import World
 from .workspace import Workspace
 
 SEED = Path(__file__).parent / "data" / "seed_papers.jsonl"
+
+
+def seed_papers() -> list[dict]:
+    """The demo's bundled seed library."""
+    if not SEED.exists():
+        return []
+    return [json.loads(line) for line in SEED.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 class Town:
@@ -78,10 +86,9 @@ class Town:
         self.skim = Skim(self)
         self._register_tools()
         if not self.library.count():
-            self.seed_library()
+            self.ingest(seed_papers(), "seed")
 
     def start(self) -> None:
-        from . import samples
         self.pipeline.recover()
         self.farm.recover()
         self.agents.reconcile()
@@ -100,8 +107,6 @@ class Town:
         self.nvidb.stop()
         self.mcp.stop()
 
-    # ---------- the town's own model ----------
-
     def llm(self) -> dict:
         s = self.s
         return {"provider": s.provider, "model_strong": s.model_strong, "model_cheap": s.model_cheap, "effort": s.effort,
@@ -110,8 +115,7 @@ class Town:
 
     def set_llm(self, provider: str | None = None, model_strong: str | None = None, model_cheap: str | None = None,
                 effort: str | None = None) -> dict:
-        """Switch the provider and models the workers use, for this run of the server (the
-        environment decides again at the next start). Keys still come from the environment."""
+        """Switch the workers' provider and models until the next start; keys still come from the environment."""
         s = self.s
         old = (s.provider, s.model_strong, s.model_cheap, s.effort)
         if provider and provider not in PROVIDERS:
@@ -130,8 +134,6 @@ class Town:
         info = self.llm()
         self.bus.publish("llm", llm=info)
         return info
-
-    # ---------- shared helpers ----------
 
     def trace(self, kind: str, label: str, detail: str = "", ms: int = 0, run_id: str | None = None, line_id: str | None = None) -> None:
         row = {"ts": now(), "run_id": run_id, "line_id": line_id, "kind": kind, "label": label, "detail": detail, "ms": ms}
@@ -170,12 +172,6 @@ class Town:
             self.bus.publish("library", added=len(added), total=self.library.count())
         return added
 
-    def seed_library(self) -> int:
-        if not SEED.exists():
-            return 0
-        papers = [json.loads(line) for line in SEED.read_text(encoding="utf-8").splitlines() if line.strip()]
-        return len(self.ingest(papers, "seed"))
-
     def brief(self, line_id: str, role: str = "") -> str:
         """Everything a pi agent should know about its project, as plain text."""
         ln = self.pipeline.line(line_id)
@@ -192,7 +188,7 @@ class Town:
                 out.append(f"- 数据 / 任务：{', '.join(draft['datasets'])}")
             if draft.get("metrics"):
                 out.append(f"- 指标：{', '.join(draft['metrics'])}")
-        elif not ln.get("linked"):
+        elif not ln["linked"]:
             out += ["", "## 方法草案", "还没有。孵化通过、造纸厂开工后会写出来。"]
         jobs = self.farm.list(line_id, 20)
         if jobs:
@@ -237,8 +233,6 @@ class Town:
             self.db.x("update stages set pct = ? where line_id = ? and key = 'exp' and status = 'run'",
                       max(10, job.progress), job.line_id)
             self.bus.publish("line", line=self.pipeline.snapshot(job.line_id))
-
-    # ---------- tools for the agents ----------
 
     def _register_tools(self) -> None:
         reg = self.tools
@@ -337,13 +331,7 @@ class Town:
         def arxiv_after(ctx: ToolCtx, a: dict, value):
             papers = value.get("papers", []) if isinstance(value, dict) else []
             added = self.ingest(papers, "arxiv")
-            from .library import expand, tokens
-            terms = list(dict.fromkeys(tokens(expand(a.get("query", "")))))
-            hits = []
-            for p in papers:
-                cov, matched = self.library.coverage(terms, f"{p['title']} {p.get('abstract', '')}")
-                hits.append({**self.library.card(p), "similarity": round(cov, 2), "matched": matched})
-            hits.sort(key=lambda h: -h["similarity"])
+            hits = self.library.rank(papers, terms_of(a.get("query", "")))
             return {"query": a.get("query"), "hits": hits, "ingested": len(added),
                     "summary": f"{len(papers)} 篇，新入馆 {len(added)} 篇"}
 

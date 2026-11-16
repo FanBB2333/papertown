@@ -1,19 +1,6 @@
-"""MCP client side: the ports. Each configured MCP server is spawned over stdio, its tools
-are listed and registered for the agents as `<server>_<tool>` (shown as server.tool in the
-trace, kind MCP).
-
-Servers come from three places, shown in the MCP exchange building:
-- built in: the arXiv dock (ports/arxiv_server.py), unless PAPERTOWN_ARXIV=0;
-- PAPERTOWN_MCP_CONFIG, a JSON file in the Claude Desktop format
-      {"mcpServers": {"github": {"command": "...", "args": [...], "env": {...}}}};
-- added in the town: mcp.json in the data directory, same format, plus a "disabled" list
-  that switches off servers from any of the three.
-Each can be connected, switched off or restarted while the town runs. Values in env may
-name environment variables ("${GITHUB_TOKEN}"), so keys stay in ~/.secrets.zsh and out of
-the file.
-
-The MCP client is async; it lives on its own event loop thread and the (threaded)
-pipelines call into it with run_coroutine_threadsafe.
+"""MCP client side (the ports): each configured server runs over stdio on the hub's own event loop thread, its tools
+registered for the agents as `<server>_<tool>`. Servers are built in (arXiv), from PAPERTOWN_MCP_CONFIG or from the
+town's mcp.json (Claude Desktop format, plus a "disabled" list); env values may name variables ("${GITHUB_TOKEN}").
 """
 
 from __future__ import annotations
@@ -24,6 +11,7 @@ import os
 import re
 import sys
 import threading
+import time
 from concurrent.futures import Future
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -46,7 +34,7 @@ class McpError(Exception):
 def _decode(result) -> Any:
     if result.structured_content is not None:
         sc = result.structured_content
-        return sc.get("result", sc) if isinstance(sc, dict) and set(sc) == {"result"} else sc
+        return sc["result"] if isinstance(sc, dict) and set(sc) == {"result"} else sc
     text = "\n".join(getattr(c, "text", "") for c in result.content or [])
     try:
         return json.loads(text)
@@ -68,8 +56,6 @@ class McpHub:
         self._running: dict[str, Future] = {}
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
-
-    # ---------- configuration ----------
 
     @property
     def town_file(self) -> Path:
@@ -131,7 +117,7 @@ class McpHub:
         with self._lock:
             d = self._town_config()
             old = (d["mcpServers"].get(name) or {}).get("env") or {}
-            env = {k: v if v != "" or k not in old else old[k] for k, v in env.items()}  # values are never shown, so a blank keeps one
+            env = {k: v if v != "" or k not in old else old[k] for k, v in env.items()}  # values are never shown, so a blank keeps the old one
             d["mcpServers"][name] = {"command": command.strip(), "args": [a for a in args if a != ""],
                                      **({"env": env} if env else {})}
             self._save_town(d)
@@ -164,8 +150,6 @@ class McpHub:
             self.disconnect(name)
             self.status.pop(name, None)
 
-    # ---------- running ----------
-
     def start(self, timeout: float = 20) -> None:
         ready = threading.Event()
         self._thread = threading.Thread(target=self._run, args=(ready,), daemon=True, name="mcp-hub")
@@ -176,7 +160,7 @@ class McpHub:
             self.connect(n, cfg)
         deadline = timeout  # wait for the first connections, so the ports' tools are there
         while deadline > 0 and not all(n in self.status and self.status[n].get("ok") is not None for n in servers):
-            threading.Event().wait(0.05)
+            time.sleep(0.05)
             deadline -= 0.05
 
     def _run(self, ready: threading.Event) -> None:
@@ -185,7 +169,7 @@ class McpHub:
         self._stop = asyncio.Event()
         self.loop.call_soon(ready.set)
         self.loop.run_until_complete(self._stop.wait())
-        pending = [f for f in asyncio.all_tasks(self.loop)]
+        pending = asyncio.all_tasks(self.loop)
         if pending:
             self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 

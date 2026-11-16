@@ -1,10 +1,6 @@
-"""The talent market: the agent workforce.
-
-Follows the organization-compiler idea from Capitalist (triage the task, compile the
-smallest sufficient team under the budget, settle ROI afterwards, promote or demote),
-re-done for research roles instead of coding roles. A worker is a role, a level and a
-ROI history; what a worker can do comes from the skills whose metadata.roles name it.
-Level decides the model tier: Lv.3 and up run on the strong model.
+"""The talent market: research workers with a role, a level and a ROI history, compiled into the smallest
+sufficient team under a budget and promoted or demoted on ROI afterwards (Capitalist's organization compiler).
+Lv.3 and up run on the strong model.
 """
 
 from __future__ import annotations
@@ -57,8 +53,6 @@ class Market:
             ws.sort(key=lambda w: (-w["trailing_roi"], -w["level"]))
         return ws[:n]
 
-    # ---------- organization compiler ----------
-
     @staticmethod
     def triage(idea: str, report: dict, budget: float) -> dict:
         sims = [s.get("similarity", 0) for s in report.get("similar", [])]
@@ -91,28 +85,26 @@ class Market:
                   f"{'预算偏紧，优先用低级别员工（便宜模型）' if cheap else '按 ROI 选人'}")
         return {"triage": t, "team": team, "alloc": ALLOC, "reason": reason, "size": len(used)}
 
-    # ---------- ROI settlement ----------
-
     def settle(self, line_id: str, quality: dict[str, float]) -> list[dict]:
-        """quality: worker id -> 0..1 for this line. Returns the level changes."""
+        """Settle each worker's ROI from quality (worker id -> 0..1 for this line), then promote or demote
+        against the role's average. Returns the level changes."""
         changes = []
         for wid, q in quality.items():
             w = self.get(wid)
             if not w:
                 continue
-            spent = self.db.val("select coalesce(sum(cost), 0) from runs where line_id = ? and worker_id = ?", line_id, wid) or 0.0
+            spent = self.db.val("select coalesce(sum(cost), 0.0) from runs where line_id = ? and worker_id = ?", line_id, wid)
             roi = q / (spent + 0.02)
             trailing = roi if w["runs"] == 0 else 0.6 * w["trailing_roi"] + 0.4 * roi
             hist = (w["history"] or []) + [{"line": line_id, "quality": round(q, 2), "cost": round(spent, 4), "roi": round(roi, 2)}]
             self.db.update("workers", {"id": wid}, runs=w["runs"] + 1, trailing_roi=round(trailing, 3), history=hist[-20:])
             changes.append({"worker": wid, "quality": q, "roi": roi, "trailing": trailing})
 
-        # promote / demote relative to the role's average, Capitalist-style
         out = []
         for c in changes:
             w = self.get(c["worker"])
             peers = [p["trailing_roi"] for p in self.db.q("select trailing_roi from workers where role = ? and runs > 0", w["role"])]
-            avg = sum(peers) / len(peers) if peers else c["trailing"]
+            avg = sum(peers) / len(peers)
             new, why = w["level"], ""
             if c["quality"] >= 0.75 and w["runs"] >= 2 and c["trailing"] >= avg and w["level"] < 5:
                 new, why = w["level"] + 1, "升"

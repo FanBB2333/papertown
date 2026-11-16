@@ -1,40 +1,18 @@
-"""The console's assistant: an agent in the sidebar that tells you what the page in front of
-you shows, read from where it comes from, and speaks for you to the projects. Each project has
-a lead (leads.py) that keeps it moving; the assistant is above them, across projects, and works
-only when you write to it: a project you name by number comes with where it stands now, and
-what you want of a project goes to its lead.
-It runs the way the depot's and the press's agents do (pi in tmux, or Paseo); what is
-particular to it is here:
-
-- The page. Each message from the sidebar starts with what you are looking at: the project,
-  the panel with its settings and what is open, what you pointed at and the text you had
-  selected. The latest is also kept in .papertown/page.md in its directory, with where every
-  part of that panel comes from (files, nvidb commands, Papertown endpoints) and the text the
-  panel shows.
-- Asking. It can ask you something, with choices, or ask you to point at the page.
-- Showing. It can open a panel, a file or a job for you and light up a part of the page.
-- Doing. It takes actions from a fixed list (tell a project's lead, pass on your answer to a
-  project's question, submit or cancel a farm job, hatch, resume, adjust, compile a paper,
-  switch a skill or an MCP server). Telling and answering are done at once; the rest wait in
-  the sidebar until you allow them, and what came of it is sent back to the assistant. The
-  work boundaries can hold any of them for your yes, or refuse it.
-- Earlier conversations. A new conversation sets the Paseo one aside; the sidebar lists those
-  (named by the first thing asked in each) and can go back to one.
-
-Its tools reach the server over HTTP; from a sandbox without network (Codex's), by files
-(relay.py).
+"""The console's assistant: the sidebar agent, one for the whole town, that reads the page you are on
+(.papertown/page.md), asks and shows you things, and acts for you across projects from a fixed list of actions.
 """
 
 from __future__ import annotations
 
 import json
 import re
+import secrets
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from .agents import PAGE_GUIDE, ROLES, AgentError
+from .agents import PAGE_GUIDE, ROLES, AgentError, model_label
 from .db import now
-from .leads import LeadError
+from .leads import LeadError, clip
 from .paseo import PaseoError
 from .workspace import WsError
 
@@ -44,13 +22,11 @@ if TYPE_CHECKING:
 ID = "assistant"
 MODS = {"overview": "概览", "survey": "调研", "code": "代码仓库", "exp": "实验", "data": "数据", "paper": "论文",
         "agents": "员工", "skills": "Skills", "mcp": "MCP", "rag": "图书馆"}
-TEXT_MAX = 8000  # of the panel's own text
-SELECTION_MAX = 2000  # of the text you had selected
+TEXT_MAX = 8000
+SELECTION_MAX = 2000
 REFS_MAX = 80
 
-# What the assistant may do: name -> (what it does, its arguments, the optional ones in brackets).
-# Telling a project and passing on your answers are done at once; the rest wait for you to allow
-# them in the sidebar. The work boundaries can make any of them wait, or refuse it.
+# name -> (what it does, its arguments with the optional ones in brackets); DIRECT ones run at once, the rest wait for your yes
 ACTIONS: dict[str, tuple[str, str]] = {
     "tell": ("给项目发消息、派活：发给项目负责人；用户明确要求时，role 写 coder 或 writer 直接发给员工；now=true 插进它正在做的事",
              "line text [role] [now]"),
@@ -69,8 +45,8 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "mcp.toggle": ("启用或停用接线局里的一个 MCP server", "name enabled"),
     "mcp.restart": ("重连接线局里的一个 MCP server", "name"),
 }
-DIRECT = ("tell", "answer")  # done at once unless the boundaries say otherwise
-MENTIONED_MAX = 3  # projects whose progress goes with one message
+DIRECT = ("tell", "answer")
+MENTIONED_MAX = 3
 
 # how the assistant reaches the town, by runtime
 TOOLS = {
@@ -140,11 +116,6 @@ class ActError(Exception):
     pass
 
 
-def clip(s: object, n: int = 120) -> str:
-    t = " ".join(str(s or "").split())
-    return t if len(t) <= n else t[: n - 1] + "…"
-
-
 def _role(v: object, allowed: tuple[str, ...] = ("coder", "writer")) -> str:
     r = {"coder": "coder", "代码员工": "coder", "代码": "coder", "writer": "writer", "写作员工": "writer", "写作": "writer",
          "lead": "lead", "负责人": "lead", "项目负责人": "lead"}.get(str(v).strip().lower())
@@ -189,14 +160,11 @@ class Assistant:
         self.dir = self.s.data_dir / "assistant"
         self.page: dict = {}  # the latest from the sidebar
 
-    # ---------- its row and its files ----------
-
     def row(self) -> dict:
-        """The assistant's agent, one for the whole town (no project of its own)."""
+        """The assistant's agent row, created on first use."""
         a = self.town.agents.get(ID)
         if a:
             return a
-        import secrets
         self.dir.mkdir(parents=True, exist_ok=True)
         self.db.insert("agents", {"id": ID, "line_id": None, "role": ID, "status": "stopped", "tmux": f"pt-{ID}", "cwd": str(self.dir),
                                   "token": secrets.token_urlsafe(18), "model": None, "cost": 0, "created_at": now(), "updated_at": now()})
@@ -228,8 +196,6 @@ class Assistant:
 
     def policy(self, action: str) -> tuple[str, dict | None]:
         return self.town.bounds.policy(ID, None, action, "auto" if action in DIRECT else "ask")
-
-    # ---------- the page you are looking at ----------
 
     def set_page(self, p: dict) -> dict:
         """What the sidebar says you are looking at; written to page.md for the assistant."""
@@ -263,7 +229,7 @@ class Assistant:
 
     def header(self, p: dict) -> str:
         """The head of a message from the sidebar: where you are and what you point at."""
-        ln, st = p.get("line"), " · ".join(f"{k} {v}" for k, v in (p.get("state") or {}).items())
+        ln, st = p.get("line"), " · ".join(f"{k} {v}" for k, v in p["state"].items())
         project = f"#{ln['seq']}「{ln['title']}」· " if ln else ""
         out = ["<page>", f"在看：{project}{p.get('mod_name') or '中控屏'}" + (f"（{st}）" if st else "")]
         if p.get("focus"):
@@ -301,20 +267,23 @@ class Assistant:
             out += ["", "## 面板上现在显示的文字（节选）", "", "```text", p["text"], "```"]
         return "\n".join(out) + "\n"
 
-    def _place(self, line_id: str) -> list[str]:
+    def _roots(self, lid: str | None) -> tuple[Path | None, Path | None] | None:
         try:
-            code, paper = self.town.workspace.root(line_id, "code"), self.town.workspace.root(line_id, "paper")
+            return (self.town.workspace.root(lid, "code"), self.town.workspace.root(lid, "paper")) if lid else (None, None)
         except WsError:
+            return None
+
+    def _place(self, line_id: str) -> list[str]:
+        roots = self._roots(line_id)
+        if roots is None:
             return []
+        code, paper = roots
         return [*(["本地项目"] if self.town.linked.of(line_id) else []), *([f"代码 {code}"] if code else []), *([f"论文 {paper}"] if paper else [])]
 
     def _sources(self, mod: str, lid: str | None) -> list[str]:
         """Where each part of a panel comes from, for the assistant to read it there."""
         t, x = self.town, lid or "<项目>"
-        try:
-            code, paper = (t.workspace.root(lid, "code"), t.workspace.root(lid, "paper")) if lid else (None, None)
-        except WsError:
-            code = paper = None
+        code, paper = self._roots(lid) or (None, None)
         link = t.linked.of(lid) if lid else None
         out: list[str] = []
         if mod == "overview":
@@ -343,9 +312,10 @@ class Assistant:
                     "一个 nvidb 任务交回的结果：`nvidb job result <编号> --json`"]
         elif mod == "paper":
             main = (t.workspace.info(lid).get("paper") or {}).get("main") if paper else None
+            pdf = t.workspace.pdf(lid) if paper else None
             out += [f"论文目录 `{paper}`，主文件 `{main or '?'}`，直接读" if paper else "这个项目还没有论文",
                     f"文件树：接口 `/api/lines/{x}/ws/paper/tree`；一个文件：`/api/lines/{x}/ws/paper/file?path=<相对路径>`",
-                    f"编译出的 PDF：`{t.workspace.pdf(lid)}`" if lid and paper and t.workspace.pdf(lid) else "还没有编译好的 PDF；要编译用 paper.compile"]
+                    f"编译出的 PDF：`{pdf}`" if pdf else "还没有编译好的 PDF；要编译用 paper.compile"]
         elif mod == "agents":
             out += ["代码员工、写作员工和它们的状态：接口 `/api/agents?role=coder`、`/api/agents?role=writer`",
                     f"一个员工的对话：接口 `/api/agents/coder-{x}`（pi 的）或 `/api/agents/coder-{x}/timeline`（Paseo 的），写作员工把 coder 换成 writer"]
@@ -357,8 +327,6 @@ class Assistant:
         elif mod == "rag":
             out += ["馆藏统计和检索设置：接口 `/api/rag`；试检索：`/api/rag/search?q=<检索词>`；馆藏：`/api/library?q=<关键词>`"]
         return [*out, "所有项目：接口 `/api/lines`；小镇的运行状态：`/api/status`"]
-
-    # ---------- talking ----------
 
     def say(self, text: str, page: dict | None) -> dict:
         """A message from the sidebar, headed by the page it was written on."""
@@ -376,8 +344,6 @@ class Assistant:
         """Where the projects you name by number stand, read just now, to go with your message."""
         seqs = list(dict.fromkeys(int(x) for x in re.findall(r"#(\d+)", text)))[:MENTIONED_MAX]
         lines = [ln for ln in (self.db.one("select id from lines where seq = ?", n) for n in seqs) if ln]
-        if not lines:
-            return ""
         parts = []
         for ln in lines:
             try:
@@ -386,8 +352,12 @@ class Assistant:
                 continue
         return "<projects>\n你提到的项目，Papertown 刚读的进展：\n\n" + "\n\n".join(parts) + "\n</projects>" if parts else ""
 
+    def line_id(self, line: str | None) -> str | None:
+        """Resolve a named project, or use the project currently on the user's screen."""
+        return self._line(line)["id"] if line else (self.page.get("line") or {}).get("id")
+
     def brief(self, line: str | None) -> str:
-        lid = self._line(line)["id"] if line else (self.page.get("line") or {}).get("id")
+        lid = self.line_id(line)
         if not lid:
             raise ActError("说一下是哪个项目（line）")
         return self.town.brief(lid)
@@ -414,8 +384,6 @@ class Assistant:
             raise ActError("要说明打开什么：mod、line、file、job 或 ref")
         self.town.bus.publish("assistant_show", target=t)
         return t
-
-    # ---------- doing things: at once, or once you allow them ----------
 
     def act(self, action: str, args: dict, why: str) -> dict:
         """An action the assistant takes: done now if it may, else a card that waits for you."""
@@ -517,7 +485,7 @@ class Assistant:
             return f"取消实验农场的任务 {job}（{j['name']}，现在{j['status']}）", lambda: f"{job} 现在是 {t.farm.cancel(job)['status']}"
         if name == "skill.toggle":
             scope, on, skill = str(a.get("scope") or "project"), _bool(a["enabled"]), str(a["name"]).strip()
-            lid = self._line(a.get("line") or (self.page.get("line") or {}).get("id"))["id"] if scope != "global" else None
+            lid = self._line(a.get("line") or self.line_id(None))["id"] if scope != "global" else None
             agent = f"{_role(a.get('role'))}-{lid}" if scope == "session" else None
             where = {"global": "全局", "project": f"项目 {lid}", "session": f"员工 {agent}"}.get(scope)
             if not where:
@@ -528,7 +496,7 @@ class Assistant:
                 t.skim.apply_all(None if scope == "global" else lid)
                 return "已" + ("打开" if on else "关掉")
             return f"在{where}这一层{'打开' if on else '关掉'} skill「{skill}」", toggle
-        ln = self._line(a["line"])  # the rest act on one project
+        ln = self._line(a["line"])
         lid, tag = ln["id"], f"#{ln['seq']}「{clip(ln['title'], 30)}」"
         if name == "job.submit":
             jname, cmd = clip(a["name"], 60), str(a["command"]).strip()
@@ -558,31 +526,30 @@ class Assistant:
             return f"给{who}发项目简报", lambda: (t.agents.say(aid, t.agents.brief(aid)), "已发出")[1]
         return f"打断{who}手上的事", lambda: (t.agents.abort(aid), "已打断")[1]
 
-    # ---------- what the sidebar shows ----------
-
     def view(self) -> dict:
+        """What the sidebar shows: the agent, the open question, the latest actions and the action list."""
         a = self.row()
         rows = self.db.q("select * from agent_events where agent_id = ? and kind in ('ask', 'act') order by id desc limit 30", ID)
         return {"agent": self.town.agents.public(a), "asks": [e for e in rows if e["kind"] == "ask" and e["data"].get("open")][:1],
                 "acts": [e for e in rows if e["kind"] == "act"][:8][::-1], "actions": {k: {"what": v[0], "args": v[1]} for k, v in ACTIONS.items()}}
 
+    def _interrupt(self, a: dict) -> None:
+        if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "working":
+            try:
+                self.town.agents.abort(ID)
+            except AgentError:
+                pass
+
     def reset(self) -> dict:
-        """A new conversation: Paseo's is set aside (it stays in Paseo) and the next start makes
-        another; pi starts a new session of its own."""
+        """A new conversation: Paseo's is set aside (it stays in Paseo); pi starts a new session."""
         a = self.row()
         if a.get("runtime") == "paseo":
-            if a.get("ext_id") and a["status"] == "working":
-                try:
-                    self.town.agents.abort(ID)
-                except AgentError:
-                    pass
+            self._interrupt(a)
             self.town.agents.detach(ID)
         elif a.get("runtime") == "pi" and self.town.agents.alive(a):
             self.town.agents.say(ID, "/new")
         self._close_asks()
         return self.town.agents.public(self.row())
-
-    # ---------- earlier conversations ----------
 
     def _names(self) -> dict[str, str]:
         try:
@@ -607,7 +574,7 @@ class Assistant:
     def history(self) -> list[dict]:
         """Its conversations in Paseo, the latest first; pi keeps its sessions to itself."""
         cur, names = self.row().get("ext_id"), self._names()
-        out = [{"id": c["id"], "title": names.get(c["id"]), "model": "/".join(x for x in (c["provider"], c.get("model")) if x),
+        out = [{"id": c["id"], "title": names.get(c["id"]), "model": model_label(c["provider"], c.get("model")),
                 "at": c.get("last_user") or c.get("updated") or c.get("created"), "current": c["id"] == cur} for c in self._mine()]
         return sorted(out, key=lambda x: x["at"] or "", reverse=True)
 
@@ -618,11 +585,7 @@ class Assistant:
             raise AgentError("Paseo 里没有这段对话了")
         a = self.row()
         if a.get("ext_id") != ext_id:
-            if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "working":
-                try:
-                    self.town.agents.abort(ID)
-                except AgentError:
-                    pass
+            self._interrupt(a)
             self._close_asks()
             self.town.agents.attach(ID, conv)
         return self.town.agents.public(self.row())

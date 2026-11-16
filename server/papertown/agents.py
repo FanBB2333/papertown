@@ -1,20 +1,6 @@
-"""Agents with a terminal of their own: one pi per project in the depot (writes the code,
-tests it, submits experiments) and one in the press (writes the paper), and the console's
-assistant in the sidebar (assistant.py), one for the whole town. The farm has a built-in
-monitor per project instead (farm.py), which needs no model.
-
-An agent runs in one of two places:
-
-- pi in a detached tmux session on a private socket, so you can attach and type there.
-  It loads bridge.ts, which mirrors the session to this server, injects what you type in
-  the web app and runs pi's slash commands; the ones that need pi's own terminal UI are
-  typed into tmux. Pi uses its own model settings and login; nothing here touches keys.
-
-      tmux -L papertown attach -t pt-coder-line_1
-
-- Paseo (paseo.py): any provider Paseo hosts (Claude Code, Codex, OpenCode, Pi, ...). The
-  room embeds Paseo's own app for the agent, and the agent reaches the farm with the
-  .papertown/pt script.
+"""The agents you talk to (each project's coder, writer and lead, and the console's assistant) and the farm's monitors.
+Each runs either as pi in a tmux session on a private socket (`tmux -L papertown attach -t pt-coder-line_1`),
+mirrored to the server by bridge.ts, or in Paseo (paseo.py), reaching the town with `.papertown/pt`.
 """
 
 from __future__ import annotations
@@ -40,19 +26,18 @@ BRIDGE = Path(__file__).parent / "pi" / "bridge.ts"
 PT = Path(__file__).parent / "pi" / "pt.py"
 SOCKET = "papertown"
 ROLES = {
-    "coder": {"building": "depot", "name": "代码员工", "title": "写代码的 agent"},
-    "writer": {"building": "press", "name": "写作员工", "title": "写论文的 agent"},
-    "monitor": {"building": "farm", "name": "看田员", "title": "看实验进度的员工"},
-    "assistant": {"building": "console", "name": "小助手", "title": "中控屏侧边栏里帮你看页面、办事的 agent"},
-    "lead": {"building": "mill", "name": "项目负责人", "title": "盯项目进度、催员工、向你汇报的 agent"},
+    "coder": {"name": "代码员工"},
+    "writer": {"name": "写作员工"},
+    "monitor": {"name": "看田员"},
+    "assistant": {"name": "小助手"},
+    "lead": {"name": "项目负责人"},
 }
-PI_ROLES = ("coder", "writer")  # one per project
-CHAT_ROLES = (*PI_ROLES, "assistant", "lead")  # the ones you talk to
+PI_ROLES = ("coder", "writer")
+CHAT_ROLES = (*PI_ROLES, "assistant", "lead")
 
-# pi's built-in commands that open its terminal UI (selectors, login, clipboard): typed into tmux
+# pi's built-in commands that open its terminal UI: typed into tmux rather than sent to the bridge
 TUI_COMMANDS = {"settings", "scoped-models", "export", "import", "share", "bug", "changelog", "hotkeys",
                 "fork", "tree", "trust", "login", "logout", "resume", "copy"}
-# what a Paseo agent is called, by status
 PASEO_STATUS = {"running": "working", "idle": "idle", "closed": "idle", "error": "error", "permission": "working"}
 
 # how an agent reaches the town, by runtime
@@ -143,10 +128,7 @@ LEAD_LINKED = """
 这个项目是从本机接入的：代码在 `{code}`，论文在 `{paper}`。你可以读这两个目录、看 `git status` 和 `git log`，但不要改文件，也不要提交。
 """
 
-# A project linked in from your own repositories: the agent works in the repository itself
-# and gets this guide with its brief, since nothing is written into the repo. The brief is
-# already in that first message, so reading it again is optional; `pt` needs to reach the
-# Papertown server, which a sandbox without network (Codex's default) does not allow.
+# for a linked repository, which Papertown does not write into: the guide goes with the brief
 LINKED_GUIDE = {
     "coder": """# Papertown · 代码员工
 
@@ -199,6 +181,14 @@ def _which(name: str, explicit: str = "") -> str | None:
     return None
 
 
+def model_label(provider: str | None, model: str | None) -> str:
+    return "/".join(x for x in (provider, model) if x)
+
+
+def _attach(session: str) -> str:
+    return f"tmux -L {SOCKET} attach -t {session}"
+
+
 class Agents:
     def __init__(self, town: "Town"):
         self.town = town
@@ -213,8 +203,6 @@ class Agents:
         self._seq = 0
         self._watching = False
 
-    # ---------- what is installed ----------
-
     def available(self) -> dict:
         missing = [n for n, p in (("pi", self.pi), ("tmux", self.tmux)) if not p]
         return {"pi": self.pi, "tmux": self.tmux, "ok": not missing,
@@ -228,8 +216,6 @@ class Agents:
             return [str(node), str(real)]
         return [self.pi]
 
-    # ---------- rows ----------
-
     def get(self, agent_id: str) -> dict | None:
         return self.db.one("select * from agents where id = ?", agent_id)
 
@@ -238,13 +224,12 @@ class Agents:
             return None
         out = {k: v for k, v in a.items() if k != "token"}
         out["runtime"] = rt = a.get("runtime") or "pi"
-        out["started"] = bool(a.get("runtime"))  # false until it has been started once (pi or Paseo)
-        out["attach"] = f"tmux -L {SOCKET} attach -t {a['tmux']}" if rt == "pi" and a.get("tmux") else None
+        out["started"] = bool(a.get("runtime"))
+        out["attach"] = _attach(a["tmux"]) if rt == "pi" and a.get("tmux") else None
         out["web"] = self.paseo.url(a["ext_id"]) if rt == "paseo" and a.get("ext_id") else None
         out["state"] = self._state.get(a["id"]) if rt == "pi" else None
         out["name"] = ROLES[a["role"]]["name"]
-        last = self.db.one("select * from agent_events where agent_id = ? and kind in ('assistant', 'note', 'user') order by id desc limit 1", a["id"])
-        out["last"] = last
+        out["last"] = self.db.one("select * from agent_events where agent_id = ? and kind in ('assistant', 'note', 'user') order by id desc limit 1", a["id"])
         return out
 
     def ensure(self, line_id: str, role: str) -> dict:
@@ -271,7 +256,7 @@ class Agents:
             d = self.s.projects_dir / line_id / "lead"
             d.mkdir(parents=True, exist_ok=True)
             return d
-        linked = self.town.linked.workdir(line_id, role)  # a project of your own: its repository itself
+        linked = self.town.linked.workdir(line_id, role)
         if linked:
             return linked
         if role == "coder":
@@ -284,8 +269,7 @@ class Agents:
         return d
 
     def _home(self, line_id: str | None, role: str) -> Path:
-        """Where Papertown keeps an agent's own files (its guide, the pt tool). That is its
-        working directory, except in a linked repository, which Papertown does not write into."""
+        """Where Papertown keeps an agent's guide and pt: its working directory, unless that is a linked repository."""
         if role != "assistant" and self.town.linked.workdir(line_id, role):
             d = self.s.projects_dir / line_id / role
             d.mkdir(parents=True, exist_ok=True)
@@ -305,15 +289,11 @@ class Agents:
     def _publish(self, agent_id: str) -> None:
         self.town.bus.publish("agent", agent=self.public(self.get(agent_id)))
 
-    def _event(self, agent_id: str, kind: str, data: dict) -> dict:
+    def record(self, agent_id: str, kind: str, data: dict) -> dict:
         row = {"agent_id": agent_id, "ts": now(), "kind": kind, "data": data}
         row["id"] = self.db.insert("agent_events", row)
         self.town.bus.publish("agent_event", event=row)
         return row
-
-    def record(self, agent_id: str, kind: str, data: dict) -> dict:
-        """An event of the agent's own kind: the assistant's questions and requests."""
-        return self._event(agent_id, kind, data)
 
     def amend(self, event_id: int, data: dict) -> dict:
         self.db.update("agent_events", {"id": event_id}, data=data)
@@ -326,19 +306,17 @@ class Agents:
         self._set(agent_id, runtime=None, ext_id=None, status="stopped", model=None)
 
     def attach(self, agent_id: str, conv: dict) -> None:
-        """Take a Paseo conversation (back) as the agent's own: detach's other half."""
-        model = "/".join(x for x in (conv["provider"], conv.get("model")) if x)
-        self._set(agent_id, runtime="paseo", ext_id=conv["id"], model=model, status=PASEO_STATUS.get(conv["status"], "idle"))
+        """Take a Paseo conversation (back) as the agent's own."""
+        self._set(agent_id, runtime="paseo", ext_id=conv["id"], model=model_label(conv["provider"], conv.get("model")),
+                  status=PASEO_STATUS.get(conv["status"], "idle"))
         self.watch()
 
     def events(self, agent_id: str, after: int = 0, limit: int = 400) -> list[dict]:
         rows = self.db.q("select * from agent_events where agent_id = ? and id > ? order by id desc limit ?", agent_id, after, limit)
         return rows[::-1]
 
-    # ---------- the terminal ----------
-
     def _tmux(self, *args: str) -> subprocess.CompletedProcess:
-        # our own tmux server: your ~/.tmux.conf plus the extended keys pi asks for (docs/tmux.md in pi)
+        # own tmux server: ~/.tmux.conf plus the extended keys pi asks for
         conf = self.s.data_dir / "tmux.conf"
         if not conf.exists():
             conf.write_text("source-file -q ~/.tmux.conf\nset -g extended-keys on\nset -g extended-keys-format csi-u\n", encoding="utf-8")
@@ -348,9 +326,7 @@ class Agents:
         return bool(self.tmux and a.get("tmux")) and self._tmux("has-session", "-t", a["tmux"]).returncode == 0
 
     def _guide(self, a: dict, runtime: str) -> str:
-        """Write the role's guide where the agent reads it; returns the text. In a linked
-        repository the repo's own AGENTS.md and CLAUDE.md are left alone: the guide goes into
-        Papertown's directory and reaches the agent with its brief instead."""
+        """Write the role's guide to the agent's home (never into a linked repository) and return it."""
         cwd = Path(a["cwd"])
         cwd.mkdir(parents=True, exist_ok=True)
         text = self._guide_text(a, runtime)
@@ -358,7 +334,7 @@ class Agents:
         (home / "AGENTS.md").write_text(text, encoding="utf-8")
         if runtime == "paseo":
             if home == cwd:
-                (cwd / "CLAUDE.md").write_text(text, encoding="utf-8")  # Claude Code reads this one
+                (cwd / "CLAUDE.md").write_text(text, encoding="utf-8")
             self._tools(a)
         return text
 
@@ -368,7 +344,7 @@ class Agents:
         if a["role"] == "assistant":
             return self.town.assistant.guide(runtime) + bounds
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
-        info = self.town.linked.summary(a["line_id"]) if self.town.linked.of(a["line_id"]) else None
+        info = self.town.linked.summary(a["line_id"])
         code, paper = ((info or {}).get("code") or {}), ((info or {}).get("paper") or {})
         where = {"code": code.get("path") or "（没有接代码仓库）", "paper": paper.get("path") or "（没有接论文仓库）"}
         if a["role"] == "lead":
@@ -385,7 +361,7 @@ class Agents:
             self._guide(a, a["runtime"])
 
     def pt(self, a: dict) -> Path:
-        """Where a Paseo agent's `pt` is, by full path (an imported conversation works elsewhere)."""
+        """A Paseo agent's `pt` by full path, since an imported conversation works elsewhere."""
         return self._home(a["line_id"], a["role"]) / ".papertown" / "pt"
 
     def _linked_intro(self, a: dict, runtime: str) -> str:
@@ -396,8 +372,7 @@ class Agents:
         return guide + "\n\n这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
 
     def _tools(self, a: dict) -> Path:
-        """`.papertown/pt` in the role's own directory, with who it speaks for in link.json, for
-        a shell that has no PAPERTOWN_* environment (an imported conversation). Returns pt."""
+        """Write `.papertown/pt` and its link.json (who it speaks for, for a shell without PAPERTOWN_* env); returns pt."""
         tools = self._home(a["line_id"], a["role"]) / ".papertown"
         tools.mkdir(parents=True, exist_ok=True)
         for sub in ("q", "a"):  # requests by file, for a sandbox without network (relay.py)
@@ -426,7 +401,7 @@ class Agents:
             return self.public(a)
         self._guide(a, "pi")
         if a["role"] == "assistant":
-            self._tools(a)  # its page and its list of actions sit next to pt
+            self._tools(a)
         cwd = Path(a["cwd"])
         sessions = self.s.data_dir / "agents" / agent_id
         sessions.mkdir(parents=True, exist_ok=True)
@@ -446,7 +421,7 @@ class Agents:
         if r.returncode != 0:
             raise AgentError(f"tmux 启动失败：{r.stderr.strip()}")
         self._set(agent_id, status="starting", runtime="pi")
-        self._event(agent_id, "note", {"text": "在后台终端里启动 pi。", "attach": f"tmux -L {SOCKET} attach -t {a['tmux']}"})
+        self.record(agent_id, "note", {"text": "在后台终端里启动 pi。", "attach": _attach(a["tmux"])})
         threading.Thread(target=self._watch_start, args=(agent_id,), daemon=True).start()
         return self.public(self.get(agent_id))
 
@@ -454,18 +429,16 @@ class Agents:
         t0 = time.time()
         while time.time() - t0 < timeout:
             time.sleep(0.5)
-            a = self.get(agent_id)
-            if a["status"] != "starting":
+            if self.get(agent_id)["status"] != "starting":
                 return
         a = self.get(agent_id)
         if a["status"] == "starting":
             screen = self._tmux("capture-pane", "-p", "-t", a["tmux"]).stdout.strip().splitlines()[-6:] if self.alive(a) else []
             self._set(agent_id, status="error")
-            self._event(agent_id, "note", {"text": "pi 没有连上 Papertown。" + (f"终端最后几行：{' / '.join(screen)}" if screen else ""), "error": True})
+            self.record(agent_id, "note", {"text": "pi 没有连上 Papertown。" + (f"终端最后几行：{' / '.join(screen)}" if screen else ""), "error": True})
 
     def _start_paseo(self, a: dict, provider: str | None, model: str | None, thinking: str | None) -> dict:
-        """Create the agent in Paseo with the project brief as its first message. Paseo keeps
-        it from then on, so starting again only reopens it."""
+        """Create the agent in Paseo with its brief as the first message; once there, starting again only reopens it."""
         if a.get("ext_id"):
             return self.public(a)
         if not provider and a["role"] in ("assistant", "lead"):
@@ -479,16 +452,16 @@ class Agents:
         self._guide(a, "paseo")
         if a["role"] == "assistant":
             title, prompt = "Papertown · 小助手", self.town.assistant.intro()
-        elif a["role"] == "lead":
-            line = self.db.one("select * from lines where id = ?", a["line_id"])
-            title, prompt = f"Papertown #{line['seq']} 项目负责人：{line['title']}", self.brief(a["id"])
         else:
             line = self.db.one("select * from lines where id = ?", a["line_id"])
-            title = f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}"
-            if self.town.linked.of(a["line_id"]):
-                prompt = self._linked_intro(a, "paseo")
+            if a["role"] == "lead":
+                title, prompt = f"Papertown #{line['seq']} 项目负责人：{line['title']}", self.brief(a["id"])
             else:
-                prompt = "这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
+                title = f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}"
+                if self.town.linked.of(a["line_id"]):
+                    prompt = self._linked_intro(a, "paseo")
+                else:
+                    prompt = "这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
         try:
             r = self.paseo.create(
                 title=title, provider=provider, model=model,
@@ -497,9 +470,9 @@ class Agents:
                 env={"PAPERTOWN_URL": self.s.url, "PAPERTOWN_AGENT": a["id"], "PAPERTOWN_AGENT_TOKEN": a["token"], "PAPERTOWN_AGENT_ROLE": a["role"]})
         except PaseoError as e:
             raise AgentError(str(e)) from e
-        self._set(a["id"], runtime="paseo", ext_id=r["agentId"], status="working", model="/".join(x for x in (provider, model) if x))
+        self._set(a["id"], runtime="paseo", ext_id=r["agentId"], status="working", model=model_label(provider, model))
         sent = "说明" if a["role"] == "assistant" else "项目简报"
-        self._event(a["id"], "note", {"text": f"在 Paseo 里启动了 {provider}{f' · {model}' if model else ''}，并发了{sent}。"})
+        self.record(a["id"], "note", {"text": f"在 Paseo 里启动了 {provider}{f' · {model}' if model else ''}，并发了{sent}。"})
         self.watch()
         return self.public(self.get(a["id"]))
 
@@ -523,36 +496,36 @@ class Agents:
             self.paseo.label(ext_id, {"papertown": "1", "papertown.agent": a["id"], "papertown.line": line_id, "papertown.role": role})
         except PaseoError as e:
             raise AgentError(str(e)) from e
-        model = "/".join(x for x in (conv["provider"], conv.get("model")) if x)
-        # the conversation keeps working where it was (nothing is written there); the tools
-        # stay in the project's own directory
         self._tools(a)
-        self._set(a["id"], runtime="paseo", ext_id=ext_id, model=model, cwd=conv.get("cwd") or a["cwd"], status=PASEO_STATUS.get(conv["status"], "idle"))
-        self._event(a["id"], "note", {"text": f"导入了 Paseo 里的对话「{conv.get('title') or ext_id[:8]}」。点侧栏的「发送项目简报」，它就知道这个项目和怎么用 Papertown。"})
+        self._set(a["id"], runtime="paseo", ext_id=ext_id, model=model_label(conv["provider"], conv.get("model")),
+                  cwd=conv.get("cwd") or a["cwd"], status=PASEO_STATUS.get(conv["status"], "idle"))
+        self.record(a["id"], "note", {"text": f"导入了 Paseo 里的对话「{conv.get('title') or ext_id[:8]}」。点侧栏的「发送项目简报」，它就知道这个项目和怎么用 Papertown。"})
         self.watch()
         return self.public(self.get(a["id"]))
 
-    def timeline(self, agent_id: str, limit: int = 200) -> dict:
-        """A Paseo agent's conversation, trimmed for the room; also refreshes its status."""
+    def _paseo_agent(self, agent_id: str) -> dict:
         a = self.get(agent_id)
         if not a or a.get("runtime") != "paseo" or not a.get("ext_id"):
             raise AgentError("这个员工不在 Paseo 里")
+        return a
+
+    def timeline(self, agent_id: str, limit: int = 200) -> dict:
+        """A Paseo agent's conversation, trimmed for the room; also refreshes its status."""
+        a = self._paseo_agent(agent_id)
         try:
             t = self.paseo.timeline(a["ext_id"], limit)
         except PaseoError as e:
             raise AgentError(str(e)) from e
         snap = t.get("agent") or {}
         status = PASEO_STATUS.get(snap.get("status"), a["status"])
-        model = "/".join(x for x in (snap.get("provider"), snap.get("model")) if x) or a["model"]
+        model = model_label(snap.get("provider"), snap.get("model")) or a["model"]
         if status != a["status"] or model != a["model"]:
             self._set(agent_id, status=status, model=model)
         return {"agent": self.public(self.get(agent_id)), "paseo": snap, "items": t.get("items", [])}
 
     def permit(self, agent_id: str, request_id: str, allow: bool) -> None:
-        """Answer a Paseo agent's permission request (run this command, edit that file)."""
-        a = self.get(agent_id)
-        if not a or a.get("runtime") != "paseo" or not a.get("ext_id"):
-            raise AgentError("这个员工不在 Paseo 里")
+        """Answer a Paseo agent's permission request."""
+        a = self._paseo_agent(agent_id)
         try:
             self.paseo.permit(a["ext_id"], request_id, allow)
         except PaseoError as e:
@@ -591,7 +564,7 @@ class Agents:
                 if status != a["status"] or model != a["model"]:
                     self._set(a["id"], status=status, model=model)
                     if not x:
-                        self._event(a["id"], "note", {"text": "Paseo 里找不到这个 agent 了（可能被删除或归档）。"})
+                        self.record(a["id"], "note", {"text": "Paseo 里找不到这个 agent 了（可能被删除或归档）。"})
                 if status == "idle":
                     self.release(a["id"])
 
@@ -606,21 +579,20 @@ class Agents:
             self.paseo.send(a["ext_id"], row["data"]["text"])
         except PaseoError:
             return  # it stays queued and goes with the next look
-        self.db.update("agent_events", {"id": row["id"]}, data=row["data"] | {"delivered": True, "held": False})
-        self.town.bus.publish("agent_event", event=self.db.one("select * from agent_events where id = ?", row["id"]))
+        self.amend(row["id"], row["data"] | {"delivered": True, "held": False})
         self._set(agent_id, status="working")
 
     def stop(self, agent_id: str) -> dict:
         a = self.get(agent_id)
         if not a:
             raise AgentError("没有这个员工")
-        if a.get("runtime") == "paseo":  # Paseo keeps the agent; stopping is interrupting its turn
+        if a.get("runtime") == "paseo":
             self.abort(agent_id)
             return self.public(self.get(agent_id))
         if self.alive(a):
             self._tmux("kill-session", "-t", a["tmux"])
         self._set(agent_id, status="stopped")
-        self._event(agent_id, "note", {"text": "pi 已停止。"})
+        self.record(agent_id, "note", {"text": "pi 已停止。"})
         return self.public(self.get(agent_id))
 
     def reconcile(self) -> None:
@@ -629,16 +601,9 @@ class Agents:
                 self.db.update("agents", {"id": a["id"]}, status="stopped", updated_at=now())
         self.watch()
 
-    def shutdown(self) -> None:
-        """Pi sessions outlive the server on purpose; nothing to do."""
-
-    # ---------- talking to it ----------
-
     def say(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
-        """A message from the web, or from another agent or the town (`origin`). While the agent
-        works, `mode` says how it gets there: "steer" puts it into what the agent is doing,
-        "queue" holds it until the agent is done; without one each runtime keeps its own way
-        (pi queues, Paseo steers)."""
+        """A message to the agent. While it works, `mode` "steer" puts it into the current turn and "queue"
+        holds it until the turn ends; without one, pi queues and Paseo steers."""
         a = self.get(agent_id)
         if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")
@@ -650,49 +615,41 @@ class Agents:
                 raise AgentError("先在 Paseo 里启动它")
             busy = a["status"] == "working"
             if busy and mode == "queue":  # Paseo has no queue of its own: the watcher sends it once the agent is idle
-                return self._event(agent_id, "user", {"text": text, "origin": origin, "delivered": False, "queued": True, "held": True})
+                return self.record(agent_id, "user", {"text": text, "origin": origin, "delivered": False, "queued": True, "held": True})
             try:
                 self.paseo.send(a["ext_id"], text)
             except PaseoError as e:
                 raise AgentError(str(e)) from e
             self._set(agent_id, status="working")
-            return self._event(agent_id, "user", {"text": text, "origin": origin, "delivered": True, "steered": busy})
+            return self.record(agent_id, "user", {"text": text, "origin": origin, "delivered": True, "steered": busy})
         if text.startswith("/") and len(text) > 1 and not text[1:2].isspace():
             return self._command(a, text)
         running = self.alive(a)
         if not running and not (self.pi and self.tmux):
             raise AgentError(self.available()["note"])
-        with self._lock:
-            self._seq += 1
-            mid = self._seq
-            self._inbox.setdefault(agent_id, []).append({"id": mid, "text": text, "mode": mode})
-        ev = self._event(agent_id, "user", {"text": text, "origin": origin, "mid": mid, "delivered": False})
+        mid = self._queue(agent_id, {"text": text, "mode": mode})
+        ev = self.record(agent_id, "user", {"text": text, "origin": origin, "mid": mid, "delivered": False})
         if not running:
             self.start(agent_id)
         return ev
 
     def _command(self, a: dict, text: str) -> dict:
-        """A slash command for pi. The ones that need pi's terminal UI are typed into tmux;
-        the bridge runs the rest (pi's API for model, thinking, compact, new, ...; pi's own
-        expansion for extension commands, skills and prompt templates)."""
+        """A slash command for pi: typed into tmux when it needs pi's terminal UI, otherwise run by the bridge."""
         name, _, args = text[1:].partition(" ")
         if name == "quit":
             self.stop(a["id"])
-            return self._event(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "delivered": True})
+            return self.record(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "delivered": True})
         if not self.alive(a):
             raise AgentError("pi 没在运行，先启动它")
         if name in TUI_COMMANDS:
             self._tmux("send-keys", "-t", a["tmux"], "-l", text)
             self._tmux("send-keys", "-t", a["tmux"], "Enter")
-            ev = self._event(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "delivered": True})
-            attach = f"tmux -L {SOCKET} attach -t {a['tmux']}"
-            self._event(a["id"], "note", {"text": f"{text} 要用 pi 的终端界面，已经在终端里执行了，接上终端操作：{attach}", "attach": attach})
+            ev = self.record(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "delivered": True})
+            attach = _attach(a["tmux"])
+            self.record(a["id"], "note", {"text": f"{text} 要用 pi 的终端界面，已经在终端里执行了，接上终端操作：{attach}", "attach": attach})
             return ev
-        with self._lock:
-            self._seq += 1
-            mid = self._seq
-            self._inbox.setdefault(a["id"], []).append({"id": mid, "kind": "cmd", "name": name, "args": args.strip()})
-        return self._event(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "mid": mid, "delivered": False})
+        mid = self._queue(a["id"], {"kind": "cmd", "name": name, "args": args.strip()})
+        return self.record(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "mid": mid, "delivered": False})
 
     def abort(self, agent_id: str) -> None:
         a = self.get(agent_id)
@@ -702,9 +659,14 @@ class Agents:
             except PaseoError as e:
                 raise AgentError(str(e)) from e
             return
+        self._queue(agent_id, {"kind": "abort"})
+
+    def _queue(self, agent_id: str, msg: dict) -> int:
+        """Put a message in a pi agent's inbox for its bridge to take; returns its id."""
         with self._lock:
             self._seq += 1
-            self._inbox.setdefault(agent_id, []).append({"id": self._seq, "kind": "abort"})
+            self._inbox.setdefault(agent_id, []).append({"id": self._seq, **msg})
+            return self._seq
 
     def take(self, agent_id: str) -> list[dict]:
         with self._lock:
@@ -715,8 +677,7 @@ class Agents:
             return bool(self._inbox.get(agent_id))
 
     def brief(self, agent_id: str) -> str:
-        """The project brief as a message to the agent; a Paseo agent also gets the tools,
-        by full path, since an imported conversation works outside the project."""
+        """The project brief as a message to the agent; a Paseo agent also gets its tools by full path."""
         a = self.get(agent_id)
         if not a:
             raise AgentError("没有这个员工")
@@ -728,7 +689,7 @@ class Agents:
                     f"再读下面项目现在的样子和简报。读完用 `{self._tools(a)} report` 写第一条汇报：项目到哪了、接下来怎么推进、有什么要用户定的；"
                     "要员工动手的用 `pt tell` 派下去。然后结束这一轮，等巡检消息。\n\n"
                     + self.town.leads.status(a["line_id"]) + "\n\n## 项目简报\n\n" + self.town.brief(a["line_id"], "lead"))
-        if self.town.linked.of(a["line_id"]):  # in a linked repo the guide is not in AGENTS.md: send it along
+        if self.town.linked.of(a["line_id"]):
             return self._linked_intro(a, "paseo" if a.get("runtime") == "paseo" else "pi")
         text = self.town.brief(a["line_id"], a["role"])
         if a.get("runtime") != "paseo":
@@ -744,8 +705,6 @@ class Agents:
                 f"- `{pt} tell lead \"…\"` 告诉项目负责人你做完了、卡住了或要它拍板\n"
                 f"- `{pt} ask \"问题\" [--choice 选项]…` 问用户；`{pt} rules` 看你的工作边界\n\n" + text)
 
-    # ---------- from the bridge ----------
-
     def check(self, agent_id: str, token: str | None) -> dict:
         a = self.get(agent_id)
         if not a or not token or not secrets.compare_digest(a["token"], token):
@@ -753,28 +712,29 @@ class Agents:
         return a
 
     def ingest(self, agent_id: str, events: list[dict]) -> None:
+        """Events from a pi agent's bridge."""
         for e in events:
             t = e.get("t")
             if t == "hello":
                 before = self.get(agent_id)["status"]
                 self._set(agent_id, status="idle" if e.get("idle", True) else "working", model=e.get("model"))
                 if before in ("starting", "stopped", "error"):  # the bridge also says hello after a reconnect
-                    self._event(agent_id, "note", {"text": f"pi 已连上（{e.get('model') or '默认模型'}）。"})
+                    self.record(agent_id, "note", {"text": f"pi 已连上（{e.get('model') or '默认模型'}）。"})
             elif t == "input":
-                self._event(agent_id, "user", {"text": e.get("text", ""), "origin": "terminal" if e.get("source") == "interactive" else e.get("source")})
+                self.record(agent_id, "user", {"text": e.get("text", ""), "origin": "terminal" if e.get("source") == "interactive" else e.get("source")})
             elif t == "start":
                 self._set(agent_id, status="working")
             elif t == "delta":
                 self.town.bus.publish("agent_delta", agent_id=agent_id, text=e.get("text", ""))
             elif t == "assistant":
                 usage = e.get("usage") or {}
-                self._event(agent_id, "assistant", {k: e.get(k) for k in ("text", "tools", "model", "stop", "error")} | {"usage": usage})
+                self.record(agent_id, "assistant", {k: e.get(k) for k in ("text", "tools", "model", "stop", "error")} | {"usage": usage})
                 if usage.get("cost"):
                     self._charge(agent_id, e.get("model") or "pi", usage)
             elif t == "tool_start":
-                self._event(agent_id, "tool", {"id": e.get("id"), "name": e.get("name"), "args": e.get("args")})
+                self.record(agent_id, "tool", {"id": e.get("id"), "name": e.get("name"), "args": e.get("args")})
             elif t == "tool_end":
-                self._event(agent_id, "tool_end", {k: e.get(k) for k in ("id", "name", "error", "result", "ms")})
+                self.record(agent_id, "tool_end", {k: e.get(k) for k in ("id", "name", "error", "result", "ms")})
             elif t == "settled":
                 self._set(agent_id, status="idle")
             elif t == "delivered":
@@ -782,17 +742,14 @@ class Agents:
                     row = self.db.one("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.mid') = ?"
                                       " order by id desc limit 1", agent_id, mid)
                     if row:
-                        self.db.update("agent_events", {"id": row["id"]}, data=row["data"] | {"delivered": True, "queued": bool(e.get("queued")),
-                                                                                              "steered": bool(e.get("steered"))})
-                        self.town.bus.publish("agent_event", event=self.db.one("select * from agent_events where id = ?", row["id"]))
+                        self.amend(row["id"], row["data"] | {"delivered": True, "queued": bool(e.get("queued")), "steered": bool(e.get("steered"))})
             elif t == "note":
-                self._event(agent_id, "note", {"text": e.get("text", ""), "error": bool(e.get("error"))})
+                self.record(agent_id, "note", {"text": e.get("text", ""), "error": bool(e.get("error"))})
             elif t == "state":
-                prev = self._state.get(agent_id, {})
                 cur = {k: v for k, v in e.items() if k != "t"}
-                self._state[agent_id] = prev | cur  # the model list and commands come only now and then
-                m = cur.get("model") or {}
-                self._set(agent_id, model=f"{m['provider']}/{m['id']}" if m else self.get(agent_id)["model"])
+                self._state[agent_id] = self._state.get(agent_id, {}) | cur  # the model list and commands come only now and then
+                m = cur.get("model")
+                self._set(agent_id, **({"model": f"{m['provider']}/{m['id']}"} if m else {}))
             elif t == "bye":
                 self._set(agent_id, status="stopped")
 
@@ -806,9 +763,8 @@ class Agents:
         self.db.update("agents", {"id": agent_id}, cost=(a["cost"] or 0) + cost)
         self.town.bus.publish("bank", **self.town.bank.summary())
 
-    # ---------- the farm's monitors ----------
-
     def monitor_note(self, line_id: str, text: str, **data) -> None:
+        """A note from the farm's built-in monitor of a project."""
         a = self.ensure(line_id, "monitor")
-        self._event(a["id"], "note", {"text": text, **data})
+        self.record(a["id"], "note", {"text": text, **data})
         self._set(a["id"], status="watching")

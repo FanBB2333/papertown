@@ -1,19 +1,12 @@
-"""A project's memory from before Papertown: the conversations agents had in its code and paper
-repositories (Claude Code, Codex) and the notes they kept (Claude Code's memory, and the
-repositories' own CLAUDE.md and AGENTS.md), found on this machine and imported when you pick
-them. Nothing is imported on its own, and nothing where they are found is changed.
+"""A project's memory from before Papertown: agent conversations (Claude Code, Codex) and notes found
+for its repositories on this machine, imported only when you pick them, as the words alone (no tool
+calls or injected context, secrets blanked). Where it looks, and where an import lands:
 
     ~/.claude/projects/<the repository's path, other characters as ->/<session>.jsonl
     ~/.claude/projects/<the same>/memory/*.md
-    ~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl        its first line names the working directory
-                                                         (a Codex worktree of the repository counts)
+    ~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl    (a Codex worktree of the repository counts)
     <repository>/CLAUDE.md, <repository>/AGENTS.md
-
-An import keeps the words: what was asked and what the agent answered, without its tool calls,
-its thinking or the context its tool put in, and with keys and tokens blanked out. Each lands
-in data/projects/<project>/memory/<id>.json, listed in index.json beside them; importing a
-conversation again brings it up to date. The questions on the 进展 page search them, and so
-can the project's agents (pt recall).
+    data/projects/<project>/memory/<id>.json, listed in index.json
 """
 
 from __future__ import annotations
@@ -25,17 +18,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterator
 
-from .db import now
+from .db import now, read_json
 from .linked import _git, _home
 
 if TYPE_CHECKING:
     from .town import Town
 
-SOURCES = {"claude": "Claude Code", "codex": "Codex", "claude-memory": "Claude Code 记忆", "repo": "仓库里的说明"}
 NOTES = ("CLAUDE.md", "AGENTS.md")
 HEAD_LINES, HEAD_BYTES, TAIL_BYTES = 400, 4_000_000, 512_000
 MSG_MAX, MSGS_MAX, NOTE_MAX = 8000, 4000, 60_000
-# what a coding tool puts in a user turn on its own: commands, reminders, injected context
+# how a user turn begins when the coding tool, not the person, wrote it
 INJECTED = ("<command-", "<local-command", "Caveat:", "<system-reminder>", "[Request interrupted", "<bash-", "<task-notification",
             "<user-prompt-submit-hook>", "<environment_context>", "<user_instructions>", "# AGENTS.md", "<permissions",
             "<collaboration_mode>", "<turn_aborted>", "<user_shell_command>", "<INSTRUCTIONS>", "<subagent_notification")
@@ -63,13 +55,13 @@ def _slug(p: Path) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", str(p))
 
 
-def _inside(cwd: str | None, root: Path) -> bool:
-    return bool(cwd) and (cwd == str(root) or cwd.startswith(str(root) + "/"))
+def _inside(cwd: str, root: Path) -> bool:
+    return cwd == str(root) or cwd.startswith(str(root) + "/")
 
 
-def _worktree(cwd: str | None, root: Path) -> bool:
+def _worktree(cwd: str, root: Path) -> bool:
     """A Codex worktree of the repository: ~/.codex/worktrees/<name>/<repository's folder>."""
-    return bool(cwd) and re.search(r"/\.codex/worktrees/[^/]+/" + re.escape(root.name) + r"(/|$)", cwd) is not None
+    return re.search(r"/\.codex/worktrees/[^/]+/" + re.escape(root.name) + r"(/|$)", cwd) is not None
 
 
 def _ts(v) -> str | None:
@@ -122,8 +114,6 @@ def _json(line: str) -> dict | None:
         return None
 
 
-# ---------- reading each tool's sessions ----------
-
 def claude_head(path: Path) -> dict | None:
     """Where a Claude Code session ran, when, and what it was about, from its first and last parts."""
     cwd = started = first = title = None
@@ -168,8 +158,7 @@ def claude_messages(path: Path) -> list[dict]:
 
 
 def codex_head(path: Path) -> dict | None:
-    meta = first = started = None
-    ended = None
+    meta = first = started = ended = None
     for i, ln in enumerate(_lines(path)):
         d = _json(ln)
         if not d:
@@ -216,7 +205,7 @@ def _add(out: list[dict], role: str, text: str, at) -> None:
     text = redact(text.strip())
     if not text:
         return
-    if out and out[-1]["role"] == role:  # an answer in several parts is one message
+    if out and out[-1]["role"] == role:
         out[-1]["text"] = _clip(out[-1]["text"] + "\n\n" + text, MSG_MAX)
         return
     out.append({"role": role, "text": _clip(text, MSG_MAX), "at": _ts(at)})
@@ -242,9 +231,7 @@ class History:
         self.town = town
         self.s = town.s
         self._lock = threading.Lock()
-        self._heads: dict[str, tuple[float, int, dict | None]] = {}  # a session file's head, while it is unchanged
-
-    # ---------- where to look ----------
+        self._heads: dict[str, tuple[float, int, dict | None]] = {}
 
     def roots(self, line_id: str) -> list[tuple[str, Path]]:
         out = []
@@ -287,7 +274,7 @@ class History:
                         found.append(self._item(f"claude:{f.stem}", "claude", "session", which, f, h))
                 if ran_here and (d / "memory").is_dir():
                     for f in sorted((d / "memory").glob("*.md")):
-                        if f.name != "MEMORY.md":  # the index of the others
+                        if f.name != "MEMORY.md":
                             title, _ = _note(f)
                             found.append(self._item(f"claude-memory:{d.name}/{f.name}", "claude-memory", "note", which, f,
                                                     {"title": title, "cwd": str(root)}))
@@ -304,7 +291,7 @@ class History:
                     found.append(self._item(f"repo:{which}/{name}", "repo", "note", which, f, {"title": f"{name} · {title}", "cwd": str(root)}))
         seen: set[str] = set()
         out = []
-        for x in found:  # a repository inside the other (a paper in the code) finds some twice
+        for x in found:
             if x["key"] in seen:
                 continue
             seen.add(x["key"])
@@ -323,8 +310,6 @@ class History:
                 "origin": str(f), "started": h.get("started"), "ended": h.get("ended") or _ts(st.st_mtime),
                 "size": st.st_size, "mtime": st.st_mtime}
 
-    # ---------- importing ----------
-
     def _dir(self, line_id: str) -> Path:
         return self.s.projects_dir / line_id / "memory"
 
@@ -333,16 +318,12 @@ class History:
         return re.sub(r"[^\w.-]+", "_", key)[:140]
 
     def imported(self, line_id: str) -> list[dict]:
-        try:
-            v = json.loads((self._dir(line_id) / "index.json").read_text(encoding="utf-8"))
-            return v if isinstance(v, list) else []
-        except (OSError, ValueError):
-            return []
+        return read_json((self._dir(line_id) / "index.json"), [])
 
     def _save_index(self, line_id: str, rows: list[dict]) -> None:
         d = self._dir(line_id)
         d.mkdir(parents=True, exist_ok=True)
-        rows.sort(key=lambda m: (m["kind"] != "note", m.get("ended") or ""), reverse=False)
+        rows.sort(key=lambda m: (m["kind"] != "note", m.get("ended") or ""))
         (d / "index.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
     def counts(self, line_id: str) -> dict:
@@ -364,14 +345,16 @@ class History:
                 done.append(self._import(line_id, x))
             except (OSError, ValueError) as e:
                 failed.append({"key": key, "why": str(e)[:200]})
-        if done:
-            with self._lock:
-                rows = {m["key"]: m for m in self.imported(line_id)}
-                rows.update({m["key"]: m for m in done})
-                self._save_index(line_id, list(rows.values()))
-            self.town.bus.publish("memory", line_id=line_id, counts=self.counts(line_id))
-            self.town.trace("记忆", f"导入 {len(done)} 条", "、".join(m["title"][:20] for m in done[:4]), 0, line_id=line_id)
-        return {"imported": done, "failed": failed, "counts": self.counts(line_id)}
+        if not done:
+            return {"imported": done, "failed": failed, "counts": self.counts(line_id)}
+        with self._lock:
+            rows = {m["key"]: m for m in self.imported(line_id)}
+            rows.update({m["key"]: m for m in done})
+            self._save_index(line_id, list(rows.values()))
+        counts = self.counts(line_id)
+        self.town.bus.publish("memory", line_id=line_id, counts=counts)
+        self.town.trace("记忆", f"导入 {len(done)} 条", "、".join(m["title"][:20] for m in done[:4]), 0, line_id=line_id)
+        return {"imported": done, "failed": failed, "counts": counts}
 
     def _import(self, line_id: str, x: dict) -> dict:
         f = Path(x["origin"])
@@ -395,8 +378,6 @@ class History:
         (d / f"{meta['id']}.json").write_text(json.dumps(meta | body, ensure_ascii=False) + "\n", encoding="utf-8")
         return meta
 
-    # ---------- reading what was imported ----------
-
     def get(self, line_id: str, mid: str) -> dict:
         if mid != self._id(mid) or mid == "index":
             raise HistoryError("没有这条记忆")
@@ -412,8 +393,9 @@ class History:
         with self._lock:
             self._save_index(line_id, [r for r in self.imported(line_id) if r["id"] != mid])
             (self._dir(line_id) / f"{mid}.json").unlink(missing_ok=True)
-        self.town.bus.publish("memory", line_id=line_id, counts=self.counts(line_id))
-        return {"removed": m["key"], "counts": self.counts(line_id)}
+        counts = self.counts(line_id)
+        self.town.bus.publish("memory", line_id=line_id, counts=counts)
+        return {"removed": m["key"], "counts": counts}
 
     def all(self, line_id: str) -> Iterator[dict]:
         """Every imported conversation and note in full, for the project's search."""

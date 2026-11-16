@@ -1,8 +1,5 @@
-"""Papertown's own tools over MCP, for other agents (Claude Code, Claude Desktop ...):
-
-    uv run papertown mcp
-
-Read-only: library search, genealogy, depot search, and the state of the paper lines.
+"""Papertown's own read-only tools over MCP for other agents (`uv run papertown mcp`):
+library search, genealogy, depot search and the state of the paper lines.
 """
 
 from __future__ import annotations

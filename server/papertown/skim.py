@@ -1,17 +1,6 @@
-"""Skills per project and per conversation, configured with skim (github.com/FanBB2333/skim).
-
-skim keeps the skills in one store (~/.skim/store) and layers their configuration the way
-git config layers its files, the narrower scope winning:
-
-    global   ~/.skim/skimconfig               every project and conversation on this machine
-    project  <project>/.skim/config           one project in the town
-    session  ~/.skim/sessions/<id>.config     one conversation (an agent of a project)
-
-A project's scope lives in Papertown's own directory for it (projects/<line>/.skim/config,
-also for a project linked in from your repos, so nothing is written there) and a
-conversation's session id is papertown-<agent id>. Applying links the skills an agent ends
-up with into .papertown/skills next to its guide, and its brief lists them with the path to
-each SKILL.md, which works the same for Claude Code, Codex and pi.
+"""Skills per project and per conversation, configured with skim (github.com/FanBB2333/skim): global, project
+(projects/<line>/.skim/config) and session (papertown-<agent id>) scopes, the narrower winning, applied into each
+agent's .papertown/skills.
 """
 
 from __future__ import annotations
@@ -42,8 +31,6 @@ class Skim:
         self.bin = self.s.skim_bin or shutil.which("skim")
         self._lock = threading.Lock()
         self._cache: tuple[float, dict] | None = None
-
-    # ---------- running skim ----------
 
     def _run(self, *args: str) -> str:
         if not self.bin or not Path(self.bin).exists():
@@ -77,11 +64,8 @@ class Skim:
     def session_id(agent_id: str) -> str:
         return f"papertown-{agent_id}"
 
-    # ---------- reading ----------
-
     def status(self, fresh: bool = False) -> dict:
-        """The store, the environments and the global scope; ok False with a note when
-        skim is missing or not initialised."""
+        """The store, the environments and the global scope; ok False with a note when skim is missing or not initialised."""
         with self._lock:
             if not fresh and self._cache and time.time() - self._cache[0] < TTL:
                 return self._cache[1]
@@ -100,8 +84,7 @@ class Skim:
         return out
 
     def resolve(self, line_id: str | None = None, agent_id: str | None = None) -> dict:
-        """Every skill in the store for this project or conversation: enabled or not and
-        which scope decided it, with the files of the scopes."""
+        """Every skill in the store for this project or conversation, enabled or not and by which scope."""
         return self._json("resolve", "--all", *self._where(line_id, agent_id))
 
     def enabled(self, line_id: str, agent_id: str) -> list[dict]:
@@ -109,8 +92,6 @@ class Skim:
             return [s for s in self.resolve(line_id, agent_id)["skills"] if s["enabled"] and s["in_store"]]
         except (SkimError, json.JSONDecodeError):
             return []
-
-    # ---------- writing ----------
 
     def set(self, scope: str, key: str, value: str | None, line_id: str | None = None, agent_id: str | None = None) -> None:
         """Set a key in one scope, or unset it with value None."""

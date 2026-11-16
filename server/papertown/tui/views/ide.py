@@ -1,9 +1,6 @@
-"""The code and paper pages' editor, as the web page has it (web/src/console/files.tsx and Editor.tsx):
-the files as a tree of folders that open and close, each with its icon and git's state of it; the
-file you open, in the editor's colour theme and wrapped when it is prose; a status line under it;
-the editor itself in the same colours; and the pick of those colours, the file icons and the TUI's
-own theme (T), tried on as you move through it. A workspace on this machine is read from its
-directory; one elsewhere through the server, which also does all the saving."""
+"""The code and paper pages, as the web console has them: a workspace's file tree, the open file, an
+editor for it, and the picker for the TUI theme, editor colours and file icons (T). A workspace on
+this machine is read from disk, one elsewhere through the server, which also does all the saving."""
 
 from __future__ import annotations
 
@@ -30,6 +27,7 @@ from ..edthemes import (GIT, ICON_THEMES, PAPER, THEMES, WRAPPED, EdSyntax, EdTh
                         textarea_theme)
 from ..look import PALETTES, size
 from ..widgets import Bar, Confirm, row_key, sync_rows
+from . import cycle, tabs
 
 if TYPE_CHECKING:
     from ..app import Papertown
@@ -51,6 +49,14 @@ def swap_theme_class(w: Any, th: EdTheme) -> None:
     w.add_class(f"ed-{th.key}")
 
 
+def status_bar(left: Text, right: Text, *, ellipsis: bool = False) -> Table:
+    grid = Table.grid(expand=True)
+    grid.add_column(no_wrap=True, overflow="ellipsis" if ellipsis else "fold")
+    grid.add_column(justify="right", no_wrap=True)
+    grid.add_row(left, right)
+    return grid
+
+
 class FileTree(DataTable):
     """a workspace's files as folders that open (→, Enter) and close (←), each file with its icon and git's state"""
 
@@ -64,9 +70,9 @@ class FileTree(DataTable):
     def __init__(self, **kw: Any):
         super().__init__(cursor_type="row", show_header=False, cell_padding=0, **kw)
         self.files: list[dict] = []
-        self.opened: set[str] = set()  # the folders open
+        self.opened: set[str] = set()
         self.filter = ""
-        self.cur: str | None = None  # the file shown beside it
+        self.cur: str | None = None
 
     @property
     def town(self) -> "Papertown":
@@ -79,16 +85,19 @@ class FileTree(DataTable):
     def set_files(self, files: list[dict], fresh: bool) -> None:
         self.files = files
         if fresh:
-            self.opened = {d for f in files for d in parents(f["path"])} if len(files) <= 40 else set()  # a small tree opens all the way
+            self.opened = {d for f in files for d in parents(f["path"])} if len(files) <= 40 else set()
         self.paint()
 
     def reveal(self, path: str) -> None:
         self.cur = path
         self.opened |= set(parents(path))
         self.paint()
+        self.move_to(path)
+
+    def move_to(self, key: str) -> None:
         keys = [k.value for k in self.rows]
-        if path in keys:
-            self.move_cursor(row=keys.index(path), animate=False)
+        if key in keys:
+            self.move_cursor(row=keys.index(key), animate=False)
 
     def paint(self) -> None:
         th, icons = self.town.ed, self.town.prefs.ed_icons
@@ -163,9 +172,8 @@ class FileTree(DataTable):
             self.paint()
             return
         parent = str(PurePosixPath(cur[1]).parent)
-        keys = [k.value for k in self.rows]
-        if parent != "." and f"d:{parent}" in keys:
-            self.move_cursor(row=keys.index(f"d:{parent}"), animate=False)
+        if parent != ".":
+            self.move_to(f"d:{parent}")
 
 
 class Viewer(ScrollableContainer, can_focus=True):
@@ -199,13 +207,12 @@ class Ide(Horizontal):
         super().__init__(**kw)
         self.root = root
         self.line_id: str | None = None
-        self.info: dict | None = None  # the workspace: its directory, name, git branch…
-        self.press = False  # the press's own paper (its build files are left out)
+        self.info: dict | None = None
         self.opened: str | None = None
         self.file: dict | None = None
-        self.diff: str | None = None  # the open file's `git diff`, shown instead of it
-        self.latex: str | None = None  # what LaTeX said when the paper did not compile, shown instead of the file
-        self.wrap: bool | None = None  # None: as its language goes (prose wrapped, code not)
+        self.diff: str | None = None
+        self.latex: str | None = None
+        self.wrap: bool | None = None
 
     @property
     def town(self) -> "Papertown":
@@ -231,13 +238,10 @@ class Ide(Horizontal):
         swap_theme_class(self, self.town.ed)
 
     def restyle(self) -> None:
-        """the colour theme or the icons changed"""
         swap_theme_class(self, self.town.ed)
         self.ftree.paint()
         self.paint_view()
         self.paint_status()
-
-    # ---------- what it shows ----------
 
     async def load(self, line: dict, ws: dict) -> None:
         fresh = line["id"] != self.line_id
@@ -245,10 +249,10 @@ class Ide(Horizontal):
             self.line_id, self.opened, self.file, self.diff, self.wrap = line["id"], None, None, None, None
             self.ftree.filter, self.ftree.cur = "", None
         self.info = ws.get(self.root)
-        self.press = self.root == "paper" and not ws.get("linked")
+        press = self.root == "paper" and not ws.get("linked")
         files: list[dict] = []
         if self.info:
-            t = await self.town.local.ws_tree(self.info.get("path") or "", self.press)  # on this machine: read it here
+            t = await self.town.local.ws_tree(self.info.get("path") or "", press)
             if t is None:
                 t = await self.town.api.get(f"/api/lines/{line['id']}/ws/{self.root}/tree")
             files = t.get("files", [])
@@ -276,7 +280,7 @@ class Ide(Horizontal):
             return
         try:
             if diff:
-                text = await self.town.local.git_diff(self.info.get("path") or "", path)  # git diff, run here
+                text = await self.town.local.git_diff(self.info.get("path") or "", path)
                 if not text:
                     self.town.notify(f"{path} 没有未提交的改动")
                     return
@@ -298,7 +302,7 @@ class Ide(Horizontal):
             self.viewer.focus()
 
     async def _read(self, path: str) -> None:
-        f = await self.town.local.ws_read(self.info.get("path") or "", path) if self.info else None
+        f = await self.town.local.ws_read(self.info.get("path") or "", path)
         if f is None:
             f = await self.town.api.get(f"/api/lines/{self.line_id}/ws/{self.root}/file", path=path)
         if f.get("error"):
@@ -352,7 +356,7 @@ class Ide(Horizontal):
             return
         f, path = self.file, self.opened
         if self.diff is not None:
-            self.viewer.show(Syntax(self.diff, language("x.diff")[1] or "diff", theme=EdSyntax(th), word_wrap=False), wrap=False)
+            self.viewer.show(Syntax(self.diff, language("x.diff")[1], theme=EdSyntax(th), word_wrap=False), wrap=False)
             return
         if f.get("binary") or f.get("too_big"):
             self.viewer.show(Padding(Text(f"{path} · {size(f.get('size'))} · {'二进制文件' if f.get('binary') else '太大，不在这里显示'}"
@@ -382,11 +386,7 @@ class Ide(Horizontal):
                          "自动换行" if self.wrapped() else "不换行"]
             bits.append(self.town.ed.name)
             right.append("  ·  ".join(bits) + " ")
-        grid = Table.grid(expand=True)
-        grid.add_column(no_wrap=True, overflow="ellipsis")
-        grid.add_column(justify="right", no_wrap=True)
-        grid.add_row(left, right)
-        self.query_one(".ed-status", Static).update(grid)
+        self.query_one(".ed-status", Static).update(status_bar(left, right, ellipsis=True))
 
     def set_filter(self, q: str) -> None:
         self.ftree.filter = q
@@ -394,14 +394,11 @@ class Ide(Horizontal):
         self.paint_head()
 
 
-# ---------- the editor ----------
-
 class EdTextArea(TextArea):
-    """a TextArea that colours its text with the viewer's lexers and roles instead of tree-sitter (which
-    has no LaTeX): the highlights it keeps per line are filled from the tokens"""
+    """a TextArea coloured with the viewer's lexers instead of tree-sitter (which has no LaTeX)"""
 
-    def __init__(self, text: str, path: str, th: EdTheme, **kw: Any):
-        self._lexer = language(path)[1]  # before TextArea's own start, which builds the highlights once
+    def __init__(self, text: str, path: str, **kw: Any):
+        self._lexer = language(path)[1]  # before super().__init__, which builds the highlights
         super().__init__(text, **kw)
 
     def set_theme(self, th: EdTheme) -> None:
@@ -414,7 +411,7 @@ class EdTextArea(TextArea):
             self._line_cache.clear()
             hl = self._highlights
             hl.clear()
-        except AttributeError:  # a Textual that keeps its highlights elsewhere: plain text, then
+        except AttributeError:  # Textual private internals moved: plain text
             return
         text = self.text
         if self._lexer is None or len(text) > 400_000:
@@ -432,8 +429,8 @@ class EdTextArea(TextArea):
 
 
 class Editor(ModalScreen[bool]):
-    """a file of the project's workspace, to change: Ctrl+S saves and keeps it open, Esc closes it (and
-    asks first when something is not saved). Dismisses with whether anything was saved."""
+    """a workspace file to change: Ctrl+S saves, Esc closes (asking first when something is not saved);
+    dismisses with whether anything was saved"""
 
     BINDINGS = [Binding("ctrl+s", "save", "保存", priority=True), Binding("escape", "close", "关闭", priority=True)]
 
@@ -447,11 +444,10 @@ class Editor(ModalScreen[bool]):
         return self.app  # type: ignore[return-value]
 
     def compose(self) -> ComposeResult:
-        th = self.town.ed
         lang = language(self.path)[0]
         with Vertical(classes="dialog editor"):
             yield Static(Text.assemble(("改 ", "bold"), (self.path, "bold")), classes="dialog-title")
-            yield EdTextArea(self.saved_text, self.path, th, show_line_numbers=True, tab_behavior="indent", soft_wrap=lang in WRAPPED)
+            yield EdTextArea(self.saved_text, self.path, show_line_numbers=True, tab_behavior="indent", soft_wrap=lang in WRAPPED)
             yield Bar(classes="ed-status")
 
     def on_mount(self) -> None:
@@ -473,11 +469,7 @@ class Editor(ModalScreen[bool]):
         row, col = ta.cursor_location
         left = Text(f" 行 {row + 1}，列 {col + 1}   {language(self.path)[0]}   ")
         left.append("● 没保存" if self.dirty else (note or "已保存"), style="bold" if self.dirty else "")
-        grid = Table.grid(expand=True)
-        grid.add_column(no_wrap=True)
-        grid.add_column(justify="right", no_wrap=True)
-        grid.add_row(left, Text(f"Ctrl+S 保存 · Esc 关闭 · {self.town.ed.name} "))
-        self.query_one(".ed-status", Static).update(grid)
+        self.query_one(".ed-status", Static).update(status_bar(left, Text(f"Ctrl+S 保存 · Esc 关闭 · {self.town.ed.name} ")))
 
     @on(TextArea.Changed)
     @on(TextArea.SelectionChanged)
@@ -505,8 +497,6 @@ class Editor(ModalScreen[bool]):
 
         self.app.push_screen(Confirm(f"{self.path} 还没保存", "关掉就丢掉这些修改。y 丢掉，n 回去接着改（Ctrl+S 保存）"), answered)
 
-
-# ---------- the looks ----------
 
 LOOK_TABS = [("ui", "界面"), ("theme", "编辑器配色"), ("icons", "文件图标")]
 UI_NAMES = {"papertown": "深色", "papertown-paper": "纸色"}
@@ -539,27 +529,24 @@ class LookPicker(ModalScreen[None]):
             yield Static(Text.assemble(("↑↓", "bold"), " 试 · ", ("Enter", "bold"), " 就用它 · ", ("Tab ← →", "bold"), " 换一类 · ",
                                        ("Esc", "bold"), " 不换"), classes="dialog-keys")
 
+    def looks(self) -> dict[str, str]:
+        return {"ui": self.town.theme, "theme": self.town.prefs.ed_theme, "icons": self.town.prefs.ed_icons}
+
     def on_mount(self) -> None:
-        pr = self.town.prefs
-        self.was = (self.town.theme, pr.ed_theme, pr.ed_icons)
+        self.was = self.looks()
         self.fill()
 
     def fill(self) -> None:
         p = self.town.pal
-        t = Text()
-        for k, label in LOOK_TABS:
-            t.append(f" {label} ", style=f"bold {p['brand']} underline" if k == self.tab else p["muted"])
-            t.append(" ")
-        self.query_one("#lp-tabs", Static).update(t)
+        self.query_one("#lp-tabs", Static).update(tabs(LOOK_TABS, self.tab, p))
         ol = self.query_one(OptionList)
         self.filling = True
         ol.clear_options()
         dark = self.town.theme == "papertown"
-        was = dict(zip(("ui", "theme", "icons"), self.was))
-        now = (self.town.theme, self.town.prefs.ed_theme, self.town.prefs.ed_icons)[["ui", "theme", "icons"].index(self.tab)]
+        now = self.looks()[self.tab]
 
         def mark(k: str) -> Text:
-            return Text("  当前", style=p["muted"]) if k == was[self.tab] else Text()
+            return Text("  当前", style=p["muted"]) if k == self.was[self.tab] else Text()
 
         if self.tab == "ui":
             for k, name in UI_NAMES.items():
@@ -572,7 +559,7 @@ class LookPicker(ModalScreen[None]):
                     opts.append(None)
                 opts.append(Option(Text(group, style=p["muted"]), disabled=True))
                 for th in THEMES:
-                    shown = resolve(th.id, dark)  # 纸墨 goes with the TUI's own theme
+                    shown = resolve(th.id, dark)
                     if shown.dark != is_dark:
                         continue
                     tk = shown.tok
@@ -608,11 +595,9 @@ class LookPicker(ModalScreen[None]):
         return {"ui": {"theme": value}, "theme": {"ed_theme": value}, "icons": {"ed_icons": value}}[kind]
 
     def action_tab(self, step: int) -> None:
-        keys = [k for k, _ in LOOK_TABS]
-        self.tab = keys[(keys.index(self.tab) + step) % len(keys)]
+        self.tab = cycle(LOOK_TABS, self.tab, step)
         self.fill()
 
     def action_cancel(self) -> None:
-        theme, ed, icons = self.was
-        self.town.set_look(theme=theme, ed_theme=ed, ed_icons=icons)
+        self.town.set_look(theme=self.was["ui"], ed_theme=self.was["theme"], ed_icons=self.was["icons"])
         self.dismiss(None)

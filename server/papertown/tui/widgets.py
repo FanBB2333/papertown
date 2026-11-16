@@ -4,14 +4,19 @@ rebuilt, and the dialogs (a line of text, a small form, a yes/no)."""
 from __future__ import annotations
 
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
+from rich.padding import Padding
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, Select, Static
+
+from .anim import dur, star
+from .look import clip, pad
 
 if TYPE_CHECKING:
     from .app import Papertown
@@ -21,8 +26,6 @@ class Place(Vertical):
     """One of the places in the index on the left: a view onto part of the town."""
 
     key = ""
-    title = ""
-    animated = False  # has something that moves, so it is redrawn on the clock
 
     @property
     def town(self) -> "Papertown":
@@ -87,9 +90,6 @@ def transcript(items: list[dict], p: dict[str, str], dark: bool) -> list[Any]:
     """An agent's conversation (Paseo's timeline): what you said, its answers as Markdown, and the
     tools it ran folded into one line between them."""
     from rich.markdown import Markdown
-    from rich.padding import Padding
-
-    from .look import clip
 
     parts: list[Any] = []
     tools: list[str] = []
@@ -107,7 +107,7 @@ def transcript(items: list[dict], p: dict[str, str], dark: bool) -> list[Any]:
         flush()
         if kind == "user":
             text = it.get("text") or ""
-            if text.startswith("<page>"):  # what the console's assistant is told about the page: not yours to read again
+            if text.startswith("<page>"):  # the page context the assistant is sent, not what you wrote
                 text = text.split("</page>", 1)[-1].strip() or text
             parts.append(Text.assemble(("你 ❯ ", f"bold {p['brand']}"), (clip(text, 600), p["ink"])))
         elif kind == "assistant":
@@ -122,12 +122,6 @@ def transcript(items: list[dict], p: dict[str, str], dark: bool) -> list[Any]:
 
 def writing(live: tuple[str, float, float] | None, t: float, p: dict[str, str]) -> list[Any]:
     """what an agent is writing right now (its streamed text so far), with the cursor blinking after it"""
-    import time
-
-    from rich.padding import Padding
-
-    from .anim import dur, star
-
     if not live:
         return []
     text, since, _ = live
@@ -153,7 +147,7 @@ class Pane(VerticalScroll):
         yield self.body
 
     def show(self, renderable: Any, layout: bool = True) -> None:
-        # layout=False when only the look changes (a turning star, a gleam), not how many lines there are
+        """layout=False skips the layout pass when only the colours change, not the number of lines"""
         self.body.update(renderable, layout=layout)
 
 
@@ -245,8 +239,6 @@ class Help(ModalScreen[None]):
         self.rows = rows
 
     def compose(self) -> ComposeResult:
-        from .look import pad
-
         t = Text()
         for i, (section, keys) in enumerate(self.rows):
             if i:

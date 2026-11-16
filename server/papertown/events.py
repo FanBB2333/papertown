@@ -1,7 +1,5 @@
-"""In-process event bus feeding the SSE stream.
-
-Pipelines run in worker threads and publish from there; each SSE client owns an
-asyncio.Queue on the server loop, so publishing hops threads with call_soon_threadsafe.
+"""In-process event bus feeding the SSE stream. Each SSE client owns an asyncio.Queue on the server
+loop, so publishing from worker threads hops over with call_soon_threadsafe.
 """
 
 from __future__ import annotations

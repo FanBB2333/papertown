@@ -1,8 +1,5 @@
-"""Settings, read once from the environment.
-
-Keys never live in files in this repo: export them from ~/.secrets.zsh (or any env
-manager) before starting the server. Without a provider key the server runs in
-offline mode with the scripted provider, which is also the demo fallback.
+"""Settings, read once from the environment. Keys never live in files in this repo; without a
+provider key the server runs offline with the scripted provider.
 """
 
 from __future__ import annotations
@@ -30,8 +27,7 @@ def _detect_provider() -> str:
     return "mock"
 
 
-# providers the town's own workers can use, with their default (strong, cheap) models and a
-# few suggestions for the switch in the chat drawer
+# providers the town's own workers can use: default (strong, cheap) models and suggestions for the switch
 PROVIDERS = {
     "mock": {"name": "离线演示", "default": ("scripted", "scripted"), "models": ["scripted"]},
     "anthropic": {"name": "Anthropic", "default": ("claude-opus-5-5", "claude-haiku-5-5"),
@@ -70,7 +66,7 @@ class Settings:
     # seconds a simulated GPU job takes; tests set 0
     sim_gpu_seconds: float = field(default_factory=lambda: float(_env("PAPERTOWN_SIM_GPU_SECONDS", "6")))
     compile_tex: bool = field(default_factory=lambda: _env("PAPERTOWN_COMPILE_TEX", "1") != "0")
-    # pi agents in the press and the depot; they use pi's own model settings and login
+    # pi agents use pi's own model settings and login
     pi_bin: str = field(default_factory=lambda: _env("PAPERTOWN_PI_BIN"))
     pi_model: str = field(default_factory=lambda: _env("PAPERTOWN_PI_MODEL"))
     tmux_bin: str = field(default_factory=lambda: _env("PAPERTOWN_TMUX_BIN"))
@@ -85,14 +81,13 @@ class Settings:
     # nvidb's GPU queue, read only: the cards on your machines and their jobs ("0" turns it off)
     nvidb: bool = field(default_factory=lambda: _env("PAPERTOWN_NVIDB", "1") != "0")
     nvidb_bin: str = field(default_factory=lambda: _env("PAPERTOWN_NVIDB_BIN"))
-    # seconds between the main process's readings of it, in the background
+    # seconds between background readings of nvidb
     nvidb_poll: float = field(default_factory=lambda: float(_env("PAPERTOWN_NVIDB_POLL", "10") or 10))
-    # skim, the skill manager: skills layered per project and per conversation (see skim.py)
+    # skim, the skill manager (see skim.py)
     skim_bin: str = field(default_factory=lambda: _env("PAPERTOWN_SKIM_BIN"))
     # your own projects, linked in from local repos (see linked.py); default: projects.json in the data dir
     projects: str = field(default_factory=lambda: _env("PAPERTOWN_PROJECTS"))
-    # what the assistant and the project leads start with on Paseo until one is chosen in the
-    # settings page (see paseo_models.py): provider/model@thinking
+    # what the assistant and the leads start with on Paseo until chosen in settings: provider/model@thinking
     assistant_model: str = field(default_factory=lambda: _env("PAPERTOWN_ASSISTANT_MODEL", "codex/gpt-6.1-terra@xhigh"))
     lead_model: str = field(default_factory=lambda: _env("PAPERTOWN_LEAD_MODEL", "codex/gpt-6.1-terra@high"))
     # project leads: seconds between looks at their projects, and at least between two check-ins
@@ -100,7 +95,7 @@ class Settings:
     lead_gap: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_GAP", "180") or 180))
     # seconds between readings of Paseo's model list for new models; 0 turns them off
     paseo_watch: float = field(default_factory=lambda: float(_env("PAPERTOWN_PASEO_WATCH", "1800") or 0))
-    # where Claude Code and Codex keep their conversations, for importing a project's earlier ones (history.py)
+    # where Claude Code and Codex keep their conversations, for importing (history.py)
     claude_home: str = field(default_factory=lambda: _env("PAPERTOWN_CLAUDE_HOME", "~/.claude"))
     codex_home: str = field(default_factory=lambda: _env("PAPERTOWN_CODEX_HOME", "~/.codex"))
     # local job runner: how many commands run at once

@@ -1,8 +1,5 @@
-"""The depot district: one depot per repository, its docs and code indexed for RAG.
-
-Until a GitHub port is connected the depots hold the sample repos in
-data/sample_repos.json; replacing that file (or syncing real repos into the `repos`
-and `repo_docs` tables) changes the map without touching anything else.
+"""The depot district: one depot per repository, its docs and code indexed for RAG. The sample repos
+come from data/sample_repos.json; real repos synced into `repos` and `repo_docs` take their place.
 """
 
 from __future__ import annotations
@@ -11,7 +8,7 @@ import json
 from pathlib import Path
 
 from .db import DB
-from .library import expand, tokens
+from .library import terms_of
 
 SAMPLE = Path(__file__).parent / "data" / "sample_repos.json"
 
@@ -43,7 +40,7 @@ class Depots:
         return r["data"] if r else None
 
     def search(self, query: str, repo: str | None = None, top_k: int = 5) -> dict:
-        terms = list(dict.fromkeys(tokens(expand(query))))
+        terms = terms_of(query)
         if not terms:
             return {"query": query, "hits": []}
         match = " OR ".join(f'"{t}"' for t in terms)

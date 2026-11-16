@@ -1,12 +1,10 @@
-"""The terminal view of the town. Top to bottom: the masthead (the town's numbers, counting up), the
-ribbon (what is happening right now, moving while it does), the index of places on the left and the
-place itself, the box you talk to the town through, and the keys that work where you are."""
+"""The terminal app: the masthead, the ribbon of what is happening now, the index of places and the
+place shown, the box you write to the town in, and the keys that work where you are."""
 
 from __future__ import annotations
 
 import asyncio
 import time
-import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -25,9 +23,11 @@ from .edthemes import EdTheme, Prefs, resolve
 from .edthemes import css as editor_css
 from .local import Local
 from .look import PALETTES, clip, doing, themes
+from .views import make_places
+from .views.ide import Editor, Ide, LookPicker
 from .widgets import Bar, Help, Place
 
-# the events after which the numbers and the lists are fetched again, as the page does
+# events after which the numbers and the lists are fetched again
 TICK = {"line", "world", "building", "bank", "power", "workers", "library", "skills", "job", "agent"}
 LOGO = ["   ▗▖      ", "  ▐▀▀▙▖ ▗▌", " ▐▀▀▀▀▀▀▀▌", " ▐▬▬▬▬  ▄▌", " ▝▀▀▀▀▀▀▘ "]
 
@@ -36,7 +36,7 @@ LOGO = ["   ▗▖      ", "  ▐▀▀▙▖ ▗▌", " ▐▀▀▀▀▀▀�
 class Target:
     """who the box at the bottom talks to"""
 
-    kind: str  # idea | ask | adjust | say | assistant
+    kind: str
     label: str
     line: str | None = None
     building: str | None = None
@@ -44,7 +44,7 @@ class Target:
 
 
 class Masthead(Static):
-    ALLOW_SELECT = False  # the town's chrome: clicking it never selects its words
+    ALLOW_SELECT = False
 
     def __init__(self) -> None:
         super().__init__(id="masthead")
@@ -101,18 +101,17 @@ class Masthead(Static):
             self.n["idle"].set(town.gpu_summary.get("idle", 0))
         for tw in self.n.values():
             tw.step(dt)
-        self.update(self.line(t), layout=False)  # one line, always: no layout pass at 12 fps
+        self.update(self.line(t), layout=False)  # always one line: skip the layout pass at 12 fps
 
 
 class Ribbon(Static):
-    """What the town is doing right now: a turning star and a gleam along the words while it works,
-    the time it has been at it, and the star warming to red when the stream has been quiet too long."""
+    """What the town is doing right now; the star warms to red when the event stream has been quiet too long."""
 
     ALLOW_SELECT = False
 
     def __init__(self) -> None:
         super().__init__(id="ribbon")
-        self.seen: dict[str, float] = {}  # when an activity without a start time was first seen
+        self.seen: dict[str, float] = {}
 
     def activities(self) -> list[tuple[str, float | None]]:
         town: Papertown = self.app  # type: ignore[assignment]
@@ -129,7 +128,7 @@ class Ribbon(Static):
                 started = parse_ts(cur.get("started_at"))
                 out.append((f"#{ln['seq']}「{clip(ln['title'], 18)}」{cur.get('name', '')}中", started.timestamp() if started else None))
         for d in town.depts:
-            if d.get("state") == "busy" and d["id"] not in ("mill",):
+            if d.get("state") == "busy" and d["id"] != "mill":
                 out.append((f"{d['name']}：{clip(doing(d), 40)}", None))
         for key, _ in out:
             self.seen.setdefault(key, now)
@@ -158,7 +157,6 @@ class Ribbon(Static):
             out.append(" 看全部按键", style=p["faint"])
             self.update(out, layout=False)
             return
-        # the first thing, turning over to the next every few seconds
         what, since = acts[int(t / 5) % len(acts)]
         quiet = time.time() - town.last_event
         color = mix(p["brand"], p["bad"], (quiet - 30) / 60) if quiet > 30 else p["brand"]
@@ -176,7 +174,7 @@ PLACES = [("projects", "项目"), ("jobs", "任务"), ("plant", "电厂"), ("sta
 class Nav(Static):
     """the places, with a number to jump to each and what is going on there"""
 
-    ALLOW_SELECT = False  # a quick second or third click would otherwise select every place
+    ALLOW_SELECT = False  # a double or triple click would otherwise select every place
 
     def __init__(self) -> None:
         super().__init__(id="nav")
@@ -188,7 +186,7 @@ class Nav(Static):
             w = town.hud["lines"]["waiting"]
             return (f"◐{w}", p["warn"]) if w else (str(town.hud["lines"]["total"]), p["muted"])
         if key == "jobs":
-            n = sum(1 for d in town.depts for _ in d.get("jobs") or [])
+            n = sum(len(d.get("jobs") or []) for d in town.depts)
             return (str(n), p["run"]) if n else ("", p["muted"])
         if key == "plant" and town.gpu_summary:
             return (f"{town.gpu_summary.get('idle', 0)}空", p["ok"])
@@ -221,7 +219,7 @@ class Nav(Static):
         self.update(out, layout=False)
 
     def on_click(self, e: Any) -> None:
-        i = (e.y - 1) // 2  # a line of padding on top, then a place every two lines (its own and the gap under it)
+        i = (e.y - 1) // 2  # one line of padding on top (app.tcss), then two lines per place
         if e.y >= 1 and 0 <= i < len(PLACES):
             self.app.call_later(self.app.action_place, PLACES[i][0])  # type: ignore[attr-defined]
 
@@ -266,7 +264,7 @@ class Splash(Screen):
         town: Papertown = self.app  # type: ignore[assignment]
         p = town.pal
         out = Text(justify="center")
-        lift = int(breathe(t, 2.6) * 1.99)  # the mark bobs, as it does while the page loads
+        lift = int(breathe(t, 2.6) * 1.99)
         out.append("\n" * (1 - lift))
         for i, row in enumerate(LOGO):
             out.append(row + "\n", style=p["brand"] if i < 3 else p["ink"])
@@ -309,7 +307,7 @@ class Main(Screen):
 
 class Papertown(App):
     CSS_PATH = "app.tcss"
-    CSS = editor_css()  # the editor's colour themes, one class each
+    CSS = editor_css()
     TITLE = "Papertown"
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
@@ -329,7 +327,7 @@ class Papertown(App):
         self.start_server = start_server
         self.use_events = events
         self.server: LocalServer | None = None
-        self.local = Local()  # what the TUI reads with nvidb, skim and git itself
+        self.local = Local()
         self.t0 = time.monotonic()
         self.t = 0.0
         self.online = False
@@ -342,8 +340,8 @@ class Papertown(App):
         self.messages: list[dict] = []
         self.trace: list[dict] = []
         self.unread = 0
-        self.asking: tuple[str, float] | None = None  # a building you asked, and when
-        self.streaming: dict[str, tuple[str, float, float]] = {}  # agent → (text so far, started, last)
+        self.asking: tuple[str, float] | None = None
+        self.streaming: dict[str, tuple[str, float, float]] = {}
         self.glow = Glow()
         self.place = "projects"
         self.targets: list[Target] = []
@@ -355,14 +353,13 @@ class Papertown(App):
         self._sending = False
         self._focus: object = None
         self.frames = 0
-        self.beat = False  # every third frame: the rate tables and pages animate at (the masthead, ribbon and nav run at 12 fps)
+        self.beat = False
         self._target: tuple | None = None
         for th in themes():
             self.register_theme(th)
         self.prefs_path = self.local.s.data_dir / "tui.json"
-        self.prefs = Prefs.load(self.prefs_path)  # the looks chosen last time (T)
+        self.prefs = Prefs.load(self.prefs_path)
         self.theme = self.prefs.theme
-        from .views import make_places
         self.places = make_places()
 
     @property
@@ -384,7 +381,6 @@ class Papertown(App):
         if ed_icons:
             self.prefs.ed_icons = ed_icons
         if (self.theme, self.prefs.ed_theme, self.prefs.ed_icons) != before:
-            from .views.ide import Editor, Ide
             for scr in self.screen_stack:
                 for ide in scr.query(Ide):
                     ide.restyle()
@@ -395,12 +391,10 @@ class Papertown(App):
                 self.run_worker(self.current.load(), group=f"load-{self.place}", exclusive=True, exit_on_error=False)
         if keep:
             self.prefs.theme = self.theme
-            self.prefs.save(self.prefs_path)
+            self.save_prefs()
 
     def save_prefs(self) -> None:
         self.prefs.save(self.prefs_path)
-
-    # ---------- starting ----------
 
     def on_mount(self) -> None:
         self.splash = Splash()
@@ -416,9 +410,10 @@ class Papertown(App):
         if not (self.start_server and local):
             self.splash.error = f"{self.api.base} 上没有 Papertown 服务"
             return
-        port = int(self.api.base.rsplit(":", 1)[-1]) if self.api.base.rsplit(":", 1)[-1].isdigit() else 8000
+        last = self.api.base.rsplit(":", 1)[-1]
+        port = int(last) if last.isdigit() else 8000
         self.splash.status = f"正在启动服务（端口 {port}）…"
-        self.server = LocalServer(port)
+        self.server = LocalServer(port, self.local.s.data_dir)
         self.server.start()
         if await self.server.ready(self.api):
             return await self.enter()
@@ -429,8 +424,7 @@ class Papertown(App):
     async def enter(self) -> None:
         self.online = True
         await self.refetch()
-        self.main = Main(self.places)
-        await self.switch_screen(self.main)
+        await self.switch_screen(Main(self.places))
         self.retarget()
         await self.current.load()
         if self.use_events:
@@ -459,7 +453,7 @@ class Papertown(App):
         """the numbers, the projects and the departments: what the masthead, the ribbon and the index show"""
         try:
             world, lines, depts = await asyncio.gather(self.api.get("/api/world"), self.api.get("/api/lines"), self.api.get("/api/departments"))
-        except (ApiError, Exception):
+        except Exception:
             return
         self.hud, self.placements, self.lines, self.depts = world["hud"], world["placements"], lines, depts
         await self.read_gpus()
@@ -524,8 +518,6 @@ class Papertown(App):
         if kind in TICK:
             self.schedule_refetch()
 
-    # ---------- the clock ----------
-
     def frame(self) -> None:
         now = time.monotonic()
         dt, self._last_frame = now - self._last_frame, now
@@ -549,8 +541,6 @@ class Papertown(App):
             return
         self.current.tick(self.t)
 
-    # ---------- places ----------
-
     @property
     def current(self) -> Place:
         return next(p for p in self.places if p.key == self.place)
@@ -566,7 +556,7 @@ class Papertown(App):
         self.paint_hints()
         place = self.current
         place.focus_first()  # type: ignore[attr-defined]
-        # loading runs on its own, so the switch shows at once and keys keep working while it reads
+        # a worker, so the switch shows at once
         self.run_worker(place.load(), group=f"load-{key}", exclusive=True, exit_on_error=False)
 
     def paint_hints(self) -> None:
@@ -574,7 +564,7 @@ class Papertown(App):
             return
         p = self.pal
         out = Text(" ")
-        if getattr(self.focused, "id", None) == "say":  # in the box, only its own keys work
+        if getattr(self.focused, "id", None) == "say":
             option = {"idea": [("Ctrl+B", "换预算")], "say": [("Ctrl+B", "插话 / 排队")]}.get(self.target.kind if self.targets else "", [])
             keys = [("Enter", "发出去"), ("Tab", "换对象"), *option, ("Esc", "离开框")]
         else:
@@ -598,7 +588,6 @@ class Papertown(App):
         ]))
 
     def action_theme(self) -> None:
-        from .views.ide import LookPicker
         on_files = self.place == "projects" and getattr(self.current, "tab", "") in ("code", "paper")
         self.push_screen(LookPicker("theme" if on_files else "ui"))
 
@@ -616,12 +605,7 @@ class Papertown(App):
     def action_web(self) -> None:
         ctx = self.current.context()
         frag = {"projects": f"view=console&line={ctx.get('line', '')}", "chat": "view=world&chat", "daily": "view=status"}.get(self.place, "view=console")
-        webbrowser.open(self.api.url(f"/#{frag}"))
-
-    def open_url(self, url: str, *, new_tab: bool = True) -> None:  # type: ignore[override]
-        webbrowser.open(url)
-
-    # ---------- the box at the bottom ----------
+        self.open_url(self.api.url(f"/#{frag}"))
 
     def retarget(self) -> None:
         """who the box can talk to from the place you are in"""
@@ -641,6 +625,16 @@ class Papertown(App):
         self.targets = ts
         self.target_i = next((i for i, x in enumerate(ts) if x.kind == keep), 0)
 
+    def aim(self, kind: str, default: int | None = None) -> bool:
+        """Select a conversation target and focus the input when that target is available."""
+        self.retarget()
+        i = next((i for i, x in enumerate(self.targets) if x.kind == kind), default)
+        if i is None:
+            return False
+        self.target_i = i
+        self.action_compose()
+        return True
+
     @property
     def target(self) -> Target:
         return self.targets[self.target_i] if self.targets else Target("idea", "新 idea")
@@ -656,7 +650,7 @@ class Papertown(App):
         if tg.kind == "say":
             out.append(" · 插话" if self.say_mode == "steer" else " · 排队", style=p["muted"])
         out.append(" ❯ ", style=p["brand"])
-        if self._target == (out, tg.kind):  # the same as on screen: no repaint, and no layout (its width follows the words)
+        if self._target == (out, tg.kind):  # unchanged: skip the repaint and relayout
             return
         self._target = (out, tg.kind)
         try:
@@ -680,7 +674,7 @@ class Papertown(App):
     def action_cycle_option(self) -> None:
         if self.target.kind == "idea":
             steps = [0.5, 1.0, 2.0, 5.0, 10.0]
-            self.budget = steps[(steps.index(self.budget) + 1) % len(steps)] if self.budget in steps else 1.0
+            self.budget = steps[(steps.index(self.budget) + 1) % len(steps)]
         elif self.target.kind == "say":
             self.say_mode = "queue" if self.say_mode == "steer" else "steer"
 
@@ -688,7 +682,7 @@ class Papertown(App):
         self.current.focus_first()
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
-        # in a text box, letters are letters; and a dialog's keys are its own (q in a yes/no is not "quit")
+        # letters are text in an Input, and a dialog's keys are its own
         if (isinstance(self.focused, Input) or isinstance(self.screen, ModalScreen)) and \
                 action in {"compose", "help", "theme", "web", "quit", "place", "reload"}:
             return False
@@ -724,8 +718,6 @@ class Papertown(App):
         finally:
             self._sending = False
 
-    # ---------- names ----------
-
     def building_name(self, bid: str | None) -> str:
         p = next((x for x in self.placements if x["id"] == bid), None)
         if p:
@@ -733,11 +725,14 @@ class Papertown(App):
         d = next((x for x in self.depts if x["id"] == bid), None)
         return d["name"] if d else (bid or "")
 
+    def line_seq(self, line_id: str | None) -> int | None:
+        return next((x["seq"] for x in self.lines if x["id"] == line_id), None)
+
     def agent_name(self, aid: str) -> str:
         if aid == "assistant":
             return "小助手"
         role, _, line = aid.partition("-")
-        seq = next((x["seq"] for x in self.lines if x["id"] == line), None)
+        seq = self.line_seq(line)
         name = {"coder": "代码员工", "writer": "写作员工", "monitor": "看田员"}.get(role, role)
         return f"{name} #{seq}" if seq else name
 

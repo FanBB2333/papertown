@@ -1,19 +1,5 @@
-"""Paseo as a home for the depot's and the press's agents.
-
-Paseo (paseo.sh) runs a local daemon that hosts coding agents from many providers
-(Claude Code, Codex, OpenCode, Pi, Copilot, ...) and serves its own app for them. The town
-talks to that daemon through the `paseo` CLI, which is a client of the daemon's WebSocket
-endpoint (127.0.0.1:6767 by default): it creates one agent per project and role, sends it
-messages and reads its status. Reading conversations goes through Paseo's official SDK
-(@getpaseo/client, in paseo_link/): the room shows a trimmed transcript of the agent, and
-existing Paseo conversations on this machine can be imported into a project. The full
-Paseo page can be opened in the room as well, for its slash commands, model and thinking
-switches, modes and permission prompts.
-
-    cd server/papertown/paseo_link && pnpm install          # the SDK, once
-
-    paseo daemon config set features.webUi.enabled true   # serve the web app the room embeds
-    paseo daemon restart
+"""Paseo (paseo.sh), the local daemon that hosts the projects' coding agents: driven through the
+`paseo` CLI, with conversations read through Paseo's SDK in paseo_link/.
 """
 
 from __future__ import annotations
@@ -49,11 +35,15 @@ def _find(explicit: str) -> str | None:
 
 
 def _node() -> list[str] | None:
-    from .agents import _which  # same lookup as for pi: PATH, Homebrew, nvm
+    from .agents import _which
     node = _which("node")
     if node:
         return [node]
     return [APP_NODE] if Path(APP_NODE).exists() else None
+
+
+def _pairs(flag: str, d: dict[str, str]) -> list[str]:
+    return [x for k, v in d.items() for x in (flag, f"{k}={v}")]
 
 
 class Paseo:
@@ -107,13 +97,12 @@ class Paseo:
         return self._link("timeline", agent_id, str(limit))
 
     def label(self, agent_id: str, labels: dict[str, str]) -> None:
-        args = ["agent", "update", agent_id]
-        for k, v in labels.items():
-            args += ["--label", f"{k}={v}"]
-        self._cli(*args)
+        self._cli("agent", "update", agent_id, *_pairs("--label", labels))
 
-    def _cached(self, key: str, ttl: float, fn) -> Any:
+    def _cached(self, key: str, ttl: float, fn, fresh: bool = False) -> Any:
         with self._lock:
+            if fresh:
+                self._cache.pop(key, None)
             hit = self._cache.get(key)
             if hit and time.time() - hit[0] < ttl:
                 return hit[1]
@@ -122,8 +111,6 @@ class Paseo:
             with self._lock:
                 self._cache[key] = (time.time(), v)
         return v
-
-    # ---------- the daemon ----------
 
     def status(self, fresh: bool = False) -> dict:
         def probe() -> dict:
@@ -137,10 +124,7 @@ class Paseo:
             return {"ok": up, "server_id": st.get("serverId"), "listen": st.get("listen"), "version": st.get("daemonVersion"),
                     "web": self.web if up and self._web_up() else None,
                     "note": "" if up else "Paseo 守护进程没有运行：paseo daemon start"}
-        if fresh:
-            with self._lock:
-                self._cache.pop("status", None)
-        return self._cached("status", 15, probe)
+        return self._cached("status", 15, probe, fresh)
 
     def _web_up(self) -> bool:
         try:
@@ -150,8 +134,7 @@ class Paseo:
             return False
 
     def providers(self, fresh: bool = False) -> list[dict]:
-        """Providers that are ready, each with its models and thinking options; read again when
-        `fresh`, else kept for five minutes."""
+        """Providers that are ready, each with its models and thinking options; kept for five minutes."""
         def load() -> list[dict]:
             for _ in range(10):  # right after the daemon starts, providers report "loading" for a while
                 rows = self._cli("provider", "ls") or []
@@ -170,16 +153,11 @@ class Paseo:
                                     "default_thinking": m.get("defaultThinkingOptionId")} for m in ms]}
             with ThreadPoolExecutor(4) as ex:
                 return list(ex.map(models, rows))
-        if fresh:
-            with self._lock:
-                self._cache.pop("providers", None)
-        return self._cached("providers", 300, load)
+        return self._cached("providers", 300, load, fresh)
 
     def url(self, agent_id: str) -> str | None:
         st = self.status()
         return f"{st['web']}/h/{st['server_id']}/agent/{agent_id}" if st.get("web") and st.get("server_id") else None
-
-    # ---------- agents ----------
 
     def create(self, *, title: str, provider: str, model: str | None, thinking: str | None, cwd: Path,
                labels: dict[str, str], env: dict[str, str], prompt: str) -> dict:
@@ -188,11 +166,7 @@ class Paseo:
             args += ["--model", model]
         if thinking:
             args += ["--thinking", thinking]
-        for k, v in labels.items():
-            args += ["--label", f"{k}={v}"]
-        for k, v in env.items():
-            args += ["--env", f"{k}={v}"]
-        r = self._cli(*args, prompt, timeout=90) or {}
+        r = self._cli(*args, *_pairs("--label", labels), *_pairs("--env", env), prompt, timeout=90) or {}
         if not r.get("agentId"):
             raise PaseoError("Paseo 没有返回 agent id")
         return r
@@ -215,10 +189,4 @@ class Paseo:
         self._cli("agent", "open", agent_id)
 
     def list(self, labels: dict[str, str]) -> list[dict]:
-        args = ["ls", "--all", "--global"]
-        for k, v in labels.items():
-            args += ["--label", f"{k}={v}"]
-        return self._cli(*args) or []
-
-    def inspect(self, agent_id: str) -> dict:
-        return self._cli("inspect", agent_id) or {}
+        return self._cli("ls", "--all", "--global", *_pairs("--label", labels)) or []

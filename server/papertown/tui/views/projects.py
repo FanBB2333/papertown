@@ -1,6 +1,5 @@
-"""项目: every project down the left, and the one you are on, page by page, on the right: how far it has
-got and what it waits on, its survey, code, experiments, paper, files and the staff on it. The
-console of the web page, in a terminal."""
+"""项目: the web console in a terminal: every project down the left and, page by page on the right, the
+selected one's progress, survey, code, experiments, paper, files and staff."""
 
 from __future__ import annotations
 
@@ -18,18 +17,25 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import ContentSwitcher, DataTable, Static
 
-from ..anim import bar, clock, dur, gleam, seconds_since
+from ..anim import bar, clock, dur, gleam, mix, seconds_since
 from ..client import ApiError
 from ..look import JOB, LINE, STAGE, clip, job_mark, job_state, line_mark, money, stage_mark
 from ..widgets import Bar, Confirm, Pane, Place, Prompt, row_key, sync_rows
+from . import cycle, tabs
 from .ide import Editor, Ide
 
 TABS = [("overview", "概览"), ("survey", "调研"), ("code", "代码"), ("exp", "实验"), ("paper", "论文"), ("files", "文件"), ("team", "员工")]
 FILTERS = [("all", "全部"), ("active", "在做的"), ("waiting", "等你决定"), ("done", "已出厂")]
+ACTIVE = ("running", "hatching", "paused", "linked")
+
+
+def shown(f: str, status: str) -> bool:
+    """whether a project in this status passes the filter f"""
+    return f == "all" or (status in ACTIVE if f == "active" else status == f)
 
 
 class Projects(Place):
-    key, title, animated = "projects", "项目", True
+    key, title = "projects", "项目"
     BINDINGS = [
         Binding("left_square_bracket", "tab(-1)", "上一页", show=False), Binding("right_square_bracket", "tab(1)", "下一页", show=False),
         Binding("f", "filter", "筛选"), Binding("slash", "search", "搜索"), Binding("n", "idea", "新 idea"),
@@ -44,10 +50,10 @@ class Projects(Place):
         self.filter = "all"
         self.search = ""
         self.sel: str | None = None
-        self.line: dict | None = None  # the selected project in full
-        self.ws: dict | None = None
+        self.line: dict | None = None
+        self.ws: dict = {}
         self.papers: list[dict] = []
-        self.data: dict | None = None
+        self.data: dict = {}
         self.jobs: list[dict] = []
         self.agents: list[dict] = []
 
@@ -86,17 +92,10 @@ class Projects(Place):
         f.add_column("文件", key="name", width=36)
         f.add_column("", key="what", width=24)
 
-    # ---------- the list ----------
-
     def visible(self) -> list[dict]:
         out = []
         for ln in self.town.lines:
-            s = ln["status"]
-            if self.filter == "active" and s not in ("running", "hatching", "paused", "linked"):
-                continue
-            if self.filter == "waiting" and s != "waiting":
-                continue
-            if self.filter == "done" and s != "done":
+            if not shown(self.filter, ln["status"]):
                 continue
             if self.search and self.search.lower() not in f"{ln['seq']} {ln['title']} {ln.get('idea', '')}".lower():
                 continue
@@ -111,25 +110,20 @@ class Projects(Place):
             glow = self.town.glow.k(("line", ln["id"]), t)
             title = Text(clip(ln["title"], 26), style=f"bold {p['ink']}" if ln["status"] == "waiting" else p["ink"])
             if glow:
-                title.stylize(f"on {self._glow(glow)}")
+                title.stylize(f"on {mix(p['bg'], p['brand'], glow * 0.45)}")
             pct = bar(ln.get("pct", 0) / 100, 7, p["done"] if ln["status"] == "done" else p["brand"], p["raised"])
             pct.append(f" {ln.get('pct', 0):>3}%", style=p["muted"])
             out.append((ln["id"], (line_mark(ln["status"], t, p), Text(str(ln["seq"]), style=p["brand"]), title,
                                    Text(clip(cur.get("name") or LINE.get(ln["status"], ""), 8), style=p["muted"]), pct)))
         return out
 
-    def _glow(self, k: float) -> str:
-        from ..anim import mix
-        return mix(self.pal["bg"], self.pal["brand"], k * 0.45)
-
     def paint_list(self) -> None:
         table = self.query_one("#pj-table", DataTable)
         sync_rows(table, self.rows())
         p = self.pal
         chips = Text()
-        counts = {"all": len(self.town.lines), "active": sum(ln["status"] in ("running", "hatching", "paused", "linked") for ln in self.town.lines),
-                  "waiting": sum(ln["status"] == "waiting" for ln in self.town.lines), "done": sum(ln["status"] == "done" for ln in self.town.lines)}
-        for i, (k, label) in enumerate(FILTERS):
+        counts = {k: sum(shown(k, ln["status"]) for ln in self.town.lines) for k, _ in FILTERS}
+        for k, label in FILTERS:
             on = k == self.filter
             chips.append(f" {label} {counts[k]} ", style=f"bold {p['ink']} on {p['raised']}" if on else p["muted"])
             chips.append(" ")
@@ -140,6 +134,7 @@ class Projects(Place):
             self.sel = row_key(table)
 
     async def load(self) -> None:
+        self.paint_tabs()
         self.paint_list()
         if self.sel:
             await self.load_line(self.sel)
@@ -148,9 +143,8 @@ class Projects(Place):
         if not self.town.beat:
             return
         table = self.query_one("#pj-table", DataTable)
-        # only the cells that move are redrawn: the marks of what works or waits, and rows still glowing
         moving = {ln["id"] for ln in self.town.lines if ln["status"] in ("running", "hatching", "waiting")}
-        if moving or self.town.glow.live:
+        if moving or self.town.glow.at:
             for key, cells in self.rows():
                 if key in moving or self.town.glow.k(("line", key), t):
                     try:
@@ -160,7 +154,6 @@ class Projects(Place):
                         pass
         if self.tab == "overview" and self.line and any(s["status"] in ("run", "wait") for s in self.line.get("stages", [])):
             self.paint_overview(layout=False)
-        self.paint_tabs()
 
     def on_town_event(self, ev: dict) -> None:
         if ev.get("type") == "line" and self.is_mounted:
@@ -189,21 +182,14 @@ class Projects(Place):
         self.town.retarget()
         await self.load_tab()
 
-    # ---------- the pages ----------
-
     def paint_tabs(self) -> None:
         p = self.pal
-        out = Text()
-        for k, label in TABS:
-            on = k == self.tab
-            out.append(f" {label} ", style=f"bold {p['brand']} underline" if on else p["muted"])
-            out.append(" ")
+        out = tabs(TABS, self.tab, p)
         out.append("   [ ] 翻页", style=p["faint"])
         self.query_one("#pj-tabs", Static).update(out, layout=False)
 
     def action_tab(self, step: int) -> None:
-        keys = [k for k, _ in TABS]
-        self.tab = keys[(keys.index(self.tab) + step) % len(keys)]
+        self.tab = cycle(TABS, self.tab, step)
         self.query_one("#pj-panes", ContentSwitcher).current = self.tab
         self.lay_out()
         self.paint_tabs()
@@ -212,11 +198,12 @@ class Projects(Place):
 
     def on_click(self, e: Any) -> None:
         if getattr(e, "widget", None) is self.query_one("#pj-tabs", Static):
+            keys = [k for k, _ in TABS]
             x = 0
-            for k, label in TABS:
+            for i, (_, label) in enumerate(TABS):
                 w = len(label) * 2 + 3
                 if x <= e.x < x + w:
-                    self.action_tab([k for k, _ in TABS].index(k) - [k for k, _ in TABS].index(self.tab))
+                    self.action_tab(i - keys.index(self.tab))
                     return
                 x += w
 
@@ -234,11 +221,10 @@ class Projects(Place):
                 self.paint_survey()
             elif self.tab in ("code", "paper"):
                 self.ws = await api.get(f"/api/lines/{lid}/ws")
-                await self.query_one(f"#{self.tab}", Ide).load(self.line, self.ws or {})
+                await self.query_one(f"#{self.tab}", Ide).load(self.line, self.ws)
             elif self.tab == "exp":
                 self.data, jobs = await api.get(f"/api/lines/{lid}/data"), await api.get("/api/jobs", line_id=lid, external="false")
-                own = [j for j in jobs.get("jobs", []) if not j.get("external")]
-                self.jobs = await self.town.local.nvidb_jobs(self.town.lines, lid) + own  # nvidb's read here
+                self.jobs = await self.town.local.nvidb_jobs(self.town.lines, lid) + jobs["jobs"]
                 self.paint_exp()
             elif self.tab == "files":
                 self.paint_files()
@@ -254,7 +240,7 @@ class Projects(Place):
             self.town.notify(str(e), severity="error")
 
     def head(self) -> Text:
-        p, ln = self.pal, self.line or {}
+        p, ln = self.pal, self.line
         out = Text()
         out.append(f"#{ln.get('seq')} ", style=f"bold {p['brand']}")
         out.append(ln.get("title", ""), style=f"bold {p['ink']}")
@@ -265,8 +251,6 @@ class Projects(Place):
 
     def paint_overview(self, layout: bool = True) -> None:
         ln, p, t = self.line, self.pal, self.town.t
-        if not ln:
-            return
         parts: list[Any] = [self.head()]
         if ln.get("idea"):
             parts.append(Text(clip(ln["idea"], 400), style=p["muted"]))
@@ -314,12 +298,9 @@ class Projects(Place):
             facts.append(("查重", f"{hatch['verdict']}（最接近 {len(hatch.get('similar') or [])} 篇）"))
         if ln.get("reason"):
             facts.append(("编队", ln["reason"]))
-        ws = self.ws or {}
-        if ws.get("code"):
-            c = ws["code"]
+        if c := self.ws.get("code"):
             facts.append(("代码", f"{c.get('name')} · {c.get('branch') or ''} · {'%d 处改动' % c['dirty'] if c.get('dirty') else '无改动'}"))
-        if ws.get("paper"):
-            pp = ws["paper"]
+        if pp := self.ws.get("paper"):
             facts.append(("论文", f"{pp.get('main') or pp.get('name')} · {'有 PDF' if pp.get('pdf') else '还没编译'}"))
         if ln.get("files"):
             facts.append(("成品", "、".join(ln["files"])))
@@ -357,8 +338,9 @@ class Projects(Place):
         self.query_one("#pj-paper", Pane).show(Padding(Group(*body), (0, 1)))
 
     @on(DataTable.RowSelected, "#pj-papers")
-    def open_paper(self, e: DataTable.RowSelected) -> None:
-        x = next((x for x in self.papers if x["paper_id"] == e.row_key.value), None)
+    def open_paper(self, e: DataTable.RowSelected | None = None) -> None:
+        key = e.row_key.value if e else row_key(self.query_one("#pj-papers", DataTable))
+        x = next((x for x in self.papers if x["paper_id"] == key), None)
         if x and x.get("url"):
             self.town.open_url(x["url"])
 
@@ -366,8 +348,7 @@ class Projects(Place):
         return self.query_one(f"#{self.tab}", Ide) if self.tab in ("code", "paper") else None
 
     def lay_out(self) -> None:
-        """the list of projects: slim beside the code and the paper (their files need the room), and gone
-        altogether in 专注 (z)"""
+        """the list of projects: slim beside the code and the paper, gone in 专注 (z)"""
         left = self.query_one("#pj-left")
         left.display = not self.town.prefs.focus
         left.set_class(self.tab in ("code", "paper"), "slim")
@@ -382,9 +363,7 @@ class Projects(Place):
         self.town.notify("专注：收起项目列表，z 放回来" if self.town.prefs.focus else "项目列表放回来了")
 
     def action_diff(self) -> None:
-        ide = self.ide()
-        path = ide.current() if ide else None
-        if ide and path:
+        if (ide := self.ide()) and (path := ide.current()):
             ide.open(path, diff=True)
 
     @work(group="pj-edit")
@@ -406,7 +385,7 @@ class Projects(Place):
 
         async def save(text: str) -> bool:
             try:
-                await self.town.api.put(f"/api/lines/{lid}/ws/{root}/file", {"path": path, "text": text})  # saving goes through the town
+                await self.town.api.put(f"/api/lines/{lid}/ws/{root}/file", {"path": path, "text": text})
                 return True
             except ApiError as e:
                 self.town.notify(str(e), title="没存上", severity="error")
@@ -418,8 +397,7 @@ class Projects(Place):
             ide.open(path)
 
     def paint_exp(self) -> None:
-        p, t = self.pal, self.town.t
-        d = self.data or {}
+        p, t, d = self.pal, self.town.t, self.data
         parts: list[Any] = [self.head(), Text()]
         meta = d.get("meta") or {}
         if meta:
@@ -433,7 +411,7 @@ class Projects(Place):
             if res.get("simulated"):
                 parts.append(Text("⚠ 模拟电厂的模拟结果，不是真实实验", style=p["warn"]))
             tb = Table(box=None, header_style=f"bold {p['muted']}", pad_edge=False, padding=(0, 2))
-            if "values" in res["rows"][0]:  # the farm's table: a row per method, a value per metric, ours marked
+            if "values" in res["rows"][0]:
                 metrics = res.get("metrics") or [f"#{i + 1}" for i in range(len(res["rows"][0]["values"]))]
                 tb.add_column("方法")
                 for m in metrics:
@@ -454,7 +432,7 @@ class Projects(Place):
                 parts += [Text(), Text(res["analysis"], style=p["ink"])]
             for c in res.get("concerns") or []:
                 parts.append(Text(f"· {c}", style=p["warn"]))
-        runs = [r for r in d.get("runs") or [] if not str(r.get("id")).startswith("nvidb-")]  # nvidb's are in self.jobs, read here
+        runs = [r for r in d.get("runs") or [] if not str(r.get("id")).startswith("nvidb-")]
         jobs = self.jobs
         if runs or jobs:
             parts += [Text(), Text("运行", style=f"bold {p['ink']}")]
@@ -477,7 +455,7 @@ class Projects(Place):
 
     def paint_files(self) -> None:
         p = self.pal
-        files = (self.line or {}).get("files") or []
+        files = self.line.get("files") or []
         what = {"main.pdf": "论文 PDF", "main.tex": "LaTeX 源文件", "refs.bib": "参考文献", "paper.zip": "投稿包"}
         sync_rows(self.query_one("#pj-files", DataTable), [(f, (Text(f, style=f"bold {p['ink']}"), Text(what.get(f, ""), style=p["muted"]))) for f in files])
         note = Text.assemble(("Enter", f"bold {p['brand']}"), (" 存到「下载」 · ", p["muted"]), ("o", f"bold {p['brand']}"), (" 在浏览器里打开", p["muted"])) \
@@ -490,8 +468,6 @@ class Projects(Place):
 
     @work(group="pj-download")
     async def download(self, name: str) -> None:
-        if not self.line:
-            return
         dest = Path.home() / "Downloads"
         dest.mkdir(exist_ok=True)
         target = dest / f"{self.line['id']}-{name}"
@@ -506,12 +482,12 @@ class Projects(Place):
             self.town.notify(str(e), title="下载失败", severity="error")
 
     def paint_team(self) -> None:
-        p, ln = self.pal, self.line or {}
+        p, ln = self.pal, self.line
         parts: list[Any] = [self.head(), Text()]
         if self.agents:
             parts.append(Text("接入的 agent", style=f"bold {p['ink']}"))
             for a in self.agents:
-                last = (a.get("last") or {})
+                last = a.get("last") or {}
                 last_text = (last.get("data") or {}).get("text") or last.get("text") or ""
                 parts.append(Text.assemble(("● " if a.get("started") else "○ ", p["ok"] if a.get("started") else p["faint"]),
                                            (self.town.agent_name(a["id"]), f"bold {p['ink']}"),
@@ -532,9 +508,12 @@ class Projects(Place):
             parts.append(Text("还没有员工接手", style=p["muted"]))
         self.query_one("#team", Pane).show(Padding(Group(*parts), (1, 2)))
 
-    # ---------- doing things ----------
-
     def hints(self) -> list[tuple[str, str]]:
+        if self.tab in ("code", "paper"):
+            out = [("[ ]", "翻页"), ("Enter", "打开"), ("→←", "展开收起"), ("/", "筛选文件"), ("E", "改"), ("d", "改动"), ("w", "换行")]
+            if self.tab == "paper":
+                out += [("C", "编译"), ("P", "PDF")]
+            return out + [("z", "专注"), ("T", "配色")]
         st = (self.line or {}).get("status")
         out = [("[ ]", "翻页"), ("f", "筛选"), ("/", "搜索"), ("n", "新 idea")]
         if st == "waiting":
@@ -543,12 +522,6 @@ class Projects(Place):
             out.append(("r", "继续"))
         if self.line:
             out += [("e", "调整"), ("a", "问")]
-        if self.tab in ("code", "paper"):
-            out = [("[ ]", "翻页"), ("Enter", "打开"), ("→←", "展开收起"), ("/", "筛选文件"), ("E", "改"), ("d", "改动"), ("w", "换行")]
-            if self.tab == "paper":
-                out += [("C", "编译"), ("P", "PDF")]
-            out += [("z", "专注"), ("T", "配色")]
-            return out
         if self.tab in ("survey", "files"):
             out.append(("Enter", "打开" if self.tab == "survey" else "下载"))
         return out
@@ -560,14 +533,12 @@ class Projects(Place):
         return ctx
 
     def action_filter(self) -> None:
-        keys = [k for k, _ in FILTERS]
-        self.filter = keys[(keys.index(self.filter) + 1) % len(keys)]
+        self.filter = cycle(FILTERS, self.filter, 1)
         self.paint_list()
 
     @work(group="pj-ask")
     async def action_search(self) -> None:
-        ide = self.ide()
-        if ide:  # beside the files, / looks for a file
+        if ide := self.ide():
             q = await self.app.push_screen_wait(Prompt("筛选文件", "路径里带这些字的文件；空着回车就是不筛", ide.ftree.filter))
             ide.set_filter(q or "")
             ide.ftree.focus()
@@ -577,17 +548,10 @@ class Projects(Place):
         self.paint_list()
 
     def action_idea(self) -> None:
-        self.town.target_i = 0
-        self.town.retarget()
-        self.town.target_i = next((i for i, x in enumerate(self.town.targets) if x.kind == "idea"), 0)
-        self.town.action_compose()
+        self.town.aim("idea", default=0)
 
     def action_ask(self) -> None:
-        self.town.retarget()
-        i = next((i for i, x in enumerate(self.town.targets) if x.kind == "ask"), None)
-        if i is not None:
-            self.town.target_i = i
-            self.town.action_compose()
+        self.town.aim("ask")
 
     async def _act(self, path: str, done: str) -> None:
         try:
@@ -631,12 +595,11 @@ class Projects(Place):
         except ApiError as e:
             self.town.notify(str(e), title="编译失败", severity="error")
             return
-        ok = (r or {}).get("ok", True)
-        pages = (r or {}).get("pages")
-        self.town.notify((r or {}).get("note") or (f"编译好了 · {r.get('seconds', 0)} 秒" + (f" · {pages} 页" if pages else "") if ok else "编译失败，报错在右边"),
+        ok, pages = r["ok"], r.get("pages")
+        self.town.notify(f"编译好了 · {r['seconds']} 秒" + (f" · {pages} 页" if pages else "") if ok else "编译失败，报错在右边",
                          severity="information" if ok else "error")
         await self.load_tab()
-        if not ok and (r or {}).get("log"):
+        if not ok and r.get("log"):
             ide.show_log(r["log"])
 
     def action_pdf(self) -> None:
@@ -648,9 +611,7 @@ class Projects(Place):
     def action_open(self) -> None:
         if self.tab == "files":
             key = row_key(self.query_one("#pj-files", DataTable))
-            if key and self.line:
+            if key:
                 self.town.open_url(self.town.api.url(f"/api/lines/{self.line['id']}/files/{key}"))
         elif self.tab == "survey":
-            x = next((x for x in self.papers if x["paper_id"] == row_key(self.query_one("#pj-papers", DataTable))), None)
-            if x and x.get("url"):
-                self.town.open_url(x["url"])
+            self.open_paper()

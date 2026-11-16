@@ -1,17 +1,6 @@
-"""Each project's lead: an agent on Paseo that keeps its project moving. It does not write the
-code or the paper: it reads where the project stands, urges the workers (the coder, the
-writer) on, reports what you should know and asks you what is yours to decide.
-
-It works when something happens. Papertown keeps a pulse of each project that has a lead:
-the pipeline's stages, the jobs on the farm and in nvidb's queue, the workers' state and the
-questions waiting for you. When that changes, the lead gets a <checkin> saying what changed
-and where the project stands now; an unfinished project that sits still gets one now and
-then, until a few have gone by with nothing new. The assistant, which speaks for you, works
-only when you write to it, and reaches a project through its lead.
-
-Messages between agents go through Papertown and, for now, ride on Paseo (or pi): `pt tell`
-puts one into the other agent's conversation, headed <msg from="...">, after the work
-boundaries (bounds.py) say whether it goes at once, waits for you, or not at all.
+"""Each project's lead: an agent that keeps its project moving, acting on the <checkin> messages
+sent when the project's stages, jobs, workers or open questions change (or it sits still too long).
+Messages between agents (`pt tell`) pass the work boundaries (bounds.py) first.
 
     data/projects/<project>/lead.json    whether it gets check-ins, and how long a quiet spell is
 """
@@ -24,20 +13,21 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from .agents import AgentError
+from .agents import AgentError, ROLES
 from .db import now
+from .nvidb import as_farm_job
 
 if TYPE_CHECKING:
     from .town import Town
 
-NAMES = {"assistant": "小助手", "lead": "项目负责人", "coder": "代码员工", "writer": "写作员工"}
+NAMES = {role: ROLES[role]["name"] for role in ("assistant", "lead", "coder", "writer")}
 STATUS = {"hatching": "孵化中", "waiting": "等你决定", "running": "在做", "paused": "暂停", "done": "已出厂", "failed": "出错",
           "dropped": "放弃了", "linked": "本地项目"}
 STAGE = {"todo": "没开始", "run": "进行中", "wait": "等你", "done": "完成"}
 JOB = {"queued": "排队", "running": "在跑", "done": "完成", "failed": "失败", "cancelled": "已取消"}
 WORKER = {"working": "在干活", "idle": "空闲", "starting": "启动中", "error": "出错", "stopped": "没在运行"}
 YES = ("可以", "允许", "同意", "好", "行", "yes", "ok", "y")
-DEFAULTS = {"supervise": True, "every": 60}  # check-ins on; minutes of quiet before one comes anyway
+DEFAULTS = {"supervise": True, "every": 60}  # every: minutes of quiet before a check-in comes anyway
 QUIET_MAX = 3  # check-ins in a row with nothing new, then quiet until something happens
 ACTIVE = ("running", "linked")
 
@@ -49,13 +39,6 @@ class LeadError(Exception):
 def clip(s: object, n: int = 120) -> str:
     t = " ".join(str(s or "").split())
     return t if len(t) <= n else t[: n - 1] + "…"
-
-
-def _hhmm(iso: str | None) -> str:
-    try:
-        return datetime.fromisoformat(str(iso)).astimezone().strftime("%H:%M")
-    except ValueError:
-        return "上次"
 
 
 def _ago(iso: str | None) -> str:
@@ -71,15 +54,13 @@ class Leads:
         self.town = town
         self.db = town.db
         self.s = town.s
-        self._pulse: dict[str, dict[str, tuple[str, str]]] = {}  # per project: what is watched -> (its state, what it is)
-        self._pending: dict[str, list[str]] = {}  # changes the lead has not been told of yet
+        self._pulse: dict[str, dict[str, tuple[str, str]]] = {}
+        self._pending: dict[str, list[str]] = {}
         self._since: dict[str, str] = {}
-        self._last: dict[str, float] = {}  # when it last got a check-in
+        self._last: dict[str, float] = {}
         self._quiet: dict[str, int] = {}
         self._halt = threading.Event()
         self._thread: threading.Thread | None = None
-
-    # ---------- its settings ----------
 
     def settings(self, line_id: str) -> dict:
         try:
@@ -100,12 +81,14 @@ class Leads:
         return d
 
     def view(self, line_id: str) -> dict:
-        """The project's lead, its settings, what it reported and what waits for your answer."""
         a = self.town.agents.get(f"lead-{line_id}")
         return {"agent": self.town.agents.public(a), "settings": self.settings(line_id),
                 "reports": self.reports(line_id, 30), "asks": self.asks(line_id)}
 
-    # ---------- messages between agents ----------
+    def agent(self, line_id: str, role: str) -> dict | None:
+        """The project's agent in that role, once it has been started."""
+        a = self.town.agents.get(f"{role}-{line_id}")
+        return a if a and a["runtime"] else None
 
     def _who(self, a: dict) -> str:
         if a["role"] == "assistant":
@@ -130,8 +113,8 @@ class Leads:
                 raise LeadError(f"你能发消息给：{'、'.join(allowed)}")
         if role not in ("lead", "coder", "writer"):
             raise LeadError("收件人要写 lead（项目负责人）、coder（代码员工）或 writer（写作员工）")
-        a = self.town.agents.get(f"{role}-{lid}")
-        if not a or not a.get("runtime"):
+        a = self.agent(lid, role)
+        if not a:
             seq = self.db.val("select seq from lines where id = ?", lid)
             raise LeadError(f"#{seq} 的{NAMES[role]}还没有启动，请用户先在「员工」面板里启动它")
         if a["runtime"] == "pi" and not self.town.agents.alive(a):
@@ -150,7 +133,7 @@ class Leads:
             raise LeadError(f"你的工作边界不让你给别的 agent 发消息：{rule['text']}")
         if kind == "ask":
             q = self.ask(sender_id, f"{self._who(s)}想给{self._who(t)}发：「{clip(text, 300)}」，可以吗？", ["可以", "不可以"],
-                         act={"action": "tell", "to": t["id"], "text": text, "now": now_})  # sent as the one who asked
+                         act={"action": "tell", "to": t["id"], "text": text, "now": now_})
             return f"按你的工作边界（{rule['text']}），这条要先问用户。已经问了（问题 {q['id']}），他同意后会替你发出去，结果会告诉你。"
         self.deliver(s, t, text, now_)
         return f"已发给{self._who(t)}" + ("。" if now_ or t["status"] != "working" else "，它在忙，等它做完手上的事再交给它。")
@@ -162,8 +145,6 @@ class Leads:
         except AgentError as e:
             raise LeadError(str(e)) from e
         self.town.agents.record(sender["id"], "sent", {"to": target["id"], "who": self._who(target), "text": text})
-
-    # ---------- reports and questions for you ----------
 
     def _row(self, agent_id: str, line_id: str, kind: str, data: dict) -> dict:
         row = {"line_id": line_id, "agent_id": agent_id, "ts": now(), "kind": kind, "data": data}
@@ -195,13 +176,11 @@ class Leads:
         return rows[::-1]
 
     def asks(self, line_id: str | None = None) -> list[dict]:
-        rows = self.db.q("select * from reports where kind = 'ask' and json_extract(data, '$.open') = 1"
+        return self.db.q("select * from reports where kind = 'ask' and json_extract(data, '$.open') = 1"
                          + (" and line_id = ?" if line_id else "") + " order by id", *([line_id] if line_id else []))
-        return rows
 
     def answer(self, report_id: int, text: str, by: str = "you") -> dict:
-        """Your answer to a question: back to the agent that asked, and what it asked to do,
-        done if you allowed it."""
+        """Your answer to a question, sent back to the agent that asked; what it asked to do is done if you allowed it."""
         r = self.db.one("select * from reports where id = ? and kind = 'ask'", report_id)
         if not r:
             raise LeadError("没有这个问题")
@@ -232,7 +211,7 @@ class Leads:
             try:
                 self.town.agents.say(asker["id"], "\n".join(msg), "queue", origin="you")
             except AgentError:
-                pass  # it is not running; the answer stays on the question
+                pass
         return row
 
     def _act(self, act: dict, asker: dict | None) -> str:
@@ -250,24 +229,22 @@ class Leads:
             return f"已经提交了 {j['id']}。"
         raise LeadError(f"不认识的动作：{act.get('action')}")
 
-    # ---------- where a project stands ----------
-
     def status(self, line_id: str) -> str:
         """A project in a few lines: its stages, its agents, its jobs, its questions and reports."""
         snap = self.town.pipeline.snapshot(line_id)
         if not snap:
             raise LeadError("没有这个项目")
-        cur = snap.get("current") or {}
+        cur = snap["current"]
         out = [f"项目 #{snap['seq']}「{snap['title']}」：{STATUS.get(snap['status'], snap['status'])}"
-               + (f"，当前工序「{cur['name']}」{STAGE.get(cur['status'], cur['status'])}" + (f" {cur['pct']}%" if cur.get("pct") else "") if cur else "")
-               + (f"（{snap['note']}）" if snap.get("note") else "")]
+               + (f"，当前工序「{cur['name']}」{STAGE.get(cur['status'], cur['status'])}" + (f" {cur['pct']}%" if cur["pct"] else "") if cur else "")
+               + (f"（{snap['note']}）" if snap["note"] else "")]
         out.append("工序：" + " · ".join(f"{s['name']}{'✓' if s['status'] == 'done' else '▶' if s['status'] == 'run' else '?' if s['status'] == 'wait' else ''}"
                                         for s in snap["stages"]))
         out.append("")
         out.append("这个项目的 agent：")
         for role in ("lead", "coder", "writer"):
-            a = self.town.agents.get(f"{role}-{line_id}")
-            if not a or not a.get("runtime"):
+            a = self.agent(line_id, role)
+            if not a:
                 out.append(f"- {NAMES[role]}：还没有启动")
                 continue
             last = self.town.agents.public(a).get("last")
@@ -289,8 +266,7 @@ class Leads:
         return "\n".join(out)
 
     def _jobs(self, line_id: str) -> list[dict]:
-        ext = [j for j in self.town.linked.farm_jobs() if j["line_id"] == line_id] if self.town.linked.of(line_id) else []
-        rows = ext + self.town.farm.list(line_id, 20)
+        rows = [as_farm_job(j, line_id) for j in self.town.linked.jobs(line_id)] + self.town.farm.list(line_id, 20)
         return sorted(rows, key=lambda j: str(j.get("started_at") or j.get("created_at") or ""), reverse=True)
 
     def _said(self, a: dict) -> list[tuple[str, str, str]]:
@@ -305,8 +281,8 @@ class Leads:
         """The last few messages of a worker's conversation, for its lead."""
         if role not in ("coder", "writer"):
             raise LeadError("要看 coder（代码员工）或 writer（写作员工）")
-        a = self.town.agents.get(f"{role}-{line_id}")
-        if not a or not a.get("runtime"):
+        a = self.agent(line_id, role)
+        if not a:
             return f"{NAMES[role]}还没有启动。"
         try:
             rows = self._said(a)
@@ -318,8 +294,6 @@ class Leads:
         out = [f"{NAMES[role]}现在{WORKER.get(a['status'], a['status'])}。最近 {min(n, len(rows))} 条："]
         return "\n".join(out + [f"- {who[k]}（{_ago(ts)}）：{clip(t, 600)}" for k, t, ts in rows[-n:]])
 
-    # ---------- check-ins ----------
-
     def _facts(self, line_id: str) -> dict[str, tuple[str, str]]:
         """What the lead hears about when it changes: each with its state and what it is."""
         snap = self.town.pipeline.snapshot(line_id)
@@ -330,8 +304,7 @@ class Leads:
         f |= {f"job:{j['id']}": (j["status"], f"任务 {j['id']} {j['name']}" + (f"（{clip(j['note'], 80)}）" if j.get("note") and j["status"] == "failed" else ""))
               for j in self._jobs(line_id)[:30]}
         for role in ("coder", "writer"):
-            a = self.town.agents.get(f"{role}-{line_id}")
-            if a and a.get("runtime"):
+            if a := self.agent(line_id, role):
                 f[f"agent:{role}"] = (a["status"], NAMES[role])
         f |= {f"ask:{q['id']}": ("open", f"{q['data'].get('who')}问用户：{clip(q['data']['question'], 120)}") for q in self.asks(line_id)}
         return f
@@ -387,7 +360,7 @@ class Leads:
         st = self.settings(lid)
         if not st["supervise"] or a["status"] != "idle" or not a.get("ext_id") and a.get("runtime") == "paseo":
             return
-        quiet = time.time() - self._last.get(lid, 0)
+        quiet = time.time() - self._last[lid]
         if self._pending.get(lid) and quiet >= self.s.lead_gap:
             self.checkin(a)
         elif not self._pending.get(lid) and facts.get("line", ("",))[0] in ACTIVE and quiet >= st["every"] * 60 and self._quiet.get(lid, 0) < QUIET_MAX:
@@ -399,9 +372,9 @@ class Leads:
         changes, since = self._pending.pop(lid, []), self._since.pop(lid, None)
         out = ["<checkin>"]
         if changes:
-            out += [f"{_hhmm(since)} 以来项目里的变化：", *[f"- {c}" for c in changes]]
+            out += [f"{datetime.fromisoformat(since).astimezone():%H:%M} 以来项目里的变化：", *[f"- {c}" for c in changes]]
         else:
-            mins = int((time.time() - self._last.get(lid, time.time())) / 60)
+            mins = int((time.time() - self._last[lid]) / 60)
             out.append(f"已经 {mins} 分钟没有新动静了。看看员工是不是闲着、有没有该催的、有没有该告诉用户的。")
         out += ["", "现在的情况：", self.status(lid), "</checkin>"]
         self._last[lid] = time.time()

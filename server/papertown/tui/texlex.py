@@ -1,8 +1,5 @@
-"""LaTeX and BibTeX for the TUI's viewer and editor: the same reading of a paper as the web page's
-(web/src/console/latex.ts), as Pygments lexers. Pygments' own give a formula no colours of its own
-and a \\cite key none either; these tell apart commands, a section's title, environments, \\cite and
-\\ref keys and the math (its letters, its commands, where it opens and closes), and in a .bib the
-entry type, key, fields and values. Each token is a role of the editor's themes (edthemes.py)."""
+"""Pygments lexers for LaTeX and BibTeX that read a paper as the web page does (web/src/console/latex.ts),
+telling apart math, \\cite and \\ref keys and .bib entries; each token is a role of the editor's themes."""
 
 from __future__ import annotations
 
@@ -16,6 +13,7 @@ ROLES = ("kw", "ctl", "str", "esc", "num", "con", "com", "fn", "type", "var", "p
          "link", "label", "math", "mathCmd", "mathDelim", "meta", "bad", "quote", "mono", "list", "strong", "em", "ins", "del")
 PT: dict[str, _TokenType] = {r: getattr(Token.Pt, r[0].upper() + r[1:]) for r in ROLES}
 ROLE_OF: dict[_TokenType, str] = {v: k for k, v in PT.items()}
+SPACE = re.compile(r"\s+")
 
 
 class Stream:
@@ -53,7 +51,7 @@ class Stream:
         return m
 
     def eat_space(self) -> bool:
-        m = re.compile(r"\s+").match(self.s, self.pos)
+        m = SPACE.match(self.s, self.pos)
         if m:
             self.pos = m.end()
         return bool(m)
@@ -77,8 +75,6 @@ def _lines(text: str, token, state: dict) -> Iterator[tuple[int, _TokenType, str
             yield at + len(body), Token.Text, line[len(body):]
         at += len(line)
 
-
-# ---------- LaTeX ----------
 
 ARG = {"head": "head", "label": "label", "env": "type", "strong": "strong", "em": "em", "url": "link", "path": "str", "pkg": "type"}
 NEXT = [
@@ -138,11 +134,11 @@ def _tex(st: Stream, s: dict) -> str | None:
     if ch == "}":
         kind = args.pop() if args else None
         if kind == "env" and s["begin"] and MATH_ENVS.match(s["env"].strip()):
-            s["math"] = s["env"].strip()  # \begin{equation}: the formula starts
+            s["math"] = s["env"].strip()
         return "punc"
     if ch == "[":
         if s["next"]:
-            st.match(OPT)  # a command's optional argument: [htbp], [width=…]
+            st.match(OPT)
             return "meta"
         return "punc"
     if ch == "]":
@@ -190,10 +186,14 @@ class LatexLexer(Lexer):
         return _lines(text, _tex, {"math": None, "next": None, "args": [], "begin": False, "env": ""})
 
 
-# ---------- BibTeX ----------
+BIB_TYPE = re.compile(r"@[a-zA-Z]+")
+BIB_SKIP = re.compile(r"[^@%]+")
+BIB_KEY = re.compile(r"[^,\s}]+")
+BIB_NAME = re.compile(r"[a-zA-Z][\w\-:.]*")
+DIGITS = re.compile(r"\d+")
+
 
 def _bib(st: Stream, s: dict) -> str | None:
-    # a value can run over several lines: carry on with it before anything else
     if s["depth"] > 0 or s["quote"]:
         return _bib_value(st, s)
     if st.eat_space():
@@ -203,12 +203,12 @@ def _bib(st: Stream, s: dict) -> str | None:
         return "com"
     at = s["at"]
     if at == "out":
-        if st.match(re.compile(r"@[a-zA-Z]+")):
+        if st.match(BIB_TYPE):
             s["kind"], s["at"] = st.current()[1:].lower(), "open"
             return "kw"
-        if not st.match(re.compile(r"[^@%]+")):
+        if not st.match(BIB_SKIP):
             st.next()
-        return "com"  # BibTeX skips whatever is outside an entry
+        return "com"  # BibTeX ignores text outside an entry
     if at == "open":
         if st.eat("{("):
             if s["kind"] == "comment":
@@ -218,10 +218,10 @@ def _bib(st: Stream, s: dict) -> str | None:
             return "punc"
         s["at"] = "out"
         return None
-    if at == "key" and st.match(re.compile(r"[^,\s}]+")):
+    if at == "key" and st.match(BIB_KEY):
         s["at"] = "field"
         return "label"
-    if at == "field" and st.match(re.compile(r"[a-zA-Z][\w\-:.]*")):
+    if at == "field" and st.match(BIB_NAME):
         s["at"] = "eq"
         return "prop"
     if at == "eq" and st.eat("="):
@@ -234,12 +234,12 @@ def _bib(st: Stream, s: dict) -> str | None:
         if st.eat('"'):
             s["quote"] = True
             return _bib_value(st, s)
-        if st.match(re.compile(r"\d+")):
+        if st.match(DIGITS):
             s["at"] = "after"
             return "num"
-        if st.match(re.compile(r"[a-zA-Z][\w\-:.]*")):
+        if st.match(BIB_NAME):
             s["at"] = "after"
-            return "var"  # a @string's name, or jan…dec
+            return "var"
     if at == "after" and st.eat("#"):
         s["at"] = "value"
         return "op"

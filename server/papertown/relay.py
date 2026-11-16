@@ -1,7 +1,6 @@
-"""Papertown's API by files, for agents in a sandbox without network (Codex's default). `pt`
-reaches the server over HTTP; when that is blocked it writes the same request as a file in
-q/ beside itself, and the server answers it in a/. Every agent on Paseo has the two folders;
-only reads and the agent's own bridge go through.
+"""Papertown's API by files, for agents in a sandbox without network: when HTTP is blocked, `pt`
+writes the request as a file in q/ beside itself and the server answers it in a/. Only reads and
+the agent's own bridge go through.
 """
 
 from __future__ import annotations
@@ -46,7 +45,7 @@ class Relay:
     def _watch(self) -> None:
         dirs, seen = [], 0.0
         while not self._halt.wait(0.3):
-            if time.time() - seen > 3:  # the agents change seldom; their folders are looked up now and then
+            if time.time() - seen > 3:
                 try:
                     dirs, seen = self._dirs(), time.time()
                 except Exception:  # noqa: BLE001 - a busy database is asked again on the next turn
@@ -60,8 +59,7 @@ class Relay:
                     threading.Thread(target=self._relay, args=(agent_id, f), daemon=True).start()
 
     def _relay(self, agent_id: str, f: Path) -> None:
-        """One request `pt` left as a file: sent on to the server as it would have sent it, the
-        answer written beside it."""
+        """Send on one request `pt` left as a file, and write the answer beside it."""
         try:
             req = json.loads(f.read_text(encoding="utf-8"))
             f.unlink()

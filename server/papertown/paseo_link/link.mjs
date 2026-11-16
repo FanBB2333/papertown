@@ -1,5 +1,4 @@
-// Reads Paseo for the Papertown server through the official SDK (@getpaseo/client), over
-// the daemon's WebSocket endpoint. One command per run, JSON on stdout:
+// Reads Paseo for the Papertown server through its SDK (@getpaseo/client); one command per run, JSON on stdout:
 //
 //   node link.mjs list                    agents on this machine (newest first)
 //   node link.mjs timeline <id> [limit]   one agent's conversation, trimmed for the room
@@ -30,10 +29,10 @@ function agentOf(a) {
 
 // what a tool call was about, in one short line
 function toolArg(d = {}) {
-  return d.command ?? d.filePath ?? d.query ?? d.url ?? (d.filePaths ?? []).join(", ") ?? "";
+  return d.command ?? d.filePath ?? d.query ?? d.url ?? (d.filePaths ?? []).join(", ");
 }
 
-// the room shows messages and a one-line trace of tools; reasoning, todos and plugin items stay in Paseo
+// a timeline entry as the room shows it, or null for what stays in Paseo
 function itemOf(e) {
   const it = e.item ?? {}, ts = e.timestamp;
   switch (it.type) {

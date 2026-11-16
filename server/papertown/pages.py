@@ -1,31 +1,20 @@
-"""Pages the project's agents write for you in HTML: reports, explainers and answers to the
-questions you put to them, shown in 进展 under 汇报与讲解 (and an answer under its question too).
-
-An agent publishes a page with `pt publish "title" page.html`, or answers a question with
-`pt reply <question> page.html`. A page is one file with everything in it (its CSS, its
-scripts, its pictures as inline SVG or data: URIs) and is kept as written:
+"""Pages the project's agents write for you in HTML (`pt publish`, `pt reply`), kept as written. They are
+shown in a sandbox: an origin of their own with no network (the Content-Security-Policy of /view), where
+only the town's font may load from Papertown.
 
     data/projects/<project>/pages/index.json    what each page is: title, kind, who, when
     data/projects/<project>/pages/<id>.html
-
-It is shown in a sandbox: its scripts run, but in an origin of its own, with no network and no
-way to Papertown's interface or your session (the Content-Security-Policy of /view); only the
-town's own font may come from Papertown. What is added to it, under its own styles: the town's
-colours and fonts as CSS variables (--pt-ink, --pt-brand, …), compact defaults for headings, text
-and tables so that a page reads as one document going down the screen, and a small script that tells the page around it how tall it is and opens what it
-links to in Papertown (`data-pt-file="path[:line]"`, `data-pt-job="id"`, `data-pt-page="id"`).
 """
 
 from __future__ import annotations
 
 import html as _html
-import json
 import re
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .db import now
+from .db import now, read_json, write_json
 
 if TYPE_CHECKING:
     from .town import Town
@@ -33,7 +22,6 @@ if TYPE_CHECKING:
 KINDS = {"report": "汇报", "explain": "讲解", "answer": "回答"}
 MAX = 3_000_000  # characters: a page carries its pictures in it
 KEEP = 200
-
 
 
 def csp(origin: str = "") -> str:
@@ -44,6 +32,8 @@ def csp(origin: str = "") -> str:
             f"style-src 'unsafe-inline'{own}; img-src data: blob:; media-src data: blob:; font-src data:{own}; form-action 'none'")
 
 
+# Put before a page's own head: the town's --pt-* variables, compact defaults, and a script that reports its height
+# and opens data-pt-file / data-pt-job / data-pt-page links in Papertown.
 HEAD = """<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base target="_blank">
 <style>
 :root { --pt-bg: #f4eee2; --pt-panel: #fcf8f0; --pt-panel2: #f3ecdf; --pt-ink: #2f261d; --pt-muted: #857560; --pt-line: rgba(84, 62, 40, .2);
@@ -99,7 +89,7 @@ def title_of(html: str) -> str:
     return ""
 
 
-# the variables in the looks of the app other than paper, the default in HEAD
+# --pt-* variables for the app's looks other than paper, whose are HEAD's defaults
 _SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", Roboto, Arial, sans-serif'
 LOOKS = {
     "light": f"--pt-bg: #fafafa; --pt-panel: #fff; --pt-panel2: #f5f5f5; --pt-ink: #171717; --pt-muted: #737373; --pt-line: #e5e5e5; "
@@ -133,22 +123,12 @@ class Pages:
     def _dir(self, line_id: str) -> Path:
         return self.town.s.projects_dir / line_id / "pages"
 
-    def _known(self, line_id: str) -> None:
-        if self.town.db.val("select seq from lines where id = ?", line_id) is None:
-            raise PageError("没有这个项目")
-
     def all(self, line_id: str) -> list[dict]:
-        try:
-            v = json.loads((self._dir(line_id) / "index.json").read_text(encoding="utf-8"))
-            return v if isinstance(v, list) else []
-        except (OSError, ValueError):
-            return []
+        return read_json((self._dir(line_id) / "index.json"), [])
 
     def _save(self, line_id: str, rows: list[dict]) -> None:
         p = self._dir(line_id) / "index.json"
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        tmp.replace(p)
+        write_json(p, rows)
 
     def get(self, line_id: str, pid: str) -> dict:
         meta = next((p for p in self.all(line_id) if p["id"] == pid), None)
@@ -165,7 +145,8 @@ class Pages:
 
     def publish(self, line_id: str, html: str, title: str = "", kind: str = "explain", by: str = "", agent: str = "",
                 question: str | None = None) -> dict:
-        self._known(line_id)
+        if self.town.db.val("select seq from lines where id = ?", line_id) is None:
+            raise PageError("没有这个项目")
         html = html.strip()
         if not html:
             raise PageError("页面是空的")
@@ -187,7 +168,7 @@ class Pages:
                 (d / f"{old['id']}.html").unlink(missing_ok=True)
             self._save(line_id, rows[-KEEP:])
         self.town.bus.publish("page", line_id=line_id, page=meta)
-        self.town.trace("页面", f"{KINDS[kind]}：{title[:40]}", by or "", 0, line_id=line_id)
+        self.town.trace("页面", f"{KINDS[kind]}：{title[:40]}", by, 0, line_id=line_id)
         return meta
 
     def remove(self, line_id: str, pid: str) -> None:

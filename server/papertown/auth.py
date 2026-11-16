@@ -1,13 +1,9 @@
-"""Who may open the town. On this machine you go straight in, as the TUI, the agents' pt and
-the macOS app always have. From anywhere else (a phone over Tailscale, another computer on
-the network) the page asks for the access password, which is set from this machine; until
-one is set, nothing but this machine gets in.
+"""Who may open the town: this machine goes straight in; other devices need the access password,
+which is set from this machine. "This machine" is a loopback request with no forwarding headers:
+`tailscale serve` and other reverse proxies connect from 127.0.0.1 too, but say whom they forward for.
 
-"This machine" is a request from a loopback address that no proxy passed along: `tailscale
-serve` and other reverse proxies connect from 127.0.0.1 too, but say whom they forward for.
-
-A login is a random token in an HttpOnly cookie; the server keeps only its hash, with the
-password's scrypt hash, in auth.json in the data directory:
+A login is a random token in an HttpOnly cookie; auth.json in the data directory keeps its hash and
+the password's scrypt hash:
 
     {"password": "scrypt$16384$8$1$<salt>$<hash>", "sessions": [{"id": "<sha256>", "at": ..., "seen": ..., "agent": ...}]}
 """
@@ -17,14 +13,13 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import os
 import secrets
 import threading
 import time
 from http.cookies import SimpleCookie
 from pathlib import Path
 
-from .db import now
+from .db import now, read_json, write_json
 
 COOKIE = "pt_session"
 DAYS = 30
@@ -40,8 +35,8 @@ class AuthError(Exception):
         self.status = status
 
 
-def _hash(password: str, salt: bytes | None = None) -> str:
-    salt = salt or secrets.token_bytes(16)
+def _hash(password: str) -> str:
+    salt = secrets.token_bytes(16)
     h = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32)
     return f"scrypt$16384$8$1${salt.hex()}${h.hex()}"
 
@@ -66,19 +61,10 @@ class Auth:
         self._fails: dict[str, list[float]] = {}
 
     def _read(self) -> dict:
-        try:
-            d = json.loads(self.path.read_text(encoding="utf-8"))
-            return d if isinstance(d, dict) else {}
-        except (OSError, ValueError):
-            return {}
+        return read_json(self.path, {})
 
     def _write(self, d: dict) -> None:
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        os.chmod(tmp, 0o600)
-        tmp.replace(self.path)
-
-    # ---------- who is asking ----------
+        write_json(self.path, d, mode=0o600)
 
     @staticmethod
     def local(scope: dict) -> bool:
@@ -92,7 +78,7 @@ class Auth:
                 c = SimpleCookie()
                 try:
                     c.load(v.decode("latin-1"))
-                except Exception:  # a cookie header we cannot read is no login
+                except Exception:
                     return None
                 return c[COOKIE].value if COOKIE in c else None
         return None
@@ -106,7 +92,7 @@ class Auth:
             d = self._read()
             for s in d.get("sessions") or []:
                 if hmac.compare_digest(s["id"], sid) and s.get("t", 0) > cut:
-                    if time.time() - s.get("seen_t", 0) > 3600:  # how recently it was used, coarsely
+                    if time.time() - s.get("seen_t", 0) > 3600:  # at most hourly, not a write per request
                         s["seen"], s["seen_t"] = now(), time.time()
                         self._write(d)
                     return True
@@ -117,14 +103,11 @@ class Auth:
 
     def state(self, scope: dict) -> dict:
         d = self._read()
-        local = self.local(scope)
-        out = {"local": local, "password": bool(d.get("password")), "authed": local or self.session(scope),
-               "signed_in": self.session(scope)}
+        local, signed = self.local(scope), self.session(scope)
+        out = {"local": local, "password": bool(d.get("password")), "authed": local or signed, "signed_in": signed}
         if out["authed"]:
             out["sessions"] = len(d.get("sessions") or [])
         return out
-
-    # ---------- the password ----------
 
     def set_password(self, scope: dict, new: str, old: str | None = None) -> None:
         if len(new) < MIN_LEN:
@@ -145,8 +128,6 @@ class Auth:
             raise AuthError(403, "只有在运行 Papertown 的这台电脑上才能取消密码")
         with self._lock:
             self._write({"sessions": []})
-
-    # ---------- signing in and out ----------
 
     def _who(self, scope: dict) -> str:
         for k, v in scope.get("headers") or []:
@@ -179,9 +160,10 @@ class Auth:
         tok = self.token(scope)
         if not tok:
             return
+        sid = _sid(tok)
         with self._lock:
             d = self._read()
-            d["sessions"] = [s for s in d.get("sessions") or [] if s["id"] != _sid(tok)]
+            d["sessions"] = [s for s in d.get("sessions") or [] if s["id"] != sid]
             self._write(d)
 
     def logout_all(self, scope: dict) -> int:
@@ -197,10 +179,10 @@ class Auth:
 
 
 class Gate:
-    """ASGI middleware: the API answers 401 to a request from elsewhere without a login. The
-    page itself (and its assets) is served to anyone, so it can show the sign-in."""
+    """ASGI middleware: the API answers 401 to a request from elsewhere without a login; the page
+    and its assets are served to anyone, so it can show the sign-in."""
 
-    OPEN = ("/api/auth/", "/api/health", "/api/bridge/")  # the bridge has its agents' tokens
+    OPEN = ("/api/auth/", "/api/health", "/api/bridge/")  # the bridge checks its agents' own tokens
 
     def __init__(self, app, auth: Auth):
         self.app = app

@@ -59,7 +59,7 @@ import uuid
 from urllib.parse import quote
 
 HERE = os.path.dirname(os.path.realpath(__file__))
-CLIP = 40000  # characters of an endpoint's answer
+CLIP = 40000
 # Papertown runs on this machine: never through a system proxy, which macOS hands urllib
 OPEN = urllib.request.build_opener(urllib.request.ProxyHandler({})).open
 
@@ -91,8 +91,8 @@ def call(path, body=None):
         except ValueError:
             detail = None
         sys.exit(detail or str(e))
-    except (urllib.error.URLError, OSError) as e:
-        if not os.path.isdir(os.path.join(HERE, "q")):  # only the assistant has a relay
+    except OSError as e:
+        if not os.path.isdir(os.path.join(HERE, "q")):
             sys.exit(f"连不上 Papertown（{url}）：{e}")
         return by_files(full, body, token)
 
@@ -160,8 +160,8 @@ def read(path):
 def main(a):
     if not a or a[0] in ("-h", "--help"):
         print(__doc__)
-    elif a[0] == "brief":
-        print(call("/brief" + (f"?line={quote(a[1])}" if len(a) > 1 else ""))["text"])
+    elif a[0] in ("brief", "status", "reports"):
+        print(call(f"/{a[0]}" + (f"?line={quote(a[1])}" if len(a) > 1 else ""))["text"])
     elif a[0] == "submit":
         if "--" not in a or a.index("--") < 2:
             sys.exit("用法：pt submit <name> [--backend local] -- <command>")
@@ -174,8 +174,6 @@ def main(a):
         print(call(f"/jobs/{a[1]}" if len(a) > 1 else "/jobs")["text"])
     elif a[0] == "rules":
         print(call("/rules")["text"])
-    elif a[0] in ("status", "reports"):
-        print(call(f"/{a[0]}" + (f"?line={quote(a[1])}" if len(a) > 1 else ""))["text"])
     elif a[0] == "worker":
         opts, rest = options(a[1:], many=(), flags=())
         if not rest:
@@ -202,11 +200,7 @@ def main(a):
         elif a[1] == "set" and len(a) > 2:
             raw = " ".join(a[2:]).strip()
             if not raw.startswith("{"):
-                try:
-                    with open(raw, encoding="utf-8") as f:
-                        raw = f.read()
-                except OSError as e:
-                    sys.exit(f"读不了 {raw}：{e}")
+                raw = read(raw)
             try:
                 card = json.loads(raw)
             except ValueError as e:

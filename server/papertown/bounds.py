@@ -1,32 +1,16 @@
-"""Work boundaries: what an agent must get done, must never do, and must ask you about first.
-
-They are set in three levels, each with an agent of its own:
-
-    全局 (global)    the console's assistant, which speaks for you to every project
-    项目 (project)   the project's lead, which keeps the project moving
-    员工 (worker)    one of the project's workers (the coder, the writer)
-
-A rule applies to the agent of its own level and, as its inheritance says, to the levels
-below: 继承 (yes) passes it down and lets a lower level switch it off for itself and what is
-under it; 不继承 (no) keeps it to its own level; 必须继承 (force) passes it down and nothing
-below can switch it off. A worker's rules are its own.
-
-Each agent reads its rules in its AGENTS.md and with `pt rules`; when they change, the agents
-whose rules changed get the new list. A never or ask rule may also name one of the actions
-that go through Papertown (sending another agent a message, submitting a job, ...): then
-Papertown itself refuses that action, or holds it until you allow it.
-
-    data/bounds.json                       the global level
-    data/projects/<project>/bounds.json    the project level, and its workers' under "workers"
+"""Work boundaries: what an agent must get done, must never do, and must ask you about first, set at the
+global (assistant), project (lead) and worker levels and passed down as each rule's inheritance says.
+Stored in data/bounds.json and data/projects/<project>/bounds.json (its workers' under "workers").
 """
 
 from __future__ import annotations
 
-import json
 import secrets
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from .db import read_json, write_json
 
 if TYPE_CHECKING:
     from .town import Town
@@ -35,10 +19,7 @@ KINDS = {"must": "必须完成", "never": "不能做", "ask": "需要询问"}
 INHERIT = {"yes": "继承", "no": "不继承", "force": "必须继承"}
 LEVELS = {"global": "全局", "project": "项目", "worker": "员工"}
 WORKERS = ("coder", "writer")
-# the agent of each level, by role
-LEVEL_OF = {"assistant": "global", "lead": "project", "coder": "worker", "writer": "worker"}
-
-# what a never or ask rule can name, so that Papertown refuses it or holds it for you
+# actions a never or ask rule can name; Papertown then refuses them or holds them for you
 ACTIONS = {
     "tell": "给别的 agent 发消息、派活",
     "answer": "替用户回答项目里的问题",
@@ -63,7 +44,7 @@ class BoundsError(Exception):
     pass
 
 
-def _clean(rules: object, level: str, known: dict[str, dict]) -> list[dict]:
+def _clean(rules: object, level: str, known: set[str]) -> list[dict]:
     """A level's rules as they are written down: checked, each with an id."""
     if not isinstance(rules, list):
         raise BoundsError("rules 要是一个列表")
@@ -75,7 +56,7 @@ def _clean(rules: object, level: str, known: dict[str, dict]) -> list[dict]:
             raise BoundsError("每一条要写成 {kind, text, inherit}")
         text = " ".join(str(r.get("text") or "").split())
         if not text:
-            continue  # an empty row in the editor is no rule
+            continue
         if len(text) > TEXT_MAX:
             raise BoundsError(f"一条最多 {TEXT_MAX} 个字：{text[:20]}…")
         kind = r.get("kind")
@@ -92,8 +73,8 @@ def _clean(rules: object, level: str, known: dict[str, dict]) -> list[dict]:
         rid = str(r.get("id") or "")
         if not rid.startswith("b_") or rid in known:  # ids are unique across the levels: a lower one switches off by id
             rid = f"b_{secrets.token_hex(4)}"
-        known[rid] = row = {"id": rid, "kind": kind, "text": text, "inherit": inherit, "action": action}
-        out.append(row)
+        known.add(rid)
+        out.append({"id": rid, "kind": kind, "text": text, "inherit": inherit, "action": action})
     return out
 
 
@@ -114,8 +95,6 @@ class Bounds:
         self.s = town.s
         self._lock = threading.Lock()
 
-    # ---------- the files ----------
-
     def _global_path(self) -> Path:
         return self.s.data_dir / "bounds.json"
 
@@ -124,21 +103,14 @@ class Bounds:
 
     @staticmethod
     def _read(p: Path) -> dict:
-        try:
-            d = json.loads(p.read_text(encoding="utf-8"))
-            return d if isinstance(d, dict) else {}
-        except (OSError, ValueError):
-            return {}
+        return read_json(p, {})
 
     def _write(self, p: Path, d: dict) -> None:
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        tmp.replace(p)
+        write_json(p, d)
 
     def levels(self, line_id: str | None = None) -> dict:
-        """What is written at each level: the global rules, and for a project its own, the
-        inherited ones it switched off, and the same for each of its workers."""
+        """What is written at each level: the global rules and, for a project, its own and each worker's with what they switched off."""
         g = self._read(self._global_path())
         out = {"global": {"rules": _norm(g.get("rules"), "global")}}
         if line_id:
@@ -149,11 +121,8 @@ class Bounds:
             out["workers"] = {w: {"rules": _norm((ws.get(w) or {}).get("rules"), "worker"), "off": off(ws.get(w) or {})} for w in WORKERS}
         return out
 
-    # ---------- what holds for an agent ----------
-
     def effective(self, role: str, line_id: str | None = None) -> list[dict]:
-        """The rules an agent of this role keeps, each with the level it comes from and whether
-        that level made it binding below (locked)."""
+        """The rules an agent of this role keeps, each with the level it comes from and whether it is locked."""
         lv = self.levels(line_id if role != "assistant" else None)
         top = [r | {"from": "global", "locked": False} for r in lv["global"]["rules"]]
         if role == "assistant":
@@ -171,9 +140,8 @@ class Bounds:
         return down + [r | {"from": "worker", "locked": False} for r in w["rules"]]
 
     def policy(self, role: str, line_id: str | None, action: str, default: str = "auto") -> tuple[str, dict | None]:
-        """Whether an agent may take one of the actions Papertown carries out: "never" (refused),
-        "ask" (held until you allow it), or the action's default; with the rule that decided."""
-        bound = [r for r in self.effective(role, line_id) if r.get("action") == action]
+        """Whether an agent may take an action Papertown carries out: "never", "ask" or `default`, with the rule that decided."""
+        bound = [r for r in self.effective(role, line_id) if r["action"] == action]
         for kind in ("never", "ask"):
             hit = next((r for r in bound if r["kind"] == kind), None)
             if hit:
@@ -193,7 +161,7 @@ class Bounds:
             out += ["", f"{name}："]
             for r in rows:
                 tail = [LEVELS[r["from"]]]
-                if r.get("action"):
+                if r["action"]:
                     tail.append(f"Papertown 会{'拦下' if kind == 'never' else '先问用户'}「{ACTIONS[r['action']]}」")
                 out.append(f"- {r['text']}（{'，'.join(tail)}）")
         if any(r["kind"] == "ask" for r in rules):
@@ -207,11 +175,9 @@ class Bounds:
         return ("\n## 工作边界\n\n用户在 Papertown 里分全局、项目、员工三层设定，下面是对你有效的。它们比这份说明里的其他要求优先；"
                 f"改了会发消息告诉你{again}。\n\n" + self.text(role, line_id, pt) + "\n")
 
-    # ---------- writing them ----------
-
     def save(self, line_id: str | None, role: str | None, rules: object, off: object = None) -> dict:
-        """Write one level: the global one, a project's (line_id), or one of its workers'
-        (line_id and role). The agents whose rules changed hear about it."""
+        """Write one level: the global one, a project's (line_id) or one of its workers' (line_id and role);
+        the agents whose rules changed hear about it."""
         if role and role not in WORKERS:
             raise BoundsError(f"员工这一层只有 {'、'.join(WORKERS)}")
         if role and not line_id or line_id and not self.town.db.one("select 1 from lines where id = ?", line_id):
@@ -221,15 +187,12 @@ class Bounds:
         with self._lock:
             before = self._snapshot(line_id)
             lv = self.levels(line_id)
-            known = {r["id"]: r for r in [*lv["global"]["rules"], *(lv.get("project") or {}).get("rules", []),
-                                          *[r for w in (lv.get("workers") or {}).values() for r in w["rules"]]]}
-            mine = {"global": lv["global"]["rules"], "project": (lv.get("project") or {}).get("rules", []),
-                    "worker": (lv.get("workers") or {}).get(role or "", {}).get("rules", [])}[level]
-            for r in mine:  # this level's own ids may stay
-                known.pop(r["id"], None)
+            every = [lv["global"], *([lv["project"], *lv["workers"].values()] if line_id else [])]
+            mine = lv["global"] if level == "global" else lv["project"] if level == "project" else lv["workers"][role]
+            known = {r["id"] for x in every for r in x["rules"]} - {r["id"] for r in mine["rules"]}
             clean = _clean(rules, level, known)
             above = self._above(lv, level)
-            off = [x for x in dict.fromkeys(off) if x in above]  # only what comes down marked 继承; a rule gone since is dropped
+            off = [x for x in dict.fromkeys(off) if x in above]
             if level == "global":
                 self._write(self._global_path(), {"rules": clean})
             else:
@@ -249,7 +212,7 @@ class Bounds:
         up = [r for r in lv["global"]["rules"] if r["inherit"] == "yes"]
         if level == "worker":
             up = [r for r in up if r["id"] not in lv["project"]["off"]] + [r for r in lv["project"]["rules"] if r["inherit"] == "yes"]
-        return {r["id"] for r in up} if level != "global" else set()
+        return {r["id"] for r in up}
 
     def _snapshot(self, line_id: str | None) -> dict[str, list[dict]]:
         """Every started agent the change can reach, with its rules now."""

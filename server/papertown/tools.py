@@ -1,8 +1,5 @@
-"""Tool registry shared by every agent. Each call is traced with its kind, which is what
-the trace panel and the status page count (RAG / MCP / SKILL / GRAPH / LLM ...).
-
-API names use underscores (provider tool names cannot contain dots); the trace shows
-the dotted label, e.g. library_search -> library.search.
+"""Tool registry shared by every worker agent; each call is traced with its kind and dotted label.
+API names use underscores since provider tool names cannot contain dots (library_search -> library.search).
 """
 
 from __future__ import annotations
@@ -26,8 +23,6 @@ class ToolCtx:
     town: "Town"
     run_id: str | None = None
     line_id: str | None = None
-    stage: str | None = None
-    worker: dict | None = None
     loaded: set[str] = field(default_factory=set)
 
 
@@ -76,6 +71,18 @@ def _count(v: Any) -> str:
     return "完成"
 
 
+def _label(t: Tool, args: dict) -> str:
+    """How a call shows in the trace."""
+    if t.name == "read_reference":
+        return f"{args.get('skill', '')}/{args.get('path', '')}"
+    if t.name == "run_script":
+        return f"{args.get('skill', '')}/scripts/{args.get('script', '')}"
+    if t.name == "load_skill":
+        return f"{args.get('name', '')}/SKILL.md"
+    a = args.get(t.arg) if t.arg else None
+    return f"{t.label}({short(a)})" if a not in (None, "") else t.label
+
+
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
@@ -89,9 +96,6 @@ class ToolRegistry:
     def has(self, name: str) -> bool:
         return name in self._tools
 
-    def get(self, name: str) -> Tool:
-        return self._tools[name]
-
     def names(self) -> list[str]:
         return list(self._tools)
 
@@ -99,25 +103,12 @@ class ToolRegistry:
         t = self._tools[name]
         return ToolSpec(t.name, t.description, t.schema)
 
-    def label(self, name: str, args: dict) -> str:
-        t = self._tools.get(name)
-        if not t:
-            return name
-        if name == "read_reference":
-            return f"{args.get('skill', '')}/{args.get('path', '')}"
-        if name == "run_script":
-            return f"{args.get('skill', '')}/scripts/{args.get('script', '')}"
-        if name == "load_skill":
-            return f"{args.get('name', '')}/SKILL.md"
-        a = args.get(t.arg) if t.arg else None
-        return f"{t.label}({short(a)})" if a not in (None, "") else t.label
-
     def call(self, ctx: ToolCtx, name: str, args: dict) -> tuple[str, Any, bool]:
         """Run a tool for an agent. Returns (content for the model, value, is_error)."""
         t = self._tools.get(name)
-        t0 = time.monotonic()
         if not t:
             return f"没有 {name} 这个工具", None, True
+        t0 = time.monotonic()
         try:
             value = t.fn(ctx, args)
             err = False
@@ -127,7 +118,7 @@ class ToolRegistry:
         except Exception as e:  # network, subprocess timeouts ... reported to the model, not raised
             value, err, summary = None, True, f"出错：{type(e).__name__} {e}"
         ms = int((time.monotonic() - t0) * 1000)
-        ctx.town.trace(t.kind, self.label(name, args), summary, ms, run_id=ctx.run_id, line_id=ctx.line_id)
+        ctx.town.trace(t.kind, _label(t, args), summary, ms, run_id=ctx.run_id, line_id=ctx.line_id)
         if err:
             return summary, None, True
         content = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
@@ -136,13 +127,11 @@ class ToolRegistry:
         return content, value, False
 
 
-# ---------- skill tools: progressive disclosure ----------
-
 def _load_skill(ctx: ToolCtx, a: dict) -> str:
     sk = ctx.town.skills.get(a["name"])
     ctx.loaded.add(sk.name)
-    extra = [f"references: {', '.join(sk.files('references'))}" if sk.files("references") else "",
-             f"scripts: {', '.join(sk.files('scripts'))}" if sk.files("scripts") else ""]
+    refs, scripts = sk.files("references"), sk.files("scripts")
+    extra = [f"references: {', '.join(refs)}" if refs else "", f"scripts: {', '.join(scripts)}" if scripts else ""]
     return "\n".join([sk.body, *[x for x in extra if x]])
 
 
@@ -162,6 +151,7 @@ def _run_script(ctx: ToolCtx, a: dict) -> Any:
 
 
 def register_skill_tools(reg: ToolRegistry) -> None:
+    """The skill tools: a skill's body, references and scripts are loaded only when the agent asks."""
     reg.add(Tool("load_skill", "load_skill", "SKILL", "读取一个 skill 的完整说明（SKILL.md 正文），以及它附带的 references 和 scripts 列表。",
                  obj(["name"], name=s("skill 名称")), _load_skill, lambda v: "加载 SKILL.md"))
     reg.add(Tool("read_reference", "read_reference", "SKILL", "读取已加载 skill 的参考文件，例如 references/rubric.md。",

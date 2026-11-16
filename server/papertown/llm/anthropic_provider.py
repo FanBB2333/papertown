@@ -1,8 +1,4 @@
-"""Claude through the official anthropic SDK, with a manual tool-use loop driven by agent.py.
-
-Credentials come from the environment (ANTHROPIC_API_KEY, or an `ant auth login`
-profile). Server-side refusal fallback is on for the models that support it.
-"""
+"""Claude through the official anthropic SDK; credentials come from ANTHROPIC_API_KEY or an `ant auth login` profile."""
 
 from __future__ import annotations
 
@@ -38,7 +34,6 @@ class AnthropicProvider(Provider):
                         {"type": "tool_use", "id": c.id, "name": c.name, "input": c.args} for c in t.calls]
                 out.append({"role": "assistant", "content": content})
             else:
-                # all results of one assistant turn go back in a single user message
                 out.append({"role": "user", "content": [
                     {"type": "tool_result", "tool_use_id": r.call_id, "content": r.content, "is_error": r.is_error}
                     for r in t.results]})

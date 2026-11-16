@@ -1,7 +1,5 @@
-"""`papertown` in a terminal: the town's console, as the web page has it, driven by the keyboard.
-
-It talks to the server over the same API the page uses (PAPERTOWN_URL, or --server); when nothing
-answers there on this machine, it starts `papertown serve` for as long as it runs."""
+"""`papertown` in a terminal: the town's console, driven by the keyboard. It talks to the server's API
+(PAPERTOWN_URL, or --server) and starts `papertown serve` itself when nothing answers on this machine."""
 
 from __future__ import annotations
 

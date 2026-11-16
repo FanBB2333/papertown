@@ -1,6 +1,5 @@
-"""员工: the town's departments and what each is doing, and the agents you plugged in (the code and
-writing staff of each project), with their conversation: what you said, what they answered (as it
-streams in), the tools they ran, and what they ask permission for."""
+"""员工: the town's departments and what each is doing, and each project's agents with their
+conversation as it streams in, the tools they ran and what they ask permission for."""
 
 from __future__ import annotations
 
@@ -10,20 +9,20 @@ from rich.console import Group
 from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
-from textual import on, work
+from textual import events, on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable
 
-from ..anim import breathe, gleam, mix, star
+from ..anim import gleam
 from ..client import ApiError
-from ..look import AGENT, DEPT, JOB, LINE, WORKER, clip, doing, line_mark, money
+from ..look import AGENT, DEPT, JOB, LINE, WORKER, busy_mark, clip, doing, line_mark, money, wait_mark
 from ..widgets import Confirm, Pane, Place, row_key, sync_rows, transcript, writing
 
 
 class Staff(Place):
-    key, title, animated = "staff", "员工", True
+    key, title = "staff", "员工"
     BINDINGS = [
         Binding("s", "say", "对它说"), Binding("b", "brief", "发简报"), Binding("S", "start", "启动"), Binding("x", "stop", "停下"),
         Binding("exclamation_mark", "abort", "打断"), Binding("y", "permit(True)", "允许", show=False), Binding("N", "permit(False)", "拒绝", show=False),
@@ -31,12 +30,12 @@ class Staff(Place):
 
     def __init__(self) -> None:
         super().__init__(id="staff")
-        self.sel: tuple[str, str] | None = None  # ("dept" | "agent", id)
+        self.sel: tuple[str, str] | None = None
         self.timeline: dict | None = None
         self.roster: list[dict] = []
         self._polled = 0.0
-        self._tx: tuple[Any, list[Any]] = (None, [])  # the conversation as drawn, kept until it changes (Markdown is slow to build)
-        self._shown: tuple[str, str] | None = None  # what the detail pane shows now
+        self._tx: tuple[Any, list[Any]] = (None, [])  # the drawn conversation, cached: Markdown is slow to build
+        self._shown: tuple[str, str] | None = None
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -64,16 +63,16 @@ class Staff(Place):
     def dept_mark(self, d: dict, t: float) -> Text:
         p = self.pal
         if d.get("state") == "busy":
-            return Text(star(t), style=f"bold {p['run']}")
+            return busy_mark(t, p)
         if d.get("state") == "wait":
-            return Text("◐", style=f"bold {mix(p['warn'], p['hi'], breathe(t) * 0.6)}")
+            return wait_mark(t, p)
         return Text("·", style=p["faint"])
 
     def agent_mark(self, a: dict, t: float) -> Text:
         p = self.pal
         working = a.get("status") in ("working", "running") or a["id"] in self.town.streaming
         if working:
-            return Text(star(t), style=f"bold {p['run']}")
+            return busy_mark(t, p)
         return Text("●" if a.get("started") else "○", style=p["ok"] if a.get("started") else p["faint"])
 
     async def load(self) -> None:
@@ -94,7 +93,7 @@ class Staff(Place):
         try:
             if kind == "agent":
                 tl = await self.town.api.get(f"/api/agents/{key}/timeline", limit=200)
-                if tl == self.timeline and self._shown == self.sel:  # read again every few seconds: nothing new, nothing to redraw
+                if tl == self.timeline and self._shown == self.sel:
                     return
                 self.timeline = tl
             elif key == "market":
@@ -113,8 +112,8 @@ class Staff(Place):
         if self.query_one("#st-agents", DataTable).has_focus:
             self.pick(("agent", e.row_key.value or ""))
 
-    def on_descendant_focus(self, e: Any) -> None:
-        w = getattr(e, "widget", None)
+    def on_descendant_focus(self, e: events.DescendantFocus) -> None:
+        w = e.widget
         if isinstance(w, DataTable) and w.id in ("st-depts", "st-agents"):
             key = row_key(w)
             if key:
@@ -133,8 +132,6 @@ class Staff(Place):
         await self.load_detail()
 
     def paint_detail(self) -> None:
-        if not self.sel:
-            return
         self._shown = self.sel
         if self.sel[0] == "agent":
             self.paint_agent()
@@ -143,7 +140,7 @@ class Staff(Place):
 
     def paint_dept(self, layout: bool = True) -> None:
         p, t = self.pal, self.town.t
-        d = next((x for x in self.town.depts if x["id"] == self.sel[1]), None) if self.sel else None
+        d = next((x for x in self.town.depts if x["id"] == self.sel[1]), None)
         if not d:
             return
         head = Text()
@@ -177,13 +174,13 @@ class Staff(Place):
                 tb.add_row(w["id"], w.get("role", ""), f"Lv.{w.get('level')}", WORKER.get(w.get("status") or "", w.get("status") or ""), str(w.get("runs", 0)),
                            f"{w.get('trailing_roi') or 0:.1f}")
             parts.append(tb)
-        parts += [Text(), Text.assemble(("i", f"bold {self.pal['brand']}"), (" 在底下的框里问这个部门", self.pal["faint"]))]
+        parts += [Text(), Text.assemble(("i", f"bold {p['brand']}"), (" 在底下的框里问这个部门", p["faint"]))]
         self.query_one("#st-detail", Pane).show(Padding(Group(*parts), (0, 1)), layout=layout)
 
     def paint_agent(self, layout: bool = True) -> None:
         p, t = self.pal, self.town.t
         tl = self.timeline or {}
-        a = tl.get("agent") or next((x for x in self.agents() if self.sel and x["id"] == self.sel[1]), None) or {}
+        a = tl.get("agent") or next((x for x in self.agents() if x["id"] == self.sel[1]), None) or {}
         if not a:
             return
         head = Text()
@@ -229,7 +226,7 @@ class Staff(Place):
                 except Exception:
                     pass
         if self.sel and self.sel[0] == "agent":
-            if self.sel[1] in self.town.streaming:  # its words grow; otherwise the page only changes when it is read again
+            if self.sel[1] in self.town.streaming:
                 self.paint_agent()
             if t - self._polled > 5:
                 self._polled = t
@@ -247,17 +244,15 @@ class Staff(Place):
             if aid == self.sel[1]:
                 self.fetch()
 
-    # ---------- doing things ----------
-
     def agent(self) -> dict | None:
         if self.sel and self.sel[0] == "agent":
             return (self.timeline or {}).get("agent") or next((a for a in self.agents() if a["id"] == self.sel[1]), None)
         return None
 
     def hints(self) -> list[tuple[str, str]]:
-        if self.agent():
+        if a := self.agent():
             out = [("s", "对它说"), ("b", "发简报"), ("x", "停下"), ("!", "打断")]
-            if not (self.agent() or {}).get("started"):
+            if not a.get("started"):
                 out.insert(0, ("S", "启动"))
             if ((self.timeline or {}).get("paseo") or {}).get("permissions"):
                 out += [("y", "允许"), ("N", "拒绝")]
@@ -272,9 +267,7 @@ class Staff(Place):
 
     def action_say(self) -> None:
         if self.agent():
-            self.town.retarget()
-            self.town.target_i = next((i for i, x in enumerate(self.town.targets) if x.kind == "say"), 0)
-            self.town.action_compose()
+            self.town.aim("say", default=0)
 
     async def _post(self, path: str, done: str, body: Any = None) -> None:
         try:

@@ -1,19 +1,9 @@
-"""Demo samples: a handful of example papers for the offline demo, so the town has
-something on its lines the first time it is opened.
-
-Each sample is an ordinary idea put through the ordinary pipeline. One runs all the way
-to a shipped paper; the others are parked before different stages (the line's `hold`),
-so the mill, the farm and the press each show a paper part way along; the last is left
-waiting at the hatchery for you to decide. The ideas sit on the topics the seed library
-covers, so the hatchery's survey and the paper's references come from real papers.
-
-The library shelf (topics and cards) lives here too: the seed file says which query each
-seed paper was found by, and that is the topic it is shelved under.
+"""Demo samples for the offline town: ordinary ideas put through the ordinary pipeline, each parked before a
+different stage. Also the library shelf, which files each seed paper under the query that found it.
 """
 
 from __future__ import annotations
 
-import json
 import threading
 import time
 from functools import lru_cache
@@ -113,18 +103,10 @@ def maybe_seed(town: "Town") -> None:
         seed(town)
 
 
-# ---------- the library shelf ----------
-
 @lru_cache(maxsize=1)
 def _seed_topics() -> dict[str, str]:
-    from .town import SEED
-    out = {}
-    if SEED.exists():
-        for line in SEED.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                p = json.loads(line)
-                out[p["arxiv_id"]] = TOPICS.get(p.get("seed_query", ""), OTHER)
-    return out
+    from .town import seed_papers
+    return {p["arxiv_id"]: TOPICS.get(p.get("seed_query", ""), OTHER) for p in seed_papers()}
 
 
 def shelf(town: "Town", q: str = "", topic: str = "", limit: int = 60) -> dict:
@@ -150,9 +132,9 @@ def shelf(town: "Town", q: str = "", topic: str = "", limit: int = 60) -> dict:
 
 
 def papers_of(town: "Town", line_id: str) -> dict:
-    """What a paper read and cites: the hatchery's survey (closest first, each with how close
-    and why) and the references the press put in its bibliography."""
-    if town.linked.of(line_id):  # a project of your own: what its .bib cites
+    """What a paper read and cites: the hatchery's survey (closest first, each with how close and why) and the
+    references the press put in its bibliography, or for a linked project of your own what its .bib cites."""
+    if town.linked.of(line_id):
         return {"survey": [], "references": town.linked.references(line_id)}
     report = town.pipeline.item(line_id, "hatch") or {}
     tex = town.pipeline.item(line_id, "write") or {}

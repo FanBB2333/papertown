@@ -1,24 +1,7 @@
 /**
- * Papertown bridge: mirrors this pi session into the Papertown web app and lets the app
- * talk to it. The server starts pi inside a tmux session with `pi -e bridge.ts`, so the
- * same conversation can be followed in the terminal (`tmux -L papertown attach`) and in
- * the browser at the same time.
- *
- * Built only on pi's public extension API, the way the examples shipped with pi do it
- * (examples/extensions/file-trigger.ts and send-user-message.ts):
- *   - pi.on(...) events are batched and posted to the server
- *   - messages typed in the app are long-polled from the server and injected with
- *     pi.sendUserMessage(), as a follow-up while pi is busy
- *   - pi.registerTool() adds the Papertown tools (project brief; job submission for coders;
- *     for the console's assistant: the page you look at, reading, asking, showing and doing)
- *   - the model, thinking level, session and context usage are reported as `state`, and
- *     slash commands typed in the app arrive as `cmd`: the ones pi's extension API can do
- *     (model, thinking, compact, new, clone, name, session, reload) run here; extension
- *     commands, skills and prompt templates go through pi's own expansion. The rest of
- *     pi's built-in commands need its terminal UI, so the server types them into tmux.
- *
- * Environment (set by the server): PAPERTOWN_URL, PAPERTOWN_AGENT, PAPERTOWN_AGENT_TOKEN,
- * PAPERTOWN_AGENT_ROLE. Without them the extension does nothing.
+ * Papertown bridge, a pi extension (`pi -e bridge.ts`, started by the server in tmux): it mirrors the
+ * session into the web app, injects the messages and slash commands typed there, and registers the
+ * Papertown tools for the agent's role. Configured by the PAPERTOWN_* variables the server sets.
  */
 
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -81,6 +64,8 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		return body;
 	}
 
+	const post = (path: string, body: unknown) => call(path, { method: "POST", body: JSON.stringify(body) });
+
 	function send(ev: Ev) {
 		queue.push(ev);
 		void flush();
@@ -92,9 +77,8 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		const batch = queue;
 		queue = [];
 		try {
-			await call("/events", { method: "POST", body: JSON.stringify({ events: batch }) });
+			await post("/events", { events: batch });
 		} catch {
-			// server away: keep the newest events and try again shortly
 			queue = batch.concat(queue).slice(-400);
 			clearTimeout(retry);
 			retry = setTimeout(() => {
@@ -196,7 +180,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 				const m = findModel(args);
 				if (!m) return note(`没有找到可用的模型「${args}」。没登录的供应商要先在终端里 /login。`, true);
 				if (!(await pi.setModel(m))) return note(`${m.provider} 还没有配置登录或 key，先在终端里 /login。`, true);
-				return; // model_select reports it
+				return;
 			}
 			case "thinking": {
 				if (!args) return note(`思考强度：${pi.getThinkingLevel()}（可选 ${levelsOf(ctx.model).join(" / ")}）`);
@@ -223,7 +207,6 @@ export default function papertownBridge(pi: ExtensionAPI) {
 				// these replace or reload the session, which pi only allows from a command
 				return void pi.sendUserMessage(`/papertown ${name}`, { expandPromptTemplates: true });
 			default:
-				// extension commands, /skill:name and prompt templates, expanded by pi itself
 				return void pi.sendUserMessage(`/${name}${args ? ` ${args}` : ""}`, ctx.isIdle()
 					? { expandPromptTemplates: true }
 					: { expandPromptTemplates: true, deliverAs: "followUp" });
@@ -266,7 +249,6 @@ export default function papertownBridge(pi: ExtensionAPI) {
 			return;
 		}
 		if (!m.text) return;
-		// while pi works a message either steers what it is doing or waits until it is done
 		const idle = ctx?.isIdle() ?? true;
 		const steer = m.mode === "steer";
 		void pi.sendUserMessage(m.text, idle ? undefined : { deliverAs: steer ? "steer" : "followUp" });
@@ -283,7 +265,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 				if (stopped) break; // the session was replaced while this poll was out
 				if (!online) {
 					online = true;
-					hello(); // also after the server restarts
+					hello();
 				}
 				for (const m of messages ?? []) deliver(m);
 			} catch {
@@ -358,7 +340,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		state();
 	});
 
-	// changes made in the terminal (/model, Ctrl+P, /thinking, /name, /compact) show up in the app too
+	// changes made in the terminal show up in the app too
 	pi.on("model_select", async (e, c) => {
 		ctx = c;
 		if (e.source !== "restore") note(`模型换成 ${e.model.provider}/${e.model.id}。`);
@@ -384,10 +366,10 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		await flush();
 	});
 
-	// the console's assistant: the page you are looking at, any endpoint to read, and asking you,
-	// showing you and doing for you (each action waits for you to allow it in the sidebar)
+	const text = (t: string, details?: unknown) => ({ content: [{ type: "text" as const, text: t }], details });
+
+	// the console's assistant's tools
 	if (ROLE === "assistant") {
-		const text = (t: string, details?: unknown) => ({ content: [{ type: "text" as const, text: t }], details });
 		pi.registerTool({
 			name: "papertown_page",
 			label: "The user's page",
@@ -434,7 +416,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 				point: Type.Optional(Type.Boolean({ description: "Ask them to point at the page" })),
 			}),
 			async execute(_id, params) {
-				const r = await call("/ask", { method: "POST", body: JSON.stringify(params) });
+				const r = await post("/ask", params);
 				return text(r.text, r);
 			},
 		});
@@ -451,7 +433,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 				ref: Type.Optional(Type.String()),
 			}),
 			async execute(_id, params) {
-				const r = await call("/show", { method: "POST", body: JSON.stringify(params) });
+				const r = await post("/show", params);
 				return text(r.text, r);
 			},
 		});
@@ -476,7 +458,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 				why: Type.String({ description: "Why, in a sentence the user reads on the card" }),
 			}),
 			async execute(_id, params) {
-				const r = await call("/act", { method: "POST", body: JSON.stringify({ ...params, args: params.args ?? {} }) });
+				const r = await post("/act", { ...params, args: params.args ?? {} });
 				return text(r.text, r);
 			},
 		});
@@ -491,7 +473,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		parameters: Type.Object({}),
 		async execute() {
 			const b = await call("/brief");
-			return { content: [{ type: "text", text: b.text }], details: b };
+			return text(b.text, b);
 		},
 	});
 
@@ -509,11 +491,8 @@ export default function papertownBridge(pi: ExtensionAPI) {
 			backend: Type.Optional(Type.String({ description: "local (default). nvidb is not connected yet." })),
 		}),
 		async execute(_id, params) {
-			const j = await call("/jobs", { method: "POST", body: JSON.stringify(params) });
-			return {
-				content: [{ type: "text", text: `Submitted ${j.id} (${j.name}) to ${j.backend}; status ${j.status}. Check it with papertown_job_status.` }],
-				details: j,
-			};
+			const j = await post("/jobs", params);
+			return text(`Submitted ${j.id} (${j.name}) to ${j.backend}; status ${j.status}. Check it with papertown_job_status.`, j);
 		},
 	});
 
@@ -524,7 +503,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		parameters: Type.Object({ job_id: Type.Optional(Type.String({ description: "Job id from papertown_submit_job" })) }),
 		async execute(_id, params) {
 			const r = await call(params.job_id ? `/jobs/${encodeURIComponent(params.job_id)}` : "/jobs");
-			return { content: [{ type: "text", text: r.text }], details: r };
+			return text(r.text, r);
 		},
 	});
 }

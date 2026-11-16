@@ -1,22 +1,13 @@
-"""What the console's assistant and the projects' leads start on in Paseo, and the models Paseo
-offers that you have not been told about yet.
-
-The defaults are chosen in the settings page from what Paseo lists and kept in data/paseo.json;
-until one is chosen, PAPERTOWN_ASSISTANT_MODEL and PAPERTOWN_LEAD_MODEL (provider/model@thinking)
-say. Every so often (PAPERTOWN_PASEO_WATCH seconds) Papertown reads Paseo's list again, and also
-whenever a page asks for it: a model that was not there before, from a provider Papertown already
-knew, is news, and the console asks you whether the assistant or the leads should switch to it.
-The first reading only learns what is there; so does the first reading of a provider that became
-available later, or that listed no models before.
+"""The Paseo model the console's assistant and the projects' leads start on (kept in data/paseo.json,
+else PAPERTOWN_ASSISTANT_MODEL / PAPERTOWN_LEAD_MODEL), and the models Paseo newly offers as news.
 """
 
 from __future__ import annotations
 
-import json
 import threading
 from typing import TYPE_CHECKING
 
-from .db import now
+from .db import now, read_json, write_json
 
 if TYPE_CHECKING:
     from .town import Town
@@ -43,21 +34,13 @@ class PaseoModels:
         return self.town.agents.paseo
 
     def _read(self) -> dict:
-        try:
-            d = json.loads(self._path.read_text(encoding="utf-8"))
-            return d if isinstance(d, dict) else {}
-        except (OSError, ValueError):
-            return {}
+        return read_json(self._path, {})
 
     def _write(self, d: dict) -> None:
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        tmp.replace(self._path)
+        write_json(self._path, d)
 
     def _publish(self) -> None:
         self.town.bus.publish("paseo_models", defaults=self.defaults(), news=self.news())
-
-    # ---------- the defaults ----------
 
     def default(self, role: str) -> dict:
         """The provider, model and thinking an agent of this role starts with when none is picked."""
@@ -71,8 +54,7 @@ class PaseoModels:
         return {r: self.default(r) | {"set": bool((saved.get(r) or {}).get("provider"))} for r in ROLES}
 
     def set_default(self, role: str, provider: str | None, model: str | None = None, thinking: str | None = None) -> dict:
-        """Choose what an agent of this role starts with, from what Paseo lists; no provider goes
-        back to the environment's setting."""
+        """Choose what an agent of this role starts with, from what Paseo lists; no provider goes back to the environment's."""
         if role not in ROLES:
             raise ModelError(f"只有 {'、'.join(ROLES)} 有默认模型")
         provider, model, thinking = (provider or "").strip(), (model or "").strip() or None, (thinking or "").strip() or None
@@ -100,28 +82,26 @@ class PaseoModels:
         self._publish()
         return self.defaults()
 
-    # ---------- models Paseo started offering ----------
-
     def news(self) -> list[dict]:
         return self._read().get("news") or []
 
     def learn(self, providers: list[dict]) -> list[dict]:
-        """Take in a reading of Paseo's list; the models new since the last one are kept as news."""
+        """Take in a reading of Paseo's list; models new since the last one, from a provider already known, are kept as news."""
         added = []
         with self._lock:
             d = self._read()
             first = "seen" not in d
             seen, known = set(d.get("seen") or []), set(d.get("providers") or [])
             for p in providers:
-                for m in p.get("models") or []:
+                for m in p["models"]:
                     key = f"{p['id']}/{m['id']}"
                     if key in seen:
                         continue
                     seen.add(key)
                     if not first and p["id"] in known:
-                        added.append({"key": key, "provider": p["id"], "label": p.get("label") or p["id"], "model": m["id"], "name": m.get("name") or m["id"],
-                                      "thinking": m.get("thinking") or [], "default_thinking": m.get("default_thinking"), "at": now()})
-                if p.get("models"):  # a provider that listed nothing (still loading, timed out) is learned next time
+                        added.append({"key": key, "provider": p["id"], "label": p["label"], "model": m["id"], "name": m["name"],
+                                      "thinking": m["thinking"], "default_thinking": m["default_thinking"], "at": now()})
+                if p["models"]:  # a provider that listed nothing (still loading, timed out) is learned next time
                     known.add(p["id"])
             if first or added or len(seen) != len(d.get("seen") or []) or known != set(d.get("providers") or []):
                 d |= {"seen": sorted(seen), "providers": sorted(known), "news": ((d.get("news") or []) + added)[-NEWS_MAX:]}
@@ -141,11 +121,9 @@ class PaseoModels:
 
     def check(self) -> list[dict]:
         """Read Paseo's list afresh and learn from it; nothing when Paseo is not there."""
-        if not self.paseo.bin or not self.paseo.status(fresh=True)["ok"]:
+        if not self.paseo.status(fresh=True)["ok"]:
             return []
         return self.learn(self.paseo.providers(fresh=True))
-
-    # ---------- reading Paseo now and then ----------
 
     def start(self) -> None:
         if self._thread or not self.s.paseo_watch or not self.paseo.bin:
@@ -159,7 +137,7 @@ class PaseoModels:
         self._thread = None
 
     def _loop(self) -> None:
-        wait = 15  # a little after starting, then every so often
+        wait = 15
         while not self._halt.wait(wait):
             wait = self.s.paseo_watch
             try:

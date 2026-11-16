@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-from .db import DB, now
+from .db import DB, now, week_ago
 from .events import EventBus
 from .llm import Usage, cost
 
@@ -28,12 +26,11 @@ class Bank:
         return c
 
     def line_spent(self, line_id: str) -> float:
-        return self.db.val("select coalesce(sum(cost), 0) from ledger where line_id = ?", line_id) or 0.0
+        return self.db.val("select coalesce(sum(cost), 0.0) from ledger where line_id = ?", line_id)
 
     def summary(self) -> dict:
-        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(timespec="seconds")
         r = self.db.one("select count(*) as calls, coalesce(sum(cost), 0) as spent, coalesce(sum(tokens_in), 0) as tin,"
-                        " coalesce(sum(tokens_out), 0) as tout from ledger where ts >= ?", since)
+                        " coalesce(sum(tokens_out), 0) as tout from ledger where ts >= ?", week_ago())
         return {"week": round(r["spent"], 4), "budget": self.weekly_budget, "calls": r["calls"],
                 "tokens_in": r["tin"], "tokens_out": r["tout"]}
 

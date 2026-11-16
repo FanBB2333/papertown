@@ -1,7 +1,5 @@
-"""任务: the experiment farm's jobs and the ones a linked project has in nvidb's queue, to look
-through, follow, submit and cancel. Jobs are run by the farm's local executor; nvidb's are read here
-with `nvidb job ls / show / logs --no-tick` and only shown (they are submitted and scheduled with
-`nvidb` itself)."""
+"""任务: the experiment farm's jobs, to follow, submit and cancel, beside the linked projects' jobs in
+nvidb's queue, which are read here with `--no-tick` and only shown."""
 
 from __future__ import annotations
 
@@ -22,12 +20,13 @@ from ..anim import bar, clock, dur, gleam, parse_ts, seconds_since
 from ..client import ApiError
 from ..look import BACKEND, JOB, clip, job_mark, job_state
 from ..widgets import Bar, Confirm, Form, Pane, Place, Prompt, row_key, sync_rows
+from . import cycle
 
 STATES = [("all", "全部"), ("running", "在跑"), ("queued", "排队"), ("done", "完成"), ("failed", "失败"), ("cancelled", "已取消")]
 
 
 class Jobs(Place):
-    key, title, animated = "jobs", "任务", True
+    key, title = "jobs", "任务"
     BINDINGS = [
         Binding("f", "state", "状态"), Binding("b", "backend", "后端"), Binding("p", "project", "项目"), Binding("slash", "search", "搜索"),
         Binding("n", "submit", "提交"), Binding("x", "cancel", "取消"), Binding("R", "again", "再跑一次"), Binding("l", "follow", "跟日志"),
@@ -56,17 +55,15 @@ class Jobs(Place):
         t = self.query_one("#jb-table", DataTable)
         for k, label, w in [("mark", "", 1), ("name", "任务", 30), ("line", "项目", 4), ("backend", "后端", 6), ("pct", "进度", 11), ("age", "时间", 8)]:
             t.add_column(label, key=k, width=w)
-        self.set_interval(10, self.refresh_list)  # nvidb's jobs change without telling the town
+        self.set_interval(10, self.refresh_list)  # nvidb's jobs change without an event
 
     async def load(self) -> None:
         try:
-            r = await self.town.api.get("/api/jobs", external="false")  # the farm's own; nvidb's are read here
+            r = await self.town.api.get("/api/jobs", external="false")
         except ApiError:
             return
-        own = [j for j in r.get("jobs", []) if not j.get("external")]  # a server from before external=false still sends them
-        self.backends = r.get("backends", [])
-        # the farm's at once, with nvidb's last reading; then nvidb's as read now. The first time there is no
-        # last reading: wait for both, or the cursor would settle on a farm job before nvidb's running ones come in
+        own, self.backends = r["jobs"], r["backends"]
+        # the first load waits for nvidb too, so the cursor does not settle on a farm job before nvidb's running ones
         last = [j for j in self.jobs if j.get("backend") == "nvidb"]
         if last:
             self.jobs = last + own
@@ -74,7 +71,7 @@ class Jobs(Place):
         self.jobs = await self.town.local.nvidb_jobs(self.town.lines) + own
         self.paint_list()
         table = self.query_one("#jb-table", DataTable)
-        if self.sel is None and table.row_count:  # the top row once the whole list is in: what runs comes first
+        if self.sel is None and table.row_count:
             table.move_cursor(row=0)
             self.sel = row_key(table)
         if self.sel:
@@ -102,8 +99,8 @@ class Jobs(Place):
         return sorted(out, key=lambda j: (order.get(job_state(j.get("status")), 2), -(parse_ts(j.get("created_at")) or parse_ts("1970-01-01")).timestamp()))
 
     def seq(self, line_id: str | None) -> str:
-        ln = next((x for x in self.town.lines if x["id"] == line_id), None)
-        return f"#{ln['seq']}" if ln else "—"
+        seq = self.town.line_seq(line_id)
+        return f"#{seq}" if seq is not None else "—"
 
     def rows(self) -> list[tuple[str, tuple]]:
         p, t = self.pal, self.town.t
@@ -144,8 +141,7 @@ class Jobs(Place):
             if job_state(j.get("status")) == "running" and j["id"] in table.rows:
                 table.update_cell(j["id"], "mark", job_mark("running", t, self.pal))
         if self.detail and job_state(self.detail.get("status")) == "running":
-            self.paint_head(layout=False)  # only the lines that move: the command and the log stay as drawn
-            # a running job's log, followed every couple of seconds (nvidb's every few: it is two commands)
+            self.paint_head(layout=False)
             if self.follow and t - self._polled > (5 if str(self.detail["id"]).startswith("nvidb-") else 2):
                 self._polled = t
                 self.fetch(self.detail["id"])
@@ -177,7 +173,7 @@ class Jobs(Place):
 
     async def load_detail(self, job_id: str) -> None:
         try:
-            if job_id.startswith("nvidb-"):  # `nvidb job show` and `nvidb job logs`, both --no-tick
+            if job_id.startswith("nvidb-"):
                 self.detail = await self.town.local.nvidb_job(int(job_id.removeprefix("nvidb-")), self.town.lines)
             else:
                 self.detail = await self.town.api.get(f"/api/jobs/{job_id}", tail=200)
@@ -236,7 +232,7 @@ class Jobs(Place):
             parts.append(Text(f"nvidb #{nv.get('id', '')} · {where} · 显存 {nv.get('vram_mb') or 0}MB", style=p["muted"]))
             if nv.get("held_reason"):
                 parts.append(Text(f"挂起：{nv['held_reason']}", style=p["warn"]))
-            for e in (nv.get("events") or [])[-6:]:  # what `nvidb job show` says happened to it
+            for e in (nv.get("events") or [])[-6:]:
                 parts.append(Text.assemble((f"  {clock(e.get('ts'))} ", p["faint"]), (f"{e.get('kind', '')} ", p["info"]), (clip(e.get("message"), 90), p["muted"])))
             parts.append(Text("nvidb 只读：调度请用 nvidb queue / nvidb job", style=p["faint"]))
         parts += [Text(), Text("命令", style=f"bold {p['ink']}")]
@@ -254,8 +250,6 @@ class Jobs(Place):
         if st == "running" and self.follow:
             pane.scroll_end(animate=False)
 
-    # ---------- doing things ----------
-
     def hints(self) -> list[tuple[str, str]]:
         out = [("f", "状态"), ("b", "后端"), ("p", "项目"), ("/", "搜索"), ("n", "提交")]
         st = job_state((self.detail or {}).get("status"))
@@ -271,8 +265,7 @@ class Jobs(Place):
         return {"line": (self.detail or {}).get("line_id"), "building": "farm"}
 
     def action_state(self) -> None:
-        keys = [k for k, _ in STATES]
-        self.state = keys[(keys.index(self.state) + 1) % len(keys)]
+        self.state = cycle(STATES, self.state, 1)
         self.paint_list()
 
     def action_backend(self) -> None:
@@ -281,7 +274,7 @@ class Jobs(Place):
         self.paint_list()
 
     def action_project(self) -> None:
-        keys = ["all", *sorted({j["line_id"] for j in self.jobs if j.get("line_id")}, key=lambda x: self.seq(x))]
+        keys = ["all", *sorted({j["line_id"] for j in self.jobs if j.get("line_id")}, key=self.seq)]
         self.project = keys[(keys.index(self.project) + 1) % len(keys)] if self.project in keys else "all"
         self.paint_list()
 

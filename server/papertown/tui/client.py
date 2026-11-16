@@ -34,7 +34,7 @@ class Api:
                 detail = r.json().get("detail")
             except ValueError:
                 detail = r.text
-            if isinstance(detail, list):  # a validation error: say which field
+            if isinstance(detail, list):
                 detail = "；".join(f"{'.'.join(str(x) for x in d.get('loc', [])[1:])} {d.get('msg', '')}".strip() for d in detail)
             raise ApiError(str(detail or f"HTTP {r.status_code}"))
         return r.json() if r.content else None
@@ -89,11 +89,9 @@ class Api:
 class LocalServer:
     """`papertown serve` in its own process group, its output in the data folder's tui-server.log."""
 
-    def __init__(self, port: int):
+    def __init__(self, port: int, data_dir: Path):
         self.port = port
-        data = Path(os.environ.get("PAPERTOWN_DATA_DIR", Path(__file__).resolve().parents[2] / "var"))
-        data.mkdir(parents=True, exist_ok=True)
-        self.log = data / "tui-server.log"
+        self.log = data_dir / "tui-server.log"
         self.proc: subprocess.Popen | None = None
 
     def start(self) -> None:
