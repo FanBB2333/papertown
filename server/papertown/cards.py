@@ -183,6 +183,7 @@ class Cards:
             "repos": self.repos(lid),
             "memory": self.town.history.counts(lid),
             "asks": len(self.town.leads.asks(lid)),
+            "checks": self.town.checks.summary(lid),
         }
 
     @staticmethod

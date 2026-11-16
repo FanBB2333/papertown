@@ -83,8 +83,13 @@ create table if not exists agent_events(id integer primary key autoincrement, ag
 -- reports from a project's agents, and the questions they ask you (leads.py)
 create table if not exists reports(id integer primary key autoincrement, line_id text, agent_id text, ts text, kind text, data text);
 
+-- what each check on a project found, a row each time it changes (checks.py)
+create table if not exists checks(id integer primary key autoincrement, line_id text, check_id text, ts text, seen text,
+  status text, value real, data text, by text);
+
 create index if not exists agent_events_agent on agent_events(agent_id, id);
 create index if not exists reports_line on reports(line_id, id);
+create index if not exists checks_line on checks(line_id, check_id, id);
 create index if not exists jobs_line on jobs(line_id, created_at);
 create index if not exists trace_line on trace(line_id, id);
 create index if not exists messages_line on messages(line_id, id);

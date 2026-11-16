@@ -53,6 +53,11 @@ TOOLS = {
               "lead": "这个项目可能有一位项目负责人，它会给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
                       "做完、卡住或要它拍板时，用 `.papertown/pt tell lead \"…\"` 告诉它。"},
 }
+CHECKS = {
+    "pi": "论文还要过一组用代码查的硬检查（禁用词、连字符、括号、分号、图表标题、方括号区间），结果在用户的关卡图上；没过的项目负责人会让你改。",
+    "paseo": "论文还要过一组用代码查的硬检查（禁用词、连字符、括号、分号、图表标题、方括号区间）：用 `.papertown/pt checks` 看，没过的写着文件、行和原句；"
+             "改完用 `.papertown/pt checks run` 再跑一遍，直到都通过。",
+}
 
 GUIDE = {
     "coder": """# Papertown · 代码员工
@@ -75,6 +80,7 @@ GUIDE = {
 - 论文写在 `main.tex`，参考文献在 `refs.bib`；目录里已有初稿时在它的基础上改。
 - 只写有依据的内容：数字来自实验结果，标着「模拟」的结果要在文中注明是模拟。
 - 改完用 `latexmk -pdf -interaction=nonstopmode main.tex` 编译，修掉报错。
+- {checks}
 - {lead}
 - 回复用中文，简短说明改了哪些部分。
 """,
@@ -97,12 +103,15 @@ LEAD_GUIDE = """# Papertown · 项目负责人
 - `pt card`、`pt card set '<JSON>'`：项目在「进展」页上的卡片，用户按了更新才写（见下面）。
 - `pt recall "…"`：在项目里检索：卡片、汇报、实验、代码和论文，还有用户导入的以前的 agent 对话和记忆。
 - `pt publish 页面.html ["标题"] [--kind report|explain]`：发布一页 HTML 给用户看，放在「进展」里这个项目的「汇报与讲解」（见「写给用户看的页面」）。
+- `pt checks [run]`：项目的关卡：硬检查的结果和没过的位置（`run` 是马上再查一遍），软检查和你上次的判断。
+- `pt check <编号> pass|warn|fail "理由"`：记下一项软检查的判断。
 {linked}
 ## 怎么干活
 
 - 你不会一直在线。项目里有动静时（实验结束或失败、员工结束一轮、工序变了、用户回答了问题），Papertown 会发一条 `<checkin>` 给你，写着这段时间变了什么和项目现在的样子；项目停着不动时也会隔一阵来一条。收到后看一眼，需要时读员工的对话或任务日志，该催的催、该派的派、该报的报，然后结束这一轮。
 - 派活时说清楚做什么、做到什么程度算完、做完用 `pt tell lead` 告诉你。员工卡住了先看它卡在哪，你能定的直接定；超出你工作边界的问用户。
 - 汇报只写用户该知道的：进展的结论、出了什么问题、要他决定什么，三五句话。没有新东西就不写，不要每次巡检都汇报。要用表格、图或对比才说得清的（一批实验的结果、方案之间的取舍），写成一页 HTML 用 `pt publish 页面.html --kind report` 发布，再用 `pt report` 说一句结论，提一下页面的标题。
+- 项目有一张关卡图（「进展」里项目页的最上面），每道工序挂着检查。硬检查是 Papertown 用代码查的：论文里的禁用词和格式、查重相似度、实验交没交结果、PDF 是不是最新。它们必须满足，结果有变化会写在 `<checkin>` 里；没过的派给对应的员工去改，让它用 `pt checks` 看位置，改完再跑。软检查是要你判断的问题（实验方向、实验设计、主张有没有依据……）：到期时随 `<checkin>` 发给你，用户点了「让负责人现在查」时你会收到 `<check>`。读完项目后用 `pt check <编号> pass|warn|fail "理由"` 记下判断；不是 pass 的会自动成为一条给用户的汇报，不用再 `pt report` 一遍。汇报进展时，关卡的变化也是该说的内容。
 - 项目卡片只在收到 `<card>` 消息时写：那是用户在「进展」页上按了更新。照消息里的字段写，只写读到的事实，写完这一轮就结束；平时巡检不要动卡片。
 - 用户会在「进展」里这个项目的对话、或者中控屏里直接和你说话（不带标签的消息就是他说的）：是问题就读项目回答（需要时 `pt recall`），要用表格、图或对比才说得清的，写成一页 HTML 用 `pt publish 页面.html --kind explain` 发布，再在回复里说一句结论和页面的标题；是要你办的事，在工作边界内办或派出去，再告诉他做了什么。不要动卡片。
 - 小助手是用户的代理人，它发来的消息（开头是 `<msg from="小助手">`）就是用户的意思：照办，办完用 `pt report` 回一句。员工发来的消息开头是 `<msg from="…代码员工">` 这样。
@@ -148,6 +157,7 @@ LINKED_GUIDE = {
 - 动手前先看 `git status`。只改和任务有关的文件，不要动用户还没提交的改动；commit、push 之前先问用户。
 - 只写有依据的内容：数字和结论来自代码仓库 `{code}` 里的实验结果，找不到依据的地方留 TODO，不要编。
 - 需要编译时用 `latexmk -pdf -interaction=nonstopmode {main}`，编译产物不要提交。
+- {checks}
 - {lead}
 - 回复用中文，简短说明改了哪些部分。
 """,
@@ -422,9 +432,9 @@ class Agents:
         if a["role"] == "lead":
             return LEAD_GUIDE.format(seq=line["seq"], title=line["title"], linked=LEAD_LINKED.format(**where) if info else "", pages=PAGE_GUIDE) + bounds
         if not info:
-            return GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], **TOOLS[runtime]) + bounds
+            return GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], checks=CHECKS[runtime], **TOOLS[runtime]) + bounds
         return LINKED_GUIDE[a["role"]].format(seq=line["seq"], title=line["title"], brief=LINKED_BRIEF[runtime], lead=TOOLS[runtime]["lead"],
-                                              main=paper.get("main") or "main.tex", **where) + bounds
+                                              checks=CHECKS[runtime], main=paper.get("main") or "main.tex", **where) + bounds
 
     def renew(self, agent_id: str) -> None:
         """Write a started agent's guide again, after its rules changed."""

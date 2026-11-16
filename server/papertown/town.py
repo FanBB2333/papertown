@@ -21,6 +21,7 @@ from .db import DB, now
 from .depots import Depots
 from .events import EventBus
 from .farm import Farm, summarize
+from .checks import Checks
 from .leads import Leads
 from .graph import Genealogy
 from .library import Embedder, Library, terms_of
@@ -71,6 +72,7 @@ class Town:
         self.agents = Agents(self)
         self.bounds = Bounds(self)
         self.leads = Leads(self)
+        self.checks = Checks(self)
         self.relay = Relay(self)
         self.paseo_models = PaseoModels(self)
         self.cards = Cards(self)
@@ -98,11 +100,13 @@ class Town:
         self.nvidb.start()
         self.relay.start()
         self.leads.start()
+        self.checks.start()
         self.paseo_models.start()
 
     def stop(self) -> None:
         self.paseo_models.stop()
         self.leads.stop()
+        self.checks.stop()
         self.relay.stop()
         self.nvidb.stop()
         self.mcp.stop()

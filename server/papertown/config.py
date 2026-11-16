@@ -93,6 +93,8 @@ class Settings:
     # project leads: seconds between looks at their projects, and at least between two check-ins
     lead_tick: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_TICK", "20") or 20))
     lead_gap: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_GAP", "180") or 180))
+    # seconds between looks at what each project's hard checks read; they run again when it changed
+    check_tick: float = field(default_factory=lambda: float(_env("PAPERTOWN_CHECK_TICK", "120") or 120))
     # seconds between readings of Paseo's model list for new models; 0 turns them off
     paseo_watch: float = field(default_factory=lambda: float(_env("PAPERTOWN_PASEO_WATCH", "1800") or 0))
     # where Claude Code and Codex keep their conversations, for importing (history.py)

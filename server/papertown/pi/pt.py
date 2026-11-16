@@ -20,6 +20,7 @@ A project's lead also has:
     .papertown/pt reports                    the project's reports and questions
     .papertown/pt card                       its card on the 进展 page: the fields and the card as it is
     .papertown/pt card set '<json>'|file.json   write the card, when the user asked for it
+    .papertown/pt check <id> pass|warn|fail "reason"   a soft check's verdict
 
 Any agent of a project has:
 
@@ -28,6 +29,8 @@ Any agent of a project has:
     .papertown/pt publish page.html ["title"] [--kind report|explain]
                                              a page in HTML for the user, under 汇报与讲解 in 进展
                                              (the assistant adds --line <project>)
+    .papertown/pt checks [run]               the project's checkpoints: hard checks and where they fail
+                                             (run: check again now), soft checks and the lead's verdicts
 
 The console's assistant has more (see its AGENTS.md):
 
@@ -206,6 +209,14 @@ def main(a):
             print(call("/card", {"card": card})["text"])
         else:
             sys.exit("用法：pt card | pt card set '<JSON>' | pt card set 文件.json")
+    elif a[0] == "checks":
+        opts, rest = options(a[1:], many=(), flags=())
+        q = f"?line={quote(opts['line'])}" if opts.get("line") else ""
+        print((call("/checks/run" + q, {}) if rest[:1] == ["run"] else call("/checks" + q))["text"])
+    elif a[0] == "check":
+        if len(a) < 4 or a[2] not in ("pass", "warn", "fail"):
+            sys.exit('用法：pt check <编号> pass|warn|fail "理由"')
+        print(call("/check", {"id": a[1], "status": a[2], "text": " ".join(a[3:])})["text"])
     elif a[0] == "recall":
         if len(a) < 2:
             sys.exit('用法：pt recall "要找的"')

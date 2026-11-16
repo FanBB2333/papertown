@@ -25,6 +25,7 @@ STATUS = {"hatching": "孵化中", "waiting": "等你决定", "running": "在做
           "dropped": "放弃了", "linked": "本地项目"}
 STAGE = {"todo": "没开始", "run": "进行中", "wait": "等你", "done": "完成"}
 JOB = {"queued": "排队", "running": "在跑", "done": "完成", "failed": "失败", "cancelled": "已取消"}
+CHECK = {"pass": "通过", "warn": "有问题", "fail": "没过"}
 WORKER = {"working": "在干活", "idle": "空闲", "starting": "启动中", "error": "出错", "stopped": "没在运行"}
 YES = ("可以", "允许", "同意", "好", "行", "yes", "ok", "y")
 DEFAULTS = {"supervise": True, "every": 60}  # every: minutes of quiet before a check-in comes anyway
@@ -256,6 +257,7 @@ class Leads:
         if asks:
             out += ["", "等用户回答的问题："]
             out += [f"- 问题 {q['id']}（{q['data'].get('who')}，{_ago(q['ts'])}）：{clip(q['data']['question'], 160)}" for q in asks]
+        out += ["", "关卡：" + self.town.checks.brief(line_id)]
         reps = [r for r in self.reports(line_id, 12) if r["kind"] == "report"][-3:]
         if reps:
             out += ["", "最近的汇报："]
@@ -304,6 +306,9 @@ class Leads:
             if a := self.agent(line_id, role):
                 f[f"agent:{role}"] = (a["status"], NAMES[role])
         f |= {f"ask:{q['id']}": ("open", f"{q['data'].get('who')}问用户：{clip(q['data']['question'], 120)}") for q in self.asks(line_id)}
+        names = {h.id: h.title for h in self.town.checks.hard(line_id)}
+        f |= {f"check:{k}": (r["status"], f"硬检查「{names[k]}」" + (f"（{int(r['value'])} 处）" if r["value"] else ""))
+              for k, r in self.town.checks.latest(line_id).items() if k in names and r["status"] in CHECK}
         return f
 
     def _changes(self, line_id: str, old: dict, new: dict) -> list[str]:
@@ -322,6 +327,8 @@ class Leads:
                     out.append(f"{what}{WORKER[v]}了")
             elif kind == "ask":
                 out.append(what)
+            elif kind == "check" and was is not None:
+                out.append(f"{what}：{CHECK.get(was, was)} → {CHECK.get(v, v)}")
             elif kind == "stage" and was is not None:
                 out.append(f"{what}：{STAGE.get(was, was)} → {STAGE.get(v, v)}")
             elif kind == "line" and was is not None:
@@ -358,7 +365,7 @@ class Leads:
         if not st["supervise"] or a["status"] != "idle" or not a.get("ext_id") and a.get("runtime") == "paseo":
             return
         quiet = time.time() - self._last[lid]
-        if self._pending.get(lid) and quiet >= self.s.lead_gap:
+        if (self._pending.get(lid) or self.town.checks.due(lid)) and quiet >= self.s.lead_gap:
             self.checkin(a)
         elif not self._pending.get(lid) and facts.get("line", ("",))[0] in ACTIVE and quiet >= st["every"] * 60 and self._quiet.get(lid, 0) < QUIET_MAX:
             self._quiet[lid] = self._quiet.get(lid, 0) + 1
@@ -367,14 +374,19 @@ class Leads:
     def checkin(self, a: dict) -> None:
         lid = a["line_id"]
         changes, since = self._pending.pop(lid, []), self._since.pop(lid, None)
+        due = self.town.checks.due(lid)
         out = ["<checkin>"]
         if changes:
             out += [f"{datetime.fromisoformat(since).astimezone():%H:%M} 以来项目里的变化：", *[f"- {c}" for c in changes]]
-        else:
+        elif not due:
             mins = int((time.time() - self._last[lid]) / 60)
             out.append(f"已经 {mins} 分钟没有新动静了。看看员工是不是闲着、有没有该催的、有没有该告诉用户的。")
+        if due:
+            out += [*([""] if changes else []), "到期的软检查（关卡图上要你判断的问题）：", *self.town.checks.ask_text(due)]
         out += ["", "现在的情况：", self.status(lid), "</checkin>"]
         self._last[lid] = time.time()
+        if due:
+            self.town.checks.asked(lid, [s["id"] for s in due])
         try:
             self.town.agents.say(a["id"], "\n".join(out), "queue", origin="town")
         except AgentError:

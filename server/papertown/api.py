@@ -22,6 +22,7 @@ from .assistant import ID as ASSISTANT, ActError
 from .auth import COOKIE, DAYS, Auth, AuthError, Gate
 from .bounds import BoundsError
 from .cards import CardError
+from .checks import CheckError
 from .paseo_models import ModelError
 from .leads import LeadError
 from .config import SERVER_DIR, Settings
@@ -110,6 +111,30 @@ class PublishIn(BaseModel):
 class ReportIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     key: bool = False
+
+
+class CheckSetIn(BaseModel):
+    on: bool | None = None
+    params: dict[str, float | None] | None = None
+    title: str | None = Field(default=None, max_length=40)
+    prompt: str | None = Field(default=None, max_length=2000)
+    every: float | None = None
+    stage: str | None = None
+
+
+class CheckAddIn(BaseModel):
+    kind: str
+    stage: str
+    title: str = Field(min_length=1, max_length=40)
+    text: str = Field(min_length=1, max_length=2000)
+    prio: str = "P1"
+    max: int = Field(default=0, ge=0, le=10000)
+
+
+class VerdictIn(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    status: str
+    text: str = Field(min_length=1, max_length=4000)
 
 
 class McpServerIn(BaseModel):
@@ -287,6 +312,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     authed, guard, ws, farm = mapped(AuthError), mapped(LineError), mapped(WsError), mapped(FarmError)
     agents, assistant = mapped(AgentError), mapped(AgentError, ActError)
     leads = mapped(LeadError, AgentError, CardError)
+    checks = mapped(CheckError, AgentError, LeadError)
     known = mapped(HistoryError, AskError, AgentError, CardError, PageError)
     skim, mcp = mapped(SkimError), mapped(McpError)
 
@@ -750,6 +776,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         known(town.pages.remove, line_id, pid)
         return {"ok": True}
 
+    @app.get("/api/lines/{line_id}/checks")
+    def line_checks(line_id: str):
+        checks(town.checks.run, line_id)  # only when what the hard checks read has changed
+        return checks(town.checks.view, line_id)
+
+    @app.post("/api/lines/{line_id}/checks/run")
+    def line_checks_run(line_id: str):
+        checks(town.checks.run, line_id, True)
+        return checks(town.checks.view, line_id)
+
+    @app.post("/api/lines/{line_id}/checks")
+    def line_checks_add(line_id: str, body: CheckAddIn):
+        return checks(town.checks.add, line_id, body.kind, body.stage, body.title, body.text, body.prio, body.max)
+
+    @app.put("/api/lines/{line_id}/checks/{check_id}")
+    def line_check_set(line_id: str, check_id: str, body: CheckSetIn):
+        return checks(town.checks.set, line_id, check_id, body.on, body.params, body.title, body.prompt, body.every, body.stage)
+
+    @app.delete("/api/lines/{line_id}/checks/{check_id}")
+    def line_check_remove(line_id: str, check_id: str):
+        return checks(town.checks.remove, line_id, check_id)
+
+    @app.post("/api/lines/{line_id}/checks/{check_id}/ask")
+    def line_check_ask(line_id: str, check_id: str):
+        return checks(town.checks.ask_now, line_id, check_id)
+
     @app.get("/api/lines/{line_id}/lead")
     def lead(line_id: str):
         if not town.pipeline.line(line_id):
@@ -918,6 +970,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(403, "只有项目负责人写汇报；员工有事用 pt tell lead 告诉负责人")
         r = leads(town.leads.report, agent_id, body.text, body.key)
         return {"text": f"已经记下这条汇报（{r['id']}），用户在项目的概览里会看到。"}
+
+    @app.get("/api/bridge/{agent_id}/checks")
+    def bridge_checks(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        return {"text": checks(town.checks.text, own_line(a, line))}
+
+    @app.post("/api/bridge/{agent_id}/checks/run")
+    def bridge_checks_run(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        lid = own_line(bridged(agent_id, x_papertown_token), line)
+        checks(town.checks.run, lid, True)
+        return {"text": checks(town.checks.text, lid)}
+
+    @app.post("/api/bridge/{agent_id}/check")
+    def bridge_check(agent_id: str, body: VerdictIn, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        return checks(town.checks.verdict, agent_id, body.id, body.status, body.text)
 
     @app.get("/api/bridge/{agent_id}/card")
     def bridge_card(agent_id: str, x_papertown_token: str | None = Header(default=None)):
