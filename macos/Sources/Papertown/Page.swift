@@ -2,14 +2,12 @@ import AppKit
 import SwiftUI
 import WebKit
 
-// The town's page in a WKWebView, made to behave as it does in a browser tab: links to other sites
-// open in your browser; a link that opens a new tab opens a window (a PDF) or saves a download (a
-// project's files) into Downloads; confirm(), alert() and prompt() get dialogs; file pickers, full
-// screen and the 3D walk's hold on the mouse work.
+// The town's page in a WKWebView, behaving as in a browser tab: other sites open in the browser, new
+// tabs open a window or save a download, and JS dialogs, file pickers, full screen and pointer lock work.
 @MainActor
 final class Page: NSObject {
     let web: WKWebView
-    var origin: URL? // the server; any other address opens in the browser
+    var origin: URL?
     var onFinish: (() -> Void)?
     var onFail: ((Error) -> Void)?
     var onLang: ((Lang) -> Void)?
@@ -21,11 +19,9 @@ final class Page: NSObject {
 
     init(lang: Lang) {
         let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
         config.preferences.isElementFullscreenEnabled = true
         config.applicationNameForUserAgent = "Papertown/\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev")"
-        // the page starts in English unless told otherwise (web/src/i18n.ts); here it starts in the
-        // Mac's language, until one is picked in its settings
+        // the page defaults to English (web/src/i18n.ts); start it in the Mac's language until one is picked
         config.userContentController.addUserScript(WKUserScript(source: """
             try { localStorage.getItem('papertown.lang') || localStorage.setItem('papertown.lang', '\(lang.rawValue)') } catch {}
             """, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -44,10 +40,10 @@ final class Page: NSObject {
         web.load(URLRequest(url: url))
     }
 
-    // the page listens for these (web/src/App.tsx): open its settings, change view, show a toast
+    // a command the page listens for (web/src/App.tsx)
     func send(_ detail: [String: String]) {
-        guard let json = try? JSONSerialization.data(withJSONObject: detail), let s = String(data: json, encoding: .utf8) else { return }
-        web.evaluateJavaScript("dispatchEvent(new CustomEvent('papertown:command', { detail: \(s) }))", completionHandler: nil)
+        let json = String(decoding: try! JSONSerialization.data(withJSONObject: detail), as: UTF8.self)
+        web.evaluateJavaScript("dispatchEvent(new CustomEvent('papertown:command', { detail: \(json) }))", completionHandler: nil)
     }
 
     func toast(_ text: String) { send(["type": "toast", "text": text]) }
@@ -93,8 +89,7 @@ final class Page: NSObject {
     }
 }
 
-// the page says which look it has whenever that changes (web/src/settings.ts), and the window takes
-// it up: what shows past the page's edges, the strip under the title bar, light or dark
+// the page reports its look (web/src/settings.ts); the window follows its top-bar colour and light or dark
 extension Page: WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let look = message.body as? [String: Any], let bar = (look["bar"] as? String).flatMap(NSColor.init(hex:)) else { return }
@@ -115,7 +110,6 @@ extension Page: WKNavigationDelegate {
         decisionHandler(.allow)
     }
 
-    // a project's files are sent as attachments: saved, as a browser would
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
         let disposition = (response.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
         decisionHandler(!response.canShowMIMEType || disposition.lowercased().hasPrefix("attachment") ? .download : .allow)
@@ -130,7 +124,7 @@ extension Page: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        // a new window shows once there is something to show, so a download never flashes one
+        // a popup shows only once something commits, so a download never flashes an empty window
         if let window = popups[webView], !window.isVisible { window.makeKeyAndOrderFront(nil) }
     }
 
@@ -234,8 +228,7 @@ extension Page: WKUIDelegate {
         decisionHandler(["127.0.0.1", "localhost"].contains(origin.host) ? .grant : .prompt)
     }
 
-    // The 3D walk holds the mouse to look round (requestPointerLock). WKWebView has no public way to
-    // allow that; WebKit asks its delegate through this private call, as Safari answers it.
+    // pointer lock for the 3D walk: WebKit asks this private delegate method (no public API), as Safari answers it
     @objc(_webViewDidRequestPointerLock:completionHandler:)
     func webViewDidRequestPointerLock(_ webView: WKWebView, completionHandler: @escaping (Bool) -> Void) {
         completionHandler(true)
@@ -287,8 +280,7 @@ extension Page: NSWindowDelegate {
     }
 }
 
-// the page shown in the main window; the same WKWebView each time the window opens, so closing
-// the window and opening it again keeps your place
+// the one WKWebView, reused each time the main window opens, so reopening it keeps your place
 struct PageView: NSViewRepresentable {
     let page: Page
     func makeNSView(context: Context) -> WKWebView { page.web }

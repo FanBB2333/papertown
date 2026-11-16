@@ -1,9 +1,9 @@
 import Darwin
 import Foundation
 
-// Running the server and the page's build. An app opened from the Finder doesn't get the PATH your
-// terminal has (uv, pnpm, nvm's node, TeX), so the environment comes from your login shell, once.
-// Every child runs in its own process group, so stopping it stops what it started too.
+// Runs the server and the page's build. A Finder-launched app lacks the terminal's PATH, so the
+// environment comes from the login shell, once; each child gets its own process group, so stopping
+// it stops its descendants too.
 enum LoginEnv {
     private static var cached: [String: String]?
 
@@ -19,7 +19,7 @@ enum LoginEnv {
         let shell = String(cString: getpwuid(getuid()).pointee.pw_shell)
         let p = Process()
         p.executableURL = URL(fileURLWithPath: shell.isEmpty ? "/bin/zsh" : shell)
-        // interactive as well as login: zsh reads ~/.zshrc only then, and that's where PATH is set up
+        // -i as well as -l: zsh reads ~/.zshrc, where PATH is set up, only for interactive shells
         p.arguments = ["-lic", "printf '\\0\(mark)\\0'; /usr/bin/env -0"]
         p.standardInput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
@@ -40,7 +40,6 @@ enum LoginEnv {
             }
         }
         if env["PATH"] == nil {
-            // the shell didn't answer: the usual places, so uv and pnpm may still be found
             env = ProcessInfo.processInfo.environment
             let home = NSHomeDirectory()
             env["PATH"] = ["\(home)/.local/bin", "\(home)/.cargo/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"].joined(separator: ":")
@@ -104,13 +103,11 @@ final class Child {
         waiters = []
     }
 
-    // the exit status, once it has stopped
     @MainActor func wait() async -> Int32 {
         if let status { return status }
         return await withCheckedContinuation { waiters.append($0) }
     }
 
-    // asks it to stop the way Ctrl-C does, then makes it
     @MainActor func stop(grace: Double = 5) async {
         guard status == nil else { return }
         killpg(pid, SIGTERM)
@@ -130,7 +127,7 @@ enum Logs {
     static let server = dir.appendingPathComponent("server.log")
     static let build = dir.appendingPathComponent("build.log")
 
-    // a heading for this run; the server's log is kept (cut short when it grows big), the build's starts over
+    // appends a heading for a run, emptying the log first when `fresh` or too big
     static func begin(_ log: URL, _ what: String, fresh: Bool = false) {
         let size = (try? FileManager.default.attributesOfItem(atPath: log.path)[.size] as? Int) ?? 0
         if fresh || size > 5_000_000 { try? Data().write(to: log) }

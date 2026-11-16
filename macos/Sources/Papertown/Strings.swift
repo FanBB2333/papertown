@@ -1,12 +1,10 @@
 import Foundation
 
-// What the app itself says (menus, the splash, the page's dialogs), in the language the page is
-// shown in (web/src/i18n.ts). Keyed by the Simplified Chinese, like the page's own dictionary;
-// {0} is the argument.
+// The app's own strings, in the page's language (web/src/i18n.ts). Keyed by the Simplified Chinese
+// text, like the page's dictionary; {0} is the argument.
 enum Lang: String {
     case en, hans = "zh-Hans", hant = "zh-Hant"
 
-    // what the page starts in on this Mac, before anyone picks one in its settings
     static var system: Lang {
         let first = Locale.preferredLanguages.first ?? "en"
         if !first.hasPrefix("zh") { return .en }
@@ -15,7 +13,6 @@ enum Lang: String {
 }
 
 private let words: [String: (en: String, hant: String)] = [
-    // menus
     "设置…": ("Settings…", "設定…"),
     "App 设置…": ("App Settings…", "App 設定…"),
     "在浏览器中打开": ("Open in Browser", "在瀏覽器中開啟"),
@@ -32,10 +29,8 @@ private let words: [String: (en: String, hant: String)] = [
     "重启服务": ("Restart the Server", "重啟服務"),
     "显示服务日志": ("Show Server Log", "顯示服務日誌"),
     "显示构建日志": ("Show Build Log", "顯示建構日誌"),
-    // the page's dialogs
     "好": ("OK", "好"),
     "取消": ("Cancel", "取消"),
-    // starting up
     "正在启动服务…": ("Starting the server…", "正在啟動服務…"),
     "正在安装网页的依赖…": ("Installing the page's packages…", "正在安裝網頁的依賴…"),
     "正在构建网页…": ("Building the page…", "正在建構網頁…"),
@@ -50,13 +45,11 @@ private let words: [String: (en: String, hant: String)] = [
     "页面打不开：{0}": ("The page didn't open: {0}", "頁面打不開：{0}"),
     "重试": ("Try Again", "重試"),
     "显示日志": ("Show Log", "顯示日誌"),
-    // over the page (its own toasts)
     "已下载 {0}，在「下载」文件夹里": ("Downloaded {0} to your Downloads folder", "已下載 {0}，在「下載」資料夾裡"),
     "下载失败：{0}": ("Download failed: {0}", "下載失敗：{0}"),
     "网页构建失败，详见「服务」菜单里的构建日志": ("Building the page failed; the build log is in the Server menu", "網頁建構失敗，詳見「服務」選單裡的建構日誌"),
     "网页有更新，按 ⌘R 重新载入": ("The page has been updated: press ⌘R to reload", "網頁有更新，按 ⌘R 重新載入"),
     "服务退出了，可以在「服务」菜单里重启": ("The server stopped; restart it from the Server menu", "服務退出了，可以在「服務」選單裡重啟"),
-    // the app's settings
     "Papertown 的代码": ("Papertown's code", "Papertown 的程式碼"),
     "选择…": ("Choose…", "選擇…"),
     "端口": ("Port", "連接埠"),

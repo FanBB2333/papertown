@@ -1,10 +1,8 @@
 #!/bin/bash
-# Builds Papertown.app into macos/build: the Swift binary, Info.plist (which remembers where this
-# checkout is, so the app finds the server and the web code), the icon, an ad-hoc signature.
+# Builds macos/build/Papertown.app: the binary, an Info.plist recording this checkout's path, the icon, an ad-hoc signature.
 #   ./build.sh            build it
 #   ./build.sh --install  and copy it to ~/Applications
-# The page isn't inside the app: it is web/dist, served by the server, so changes to the web code
-# don't need the app rebuilt. Only changes under macos/ do.
+# web/dist isn't inside the app (the server serves it), so only changes under macos/ need a rebuild.
 set -euo pipefail
 cd "$(dirname "$0")"
 repo=$(cd .. && pwd)

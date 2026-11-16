@@ -3,7 +3,7 @@ import AppKit
 
 let args = CommandLine.arguments
 guard args.count == 3, let svg = NSImage(contentsOfFile: args[1]) else {
-    FileHandle.standardError.write("usage: icon.swift AppIcon.svg out.iconset\n".data(using: .utf8)!)
+    FileHandle.standardError.write(Data("usage: icon.swift AppIcon.svg out.iconset\n".utf8))
     exit(1)
 }
 let out = URL(fileURLWithPath: args[2])

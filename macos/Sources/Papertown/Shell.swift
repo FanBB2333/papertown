@@ -19,12 +19,12 @@ final class Shell {
     private(set) var ownsServer = false
     private(set) var strip = NSColor.hud // under the hidden title bar, the colour of the page's top bar
 
-    // the app's own settings (the page has its own, behind ⌘,)
     var repoPath: String { didSet { defaults.set(repoPath, forKey: "repo") } }
     var port: Int { didSet { defaults.set(port, forKey: "port") } }
     var command: String { didSet { defaults.set(command, forKey: "command") } }
     var autoBuild: Bool { didSet { defaults.set(autoBuild, forKey: "autoBuild") } }
     var stopOnQuit: Bool { didSet { defaults.set(stopOnQuit, forKey: "stopOnQuit") } }
+    var repoURL: URL { URL(fileURLWithPath: (repoPath as NSString).expandingTildeInPath) }
 
     static let defaultCommand = "uv run papertown serve --port $PAPERTOWN_PORT"
     // build.sh writes where the code is into Info.plist
@@ -38,7 +38,7 @@ final class Shell {
     @ObservationIgnored private var starting = false
     @ObservationIgnored private var buildAgain = false
     @ObservationIgnored private var buildFailed = false
-    @ObservationIgnored private var shownBuild: Date? // when the build the page was loaded from was made
+    @ObservationIgnored private var shownBuild: Date?
     @ObservationIgnored private var sourceTimer: Task<Void, Never>?
     @ObservationIgnored private var distTimer: Task<Void, Never>?
     @ObservationIgnored private var badge: Task<Void, Never>?
@@ -75,7 +75,7 @@ final class Shell {
         phase = .starting(t("正在打开…"))
         badge?.cancel()
 
-        let repo = URL(fileURLWithPath: (repoPath as NSString).expandingTildeInPath).resolvingSymlinksInPath()
+        let repo = repoURL.resolvingSymlinksInPath()
         let fm = FileManager.default
         guard fm.fileExists(atPath: repo.appendingPathComponent("server/pyproject.toml").path),
               fm.fileExists(atPath: repo.appendingPathComponent("web/package.json").path) else {
@@ -88,7 +88,7 @@ final class Shell {
         }
         let build = build!
         if server?.port != port {
-            if server?.owned == true { await server?.stop() }
+            await server?.stop()
             server = Server(port: port)
             server!.onExit = { [weak self] in self?.serverExited() }
         }
@@ -138,7 +138,7 @@ final class Shell {
         if buildFailed { page.toast(t("网页构建失败，详见「服务」菜单里的构建日志")) }
     }
 
-    // builds the page again; asked again while building, builds once more after
+    // asked again while building, it builds once more after
     func rebuild() async {
         guard let build else { return }
         if build.running { return buildAgain = true }
@@ -182,11 +182,9 @@ final class Shell {
         if phase == .ready { page.toast(t("服务退出了，可以在「服务」菜单里重启")) }
     }
 
-    // a file changed under web/ or design/src
     private func changed(_ paths: [String]) {
         guard let build else { return }
-        let dist = build.dist.path
-        if paths.contains(where: { $0 == dist || $0.hasPrefix(dist + "/") }) {
+        if paths.contains(where: { WebBuild.within(build.dist, $0) }) {
             distTimer?.cancel()
             distTimer = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1))
@@ -194,7 +192,6 @@ final class Shell {
             }
         }
         if autoBuild && paths.contains(where: build.isSource) {
-            // after the edits settle, and only if no one else has built them by then
             sourceTimer?.cancel()
             sourceTimer = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(3))
@@ -216,7 +213,6 @@ final class Shell {
 
     // the Dock icon shows how many projects are waiting on you
     private func watchBadge(_ server: Server) {
-        badge?.cancel()
         badge = Task {
             while !Task.isCancelled {
                 if let (data, _) = try? await Server.get(server.base.appendingPathComponent("api/world")),

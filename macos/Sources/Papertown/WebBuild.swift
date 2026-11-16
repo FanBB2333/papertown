@@ -1,10 +1,8 @@
 import CoreServices
 import Foundation
 
-// Keeping what the window shows in step with the web code. The server serves web/dist; when the
-// code is newer than it, the app builds it again, into web/dist.next first and then swapped in
-// whole, so the server never hands out a half-written page. Whoever builds web/dist (the app, or
-// `pnpm build` in a terminal), the page reloads.
+// Rebuilds web/dist when the web code is newer. Each build goes into web/dist.next and is swapped in
+// whole, so the server never serves a half-written page.
 @MainActor
 final class WebBuild {
     enum Step { case installing, building }
@@ -17,14 +15,17 @@ final class WebBuild {
 
     init(repo: URL) { self.repo = repo }
 
-    // what the page is built from
     private var sources: [URL] {
         ["web/src", "web/public", "web/index.html", "web/package.json", "web/pnpm-lock.yaml", "web/vite.config.ts", "web/tsconfig.json", "design/src"]
             .map { repo.appendingPathComponent($0) }
     }
 
     func isSource(_ path: String) -> Bool {
-        sources.contains { path == $0.path || path.hasPrefix($0.path + "/") }
+        sources.contains { Self.within($0, path) }
+    }
+
+    static func within(_ root: URL, _ path: String) -> Bool {
+        path == root.path || path.hasPrefix(root.path + "/")
     }
 
     static func modified(_ url: URL) -> Date? {
@@ -33,7 +34,7 @@ final class WebBuild {
 
     var built: Date? { Self.modified(dist.appendingPathComponent("index.html")) }
 
-    // the code changed after the page was last built (folders count too, so deleting a file does)
+    // a source changed after the last build (folders count too, so deleting a file does)
     var stale: Bool {
         guard let built else { return true }
         for root in sources {
@@ -46,7 +47,6 @@ final class WebBuild {
         return false
     }
 
-    // node_modules missing, or older than the lockfile
     private var needsInstall: Bool {
         guard let installed = Self.modified(web.appendingPathComponent("node_modules/.modules.yaml")) else { return true }
         return (Self.modified(web.appendingPathComponent("pnpm-lock.yaml")) ?? .distantPast) > installed
@@ -62,9 +62,9 @@ final class WebBuild {
             guard await sh("pnpm install --frozen-lockfile", env) else { return false }
         }
         step(.building)
-        // vite alone: the page doesn't wait on the type check, which `pnpm build` still runs
         let fm = FileManager.default
         let next = web.appendingPathComponent("dist.next"), prev = web.appendingPathComponent("dist.prev")
+        // vite alone: the page doesn't wait on the type check, which `pnpm build` still runs
         guard await sh("pnpm exec vite build --outDir dist.next --emptyOutDir", env),
               fm.fileExists(atPath: next.appendingPathComponent("index.html").path) else { return false }
         try? fm.removeItem(at: prev)
@@ -102,7 +102,7 @@ final class Watcher {
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
         let callback: FSEventStreamCallback = { _, info, _, paths, _, _ in
             let me = Unmanaged<Watcher>.fromOpaque(info!).takeUnretainedValue()
-            me.handler(Unmanaged<CFArray>.fromOpaque(paths).takeUnretainedValue() as? [String] ?? [])
+            me.handler(Unmanaged<CFArray>.fromOpaque(paths).takeUnretainedValue() as! [String])
         }
         let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents)
         guard let s = FSEventStreamCreate(nil, callback, &context, folders.map(\.path) as CFArray,

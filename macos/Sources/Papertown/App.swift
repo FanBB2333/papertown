@@ -23,11 +23,10 @@ struct PapertownApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.appearance = NSAppearance(named: .aqua) // the splash is on paper; the page says what comes after it
+        NSApp.appearance = NSAppearance(named: .aqua) // the splash is light; the page sets the look once it loads
         Task { await Shell.shared.start() }
     }
 
-    // closing the window leaves the town running, as the Dock icon shows; ⌘Q stops it
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -40,7 +39,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// The menus: the page's own shortcuts keep working inside it; these are the ones a Mac app has.
 struct Menus: Commands {
     let shell: Shell
     @Environment(\.openWindow) private var openWindow
@@ -77,7 +75,7 @@ struct Menus: Commands {
             Button(t("重新构建网页")) { Task { await shell.rebuild() } }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(shell.building)
-            Toggle(t("网页代码改动后自动构建"), isOn: Binding(get: { shell.autoBuild }, set: { shell.autoBuild = $0 }))
+            Toggle(t("网页代码改动后自动构建"), isOn: Bindable(shell).autoBuild)
             Divider()
             Button(t("重启服务")) { Task { await shell.restartServer() } }
                 .disabled(!shell.ownsServer)
@@ -101,8 +99,6 @@ struct MainView: View {
             }
         }
         .frame(minWidth: 960, minHeight: 600)
-        // under the (hidden) title bar: the paper while starting, then the colour of the page's
-        // top bar, so the two read as one
         .background(Color(nsColor: shell.phase == .ready ? shell.strip : .paper).ignoresSafeArea())
         .background(OneWindow())
     }
@@ -121,19 +117,16 @@ struct OneWindow: NSViewRepresentable {
     func updateNSView(_ view: Probe, context: Context) {}
 }
 
-// While the server starts and the page builds: the same mark the page shows while it loads
-// (web/index.html), in the same place, so one hands over to the other.
+// Shown while the server starts and the page builds; mirrors web/index.html's boot mark so one hands over to the other.
 struct Splash: View {
     let shell: Shell
     @Environment(\.openWindow) private var openWindow
     @Environment(\.accessibilityReduceMotion) private var still
 
-    static let logo: NSImage? = NSImage(contentsOfFile: (Shell.shared.repoPath as NSString).expandingTildeInPath + "/web/public/logo.svg")
+    static let logo: NSImage? = NSImage(contentsOf: Shell.shared.repoURL.appendingPathComponent("web/public/logo.svg"))
         ?? Bundle.main.url(forResource: "logo", withExtension: "svg").flatMap(NSImage.init(contentsOf:))
 
     var body: some View {
-        // the page's animations, worked out from the clock: the mark bobs every 2.6s, the light
-        // runs under the name every 1.3s
         TimelineView(.animation(paused: still)) { tl in
             let s = still ? 0 : tl.date.timeIntervalSinceReferenceDate
             let bob = (1 - cos(s / 2.6 * 2 * .pi)) / 2, run = s / 1.3 - (s / 1.3).rounded(.down)
@@ -171,10 +164,11 @@ struct Splash: View {
             Text(message).font(.system(size: 13)).foregroundStyle(Color(nsColor: .muted))
         case .failed(let message, let log):
             VStack(spacing: 14) {
+                let tail = log.map { Logs.tail($0) } ?? ""
                 Text(message).font(.system(size: 14)).foregroundStyle(Color(nsColor: .ink)).multilineTextAlignment(.center)
-                if let log, !Logs.tail(log).isEmpty {
+                if !tail.isEmpty {
                     ScrollView {
-                        Text(Logs.tail(log))
+                        Text(tail)
                             .font(.system(size: 11, design: .monospaced))
                             .foregroundStyle(Color(nsColor: .muted))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -203,8 +197,7 @@ extension Shell.Phase {
     }
 }
 
-// The app's own settings: where the code is and how the server starts. The town's settings are
-// the page's, under ⌘,.
+// The app's own settings; the town's are the page's, under ⌘,.
 struct AppSettings: View {
     @Bindable var shell: Shell
 
@@ -258,7 +251,7 @@ struct AppSettings: View {
         let p = NSOpenPanel()
         p.canChooseDirectories = true
         p.canChooseFiles = false
-        p.directoryURL = URL(fileURLWithPath: (shell.repoPath as NSString).expandingTildeInPath)
+        p.directoryURL = shell.repoURL
         if p.runModal() == .OK, let url = p.url { shell.repoPath = url.path }
     }
 }

@@ -34,7 +34,6 @@ final class Server {
         return res.statusCode == 200 && body?["ok"] as? Bool == true && body?["provider"] != nil ? .papertown : .other
     }
 
-    // the page itself: missing when the server started before web/dist existed
     func servesPage() async -> Bool {
         (try? await Self.get(base))?.1.statusCode == 200
     }
@@ -52,7 +51,6 @@ final class Server {
         stopping = false
     }
 
-    // up and answering, or why not
     func ready(within seconds: Double = 120) async -> Bool {
         let until = Date().addingTimeInterval(seconds)
         while Date() < until {
@@ -64,7 +62,7 @@ final class Server {
     }
 
     func stop() async {
-        guard let child, child.status == nil else { return }
+        guard let child else { return }
         stopping = true
         await child.stop()
     }
