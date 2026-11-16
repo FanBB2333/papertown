@@ -346,7 +346,7 @@ class Leads:
         facts = self._facts(lid)
         old = self._pulse.get(lid)
         self._pulse[lid] = facts
-        if old is None:  # the first look after a start is where changes count from
+        if old is None:
             self._last.setdefault(lid, time.time())
             return
         changes = self._changes(lid, old, facts)

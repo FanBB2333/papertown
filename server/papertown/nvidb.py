@@ -254,7 +254,7 @@ def as_farm_job(j: dict, line_id: str | None) -> dict:
     """An nvidb job in the shape of a farm job, for the boards; it stays nvidb's to manage."""
     st = STATE.get(j["state"], j["state"])
     prog = 100 if st == "done" else 0
-    if st == "running":  # a job's status line, when it writes one: "epoch 3/10", "42%"
+    if st == "running":
         line = str(j.get("progress") or "")
         m = re.search(r"(\d+(?:\.\d+)?)\s*%", line) or re.search(r"(\d+)\s*/\s*(\d+)", line)
         prog = 50 if not m else int(float(m.group(1))) if m.lastindex == 1 else int(100 * int(m.group(1)) / max(1, int(m.group(2))))

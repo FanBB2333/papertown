@@ -387,7 +387,6 @@ class Papertown(App):
                 if isinstance(scr, Editor):
                     scr.restyle()
             if self.theme != before[0] and any(isinstance(scr, Main) for scr in self.screen_stack):
-                # what is drawn once (not on the clock) is drawn again in the new colours
                 self.run_worker(self.current.load(), group=f"load-{self.place}", exclusive=True, exit_on_error=False)
         if keep:
             self.prefs.theme = self.theme
@@ -650,7 +649,7 @@ class Papertown(App):
         if tg.kind == "say":
             out.append(" · 插话" if self.say_mode == "steer" else " · 排队", style=p["muted"])
         out.append(" ❯ ", style=p["brand"])
-        if self._target == (out, tg.kind):  # unchanged: skip the repaint and relayout
+        if self._target == (out, tg.kind):
             return
         self._target = (out, tg.kind)
         try:

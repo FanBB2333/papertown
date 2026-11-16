@@ -168,7 +168,7 @@ class World:
 
     def set_status(self, bid: str, status: str, line_id: str | None = None) -> None:
         b = self.get(bid)
-        if b and b["type"] == "mill":  # the base camp is busy while any project runs
+        if b and b["type"] == "mill":
             status = "busy" if status == "busy" or self.db.val("select 1 from lines where status = 'running' and id != ?", line_id or "") else "idle"
         if not b or b["status"] == status:
             return

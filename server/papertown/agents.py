@@ -262,7 +262,7 @@ class Agents:
         if role == "coder":
             d = self.s.projects_dir / line_id / "code"
         elif role == "writer":
-            d = self.town.press.dir(line_id)  # the paper the press serves is the one pi edits
+            d = self.town.press.dir(line_id)
         else:
             return None
         d.mkdir(parents=True, exist_ok=True)
@@ -578,7 +578,7 @@ class Agents:
         try:
             self.paseo.send(a["ext_id"], row["data"]["text"])
         except PaseoError:
-            return  # it stays queued and goes with the next look
+            return
         self.amend(row["id"], row["data"] | {"delivered": True, "held": False})
         self._set(agent_id, status="working")
 
@@ -758,7 +758,7 @@ class Agents:
         cost = float(usage.get("cost") or 0)
         self.db.insert("ledger", {"ts": now(), "run_id": None, "line_id": a["line_id"], "provider": "pi", "model": model,
                                   "tokens_in": int(usage.get("input") or 0), "tokens_out": int(usage.get("output") or 0), "cost": cost})
-        if a["line_id"]:  # the assistant belongs to no project
+        if a["line_id"]:
             self.db.x("update lines set spent = spent + ? where id = ?", cost, a["line_id"])
         self.db.update("agents", {"id": agent_id}, cost=(a["cost"] or 0) + cost)
         self.town.bus.publish("bank", **self.town.bank.summary())

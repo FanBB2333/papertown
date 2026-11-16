@@ -327,7 +327,6 @@ class Town:
         reg.add(Tool("line_items", "line.read", "TOOL", "读取当前这篇论文流水线上已有的产出（撞车报告、草案、结果表、审稿意见）。",
                      obj(), line_items))
 
-        # arXiv dock (MCP): whatever comes ashore goes through customs into the library
         def arxiv_after(ctx: ToolCtx, a: dict, value):
             papers = value.get("papers", []) if isinstance(value, dict) else []
             added = self.ingest(papers, "arxiv")

@@ -47,7 +47,7 @@ class Market:
     def best(self, role: str, n: int = 1, exclude: set[str] | None = None, cheap: bool = False) -> list[dict]:
         ws = [w for w in self.db.q("select * from workers where role = ? and status != 'frozen'", role)
               if w["id"] not in (exclude or set())]
-        if cheap:  # a tight budget prefers workers on the cheap model
+        if cheap:
             ws.sort(key=lambda w: (w["level"] >= STRONG_LEVEL, -w["trailing_roi"], -w["level"]))
         else:
             ws.sort(key=lambda w: (-w["trailing_roi"], -w["level"]))

@@ -75,7 +75,6 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
     const load = () => api.cards().then(r => { if (alive) { setRows(r.cards); setLayout(r.layout); setErr(''); } }, e => alive && setErr((e as Error).message));
     load();
     api.modelNews().then(r => alive && setDefs(r.defaults)).catch(() => {});
-    // a card event carries the whole card; other changes reload the cards shortly after
     const off = listen(e => {
       if (e.type === 'card' && e.card) setRows(rs => rs && rs.map(r => (r.line.id === e.card.line.id ? e.card : r)));
       else if (e.type === 'card_layout' && e.layout) setLayout(e.layout);

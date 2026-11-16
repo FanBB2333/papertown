@@ -197,7 +197,6 @@ export function WorldMap({ placements, notes, active, hidden, api, onOpen }: Pro
     const up = () => {
       const d = drag.current;
       el.closest('.proto')?.classList.remove('panning');
-      // let go while moving: coast on the way it was going and slow to a stop
       if (d?.moved && opt.current.smoothMap && d.trail.length > 1) {
         const a = d.trail[0], b = d.trail[d.trail.length - 1], dt = (b.t - a.t) / 1000;
         if (dt > 0.008 && performance.now() - b.t < 70) {
