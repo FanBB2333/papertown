@@ -68,7 +68,7 @@ export function Stages({ r }: { r: ProjectCard }) {
         {line.stage ? `${line.stage.name} · ${line.stage.status === 'wait' ? tr('等你') : line.stage.status === 'todo' ? tr('还没开始') : `${line.stage.pct}%`}` : tr('全部完成')}
         {!!r.jobs.failed && <> · <b className="bad-t">{tr('{0} 个失败', r.jobs.failed)}</b></>}
         {r.asks > 0 && <> · <b className="pg-wait">{tr('{0} 个问题等你', r.asks)}</b></>}
-        {!!r.checks?.hard.fail && <> · <b className="bad-t" title={tr('关卡图上必须满足的硬检查')}>{tr('{0} 项硬检查没过', r.checks.hard.fail)}</b></>}
+        {!!r.checks?.hard.fail && <> · <b className="bad-t" title={tr('研究画布上必须满足的硬检查')}>{tr('{0} 项硬检查没过', r.checks.hard.fail)}</b></>}
       </span>
     </div>
   );

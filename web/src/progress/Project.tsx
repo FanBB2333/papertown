@@ -1,5 +1,5 @@
-// A project at /progress/<number>, in brief: what waits on you, its checkpoint map (the stages and the checks on
-// each), its card, experiments, outputs, repositories and memory, each linking to the console panel with the
+// A project at /progress/<number>, in brief: what waits on you, its canvas in small (the stages, checks and tasks,
+// opening the full-window canvas), its card, experiments, outputs, repositories and memory, each linking to the console panel with the
 // detail; beside them its conversation and the pages its agents wrote.
 
 import { useEffect, useState } from 'react';
@@ -10,7 +10,7 @@ import { ago } from '../console/util';
 import { tr } from '../i18n';
 import { follow, href, PATHS } from '../route';
 import { askPath, ChatBox } from './Ask';
-import { CheckMapSection } from './Checks';
+import { CanvasCard } from './CanvasCard';
 import { PagesBox } from './Pages';
 import { MemorySection, MemoryViewer } from './Memory';
 import { Meter, noCardText, OUT_STATE, repoLine, runText, UpdateButton, useCardActs, Who } from './parts';
@@ -67,7 +67,7 @@ export function Project({ r, defs, toast, onChange, onConsole, decide }: {
           <div className="btns">{wait.btns}</div>
         </section>
       )}
-      <CheckMapSection r={r} toast={toast} onConsole={onConsole} />
+      <CanvasCard r={r} />
 
       <div className="pj-grid">
         <div className="pj-main">

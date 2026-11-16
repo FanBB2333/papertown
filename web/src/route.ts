@@ -8,7 +8,7 @@ import { useSyncExternalStore } from 'react';
 import { DEMO } from './demo';
 
 export type View = 'cards' | 'console' | 'world';
-export interface Route { view: View | 'landing' | 'settings'; seq?: number; mod?: string; sub?: 'ask' | 'pages'; page?: string }
+export interface Route { view: View | 'landing' | 'settings'; seq?: number; mod?: string; sub?: 'ask' | 'pages' | 'canvas'; page?: string }
 
 export const PATHS: Record<View, string> = { cards: '/progress', console: '/console', world: '/town' };
 
@@ -61,7 +61,7 @@ export function parse(p: string): Route {
   const [, a, b, c, d] = p.split('/');
   if (!a) return { view: 'landing' };
   const seq = b && /^\d+$/.test(b) ? Number(b) : undefined;
-  if (a === 'progress') return { view: 'cards', seq, sub: seq != null && (c === 'ask' || c === 'pages') ? c : undefined, page: c === 'pages' ? d || undefined : undefined };
+  if (a === 'progress') return { view: 'cards', seq, sub: seq != null && (c === 'ask' || c === 'pages' || c === 'canvas') ? c : undefined, page: c === 'pages' ? d || undefined : undefined };
   if (a === 'console') return { view: 'console', seq, mod: c || undefined };
   if (a === 'town') return { view: 'world' };
   if (a === 'settings') return { view: 'settings', mod: b || undefined };

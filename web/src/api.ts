@@ -125,7 +125,7 @@ export interface ProjectCard {
   checks?: { hard: CheckCounts; soft: CheckCounts };
 }
 
-// the checkpoint map (checks.py): hard checks are code and must pass; soft checks are the lead's judgement
+// checks (checks.py): hard checks are code and must pass; soft checks are the lead's judgement
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'none' | 'wait';
 export interface CheckCounts { pass: number; warn: number; fail: number; none: number; wait: number; total: number }
 export interface CheckFinding { file: string; line: number; text: string; hit: string; hint: string }
@@ -136,12 +136,26 @@ export interface Check {
   custom: boolean; on: boolean; last: CheckResult | null; history: { ts: string; status: CheckStatus; value: number | null }[];
   asked?: string | null; due?: boolean;
 }
-export interface CheckMap {
-  line_id: string; seq: number; stages: { key: string; name: string; status: 'todo' | 'run' | 'wait' | 'done'; pct: number }[];
-  checks: Check[]; summary: { hard: CheckCounts; soft: CheckCounts }; trend: { ts: string; pass: number; fail: number; total: number }[];
-  rounds: number; lead: boolean; paper: boolean; ran: string | null;
+export interface CheckEdit { on?: boolean; params?: Record<string, number>; title?: string; prompt?: string; every?: number }
+
+// a project's canvas (canvas.py): a free graph of stages, checks, tasks for agents and notes
+export type CanvasKind = 'stage' | 'hard' | 'soft' | 'task' | 'note';
+export type TaskStatus = 'draft' | 'sent' | 'done' | 'blocked';
+export type TaskTo = 'lead' | 'coder' | 'writer';
+export interface CanvasNode {
+  id: string; kind: CanvasKind; x: number; y: number; title?: string; text?: string;
+  ref?: string; status?: string; pct?: number; // a stage: its key, state and progress; a task: its state
+  check?: Check;
+  to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string;
 }
-export interface CheckEdit { on?: boolean; params?: Record<string, number>; title?: string; prompt?: string; every?: number; stage?: string }
+export interface CanvasEdge { id: string; source: string; target: string }
+export interface CanvasView {
+  line_id: string; seq: number; title: string; nodes: CanvasNode[]; edges: CanvasEdge[]; gone: { id: string; title: string }[];
+  summary: { hard: CheckCounts; soft: CheckCounts }; tasks: Record<TaskStatus, number>;
+  trend: { ts: string; pass: number; fail: number; total: number }[]; rounds: number; ran: string | null;
+  lead: boolean; agents: Record<TaskTo, boolean>; added?: string;
+}
+export interface NewNode { kind: 'task' | 'hard' | 'soft' | 'note'; x: number; y: number; title?: string; text?: string; to?: TaskTo; prio?: string; link?: string | null; send?: boolean }
 export type Pane = 'summary' | 'attention' | 'milestone' | 'metrics' | 'running' | 'planned' | 'outputs' | 'code' | 'paper' | 'memory';
 export interface CardLayout { panes: Pane[]; default: Pane[] }
 
@@ -321,8 +335,9 @@ const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'tex
 const carded = (v: object) => said(v) || ('summary' in v && 'health' in v);
 const asIs = () => true;
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
-// a check's findings and results keep the paper's words and the lead's; the page translates their own labels
-const kept = (v: object) => ('file' in v && 'hit' in v) || ('seen' in v && 'note' in v);
+// a check's findings and results keep the paper's words and the lead's, and tasks and notes on the canvas keep
+// yours; the page translates their own labels
+const kept = (v: object) => ('file' in v && 'hit' in v) || ('seen' in v && 'note' in v) || ['task', 'note'].includes((v as { kind?: string }).kind ?? '');
 const KEEP_EVENT: Record<string, (v: object) => boolean> = { report: written, card: carded, agent_event: said, agent_delta: said, page: asIs };
 
 async function call<T>(method: string, url: string, body?: unknown, keep?: (v: object) => boolean): Promise<T> {
@@ -431,13 +446,20 @@ export const api = {
   assistantPage: (page: PageCtx) => call<{ ok: boolean }>('POST', '/api/assistant/page', { page }),
   assistantSay: (text: string, page: PageCtx | null) => call<AgentEvent>('POST', '/api/assistant/say', { text, page }),
   // an agent's conversations in Paseo: the list, a new one, going back to one
-  checks: (lineId: string) => call<CheckMap>('GET', `/api/lines/${lineId}/checks`, undefined, kept),
-  runChecks: (lineId: string) => call<CheckMap>('POST', `/api/lines/${lineId}/checks/run`, undefined, kept),
-  setCheck: (lineId: string, id: string, b: CheckEdit) => call<CheckMap>('PUT', `/api/lines/${lineId}/checks/${id}`, b, kept),
-  addCheck: (lineId: string, b: { kind: 'hard' | 'soft'; stage: string; title: string; text: string; prio: string; max: number }) =>
-    call<CheckMap>('POST', `/api/lines/${lineId}/checks`, b, kept),
-  dropCheck: (lineId: string, id: string) => call<CheckMap>('DELETE', `/api/lines/${lineId}/checks/${id}`, undefined, kept),
+  runChecks: (lineId: string) => call<unknown>('POST', `/api/lines/${lineId}/checks/run`, undefined, kept),
+  setCheck: (lineId: string, id: string, b: CheckEdit) => call<unknown>('PUT', `/api/lines/${lineId}/checks/${id}`, b, kept),
   askCheck: (lineId: string, id: string) => call<{ ok: boolean }>('POST', `/api/lines/${lineId}/checks/${id}/ask`),
+  canvas: (lineId: string) => call<CanvasView>('GET', `/api/lines/${lineId}/canvas`, undefined, kept),
+  addNode: (lineId: string, b: NewNode) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes`, b, kept),
+  setNode: (lineId: string, id: string, b: { title?: string; text?: string; to?: TaskTo; status?: 'draft' | 'done' }) =>
+    call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}`, b, kept),
+  dropNode: (lineId: string, id: string) => call<CanvasView>('DELETE', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}`, undefined, kept),
+  sendNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/send`, undefined, kept),
+  restoreNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/restore`, undefined, kept),
+  moveNodes: (lineId: string, at: Record<string, [number, number]>) => call<{ ok: boolean }>('POST', `/api/lines/${lineId}/canvas/move`, { at }),
+  connect: (lineId: string, source: string, target: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/edges`, { source, target }, kept),
+  disconnect: (lineId: string, id: string) => call<CanvasView>('DELETE', `/api/lines/${lineId}/canvas/edges/${encodeURIComponent(id)}`, undefined, kept),
+  tidyCanvas: (lineId: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/tidy`, undefined, kept),
   convs: (id: string) => call<{ conversations: AssistantConv[] }>('GET', `/api/agents/${id}/conversations`),
   newConv: (id: string) => call<Agent>('POST', `/api/agents/${id}/conversations/new`),
   resumeConv: (id: string, ext: string) => call<Agent>('POST', `/api/agents/${id}/conversations/${encodeURIComponent(ext)}`),
@@ -464,7 +486,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);

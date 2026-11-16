@@ -1,7 +1,7 @@
 // 进展: every project as a card in a grid or as a row (Rows.tsx), and the routes under
-// /progress/<number>: the project in full, asking it (/ask) and the pages its agents wrote (/pages).
+// /progress/<number>: the project in full, asking it (/ask), the pages its agents wrote (/pages) and its canvas (/canvas).
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type CardLayout, type Pane, type PaperCard, type PaseoDefaults, type ProjectCard } from '../api';
 import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
@@ -14,6 +14,8 @@ import { pagesPath, PagesView, type PageOpen } from './Pages';
 import { AskButton, CardPane, opens, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
 import { Project, type ConsoleTarget, type Decide } from './Project';
 import { ProjectRows, type Group } from './Rows';
+
+const CanvasPage = lazy(() => import('./Canvas'));
 import './progress.css';
 
 type Filter = 'all' | 'you' | 'run' | 'done';
@@ -55,7 +57,7 @@ const pageLook = (s: S) => ({ ['--pg-min' as string]: SIZES.pgCard[s.pgCard], ['
 type Open = (lineId: string, t?: ConsoleTarget) => void;
 
 export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
-  active: boolean; seq?: number; sub?: 'ask' | 'pages'; page?: string; toast: (t: string) => void; onOpen: Open; decide: Decide;
+  active: boolean; seq?: number; sub?: 'ask' | 'pages' | 'canvas'; page?: string; toast: (t: string) => void; onOpen: Open; decide: Decide;
 }) {
   const [rows, setRows] = useState<ProjectCard[] | null>(null);
   const [layout, setLayout] = useState<CardLayout | null>(null);
@@ -168,6 +170,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
       {active && project && sub === 'ask' && (
         <AskPage r={project} rows={sorted} toast={toast} />
       )}
+      {active && project && sub === 'canvas' && <Suspense fallback={null}><CanvasPage r={project} toast={toast} onConsole={onOpen} /></Suspense>}
       {active && project && sub === 'pages' && <PagesView r={project} pid={page} toast={toast} onOpen={opener(project)} />}
     </main>
   );
