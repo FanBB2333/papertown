@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from .agents import PAGE_GUIDE, ROLES, AgentError
+from .canvas import CanvasError
+from .checks import CheckError
 from .db import now
 from .leads import LeadError, clip
 from .workspace import WsError
@@ -21,7 +23,7 @@ ID = "assistant"
 MODS = {"overview": "概览", "survey": "调研", "code": "代码仓库", "exp": "实验", "data": "数据", "paper": "论文",
         "agents": "员工", "depts": "部门", "skills": "Skills", "mcp": "MCP", "rag": "图书馆", "rules": "工作边界", "trace": "调用轨迹"}
 # pages outside the console the user can be on; not panels to open
-PLACES = {"progress": "进展", "town": "小镇地图"}
+PLACES = {"progress": "进展", "town": "小镇地图", "canvas": "研究画布"}
 TEXT_MAX = 8000
 SELECTION_MAX = 2000
 REFS_MAX = 80
@@ -44,8 +46,16 @@ ACTIONS: dict[str, tuple[str, str]] = {
                      "name enabled [scope] [line] [role]"),
     "mcp.toggle": ("启用或停用接线局里的一个 MCP server", "name enabled"),
     "mcp.restart": ("重连接线局里的一个 MCP server", "name"),
+    "canvas.add": ("在项目的研究画布上加一个节点：kind 写 task（派给 agent 的任务：title 名字、text 要做的事、to 写 lead / coder / writer，send=true 加上就发给它）、"
+                   "soft（软检查：title 名字，text 是问负责人的问题）、hard（硬检查：title 名字，text 是论文里不许出现的正则，prio 写 P0 或 P1）"
+                   "或 note（备注：text）；near 写一个节点的编号，新节点放在它旁边并连上", "line kind [title] [text] [to] [prio] [near] [send]"),
+    "canvas.edit": ("改研究画布上的一个节点：任务的 title、text、to；备注的 text；软检查的问题（text）；检查开不开（on=true/false）、最多允许几处（max）；"
+                    "x、y 是把它挪到画布上的哪里", "line node [title] [text] [to] [on] [max] [x] [y]"),
+    "canvas.link": ("把研究画布上的两个节点连起来，label 是写在线上的字（已经连着的只改字）；cut=true 是断开它们", "line a b [label] [cut]"),
+    "canvas.send": ("把研究画布上的一个任务发给它的 agent（改过的任务是再发一次）", "line node"),
+    "canvas.remove": ("删掉研究画布上的任务、备注或自己加的检查；工序、内置的检查和资料卡是从画布上拿掉，用户能放回来", "line node"),
 }
-DIRECT = ("tell", "answer")
+DIRECT = ("tell", "answer", "canvas.add", "canvas.edit", "canvas.link", "canvas.send")
 MENTIONED_MAX = 3
 
 # how the assistant reaches the town, by runtime
@@ -103,6 +113,13 @@ GUIDE = """# Papertown · 小助手
 - 能做的事用 {actions} 看，每件后面写着现在是直接做、要他先点「允许」，还是不能做（取决于他给你设的工作边界）：给项目发消息、转达回答、提交或取消实验农场的任务、立项、继续、调整方向、放入新 idea、编译论文、开关 skill 和 MCP server。
 - 办事用 {do}（发消息和转达回答也可以用上面的写法）。直接做的会马上执行并告诉你结果；要他允许的，侧边栏会弹出一张卡片写着你要做什么、为什么，他点了才执行，结果会作为一条 `<event>…</event>` 消息发给你。提完这种请求就结束这一轮，告诉他你请求了什么、在等他点。
 - 只用这个办法改小镇里的东西，不要直接调用会改东西的接口。要改代码或论文，告诉那个项目的负责人（tell）。
+
+## 研究画布
+
+- 每个项目有一张研究画布（「进展」里项目页上打开，`/progress/<编号>/canvas`）：一张自由的图，节点是工序、硬检查（Papertown 用代码查，必须满足）、软检查（负责人判断的问题）、用户派给 agent 的任务、备注，和实时显示项目的资料卡（进展、三位 agent、实验任务、代码、论文、预期产出），节点之间用线连着，线上可以写字。用户在画布上叫你时，`<page>` 里写着「研究画布」和他选中的节点。
+- 画布现在的样子用 {get} 读 `/api/lines/<项目>/canvas/outline`：每个节点的编号、种类、名字和状态，以及所有连线。节点编号就是动作里的 node、near、a、b：工序是 `stage:exp`，检查是 `check:words`，资料卡是 `info:runs`，任务和备注是 `t3`、`n4` 这样的。
+- 用户让你在画布上加、改、连、删东西，用 {do}：`canvas.add` 加节点（给 agent 派任务就是加一个 task 节点，send=true 直接发出去；它连着哪些节点，agent 就会一起收到那些节点的内容，所以用 near 连到相关的检查或工序上）、`canvas.edit` 改节点或挪位置、`canvas.link` 连线和写线上的字、`canvas.send` 发任务、`canvas.remove` 删节点。改完他的画布会立刻更新；说一句你改了什么、新节点的编号。
+- 一次要加好几个节点时一个一个加，位置用 near 挂在相关节点旁边；想让他看某个节点，用 show 把 ref 写成 `node:<编号>`（加上 line）。
 
 ## 回复
 
@@ -336,6 +353,13 @@ class Assistant:
             out += ["每个项目的进展卡片（摘要、健康度、里程碑、在跑的任务、等你决定的事）：接口 `/api/cards`",
                     "新出的相关论文：接口 `/api/papers/fresh`",
                     f"项目负责人的汇报和它问你的事：接口 `/api/lines/{x}/lead`；它写的页面：`/api/lines/{x}/pages`"]
+        elif mod == "canvas":
+            out += [f"画布上的每个节点（编号、种类、名字、状态）和所有连线，用文字写的：接口 `/api/lines/{x}/canvas/outline`；完整的数据：`/api/lines/{x}/canvas`",
+                    f"检查的结果、没过的位置和设置：接口 `/api/lines/{x}/checks`",
+                    f"资料卡显示的：进展卡片在 `/api/cards`，三位 agent 在 `/api/agents?role=lead|coder|writer`，实验任务在 `/api/jobs?line_id={x}`，"
+                    f"代码和论文在 `/api/lines/{x}/ws`",
+                    "改画布用 canvas.add、canvas.edit、canvas.link、canvas.send、canvas.remove 这几个动作（见 actions）；"
+                    "页面上能亮的 ref 是 `node:<节点编号>`"]
         elif mod == "town":
             out += ["小镇地图上的建筑和项目：接口 `/api/world`"]
         return [*out, "所有项目：接口 `/api/lines`；小镇的运行状态：`/api/status`"]
@@ -389,6 +413,14 @@ class Assistant:
             raise ActError(f"没有这个面板：{t['mod']}（可以用 {'、'.join(MODS)}）")
         if t.get("line"):
             t["line"] = self._line(t["line"])["id"]
+        if t.get("ref", "").startswith("node:"):  # a node on a project's canvas: the page goes there and opens it
+            lid = t.get("line") or (self.page.get("line") or {}).get("id")
+            if not lid:
+                raise ActError("亮画布上的节点要写 line（哪个项目）")
+            try:
+                t |= {"line": lid, "ref": "node:" + self.town.canvas.find(lid, t["ref"][5:])["id"]}
+            except CanvasError as e:
+                raise ActError(str(e)) from e
         if t.get("file") and not t["file"].startswith(("code:", "paper:")):
             t["file"] = "code:" + t["file"]
         if not t:
@@ -509,6 +541,8 @@ class Assistant:
             return f"在{where}这一层{'打开' if on else '关掉'} skill「{skill}」", toggle
         ln = self._line(a["line"])
         lid, tag = ln["id"], f"#{ln['seq']}「{clip(ln['title'], 30)}」"
+        if name.startswith("canvas."):
+            return self._canvas(name, a, lid, f"{tag} 的研究画布")
         if name == "job.submit":
             jname, cmd = clip(a["name"], 60), str(a["command"]).strip()
             return (f"在 {tag} 提交实验农场任务「{jname}」：{clip(cmd, 160)}",
@@ -536,6 +570,80 @@ class Assistant:
         if name == "agent.brief":
             return f"给{who}发项目简报", lambda: (t.agents.say(aid, t.agents.brief(aid), origin=ID), "已发出")[1]
         return f"打断{who}手上的事", lambda: (t.agents.abort(aid), "已打断")[1]
+
+    def _canvas(self, name: str, a: dict, lid: str, where: str) -> tuple[str, Callable[[], str]]:
+        """An edit to a project's canvas (canvas.py), as the card says it and the call that makes it."""
+        cv, given = self.town.canvas, lambda k: a.get(k) not in (None, "")
+
+        def node(ref: object) -> dict:
+            try:
+                return cv.find(lid, ref)
+            except CanvasError as e:
+                raise ActError(str(e)) from e
+
+        def safely(fn: Callable[[], str]) -> Callable[[], str]:
+            def run() -> str:
+                try:
+                    return fn()
+                except (CanvasError, CheckError) as e:
+                    raise ActError(str(e)) from e
+                except ValueError as e:
+                    raise ActError("x、y、max 要写数字") from e
+            return run
+
+        if name == "canvas.add":
+            kind, title, text = str(a["kind"]).strip(), clip(a.get("title"), 60), str(a.get("text") or "").strip()
+            to = _role(a["to"], ("lead", "coder", "writer")) if given("to") else "lead"
+            near, send = node(a["near"]) if given("near") else None, kind == "task" and given("send") and _bool(a["send"])
+            what = {"task": f"给{ROLES[to]['name']}的任务", "soft": "软检查", "hard": "硬检查", "note": "备注"}.get(kind)
+            if not what:
+                raise ActError("kind 写 task、soft、hard 或 note")
+
+            def add() -> str:
+                x, y = (near["x"] + near["w"] + 70, near["y"] + 50) if near else cv.spot(lid)
+                v = cv.add(lid, kind, x, y, title, text, to, str(a.get("prio") or "P1"), near["id"] if near else None, send)
+                return f"加上了，编号 {v['added']}" + ("，也发给它了" if send else "")
+            return (f"在{where}上加{what}「{title or clip(text, 40)}」" + (f"，连着「{near['label']}」" if near else "") + ("，并发出去" if send else ""), safely(add))
+        if name == "canvas.link":
+            x, y = node(a["a"]), node(a["b"])
+            if given("cut") and _bool(a["cut"]):
+                def cut() -> str:
+                    e = cv.edge_between(lid, x["id"], y["id"])
+                    if not e:
+                        raise CanvasError("这两个节点没有连着")
+                    cv.disconnect(lid, e["id"])
+                    return "断开了"
+                return f"在{where}上断开「{x['label']}」和「{y['label']}」", safely(cut)
+            label = clip(a.get("label"), 40)
+
+            def link() -> str:
+                cv.connect(lid, x["id"], y["id"])
+                if given("label"):
+                    cv.label(lid, cv.edge_between(lid, x["id"], y["id"])["id"], label)
+                return "连上了" + (f"，线上写着「{label}」" if label else "")
+            return f"在{where}上把「{x['label']}」和「{y['label']}」连起来" + (f"，线上写「{label}」" if label else ""), safely(link)
+        n = node(a["node"])
+        if name == "canvas.send":
+            return f"把{where}上的任务「{n['label']}」发给它的 agent", safely(lambda: (cv.send(lid, n["id"]), "发出去了")[1])
+        if name == "canvas.remove":
+            return f"从{where}上去掉「{n['label']}」", safely(lambda: (cv.remove(lid, n["id"]), "去掉了")[1])
+        changes = [k for k in ("title", "text", "to", "on", "max", "x", "y") if given(k)]
+        if not changes:
+            raise ActError("canvas.edit 要写改什么：title、text、to、on、max、x、y")
+
+        def edit() -> str:
+            if n["kind"] in ("hard", "soft"):
+                if given("on") or given("max") or given("title") or given("text"):
+                    self.town.checks.set(lid, n["ref"], on=_bool(a["on"]) if given("on") else None,
+                                         params={"max": float(a["max"])} if given("max") else None,
+                                         title=clip(a["title"], 20) if given("title") else None, prompt=str(a["text"]) if given("text") else None)
+            elif given("title") or given("text") or given("to"):
+                cv.set(lid, n["id"], str(a["title"]) if given("title") else None, str(a["text"]) if given("text") else None,
+                       _role(a["to"], ("lead", "coder", "writer")) if given("to") else None)
+            if given("x") or given("y"):
+                cv.nudge(lid, n["id"], float(a["x"]) if given("x") else n["x"], float(a["y"]) if given("y") else n["y"])
+            return "改好了"
+        return f"改{where}上的「{n['label']}」（{'、'.join(changes)}）", safely(edit)
 
     def view(self) -> dict:
         """What the sidebar shows: the agent, the open question, the latest actions and the action list."""

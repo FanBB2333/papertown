@@ -67,6 +67,37 @@ def test_the_assistant_reads_the_page_and_asks_before_it_acts(tmp_path):
         assert done["data"]["status"] == "done" and town.farm.get(job["id"])["status"] == "cancelled"
         assert town.agents.events("assistant")[-1]["data"]["text"].startswith("<event>\n用户允许了")
         assert c.post(f"/api/assistant/acts/{r['id']}", json={"allow": True}).status_code == 400
+
+        # the project's canvas: read as an outline, edited at once through canvas.* actions, removing waits for a yes
+        lid, act = line["id"], lambda action, **args: c.post("/api/bridge/assistant/act", json={"action": action, "args": {"line": line["id"], **args}}, headers=h)
+        text = c.get(f"/api/lines/{lid}/canvas/outline").json()["text"]
+        assert "- stage:exp · 工序 · 实验" in text and "- check:design · 软检查 · 实验设计" in text and "- info:runs · 资料卡 · 实验任务" in text
+        assert "- stage:exp — check:design" in text
+        r = act("canvas.add", kind="task", title="补消融", text="三个模块各去掉一次", to="coder", near="design").json()
+        assert r["text"].startswith("已经做了") and "连着「实验设计」" in r["text"]
+        tid = r["text"].split("编号 ")[1]
+        v = c.get(f"/api/lines/{lid}/canvas").json()
+        task = next(n for n in v["nodes"] if n["id"] == tid)
+        assert (task["to"], task["status"]) == ("coder", "draft") and {"source": "check:design", "target": tid} in [{k: e[k] for k in ("source", "target")} for e in v["edges"]]
+        assert act("canvas.edit", node=tid, title="补三个消融", x=40, y=900).json()["text"].endswith("改好了")
+        assert act("canvas.edit", node="check:hyphens", max=20).json()["text"].endswith("改好了")
+        assert act("canvas.link", a=tid, b="exp", label="结果进主表").json()["text"].endswith("连上了，线上写着「结果进主表」")
+        v = c.get(f"/api/lines/{lid}/canvas").json()
+        task = next(n for n in v["nodes"] if n["id"] == tid)
+        assert (task["title"], task["x"], task["y"]) == ("补三个消融", 40, 900)
+        assert next(n for n in v["nodes"] if n["id"] == "check:hyphens")["check"]["max"] == 20
+        assert next(e for e in v["edges"] if {e["source"], e["target"]} == {tid, "stage:exp"})["label"] == "结果进主表"
+        assert act("canvas.link", a=tid, b="exp", cut="true").json()["text"].endswith("断开了")
+        assert act("canvas.add", kind="tree").status_code == 400 and act("canvas.edit", node="nowhere", title="x").status_code == 400
+        assert act("canvas.send", node=tid).status_code == 400  # the coder has not been started
+        r = act("canvas.remove", node=tid).json()
+        assert "请用户确认" in r["text"] and tid in {n["id"] for n in c.get(f"/api/lines/{lid}/canvas").json()["nodes"]}
+        assert c.post(f"/api/assistant/acts/{r['id']}", json={"allow": True}).json()["data"]["status"] == "done"
+        assert tid not in {n["id"] for n in c.get(f"/api/lines/{lid}/canvas").json()["nodes"]}
+        assert "ref node:check:design" in c.post("/api/bridge/assistant/show", json={"line": lid, "ref": "node:design"}, headers=h).json()["text"]
+        assert ("assistant_show", {"target": {"line": lid, "ref": "node:check:design"}}) in shown
+        town.assistant.set_page({"mod": "canvas", "line": {"id": lid, "seq": line["seq"], "title": "x"}})
+        assert "canvas/outline" in town.assistant.page_text() and "面板：研究画布" in town.assistant.page_text()
         r = c.post("/api/bridge/assistant/act", json={"action": "idea.submit", "args": {"text": "另一个想法"}}, headers=h).json()
         assert c.post(f"/api/assistant/acts/{r['id']}", json={"allow": False}).json()["data"]["status"] == "denied"
         assert len(town.pipeline.lines()) == 1

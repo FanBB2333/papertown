@@ -188,4 +188,5 @@ def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
         # tidying puts stages and checks back where they started; the task stays where the user left it
         v = c.post(f"/api/lines/{lid}/canvas/tidy").json()
         at = {n["id"]: (n["x"], n["y"]) for n in v["nodes"]}
-        assert at["stage:exp"] == (3 * 400, 300) and at["stage:method"] == (3 * 400, 0) and at[tid] == (0, 300)
+        assert at["stage:exp"] == (3 * 480, 600) and at["stage:method"] == (3 * 480, 0) and at[tid] == (0, 300)
+        assert at["info:runs"] == (3 * 480 - 290, 600 - 196)

@@ -851,6 +851,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         checks(town.checks.run, line_id)
         return canvas(town.canvas.view, line_id)
 
+    @app.get("/api/lines/{line_id}/canvas/outline")
+    def canvas_outline(line_id: str):
+        return {"text": canvas(town.canvas.outline, line_id)}
+
     @app.post("/api/lines/{line_id}/canvas/nodes")
     def canvas_add(line_id: str, body: NodeIn):
         return canvas(town.canvas.add, line_id, body.kind, body.x, body.y, body.title, body.text, body.to, body.prio, body.link, body.send)

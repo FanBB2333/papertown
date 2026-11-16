@@ -35,6 +35,11 @@ ACTIONS = {
     "skill.toggle": "开关 skill",
     "mcp.toggle": "启用或停用 MCP server",
     "mcp.restart": "重连 MCP server",
+    "canvas.add": "在研究画布上加节点",
+    "canvas.edit": "改研究画布上的节点",
+    "canvas.link": "在研究画布上连线、断开、改线上的字",
+    "canvas.send": "把研究画布上的任务发给 agent",
+    "canvas.remove": "删掉或拿掉研究画布上的节点",
 }
 TEXT_MAX = 300
 RULES_MAX = 60

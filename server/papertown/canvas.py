@@ -1,7 +1,8 @@
 """A project's canvas (研究画布), full-window in 进展: a free graph of nodes and the lines between them.
 
-Nodes are the stages of the research loop, hard and soft checks (checks.py), tasks the user gives an agent, and
-notes. Nothing fixes where a node sits or what it connects to: the user moves, adds, edits and wires them. A task
+Nodes are the stages of the research loop, hard and soft checks (checks.py), tasks the user gives an agent, notes,
+and info cards that show the project live (its progress card, its three agents, its experiment jobs, code, paper
+and expected outputs; the page fills them in). Nothing fixes where a node sits or what it connects to: the user moves, adds, edits and wires them. A task
 node is a job for the lead, the coder or the writer: sending it delivers a <task> message with what the node is
 wired to, and the agent closes it with `pt task <id> done|blocked "…"`, which also goes to the user as a report;
 the user can send a result back with what is wrong, and the node keeps a log of all of it. A line can carry a
@@ -29,8 +30,16 @@ if TYPE_CHECKING:
 TASK = {"draft": "还没发", "sent": "已经发给它", "done": "完成", "blocked": "卡住了"}
 TO = ("lead", "coder", "writer")
 STAGE = {"todo": "没开始", "run": "进行中", "wait": "等用户", "done": "完成"}
-STEP, DROP, ROW, CHECK_W, STAGE_W = 400, 300, 52, 176, 168  # the first layout: see _first_layout
+STEP, DROP, ROW, CHECK_W, STAGE_W = 480, 600, 52, 176, 196  # the first layout: see _first_layout
 NODES_MAX, EDGES_MAX, LOG_MAX = 300, 800, 40
+# info cards: what each shows, where it starts, and the stage it starts wired to
+INFO = {"card": "进展", "agent:lead": "项目负责人", "agent:coder": "代码员工", "agent:writer": "写作员工",
+        "code": "代码", "runs": "实验任务", "paper": "论文", "outputs": "预期产出"}
+INFO_AT = {"card": (-400, -40, "idea"), "agent:lead": (2 * STEP - 60, 112, "team"), "agent:coder": (2 * STEP - 60, 186, "team"),
+           "agent:writer": (2 * STEP - 60, 260, "team"), "code": (3 * STEP - 290, 112, "method"), "runs": (3 * STEP - 290, DROP - 196, "exp"),
+           "paper": (2 * STEP - 60, DROP - 220, "write"), "outputs": (-60, DROP - 170, "ship")}
+WIDTH = {"stage": STAGE_W, "hard": CHECK_W, "soft": CHECK_W, "task": 216, "note": 190, "info": 250}
+KIND = {"stage": "工序", "hard": "硬检查", "soft": "软检查", "task": "任务", "note": "备注", "info": "资料卡"}
 
 
 def _log(n: dict, kind: str, text: str = "", by: str = "你") -> None:
@@ -51,8 +60,9 @@ def _stage_at(key: str) -> tuple[int, int, int]:
 
 def _first_layout(checks: list[tuple[str, str, str]]) -> tuple[list[dict], list[dict]]:
     """Where everything starts: the stages as a loop (out along the top, back along the bottom) and joined in order,
-    with the way back from review to writing; each stage's checks fanned out beside it and wired to it. It is only
-    a start: nothing holds a node in place or to its lines, and from here it is the user's to rearrange."""
+    with the way back from review to writing; each stage's checks fanned out on its outer side and wired to it, and
+    the info cards inside the loop beside the stages they tell about. It is only a start: nothing holds a node in
+    place or to its lines, and from here it is the user's to rearrange."""
     keys = list(INDEX)
     nodes = [{"id": f"stage:{k}", "kind": "stage", "ref": k, "x": _stage_at(k)[0], "y": _stage_at(k)[1]} for k in keys]
     edges = [(f"stage:{a}", f"stage:{b}") for a, b in zip(keys, keys[1:])] + [("stage:review", "stage:write")]
@@ -68,6 +78,9 @@ def _first_layout(checks: list[tuple[str, str, str]]) -> tuple[list[dict], list[
             y = y0 + (-96 - (j // cols) * ROW if side < 0 else 116 + (j // cols) * ROW)
             nodes.append({"id": f"check:{cid}", "kind": kind, "ref": cid, "x": round(x), "y": round(y)})
             edges.append((f"stage:{stage}", f"check:{cid}"))
+    for ref, (x, y, stage) in INFO_AT.items():
+        nodes.append({"id": f"info:{ref}", "kind": "info", "ref": ref, "x": x, "y": y})
+        edges.append((f"stage:{stage}", f"info:{ref}"))
     return nodes, [{"id": f"e{i + 1}", "source": a, "target": b} for i, (a, b) in enumerate(edges)]
 
 
@@ -120,6 +133,14 @@ class Canvas:
                 if at:
                     d["edges"].append({"id": self._id(d, "e"), "source": at["id"], "target": nid})
                 changed = True
+            for ref, (x, y, stage) in INFO_AT.items():  # a canvas from before the info cards gets them once
+                nid = f"info:{ref}"
+                if nid in have or nid in d["gone"]:
+                    continue
+                d["nodes"].append({"id": nid, "kind": "info", "ref": ref, "x": x, "y": y})
+                if f"stage:{stage}" in have:
+                    d["edges"].append({"id": self._id(d, "e"), "source": f"stage:{stage}", "target": nid})
+                changed = True
             ids = {n["id"] for n in d["nodes"]}
             edges = [e for e in d["edges"] if e["source"] in ids and e["target"] in ids]
             if changed or len(edges) != len(d["edges"]):
@@ -169,6 +190,71 @@ class Canvas:
                 out[f"task:{n['id']}"] = (n["status"], what + (f"（{clip(n['result'], 160)}）" if n.get("result") else ""))
         return out
 
+    # for the assistant, which edits the canvas for the user (assistant.py)
+
+    def find(self, line_id: str, ref: object) -> dict:
+        """A node by its id, or by a stage's key, a check's id or an info card's name without the prefix."""
+        d, ref = self._load(line_id), str(ref or "").strip()
+        n = next((n for cand in (ref, f"stage:{ref}", f"check:{ref}", f"info:{ref}") for n in d["nodes"] if n["id"] == cand), None)
+        if not n:
+            raise CanvasError(f"画布上没有节点「{ref}」（编号见画布的清单）")
+        return {"id": n["id"], "kind": n["kind"], "ref": n.get("ref"), "x": n["x"], "y": n["y"], "w": WIDTH[n["kind"]], "label": self._label(line_id, n)}
+
+    def _label(self, line_id: str, n: dict) -> str:
+        if n["kind"] == "stage":
+            return NAMES.get(n["ref"], n["ref"])
+        if n["kind"] == "info":
+            return INFO.get(n["ref"], n["ref"])
+        if n["kind"] in ("hard", "soft"):
+            return next((c[3] for c in self._titles(line_id) if c[0] == n["ref"]), n["ref"])
+        return clip(n.get("title") or n.get("text"), 40)
+
+    def _titles(self, line_id: str) -> list[tuple[str, str, str, str]]:
+        cfg = self.town.checks.config(line_id)
+        return [(h.id, "hard", h.stage, h.title) for h in self.town.checks.hard(line_id, cfg)] + \
+               [(s["id"], "soft", s.get("stage") or "", s.get("title") or s["id"]) for s in cfg["soft"]]
+
+    def edge_between(self, line_id: str, a: str, b: str) -> dict | None:
+        return next((e for e in self._load(line_id)["edges"] if {e["source"], e["target"]} == {a, b}), None)
+
+    def spot(self, line_id: str) -> tuple[int, int]:
+        """Somewhere free for a node nobody placed: under everything, on the left."""
+        nodes = self._load(line_id)["nodes"]
+        return (min((n["x"] for n in nodes), default=0), max((n["y"] for n in nodes), default=0) + 150)
+
+    def outline(self, line_id: str) -> str:
+        """The canvas in words: every node with its id and how it stands, and the lines between them."""
+        v = self.view(line_id)
+        out = [f"#{v['seq']}「{clip(v['title'], 40)}」的研究画布。节点（编号 · 种类 · 名字 · 现在怎样）："]
+        for n in v["nodes"]:
+            if n["kind"] == "stage":
+                how = STAGE.get(n["status"], n["status"]) + (f" {n['pct']}%" if n["status"] == "run" else "")
+            elif n["kind"] in ("hard", "soft"):
+                c, last = n["check"], n["check"]["last"] or {}
+                how = "已关闭" if not c["on"] else CHECK_STATUS.get(last.get("status") or ("wait" if c["kind"] == "soft" else "none"), "")
+                if c["kind"] == "hard" and last.get("value") is not None:
+                    how += f"（{int(last['value'])}，最多 {c.get('max', 0)}）"
+                elif c["kind"] == "soft":
+                    how += f"：{clip(last.get('note') or c['text'], 80)}"
+            elif n["kind"] == "task":
+                how = f"给{ROLES[n['to']]['name']}，{TASK[n['status']]}" + (f"：{clip(n['result'] or n['text'], 100)}" if n.get("result") or n.get("text") else "")
+            elif n["kind"] == "note":
+                how = ""
+            else:
+                how = "实时显示项目的这部分"
+            name = clip(n.get("text"), 80) if n["kind"] == "note" else n.get("title")
+            out.append(f"- {n['id']} · {KIND[n['kind']]} · {name}" + (f" · {how}" if how else ""))
+        out += ["", "连线（方括号里是线上写的字）："]
+        out += [f"- {e['source']} — {e['target']}" + (f" [{e['label']}]" if e.get("label") else "") for e in v["edges"]] or ["- 还没有连线"]
+        if v["gone"]:
+            out += ["", "从画布上拿掉了（用户能在「更多」里放回）：" + "、".join(f"{g['id']}（{g['title']}）" for g in v["gone"])]
+        return "\n".join(out)
+
+    def nudge(self, line_id: str, node_id: str, x: float, y: float) -> None:
+        """Move one node and tell the page (dragging on the page does not need telling)."""
+        self.move(line_id, {node_id: [x, y]})
+        self._changed(line_id)
+
     # the view
 
     def view(self, line_id: str) -> dict:
@@ -190,6 +276,10 @@ class Canvas:
                 if not c:
                     continue
                 out |= {"kind": c["kind"], "ref": n["ref"], "title": c["title"], "check": c}
+            elif n["kind"] == "info":
+                if n["ref"] not in INFO:
+                    continue
+                out |= {"ref": n["ref"], "title": INFO[n["ref"]]}
             elif n["kind"] == "task":
                 out |= {k: n.get(k) for k in ("title", "text", "to", "status", "sent_at", "done_at", "result", "by", "created_at")}
                 out["log"] = n.get("log") or []
@@ -198,13 +288,13 @@ class Canvas:
             nodes.append(out)
         ids = {n["id"] for n in nodes}
         tasks = [n for n in nodes if n["kind"] == "task"]
-        gone = [{"id": g, "title": NAMES.get(g.split(":", 1)[1]) or next((c["title"] for c in cv["checks"] if f"check:{c['id']}" == g), g)}
-                for g in d["gone"]]
+        gone = [{"id": g, "title": INFO.get(g.split(":", 1)[1]) or NAMES.get(g.split(":", 1)[1])
+                 or next((c["title"] for c in cv["checks"] if f"check:{c['id']}" == g), g)} for g in d["gone"]]
         return {"line_id": line_id, "seq": ln["seq"], "title": ln["title"], "nodes": nodes,
                 "edges": [e for e in d["edges"] if e["source"] in ids and e["target"] in ids], "gone": gone,
                 "summary": cv["summary"], "tasks": {k: sum(1 for t in tasks if t["status"] == k) for k in TASK},
                 "trend": cv["trend"], "rounds": cv["rounds"], "ran": cv["ran"], "lead": cv["lead"],
-                "agents": {r: {"there": bool(a), "status": a["status"] if a else None}
+                "agents": {r: {"there": bool(a), "status": a["status"] if a else None, "model": a.get("model") if a else None}
                            for r in TO for a in [self.town.leads.agent(line_id, r)]}}
 
     # editing
@@ -310,7 +400,7 @@ class Canvas:
                         self.town.checks.remove(line_id, n["ref"])
                 except CheckError as e:
                     raise CanvasError(str(e)) from e
-            elif n["kind"] == "stage":
+            elif n["kind"] in ("stage", "info"):
                 d["gone"].append(node_id)
             d["nodes"] = [x for x in d["nodes"] if x["id"] != node_id]
             d["edges"] = [e for e in d["edges"] if node_id not in (e["source"], e["target"])]
@@ -328,6 +418,8 @@ class Canvas:
             kind, ref = node_id.split(":", 1)
             if kind == "stage" and ref in INDEX:
                 d["nodes"].append({"id": node_id, "kind": "stage", "ref": ref, "x": _stage_at(ref)[0], "y": _stage_at(ref)[1]})
+            elif kind == "info" and ref in INFO_AT:
+                d["nodes"].append({"id": node_id, "kind": "info", "ref": ref, "x": INFO_AT[ref][0], "y": INFO_AT[ref][1]})
             self._save(line_id, d)
             if kind == "check":
                 self.town.checks.set(line_id, ref, on=True)  # the next load gives it its node back
@@ -417,6 +509,8 @@ class Canvas:
                 what = f"任务 {n['id']}「{n['title']}」（给{ROLES[n['to']]['name']}，{TASK[n['status']]}）"
             elif n["kind"] == "note":
                 what = f"备注：{clip(n.get('text'), 300)}"
+            elif n["kind"] == "info":
+                what = f"项目的{INFO.get(n['ref'], n['ref'])}"
             if what:
                 out.append(what + (f"［线上写着：{near[n['id']]}］" if near[n["id"]] else ""))
         return out
