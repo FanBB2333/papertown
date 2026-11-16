@@ -331,7 +331,7 @@ export const api = {
   lines: () => call<Line[]>('GET', '/api/lines'),
   messages: () => call<Message[]>('GET', '/api/messages?limit=120'),
   trace: () => call<TraceRow[]>('GET', '/api/trace?limit=80'),
-  status: () => call<any>('GET', '/api/status'),
+  freshPapers: () => call<{ papers: (PaperCard & { relevance: number })[] }>('GET', '/api/papers/fresh'),
   departments: () => call<Department[]>('GET', '/api/departments'),
   idea: (text: string, budget: number) => call<Line>('POST', '/api/ideas', { text, budget }),
   hatch: (id: string) => call<Line>('POST', `/api/lines/${id}/hatch`),

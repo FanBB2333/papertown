@@ -267,6 +267,11 @@
 .ov-ask > div:first-of-type { flex: 1; min-width: 0; }
 .ov-ask p { margin: 2px 0 0; color: var(--muted); }
 .ov-ask .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+a.ov-ask { text-decoration: none; transition: border-color .2s; }
+a.ov-ask:hover { border-color: color-mix(in srgb, var(--warn) 60%, transparent); }
+a.ov-ask > .ic:last-child { color: var(--muted); animation: none; }
+.ov-brief { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; color: var(--muted); text-decoration: none; }
+.ov-brief:hover { color: var(--brand); }
 
 .ov-steps { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); margin: 4px 0 0; padding: 0; list-style: none; }
 .ov-steps::before, .ov-steps::after { content: ''; position: absolute; top: 15px; height: 2px; left: calc(50% / var(--n)); right: calc(50% / var(--n)); border-radius: 2px; }

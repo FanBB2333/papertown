@@ -312,7 +312,6 @@ html.ui-mac .ak-you p { color: var(--mac-accent-ink); }
 html.ui-mac .ak-title b { font-weight: 600; font-size: 15px; }
 html.ui-mac .ak-src button { border: 0; background: var(--lg-card); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim); }
 
-html.ui-mac .p-status { background: rgb(var(--lg-tint) / calc(var(--lg-card-a) * .62)); }
 
 /* ---------- reduced transparency ---------- */
 @media (prefers-reduced-transparency: reduce) {
@@ -444,7 +443,6 @@ html.ui-mac .sc-menu li:hover { background: var(--mac-accent); color: var(--mac-
 
 /* a phone: mobile.css's and cloudflare.css's top bar again, at the weight of the rules above */
 @media (max-width: 720px) {
-  html.ui-mac .theme-sketch.la .hud .w-only { background: var(--mac-panel); box-shadow: var(--lg-edge), var(--lg-drop); }
   html.ui-mac .theme-sketch.la .hud { gap: 8px; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); }
   html.ui-mac .theme-sketch.la .hud nav.seg { height: 32px; padding: 2px; }
   html.ui-mac .theme-sketch.la .hud nav.seg::before { top: 2px; bottom: 2px; }

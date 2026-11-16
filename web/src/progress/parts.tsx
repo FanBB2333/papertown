@@ -167,7 +167,7 @@ export function opens(line: ProjectCard['line']) {
 }
 
 export function AskButton({ seq }: { seq: number }) {
-  return <button className="btn pc-ask" onClick={() => go(askPath(seq))} title={tr('问这个项目任何问题')}><Icon n="chat" size={14} /><span>{tr('提问')}</span></button>;
+  return <button className="btn pc-ask" onClick={() => go(askPath(seq))} title={tr('和这个项目对话：提问、交代负责人、回它的问题')}><Icon n="chat" size={14} /><span>{tr('对话')}</span></button>;
 }
 
 // one pane on a card; `bare` in a row, where the column names it and an empty cell is a dash

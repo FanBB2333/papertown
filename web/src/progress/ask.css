@@ -88,6 +88,26 @@
 .ak-lead.wait { border-style: dashed; border-color: color-mix(in srgb, var(--brand) 35%, transparent); background: color-mix(in srgb, var(--brand) 4%, var(--panel)); }
 .ak-lead.wait .ak-by { color: var(--brand); }
 
+/* what an agent reported or asked you, and your answer */
+.ak-note .ak-by b { font-weight: 600; color: var(--warn); }
+.ak-note.key .ak-av, .ak-note:has(.ak-reply) .ak-av { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.ak-note .prose, .ak-q { font-size: 15px; line-height: 1.7; }
+.ak-note .prose > :first-child { margin-top: 0; }
+.ak-note .prose > :last-child { margin-bottom: 0; }
+.ak-q { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ak-res { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.ak-reply { display: flex; flex-direction: column; gap: 8px; }
+.ak-choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.ak-reply-row { display: flex; gap: 6px; }
+.ak-reply-row input {
+  flex: 1; min-width: 0; padding: 7px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel);
+  font: 13.5px var(--font); color: var(--ink);
+}
+.ak-reply-row input:focus { outline: none; border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); }
+.ak-waits .ak-hq { display: flex; align-items: center; gap: 7px; }
+.ak-waits .ak-hq .ic { flex: none; color: var(--warn); }
+.ak-waits .ak-hq span { overflow: hidden; text-overflow: ellipsis; }
+
 .ak-found { display: flex; flex-direction: column; gap: 8px; }
 .ak-found h5 { margin: 0; font: 600 12px var(--font); color: var(--muted); }
 .ak-srcs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

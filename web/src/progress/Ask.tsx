@@ -1,13 +1,16 @@
-// Asking a project anything, full window, at /progress/<number>/ask: answers from what the project
-// holds, with numbered sources; its lead can answer too, often with a page (Pages.tsx).
+// A project's conversation, full window, at /progress/<number>/ask: your questions, answered from what the
+// project holds (with numbered sources) and by its lead when you send them on, often with a page (Pages.tsx);
+// what its agents reported, and what they asked you, in between.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, listen, type Hit, type HitKind, type ProjectCard, type Question } from '../api';
+import { api, listen, type Hit, type HitKind, type ProjectCard, type Question, type Report } from '../api';
+import { Text } from '../components/AgentRoom';
 import { StatusTag } from '../components/MillRoom';
 import { Icon, type IconName } from '../console/icons';
+import { useLead } from '../console/Lead';
 import { ago, enterSends, useMedia } from '../console/util';
-import { tr } from '../i18n';
+import { tr, trx } from '../i18n';
 import { follow, go, href, query } from '../route';
 import { PageFrame, pagesPath, type PageOpen } from './Pages';
 import './ask.css';
@@ -53,6 +56,12 @@ function useQuestions(lineId: string, toast: (t: string) => void) {
   return { qs, lead, offline, put, drop };
 }
 
+// your questions and what the agents reported or asked, oldest first
+type Item = { at: number; q: Question } | { at: number; r: Report };
+const timeline = (qs: Question[], reps: Report[]): Item[] =>
+  [...qs.map(q => ({ at: Date.parse(q.at), q })), ...reps.map(r => ({ at: Date.parse(r.ts), r }))].sort((a, b) => a.at - b.at);
+const itemId = (x: Item) => ('q' in x ? x.q.id : `r${x.r.id}`);
+
 // the questions newest first, under the day they were asked
 function byDay(qs: Question[]): [string, Question[]][] {
   const day = 86400000, start = new Date().setHours(0, 0, 0, 0);
@@ -69,6 +78,9 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
 }) {
   const { line } = r;
   const { qs, lead, offline, put, drop } = useQuestions(line.id, toast);
+  const [lv, again] = useLead(line.id);
+  const items = useMemo(() => timeline(qs ?? [], lv?.reports ?? []), [qs, lv]);
+  const asks = lv?.asks ?? [];
   const [text, setText] = useState('');
   const [toLead, setToLead] = useState(false);
   const [asking, setAsking] = useState<string | null>(null);
@@ -78,7 +90,7 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
   const box = useRef<HTMLTextAreaElement>(null);
   const phone = useMedia('(max-width: 600px)');
   const back = `/progress/${line.seq}`;
-  const empty = qs != null && !qs.length && !asking;
+  const empty = qs != null && !items.length && !asking;
 
   async function send(q = text, withLead = toLead) {
     q = q.trim();
@@ -94,7 +106,7 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
     box.current?.focus();
   }, [line.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const count = (qs?.length ?? -1) + (asking ? 1 : 0);
+  const count = qs == null ? -1 : items.length + (asking ? 1 : 0);
   const first = useRef(true);
   useLayoutEffect(() => { first.current = true; }, [line.id]);
   useLayoutEffect(() => {
@@ -122,13 +134,25 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
   const groups = useMemo(() => byDay(qs ?? []), [qs]);
 
   return createPortal(
-    <div className="ak" role="dialog" aria-modal="true" aria-label={tr('问 #{0}', line.seq)}>
+    <div className="ak" role="dialog" aria-modal="true" aria-label={tr('和 #{0} 对话', line.seq)}>
       {nav && <div className="ak-scrim" onClick={() => setNav(false)} />}
       <aside className={`ak-side${nav ? ' open' : ''}`}>
         <a className="ak-back" href={href(back)} onClick={e => follow(e, back)}><Icon n="left" size={15} />{tr('回到项目')}</a>
-        <button className="ak-new" onClick={fresh}><Icon n="compose" size={16} />{tr('新问题')}</button>
+        <button className="ak-new" onClick={fresh}><Icon n="compose" size={16} />{tr('新消息')}</button>
         <a className="ak-link" href={href(pagesPath(line.seq))} onClick={e => follow(e, pagesPath(line.seq))}><Icon n="doc" size={15} />{tr('汇报与讲解')}</a>
         <nav className="ak-hist" aria-label={tr('问过的')}>
+          {asks.length > 0 && (
+            <section className="ak-waits">
+              <h4>{tr('等你回答')}</h4>
+              <ul>
+                {asks.map(a => (
+                  <li key={a.id} className={lit === `r${a.id}` ? 'on' : ''}>
+                    <button className="ak-hq" onClick={() => jump(`r${a.id}`)} title={a.data.question}><Icon n="bell" size={13} /><span>{a.data.question}</span></button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {groups.map(([name, list]) => (
             <section key={name}>
               <h4>{name}</h4>
@@ -146,7 +170,7 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
         </nav>
         {rows.length > 1 && (
           <section className="ak-projs">
-            <h4>{tr('问别的项目')}</h4>
+            <h4>{tr('别的项目')}</h4>
             <ul>
               {rows.map(x => {
                 const to = askPath(x.line.seq);
@@ -189,8 +213,10 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
             </div>
           ) : (
             <ol className="ak-thread">
-              {qs.map(q => <Turn key={q.id} q={q} lit={lit === q.id} offline={offline} lineId={line.id} seq={line.seq}
-                onOpenHit={onOpenHit} onOpenPage={onOpenPage} onDrop={() => drop(q.id)} toast={toast} />)}
+              {items.map(x => 'q' in x
+                ? <Turn key={x.q.id} q={x.q} lit={lit === x.q.id} offline={offline} lineId={line.id} seq={line.seq}
+                  onOpenHit={onOpenHit} onOpenPage={onOpenPage} onDrop={() => drop(x.q.id)} toast={toast} />
+                : <Note key={itemId(x)} r={x.r} lit={lit === itemId(x)} toast={toast} onDone={again} />)}
               {asking && (
                 <li className="ak-turn">
                   <div className="ak-you"><p>{asking}</p></div>
@@ -229,15 +255,16 @@ function Composer({ box, seq, text, setText, lead, toLead, setToLead, busy, onSe
   const on = toLead && lead;
   return (
     <form className="ak-comp" onSubmit={e => { e.preventDefault(); onSend(); }}>
-      <textarea ref={box} rows={1} value={text} maxLength={1000} placeholder={tr('问 #{0} 任何问题：实验、结果、代码、论文、以前的讨论…', seq)}
+      <textarea ref={box} rows={1} value={text} maxLength={1000}
+        placeholder={lead ? tr('问 #{0} 任何问题，或者交代负责人一件事…', seq) : tr('问 #{0} 任何问题：实验、结果、代码、论文、以前的讨论…', seq)}
         onChange={e => setText(e.target.value)}
         onKeyDown={enterSends(onSend)} />
       <div className="ak-comp-row">
         <button type="button" className={`ak-pill${on ? ' on' : ''}`} disabled={!lead} aria-pressed={on} onClick={() => setToLead(!toLead)}
-          title={lead ? tr('负责人会读项目，用 pt reply 写回答') : tr('这个项目还没有负责人')}>
-          <Icon n={on ? 'check' : 'person'} size={13} />{tr('也交给负责人回答')}
+          title={lead ? tr('负责人会读项目，回答你的问题，或者去办你交代的事') : tr('这个项目还没有负责人')}>
+          <Icon n={on ? 'check' : 'person'} size={13} />{tr('也发给负责人')}
         </button>
-        <button className="ak-send" type="submit" disabled={busy || !text.trim()} title={tr('提问（Enter）')} aria-label={tr('提问')}><Icon n="send" size={16} /></button>
+        <button className="ak-send" type="submit" disabled={busy || !text.trim()} title={tr('发送（Enter）')} aria-label={tr('发送')}><Icon n="send" size={16} /></button>
       </div>
     </form>
   );
@@ -267,7 +294,7 @@ function Turn({ q, lit, offline, lineId, seq, onOpenHit, onOpenPage, onDrop, toa
           ) : <p className="ak-miss">{tr('在这个项目里没找到和这个问题有关的内容。换个说法，或者交给负责人：它能读整个项目。')}</p>}
           {q.lead && (
             <div className={`ak-lead${q.lead.at ? '' : ' wait'}`}>
-              <span className="ak-by"><Icon n="person" size={13} />{q.lead.at ? tr('负责人的回答 · {0}', ago(q.lead.at)) : tr('已经交给负责人，等它读完项目回答 · {0}', ago(q.lead.asked))}</span>
+              <span className="ak-by"><Icon n="person" size={13} />{q.lead.at ? tr('负责人的回复 · {0}', ago(q.lead.at)) : tr('已经发给负责人，等它回 · {0}', ago(q.lead.asked))}</span>
               {q.lead.text && <Prose text={q.lead.text} onCite={cite} />}
               {q.lead.page && (
                 <div className="ak-page">
@@ -298,6 +325,55 @@ function Turn({ q, lit, offline, lineId, seq, onOpenHit, onOpenPage, onDrop, toa
         </div>
       </div>
     </li>
+  );
+}
+
+// something an agent of the project reported, or asked you, with your answer under it
+function Note({ r, lit, toast, onDone }: { r: Report; lit: boolean; toast: (t: string) => void; onDone: () => void }) {
+  const ask = r.kind === 'ask', who = trx(r.data.who ?? '');
+  return (
+    <li className={`ak-turn ak-note${r.data.key ? ' key' : ''}${lit ? ' lit' : ''}`} id={`q-r${r.id}`}>
+      <div className="ak-ans">
+        <span className="ak-av"><Icon n={ask ? 'bell' : 'person'} size={16} /></span>
+        <div className="ak-ans-b">
+          <span className="ak-by">{r.data.key && <b>{tr('要紧')}</b>}{ask ? tr('{0}在问你', who) : tr('{0}的汇报', who)} · {ago(r.ts)}</span>
+          {ask ? <p className="ak-q">{r.data.question}</p> : <div className="prose"><Text text={r.data.text ?? ''} /></div>}
+          {ask && r.data.open && <Answer r={r} toast={toast} onDone={onDone} />}
+        </div>
+      </div>
+      {ask && !r.data.open && r.data.answer && (
+        <div className="ak-you">
+          <p>{r.data.answer}</p>
+          {(r.data.by === 'assistant' || r.data.result) && <span className="ak-res">{[r.data.by === 'assistant' ? tr('小助手替你答的') : '', r.data.result].filter(Boolean).join(' · ')}</span>}
+        </div>
+      )}
+    </li>
+  );
+}
+
+// answering what an agent asked: one of its choices, or a few words
+function Answer({ r, toast, onDone }: { r: Report; toast: (t: string) => void; onDone: () => void }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const choices = r.data.choices ?? [];
+  async function send(t: string) {
+    if (!t.trim() || busy) return;
+    setBusy(true);
+    try { await api.answer(r.id, t.trim()); setText(''); onDone(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+  }
+  return (
+    <div className="ak-reply">
+      {choices.length > 0 && (
+        <div className="ak-choices">
+          {choices.map((c, i) => <button key={c} className={`btn${i === 0 && r.data.act ? ' pri' : ''}`} disabled={busy} onClick={() => send(c)}>{c}</button>)}
+        </div>
+      )}
+      <div className="ak-reply-row">
+        <input value={text} disabled={busy} placeholder={choices.length ? tr('或者写几句') : tr('写下你的回答')}
+          onChange={e => setText(e.target.value)} onKeyDown={enterSends(() => send(text))} />
+        <button className="btn" disabled={busy || !text.trim()} onClick={() => send(text)}>{tr('回答')}</button>
+      </div>
+    </div>
   );
 }
 
@@ -344,36 +420,51 @@ function Prose({ text, onCite }: { text: string; onCite: (n: number) => void }) 
   return <div className="prose">{blocks}</div>;
 }
 
-// on the project's page: a box that starts a question on the page above, and the latest ones asked
-export function AskBox({ r, toast }: { r: ProjectCard; toast: (t: string) => void }) {
+// on the project's page: what waits for your answer, a box that starts a message on the page above, and the
+// conversation's latest
+export function ChatBox({ r, toast }: { r: ProjectCard; toast: (t: string) => void }) {
   const { line } = r;
-  const { qs } = useQuestions(line.id, toast);
+  const { qs, lead } = useQuestions(line.id, toast);
+  const [lv, again] = useLead(line.id);
   const [text, setText] = useState('');
   const start = (q: string) => { if (q.trim()) askLater(line.id, line.seq, q.trim()); };
-  const latest = [...(qs ?? [])].reverse().slice(0, 4);
+  const items = timeline(qs ?? [], lv?.reports ?? []);
+  const asks = lv?.asks ?? [];
+  const latest = items.filter(x => !('r' in x && x.r.data.open)).slice(-4).reverse();
   const page = askPath(line.seq);
   return (
     <section className="psec pj-ask">
       <header className="psec-h">
-        <h3><Icon n="chat" size={16} />{tr('提问')}</h3>
-        <a className="btn" href={href(page)} onClick={e => follow(e, page)}>{qs?.length ? tr('全部 {0} 个问题', qs.length) : tr('打开')}</a>
+        <h3><Icon n="chat" size={16} />{tr('对话')}</h3>
+        <a className="btn" href={href(page)} onClick={e => follow(e, page)}>{items.length ? tr('全部 {0} 条', items.length) : tr('打开')}</a>
       </header>
+      {asks.slice(0, 2).map(a => (
+        <div key={a.id} className="pj-wait">
+          <span className="ak-by"><Icon n="bell" size={13} />{tr('{0}在问你', trx(a.data.who ?? ''))} · {ago(a.ts)}</span>
+          <p>{a.data.question}</p>
+          <Answer r={a} toast={toast} onDone={again} />
+        </div>
+      ))}
+      {asks.length > 2 && <a className="small" href={href(page)} onClick={e => follow(e, page)}>{tr('还有 {0} 件等你回答', asks.length - 2)}</a>}
       <form className="ak-comp mini" onSubmit={e => { e.preventDefault(); start(text); }}>
-        <textarea rows={2} value={text} maxLength={1000} placeholder={tr('问 #{0} 任何问题：实验、结果、代码、论文、以前的讨论…', line.seq)}
+        <textarea rows={2} value={text} maxLength={1000}
+          placeholder={lead ? tr('问 #{0} 任何问题，或者交代负责人一件事…', line.seq) : tr('问 #{0} 任何问题：实验、结果、代码、论文、以前的讨论…', line.seq)}
           onChange={e => setText(e.target.value)}
           onKeyDown={enterSends(() => start(text))} />
         <div className="ak-comp-row">
           <span className="small muted">{tr('在全屏里回答')}</span>
-          <button className="ak-send" type="submit" disabled={!text.trim()} aria-label={tr('提问')}><Icon n="send" size={15} /></button>
+          <button className="ak-send" type="submit" disabled={!text.trim()} aria-label={tr('发送')}><Icon n="send" size={15} /></button>
         </div>
       </form>
       {latest.length ? (
         <ul className="pj-recent">
-          {latest.map(q => {
-            const to = askPath(line.seq, q.id);
+          {latest.map(x => {
+            const to = askPath(line.seq, itemId(x));
+            const said = 'q' in x ? x.q.q : x.r.kind === 'ask' ? x.r.data.question : x.r.data.text?.replace(/[*`#>]/g, '').replace(/\s*\n+\s*(?:[-•]\s+)?/g, ' ');
+            const who = 'q' in x ? (x.q.lead && !x.q.lead.at ? tr('你 · 等负责人') : tr('你')) : trx(x.r.data.who ?? '');
             return (
-              <li key={q.id}><a href={href(to)} onClick={e => follow(e, to)}>
-                <span>{q.q}</span><span className="small muted">{ago(q.at)}{q.lead && !q.lead.at ? ` · ${tr('等负责人')}` : ''}</span>
+              <li key={itemId(x)}><a href={href(to)} onClick={e => follow(e, to)}>
+                <span>{said}</span><span className="small muted">{who} · {ago('q' in x ? x.q.at : x.r.ts)}</span>
               </a></li>
             );
           })}

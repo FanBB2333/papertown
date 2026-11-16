@@ -304,8 +304,7 @@ export function Console(p: Props) {
           {!kept.has(mod) && (
             <section className={`cm-mod on${BLEED.has(mod) ? ' bleed' : ''}`} key={mod} style={{ ['--dir' as string]: dir }}>
               {mod === 'overview' ? <Overview line={line} info={ws.data} tick={p.tick} typeOf={typeOf} go={m => go({ mod: m })}
-                onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)}
-                toast={p.toast} onLead={() => { setRole('lead'); go({ mod: 'agents' }); }} />
+                onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)} />
                 : mod === 'survey' ? <Survey line={line} tick={p.tick} onHatch={p.onHatch} onAdjust={p.onAdjust} />
                   : mod === 'exp' ? <Experiments lineId={id} tick={p.tick} onData={() => go({ mod: 'data' })} />
                     : mod === 'data' ? <Data lineId={id} tick={p.tick} onOpenFile={path => { setReveal(r => ({ root: 'code', path, n: (r?.n ?? 0) + 1 })); go({ mod: 'code' }); }} />

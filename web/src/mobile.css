@@ -22,7 +22,7 @@
   .hud-gear .gear { width: 17px; height: 17px; }
   .toasts { top: calc(var(--hud-h) + 58px); max-width: calc(100vw - 32px); }
 
-  .theme-sketch.la .hud .w-only { position: absolute; left: max(12px, env(safe-area-inset-left)); top: calc(100dvh - 60px - env(safe-area-inset-bottom)); }
+  .hud .modes span { display: none; }
   .walk-hint { display: none; }
 
   /* ---------- the bar along the top ---------- */
@@ -184,7 +184,7 @@
   .bd-in .bd-t { flex: 1 0 calc(100% - 90px); }
   .bd-add { flex: 1 1 0; justify-content: center; padding-inline: 6px; }
   .bd-save { margin-left: 0; width: 100%; justify-content: flex-end; }
-  .ld-reply input { font-size: 15px; }
+  .ak-reply-row input { font-size: 16px; }
   .mnews { top: auto; left: 16px; right: 16px; width: auto; bottom: calc(66px + env(safe-area-inset-bottom)); max-height: 70vh; overflow-y: auto; }
 }
 @keyframes m-up { from { transform: translateY(100%); } }

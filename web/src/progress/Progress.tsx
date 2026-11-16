@@ -2,7 +2,7 @@
 // /progress/<number>: the project in full, asking it (/ask) and the pages its agents wrote (/pages).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, listen, type CardLayout, type Pane, type PaseoDefaults, type ProjectCard } from '../api';
+import { api, listen, type CardLayout, type Pane, type PaperCard, type PaseoDefaults, type ProjectCard } from '../api';
 import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { tr } from '../i18n';
@@ -13,7 +13,7 @@ import { DisplayMenu, rowCols } from './Display';
 import { pagesPath, PagesView, type PageOpen } from './Pages';
 import { MemoryViewer } from './Memory';
 import { AskButton, CardPane, opens, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
-import { hitOpener, Project, type ConsoleTarget } from './Project';
+import { hitOpener, Project, type ConsoleTarget, type Decide } from './Project';
 import { ProjectRows, type Group } from './Rows';
 import './progress.css';
 
@@ -55,8 +55,8 @@ const pageLook = (s: S) => ({ ['--pg-min' as string]: SIZES.pgCard[s.pgCard], ['
 
 type Open = (lineId: string, t?: ConsoleTarget) => void;
 
-export function Progress({ active, seq, sub, page, toast, onOpen }: {
-  active: boolean; seq?: number; sub?: 'ask' | 'pages'; page?: string; toast: (t: string) => void; onOpen: Open;
+export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
+  active: boolean; seq?: number; sub?: 'ask' | 'pages'; page?: string; toast: (t: string) => void; onOpen: Open; decide: Decide;
 }) {
   const [rows, setRows] = useState<ProjectCard[] | null>(null);
   const [layout, setLayout] = useState<CardLayout | null>(null);
@@ -122,7 +122,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
       <div className="pg-wrap">
         {seq != null ? (
           project && sub ? null
-          : project ? <Project key={project.line.id} r={project} defs={defs} toast={toast} onChange={put} onConsole={onOpen} />
+          : project ? <Project key={project.line.id} r={project} defs={defs} toast={toast} onChange={put} onConsole={onOpen} decide={decide} />
             : <p className="muted pg-none">{rows ? <>{tr('没有项目 #{0}。', seq)} <a href={href('/progress')} onClick={e => follow(e, '/progress')}>{tr('看全部项目')}</a></> : tr('加载中…')}</p>
         ) : (
           <>
@@ -163,6 +163,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
                   </div>
                 </section>
               )))}
+            {rows && rows.length > 0 && <Fresh />}
           </>
         )}
       </div>
@@ -173,6 +174,26 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
       {active && project && sub === 'pages' && <PagesView r={project} pid={page} toast={toast} onOpen={opener(project)} />}
       {viewer && <MemoryViewer lineId={viewer.lineId} id={viewer.id} msg={viewer.msg} onClose={() => setViewer(null)} />}
     </main>
+  );
+}
+
+// under the projects: the library's newest papers, the ones closest to a project in progress first
+function Fresh() {
+  const [ps, setPs] = useState<(PaperCard & { relevance: number })[]>([]);
+  useEffect(() => { api.freshPapers().then(r => setPs(r.papers)).catch(() => {}); }, []);
+  if (!ps.length) return null;
+  return (
+    <section className="pg-sec pg-fresh">
+      <h2 className="pg-gh">{tr('新论文')}<span>{tr('按和进行中项目的相关度排')}</span></h2>
+      <ul>
+        {ps.map(p => (
+          <li key={p.paper_id}>
+            <a href={p.url} target="_blank" rel="noreferrer">{p.title}</a>
+            <span className="small muted">{[p.year, p.authors, p.relevance ? tr('相关度 {0}', p.relevance.toFixed(2)) : ''].filter(Boolean).join(' · ')}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

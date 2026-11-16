@@ -279,7 +279,7 @@ function Aside({ agent, role, line, onOpen, toast, children }: { agent: Agent; r
   return (
     <aside className="room-aside">
       {children}
-      {role === 'lead' ? <LeadAside lineId={lid} toast={toast} /> : <ConvSkills lineId={lid} agentId={agent.id} onOpen={onOpen} />}
+      {role === 'lead' ? <LeadAside lineId={lid} seq={line?.seq} toast={toast} /> : <ConvSkills lineId={lid} agentId={agent.id} onOpen={onOpen} />}
       {role === 'coder' && (
         <div className="pnl-s">
           <h4>{tr('提交到农场的实验')}</h4>

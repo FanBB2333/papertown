@@ -7,6 +7,11 @@
 .k-script { background: #8a6d3b; } .k-tool { background: #7f8a99; }
 .warn-t { color: var(--warn); }
 
+/* the 小镇 tab's switch: 中控屏, 平面, 3D */
+.hud .modes button { display: inline-flex; align-items: center; gap: 5px; }
+.hud .modes .ic { flex: none; }
+.proto[data-mode=cards] .hud .modes { display: none; }
+
 /* main map */
 .p-world .core-pad { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
 .p-world .blbl.core rect { fill: var(--accent); stroke: none; }
@@ -41,11 +46,6 @@
 .p-sheet .btns a.btn { text-decoration: none; }
 
 /* status view */
-.p-status .mast h1 { display: flex; align-items: center; justify-content: center; gap: 16px; }
-.p-status .mast h1 .logo-ic { width: 58px; height: 58px; margin-top: -8px; }
-.p-status .news a { text-decoration: none; }
-.p-status .news a:hover { text-decoration: underline; }
-.p-status .lead .news { max-height: 200px; overflow: auto; }
 
 .toasts { position: absolute; left: 50%; top: 86px; transform: translateX(-50%); z-index: 30; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .toast { padding: 8px 16px; font-size: 13px; animation: rise .2s ease-out; }

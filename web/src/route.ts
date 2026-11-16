@@ -1,22 +1,24 @@
 // Client-side routing. The static demo keeps the path in the hash (#/progress).
 //   /   (the landing)
 //   /progress[/6[/ask|/pages[/p3]]]
-//   /console[/6[/<panel>]]
-//   /town   /status   /settings/<part>
+//   /console[/6[/<panel>]]   /town      (the 小镇 tab: the console's panels, or the map)
+//   /settings/<part>
 
 import { useSyncExternalStore } from 'react';
 import { DEMO } from './demo';
 
-export type View = 'cards' | 'console' | 'world' | 'status';
+export type View = 'cards' | 'console' | 'world';
 export interface Route { view: View | 'landing' | 'settings'; seq?: number; mod?: string; sub?: 'ask' | 'pages'; page?: string }
 
-export const PATHS: Record<View, string> = { cards: '/progress', console: '/console', world: '/town', status: '/status' };
+export const PATHS: Record<View, string> = { cards: '/progress', console: '/console', world: '/town' };
 
 function read(): string {
   if (DEMO) return location.hash.startsWith('#/') ? location.hash.slice(1).split('?')[0] : '/';
   return location.pathname.replace(/\/+$/, '') || '/';
 }
 
+// the old status page is part of 进展 now
+if (read() === '/status') history.replaceState(null, '', DEMO ? '#/progress' : '/progress');
 let current = read();
 const subs = new Set<() => void>();
 const changed = () => {
@@ -62,7 +64,6 @@ export function parse(p: string): Route {
   if (a === 'progress') return { view: 'cards', seq, sub: seq != null && (c === 'ask' || c === 'pages') ? c : undefined, page: c === 'pages' ? d || undefined : undefined };
   if (a === 'console') return { view: 'console', seq, mod: c || undefined };
   if (a === 'town') return { view: 'world' };
-  if (a === 'status') return { view: 'status' };
   if (a === 'settings') return { view: 'settings', mod: b || undefined };
   return { view: 'cards' };
 }
@@ -71,7 +72,8 @@ export function parse(p: string): Route {
 export function legacy(): string | null {
   const hp = new URLSearchParams(location.hash.slice(1));
   const v = hp.get('view');
-  if (v === 'console' || v === 'status' || v === 'cards') return PATHS[v];
+  if (v === 'console' || v === 'cards') return PATHS[v];
+  if (v === 'status') return PATHS.cards;
   if (v === 'world' || hp.has('open') || hp.has('3d') || hp.has('chat')) return PATHS.world;
   return null;
 }

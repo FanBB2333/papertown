@@ -1,19 +1,18 @@
-// The overview panel: where the project stands, what it waits on you for, its lead, its stages
-// (each opening the panel that does its work) and the mill's full sheet folded away underneath.
+// The overview panel: the project's stages (each opening the panel that does its work), its parts and the
+// mill's full sheet folded away underneath. How it is going, deciding and talking to its lead are in 进展.
 
 import type { Line, WsInfo } from '../api';
 import { MillDetail } from '../components/Sheet';
 import { StatusTag } from '../components/MillRoom';
 import { tr } from '../i18n';
+import { follow, href } from '../route';
 import { Icon, type IconName } from './icons';
-import { LeadCard } from './Lead';
 import type { ModId } from './Console';
 import { gist } from './util';
 
 interface Props {
   line: Line | null; info: WsInfo | null; tick: number; typeOf: (id: string) => string; go: (m: ModId) => void;
   onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; onOpen: (id: string) => void;
-  toast: (t: string) => void; onLead: () => void;
 }
 
 export const STAGE_MOD: Record<string, ModId> = {
@@ -29,14 +28,8 @@ export function Overview(p: Props) {
   const exp = l.stages.find(s => s.key === 'exp');
   const money = (v: number) => (v > 0 && v < 0.01 ? '<$0.01' : `$${v.toFixed(2)}`);
 
-  const ask = l.status === 'waiting' ? { t: tr('查重报告出来了，等你决定'), d: gist(h?.summary, 80) || tr('看过调研后，决定立项还是调整 idea。'), btns: <>
-    <button className="btn pri" onClick={() => p.onHatch(l.id)}>{tr('孵化并立项')}</button>
-    <button className="btn" onClick={() => p.onAdjust(l.id)}>{tr('调整 idea')}</button>
-    <button className="btn" onClick={() => p.go('survey')}>{tr('先看调研')}</button></> }
-    : l.status === 'paused' || l.status === 'failed' ? { t: l.status === 'failed' ? tr('流水线出错停下了') : tr('流水线暂停了'), d: l.note ?? l.current?.note ?? l.reason ?? '', btns: <>
-      <button className="btn pri" onClick={() => p.onResume(l.id)}>{tr('继续')}</button>
-      <button className="btn" onClick={() => p.onAdjust(l.id)}>{tr('调整方向')}</button></> }
-      : null;
+  const brief = `/progress/${l.seq}`;
+  const ask = l.status === 'waiting' ? tr('查重报告出来了，等你决定') : l.status === 'failed' ? tr('流水线出错停下了') : l.status === 'paused' ? tr('流水线暂停了') : null;
 
   const parts: { m: ModId; icon: IconName; t: string; v: string; s?: string }[] = [
     { m: 'survey', icon: 'lens', t: tr('调研'), v: h?.verdict ?? (l.linked?.paper?.title ? tr('本地项目') : '—'), s: h ? tr('最接近 {0} 篇', h.similar?.length ?? 0) : undefined },
@@ -52,16 +45,17 @@ export function Overview(p: Props) {
           <span className="ov-seq">#{l.seq}</span>
           <h2>{l.title}</h2>
           <StatusTag status={l.status} />
+          <a className="ov-brief small" href={href(brief)} onClick={e => follow(e, brief)} title={tr('进展、卡片和对话')}>{tr('在进展里看')}<Icon n="right" size={12} /></a>
         </div>
         {l.idea && <p className="ov-idea">{gist(l.idea, 140)}</p>}
       </section>
 
       {ask && (
-        <section className="ov-ask">
+        <a className="ov-ask" href={href(brief)} onClick={e => follow(e, brief)}>
           <Icon n="bell" size={20} />
-          <div><b>{ask.t}</b>{ask.d && <p className="small">{ask.d}</p>}</div>
-          <div className="btns">{ask.btns}</div>
-        </section>
+          <div><b>{ask}</b><p className="small">{tr('在「进展」里决定，和负责人商量也在那里')}</p></div>
+          <Icon n="right" size={16} />
+        </a>
       )}
 
       <section className="cs">
@@ -87,8 +81,6 @@ export function Overview(p: Props) {
           ))}
         </ol>
       </section>
-
-      <LeadCard lineId={l.id} toast={p.toast} onOpen={p.onLead} />
 
       <div className="ov-parts">
         {parts.map((x, i) => (

@@ -83,7 +83,7 @@ function Look({ s }: { s: S }) {
           <Pick label={tr('动画')} value={s.motion} options={[['full', tr('完整')], ['calm', tr('柔和')]]} onChange={set('motion')} />
         </Row>
         <Row label={tr('打开页面时')} desc={tr('下次打开页面先看到哪种视图：中控屏是不用走动的面板，小镇可以平面或 3D')}>
-          <Pick label={tr('打开页面时')} value={s.start} options={[['cards', tr('进展')], ['console', tr('中控屏')], ['2d', tr('平面地图')], ['3d', tr('3D 漫游')]]} onChange={set('start')} />
+          <Pick label={tr('打开页面时')} value={s.start} options={[['cards', tr('进展')], ['console', tr('小镇 · 中控屏')], ['2d', tr('小镇 · 平面')], ['3d', tr('小镇 · 3D 漫游')]]} onChange={set('start')} />
         </Row>
       </Card>
     </>

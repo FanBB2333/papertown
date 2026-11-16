@@ -18,8 +18,8 @@ export const STATUS: Record<string, string> = {
   hatching: tr('查重中'), waiting: tr('等你决定'), running: tr('生产中'), paused: tr('已暂停'), failed: tr('出错'), done: tr('已出厂'), dropped: tr('已放弃'),
   linked: tr('本地项目'),
 };
-export function StatusTag({ status, labels = STATUS }: { status: string; labels?: Record<string, string> }) {
-  return <span className={`pst pst-${status}`}>{labels[status] ?? status}</span>;
+export function StatusTag({ status }: { status: string }) {
+  return <span className={`pst pst-${status}`}>{STATUS[status] ?? status}</span>;
 }
 export const AGENT_STATUS: Record<string, string> = {
   stopped: tr('未启动'), starting: tr('启动中'), idle: tr('待命'), working: tr('工作中'), error: tr('出错'), watching: tr('值守'),

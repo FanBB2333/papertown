@@ -41,8 +41,8 @@ const greeting = (h = new Date().getHours()) =>
   h < 5 ? tr('夜深了') : h < 11 ? tr('早上好') : h < 13 ? tr('中午好') : h < 18 ? tr('下午好') : tr('晚上好');
 const FEATURES: [Parameters<typeof Icon>[0]['n'], string, string][] = [
   ['cards', tr('进展'), tr('每个项目一张卡片：在跑的实验、预期产出、代码和论文仓库，负责人按你说的更新。')],
-  ['chat', tr('提问'), tr('对一个项目问任何事，从它的代码、论文、实验和以前的 agent 对话里找答案。')],
-  ['board', tr('中控屏'), tr('代码、实验、论文和员工，在一个面板里管和改。')],
+  ['chat', tr('对话'), tr('问一个项目任何事，或者交代它的负责人去办；负责人的汇报和要你决定的事也在这里。')],
+  ['board', tr('小镇'), tr('每个项目的细节：代码、实验、论文和员工在中控屏的面板里管和改，也可以在小镇里走动。')],
 ];
 
 export function Landing({ auth, err, reload }: { auth: AuthState | null; err: string; reload: () => Promise<AuthState | null> }) {

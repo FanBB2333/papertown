@@ -207,8 +207,6 @@ body.proto-page { background: #f4eee2; }
 .theme-sketch .toasts { z-index: 95; }
 .theme-sketch .toast { padding: 9px 18px; font-size: 13.5px; background: var(--panel); box-shadow: var(--pshadow); animation: toast-in .6s var(--spring-pop) both; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-12px) scale(.96); } }
-.theme-sketch[data-mode=status] .p-status { animation: status-in .6s var(--out) both; }
-@keyframes status-in { from { opacity: 0; transform: translateY(14px); } }
 
 /* .calm is the settings' reduced motion: nothing loops, and what still moves is quick */
 .theme-sketch.calm *, .theme-sketch.calm *::before, .theme-sketch.calm *::after {

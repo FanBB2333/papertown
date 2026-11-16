@@ -1,6 +1,6 @@
-// The app behind the landing: progress cards, the console, the town (2D map or 3D walk) and the status
-// view, with the chat, building rooms and settings over them. Hash params open a state directly:
-// #open=<building>[&line=<id>], #chat, #3d.
+// The app behind the landing, in two tabs: 进展 (every project at a glance, and talking to each) and
+// 小镇 (each project in detail: the console's panels, the 2D map or the 3D walk), with the chat,
+// building rooms and settings over them. Hash params open a state directly: #open=<building>[&line=<id>], #chat, #3d.
 
 import { typing } from './components/walk';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -10,8 +10,8 @@ import { DemoWelcome, RepoLink } from './components/Demo';
 import { Chat, type Composer, type Tab } from './components/Chat';
 import { Interior } from './components/Interior';
 import { SettingsPage } from './components/Settings';
-import { StatusView } from './components/StatusView';
 import { Console } from './console/Console';
+import { Icon } from './console/icons';
 import { Progress } from './progress/Progress';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { follow, go, href, path, PATHS, type Route, type View } from './route';
@@ -37,11 +37,16 @@ function useToasts() {
   return { toasts, push };
 }
 
-const TABS: [View, string, string | undefined][] = [
-  ['cards', tr('进展'), tr('每个项目一张卡片：进展、风险、要你决定的事')],
-  ['console', tr('中控屏'), tr('不用走动：所有项目和小镇的功能都在面板里')],
-  ['world', tr('小镇'), tr('在小镇里走动，进建筑办事；可以平面或 3D')],
-  ['status', tr('运行状态'), undefined],
+const TABS: ['cards' | 'town', string, string][] = [
+  ['cards', tr('进展'), tr('每个项目的进展、风险和要你决定的事；和负责人对话')],
+  ['town', tr('小镇'), tr('每个项目的细节：中控屏的面板，或者在小镇里走动')],
+];
+
+type Mode = 'board' | '2d' | '3d';
+const MODES: [Mode, 'board' | 'map' | 'cube', string, string][] = [
+  ['board', 'board', tr('中控屏'), tr('每个项目的细节摆成面板，不用走动')],
+  ['2d', 'map', tr('平面'), tr('小镇的平面地图，走到建筑门口办事')],
+  ['3d', 'cube', tr('3D 漫游'), tr('在 3D 的小镇里走动，人站在同一个地方')],
 ];
 
 function Gear() {
@@ -58,7 +63,14 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const [hp] = useState(() => new URLSearchParams(location.hash.slice(1)));
   const settingsOpen = at.view === 'settings';
   const under = useRef(at), leaveTo = useRef('/progress'), cameIn = useRef(false);
-  if (!settingsOpen) { under.current = at; leaveTo.current = path(); }
+  // where the 小镇 tab and its 中控屏 switch go back to
+  const townAt = useRef(['2d', '3d'].includes(getSettings().start) ? PATHS.world : PATHS.console), boardAt = useRef(PATHS.console);
+  if (!settingsOpen) {
+    under.current = at;
+    leaveTo.current = path();
+    if (at.view === 'console') townAt.current = boardAt.current = leaveTo.current;
+    else if (at.view === 'world') townAt.current = PATHS.world;
+  }
   const route = under.current;
   const last = useRef<View>('cards');
   const view: View = route.view === 'landing' || route.view === 'settings' ? last.current : route.view;
@@ -177,6 +189,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const newIdea = () => openChat({ kind: 'idea' }, true);
   const askAt = (id: string, name: string) => openChat({ kind: 'ask', building: id, name }, true);
   const adjust = (id: string) => openChat({ kind: 'adjust', lineId: id }, true);
+  const decide = { onHatch: hatch, onResume: resume, onAdjust: adjust };
 
   const [door, setDoor] = useState<{ x: number; y: number } | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -272,7 +285,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ type?: string; view?: string; text?: string }>).detail ?? {};
       if (d.type === 'settings') openSettings();
-      else if (d.type === 'view' && (d.view === 'cards' || d.view === 'console' || d.view === 'world' || d.view === 'status')) go(PATHS[d.view]);
+      else if (d.type === 'view' && (d.view === 'cards' || d.view === 'console' || d.view === 'world')) go(d.view === 'console' ? boardAt.current : PATHS[d.view]);
       else if (d.type === 'toast' && d.text) push(d.text);
     };
     addEventListener('papertown:command', on);
@@ -301,6 +314,14 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     return () => watch.disconnect();
   }, [view]);
 
+  const mode: Mode = view === 'console' ? 'board' : dim === '3d' || dim === 'to3d' ? '3d' : '2d';
+  function show(m: Mode) {
+    if (m === 'board') go(boardAt.current);
+    else if (view !== 'world') { go(PATHS.world); if (m === '3d') go3d(); }
+    else if (m === '3d') go3d();
+    else go2d();
+  }
+
   const hud = world?.hud;
   const busy = asking || lines.some(l => l.status === 'hatching');
   const walking = !sheet && view === 'world' && !chatOpen && !settingsOpen;
@@ -322,8 +343,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
             onFail={msg => { push(msg); leaveFull(); setWant3d(false); setDim('2d'); }} />
         </Suspense>
       )}
-      <StatusView tick={tick} active={view === 'status'} />
-      <Progress active={view === 'cards' && !covered} seq={route.view === 'cards' ? route.seq : undefined} sub={route.view === 'cards' ? route.sub : undefined} page={route.view === 'cards' ? route.page : undefined} toast={push} onOpen={openProject} />
+      <Progress active={view === 'cards' && !covered} seq={route.view === 'cards' ? route.seq : undefined} sub={route.view === 'cards' ? route.sub : undefined} page={route.view === 'cards' ? route.page : undefined} toast={push} onOpen={openProject}
+        decide={decide} />
       {consoleUp && (
         <Console active={view === 'console' && !covered} at={route.view === 'console' ? route : undefined} onPlace={onPlace}
           lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
@@ -333,14 +354,17 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
       <header className="hud">
         <a className="brand" href={href('/')} onClick={e => follow(e, '/')} title={tr('回到首页')}><Logo /><b>Papertown</b></a>
         <nav className="seg" ref={tabs} aria-label={tr('视图')}>
-          {TABS.map(([v, name, tip]) => (
-            <a key={v} href={href(PATHS[v])} className={view === v ? 'on' : ''} aria-current={view === v ? 'page' : undefined} title={tip}
-              onClick={e => follow(e, PATHS[v])}>{name}</a>
-          ))}
+          {TABS.map(([t, name, tip]) => {
+            const on = (t === 'cards') === (view === 'cards'), to = t === 'cards' ? PATHS.cards : townAt.current;
+            return <a key={t} href={href(to)} className={on ? 'on' : ''} aria-current={on ? 'page' : undefined} title={tip} onClick={e => follow(e, to)}>{name}</a>;
+          })}
         </nav>
-        <div className="seg w-only" role="tablist" title={tr('平面地图和 3D 漫游之间切换，人站在同一个地方')}>
-          <button className={dim === '2d' || dim === 'to2d' ? 'on' : ''} onClick={go2d}>{tr('平面')}</button>
-          <button className={dim === '3d' || dim === 'to3d' ? 'on' : ''} onClick={() => go3d()}>{tr('3D 漫游')}</button>
+        <div className="seg modes" role="radiogroup" aria-label={tr('怎么看小镇')}>
+          {MODES.map(([m, icon, name, tip]) => (
+            <button key={m} role="radio" aria-checked={mode === m} className={mode === m ? 'on' : ''} title={tip} aria-label={name} onClick={() => show(m)}>
+              <Icon n={icon} size={15} /><span>{name}</span>
+            </button>
+          ))}
         </div>
         {hud && <div className="hud-quiet">
           <span><b>{hud.lines.running}</b> {tr('个项目在跑')}</span>
@@ -352,7 +376,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>
           <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('指挥小镇的员工，看各部门在做什么（/ 直接开始写）')}
-            onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('对话')}</button>
+            onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('小镇对话')}</button>
         </div>
       </header>
 

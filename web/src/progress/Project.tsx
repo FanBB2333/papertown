@@ -1,5 +1,5 @@
-// A project in full at /progress/<number>: its card, experiments, outputs, repositories and memory,
-// beside boxes for asking it and for the pages its agents wrote.
+// A project at /progress/<number>, in brief: what waits on you, its card, experiments, outputs, repositories and
+// memory, each linking to the console panel with the detail; beside them its conversation and the pages its agents wrote.
 
 import { useEffect, useState } from 'react';
 import { type Hit, type PaseoDefaults, type ProjectCard } from '../api';
@@ -8,13 +8,14 @@ import { Icon } from '../console/icons';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
 import { follow, href, PATHS } from '../route';
-import { AskBox, askPath } from './Ask';
+import { askPath, ChatBox } from './Ask';
 import { PagesBox } from './Pages';
 import { MemorySection, MemoryViewer } from './Memory';
 import { Meter, noCardText, OUT_STATE, repoLine, runText, Stages, UpdateButton, useCardActs, Who } from './parts';
 
 export interface ConsoleTarget { mod?: string; file?: string; job?: string }
 type Open = (lineId: string, t?: ConsoleTarget) => void;
+export interface Decide { onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void }
 
 const LISTS = [['need_you', tr('要你决定')], ['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')]] as const;
 
@@ -29,8 +30,8 @@ export function hitOpener(lineId: string, onConsole: Open, onMemory: (id: string
   };
 }
 
-export function Project({ r, defs, toast, onChange, onConsole }: {
-  r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onConsole: Open;
+export function Project({ r, defs, toast, onChange, onConsole, decide }: {
+  r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onConsole: Open; decide: Decide;
 }) {
   const acts = useCardActs(r, toast, onChange);
   const [note, setNote] = useState('');
@@ -38,6 +39,19 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
   const { line, card } = r;
   const ask = askPath(line.seq);
   useEffect(() => { document.querySelector('.p-prog')?.scrollTo({ top: 0 }); }, [line.id]);
+  const more = (mod: string) => (
+    <button className="lnk pj-more small" onClick={() => onConsole(line.id, { mod })} title={tr('在中控屏里看细节')}>{tr('详细')}<Icon n="right" size={12} /></button>
+  );
+  const wait = line.status === 'waiting' ? {
+    t: tr('查重报告出来了，等你决定'), d: tr('看过调研后，决定立项还是调整 idea。'), btns: <>
+      <button className="btn pri" onClick={() => decide.onHatch(line.id)}>{tr('孵化并立项')}</button>
+      <button className="btn" onClick={() => decide.onAdjust(line.id)}>{tr('调整 idea')}</button>
+      <button className="btn" onClick={() => onConsole(line.id, { mod: 'survey' })}>{tr('先看调研')}</button></>,
+  } : line.status === 'paused' || line.status === 'failed' ? {
+    t: line.status === 'failed' ? tr('流水线出错停下了') : tr('流水线暂停了'), d: '', btns: <>
+      <button className="btn pri" onClick={() => decide.onResume(line.id)}>{tr('继续')}</button>
+      <button className="btn" onClick={() => decide.onAdjust(line.id)}>{tr('调整方向')}</button></>,
+  } : null;
 
   return (
     <div className="pj">
@@ -51,11 +65,18 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
           <StatusTag status={line.status} />
         </div>
         <div className="pj-acts">
-          <a className="btn pri" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={14} />{tr('提问')}</a>
-          <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏里打开这个项目')}><Icon n="board" size={14} />{tr('中控屏')}</button>
+          <a className="btn pri" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={14} />{tr('对话')}</a>
+          <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏里看这个项目的细节')}><Icon n="board" size={14} />{tr('中控屏')}</button>
         </div>
       </header>
       <Stages r={r} names />
+      {wait && (
+        <section className="ov-ask">
+          <Icon n="bell" size={20} />
+          <div><b>{wait.t}</b>{wait.d && <p className="small">{wait.d}</p>}</div>
+          <div className="btns">{wait.btns}</div>
+        </section>
+      )}
 
       <div className="pj-grid">
         <div className="pj-main">
@@ -63,6 +84,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
             <header className="psec-h">
               <h3><Icon n="cards" size={16} />{tr('进展')}</h3>
               <Who r={r} full />
+              {more('overview')}
             </header>
             {card ? (
               <>
@@ -100,7 +122,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
             <header className="psec-h">
               <h3><Icon n="flask" size={16} />{tr('实验')}</h3>
               <span className="muted small">{[tr('{0} 个在跑', r.running.length), r.queued.length ? tr('{0} 个排队', r.queued.length) : '', card?.plans.length ? tr('{0} 个规划中', card.plans.length) : ''].filter(Boolean).join(' · ')}</span>
-              <button className="btn" onClick={() => onConsole(line.id, { mod: 'exp' })}>{tr('看全部任务')}</button>
+              {more('exp')}
             </header>
             <div className="pj-exp">
               <div>
@@ -184,7 +206,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
         </div>
 
         <aside className="pj-side">
-          <AskBox r={r} toast={toast} />
+          <ChatBox r={r} toast={toast} />
           <PagesBox r={r} toast={toast} />
         </aside>
       </div>
