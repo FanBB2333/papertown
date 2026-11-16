@@ -49,9 +49,9 @@ def swap_theme_class(w: Any, th: EdTheme) -> None:
     w.add_class(f"ed-{th.key}")
 
 
-def status_bar(left: Text, right: Text, *, ellipsis: bool = False) -> Table:
+def status_bar(left: Text, right: Text) -> Table:
     grid = Table.grid(expand=True)
-    grid.add_column(no_wrap=True, overflow="ellipsis" if ellipsis else "fold")
+    grid.add_column(no_wrap=True, overflow="ellipsis")
     grid.add_column(justify="right", no_wrap=True)
     grid.add_row(left, right)
     return grid
@@ -386,7 +386,7 @@ class Ide(Horizontal):
                          "自动换行" if self.wrapped() else "不换行"]
             bits.append(self.town.ed.name)
             right.append("  ·  ".join(bits) + " ")
-        self.query_one(".ed-status", Static).update(status_bar(left, right, ellipsis=True))
+        self.query_one(".ed-status", Static).update(status_bar(left, right))
 
     def set_filter(self, q: str) -> None:
         self.ftree.filter = q
