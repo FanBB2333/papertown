@@ -81,8 +81,14 @@ def expand(query: str) -> str:
     return " ".join(phrases(query))
 
 
+def expanded(query: str) -> tuple[str, list[str]]:
+    """The query in English, and its distinct search terms in order."""
+    q_en = expand(query)
+    return q_en, list(dict.fromkeys(tokens(q_en)))
+
+
 def terms_of(query: str) -> list[str]:
-    return list(dict.fromkeys(tokens(expand(query))))
+    return expanded(query)[1]
 
 
 def short_authors(a: list[str]) -> str:
@@ -236,8 +242,7 @@ class Library:
         return sorted(hits, key=lambda h: -h["similarity"])
 
     def search(self, query: str, top_k: int | None = None, since: str | None = None) -> dict:
-        q_en = expand(query)
-        terms = list(dict.fromkeys(tokens(q_en)))
+        q_en, terms = expanded(query)
         cands = self._fts(terms, self.opts["candidates"], since)
         sims = self._vector_sims(q_en or query, cands)
         return {"query": query, "expanded": q_en, "terms": terms, "method": "coverage" if sims is None else "embedding",
@@ -245,8 +250,7 @@ class Library:
 
     def rescore(self, query: str, arxiv_ids: list[str]) -> dict:
         """Score papers against the whole query, so a verdict does not depend on how the agent phrased its searches."""
-        q_en = expand(query)
-        terms = list(dict.fromkeys(tokens(q_en)))
+        q_en, terms = expanded(query)
         papers = self.get(list(dict.fromkeys(arxiv_ids)))
         sims = self._vector_sims(q_en or query, papers)
         return {"method": "embedding" if sims else "coverage", "terms": terms, "hits": self.rank(papers, terms, sims)}

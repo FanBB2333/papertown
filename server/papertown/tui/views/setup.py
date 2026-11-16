@@ -25,7 +25,7 @@ PAGES = [("skills", "技能"), ("mcp", "MCP"), ("library", "图书馆"), ("model
 
 
 class Setup(Place):
-    key, title = "setup", "配置"
+    key = "setup"
     BINDINGS = [
         Binding("left_square_bracket", "page(-1)", "上一页", show=False), Binding("right_square_bracket", "page(1)", "下一页", show=False),
         Binding("t", "toggle", "启用/停用", show=False), Binding("r", "restart", "重连", show=False), Binding("n", "add", "添加", show=False),

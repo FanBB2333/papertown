@@ -21,7 +21,7 @@ from ..widgets import Pane, Place
 
 
 class Daily(Place):
-    key, title = "daily", "日报"
+    key = "daily"
     BINDINGS = [Binding("o", "open", "在浏览器里看", show=False)]
 
     def __init__(self) -> None:

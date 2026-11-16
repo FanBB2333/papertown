@@ -948,7 +948,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         a = bridged(agent_id, x_papertown_token)
         line_id = a["line_id"]
         if a["role"] == ASSISTANT and body.line:
-            line_id = assistant(town.assistant._line, body.line)["id"]
+            line_id = assistant(town.assistant.line_id, body.line)
         if not line_id:
             raise HTTPException(400, "说一下是哪个项目：--line <项目>")
         p = known(town.pages.publish, line_id, body.html, body.title, body.kind, a["model"] or "", agent_id)

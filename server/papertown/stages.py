@@ -258,7 +258,7 @@ def write(town: "Town", line: dict, worker: dict, report: dict, draft: dict, tab
     keylist = "\n".join(dict.fromkeys(keylist.splitlines()))
     prompt = (f"方法草案：\n{draft}\n\n实验结果分析：{table.get('analysis', '')}\n"
               f"结果表{'（模拟数据）' if table.get('simulated') else ''}由印刷厂自动插入。\n\n可引用的论文（bib key  标题）：\n{keylist}\n"
-              + (f"\n上一版的审稿意见，这一版要逐条回应：\n" + "\n".join(f"- {f}" for f in feedback) if feedback else "")
+              + ("\n上一版的审稿意见，这一版要逐条回应：\n" + "\n".join(f"- {f}" for f in feedback) if feedback else "")
               + "\n\n请写初稿并排版。")
     task = AgentTask(worker=worker, stage="write", building="印刷厂", prompt=prompt, finish=PAPER, payload=payload, args=args,
                      line_id=line["id"], required=["summary"], budget=line["budget"] * 0.30)

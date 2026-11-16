@@ -234,15 +234,7 @@ class History:
         self._heads: dict[str, tuple[float, int, dict | None]] = {}
 
     def roots(self, line_id: str) -> list[tuple[str, Path]]:
-        out = []
-        for which in ("code", "paper"):
-            try:
-                r = self.town.workspace.root(line_id, which)
-            except Exception:  # noqa: BLE001 - no project
-                r = None
-            if r:
-                out.append((which, r.resolve()))
-        return out
+        return [(which, r.resolve()) for which in ("code", "paper") if (r := self.town.workspace.find(line_id, which))]
 
     def _head(self, path: Path, read) -> dict | None:
         st = path.stat()

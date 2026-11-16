@@ -25,7 +25,7 @@ from .library import GLOSSARY, STOP, stem
 from .linked import plain
 from .pages import PageError, title_of
 from .llm import ProviderError, Turn
-from .workspace import WsError, _text, list_files
+from .workspace import _text, list_files
 
 if TYPE_CHECKING:
     from .town import Town
@@ -281,10 +281,7 @@ class Asker:
         self._mem: dict[str, tuple[float, Source]] = {}
 
     def _root(self, line_id: str, which: str) -> Source | None:
-        try:
-            root = self.town.workspace.root(line_id, which)
-        except (OSError, WsError):
-            root = None
+        root = self.town.workspace.find(line_id, which)
         if not root:
             return None
         files = repo_files(root)

@@ -135,6 +135,13 @@ class Workspace:
             d = self.s.projects_dir / line_id / "code" if which == "code" else self.s.press_dir / line_id
         return d if d and d.is_dir() else None
 
+    def find(self, line_id: str, which: str) -> Path | None:
+        """root(), or None when the project or its directory cannot be had."""
+        try:
+            return self.root(line_id, which)
+        except (OSError, WsError):
+            return None
+
     def _need(self, line_id: str, which: str) -> Path:
         r = self.root(line_id, which)
         if not r:

@@ -22,7 +22,7 @@ STATE = {"full": "满", "idle": "空闲", "room": "有空", "busy": "忙"}
 
 
 class Plant(Place):
-    key, title = "plant", "电厂"
+    key = "plant"
     BINDINGS = [Binding("R", "fresh", "现在就问 nvidb"), Binding("v", "procs", "进程")]
 
     def __init__(self) -> None:

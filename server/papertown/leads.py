@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from .agents import AgentError, ROLES
-from .db import now
+from .db import now, read_json
 from .nvidb import as_farm_job
 
 if TYPE_CHECKING:
@@ -63,10 +63,7 @@ class Leads:
         self._thread: threading.Thread | None = None
 
     def settings(self, line_id: str) -> dict:
-        try:
-            d = json.loads((self.s.projects_dir / line_id / "lead.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            d = {}
+        d = read_json(self.s.projects_dir / line_id / "lead.json", {})
         return DEFAULTS | {k: v for k, v in d.items() if k in DEFAULTS}
 
     def configure(self, line_id: str, supervise: bool | None = None, every: int | None = None) -> dict:

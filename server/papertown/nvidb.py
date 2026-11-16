@@ -238,14 +238,13 @@ class Nvidb:
     def jobs_matching(self, patterns: list[str]) -> list[dict]:
         """Jobs whose working directory, name, submitter, note or command mentions one of the patterns: the
         queue's live ones first, then the history behind them, newest first."""
-        pats = [p.lower() for p in patterns if p]
-        if not pats:
+        if not any(patterns):
             return []
         out, seen = [], set()
         for j in self.status()["jobs"] + self.history():
             if j["id"] in seen:
                 continue
-            if mentions(j, pats):
+            if mentions(j, patterns):
                 seen.add(j["id"])
                 out.append(j)
         return sorted(out, key=lambda j: -j["id"])

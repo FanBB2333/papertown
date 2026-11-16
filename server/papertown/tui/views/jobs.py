@@ -26,7 +26,7 @@ STATES = [("all", "全部"), ("running", "在跑"), ("queued", "排队"), ("done
 
 
 class Jobs(Place):
-    key, title = "jobs", "任务"
+    key = "jobs"
     BINDINGS = [
         Binding("f", "state", "状态"), Binding("b", "backend", "后端"), Binding("p", "project", "项目"), Binding("slash", "search", "搜索"),
         Binding("n", "submit", "提交"), Binding("x", "cancel", "取消"), Binding("R", "again", "再跑一次"), Binding("l", "follow", "跟日志"),

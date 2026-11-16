@@ -4,14 +4,13 @@
 
 from __future__ import annotations
 
-import json
 import re
 import secrets
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from .agents import PAGE_GUIDE, ROLES, AgentError, model_label
-from .db import now
+from .db import now, read_json, write_json
 from .leads import LeadError, clip
 from .paseo import PaseoError
 from .workspace import WsError
@@ -552,17 +551,14 @@ class Assistant:
         return self.town.agents.public(self.row())
 
     def _names(self) -> dict[str, str]:
-        try:
-            return json.loads((self.dir / "conversations.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {}
+        return read_json(self.dir / "conversations.json", {})
 
     def _name(self, ext_id: str, text: str) -> None:
         """The first thing asked in a conversation, as its name among the earlier ones."""
         names = self._names()
         if ext_id not in names:
             names[ext_id] = clip(text, 60)
-            (self.dir / "conversations.json").write_text(json.dumps(names, ensure_ascii=False, indent=1), encoding="utf-8")
+            write_json(self.dir / "conversations.json", names)
 
     def _mine(self) -> list[dict]:
         try:

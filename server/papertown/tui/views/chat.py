@@ -24,7 +24,7 @@ PAGES = [("town", "小镇"), ("assistant", "小助手")]
 
 
 class Chat(Place):
-    key, title = "chat", "对话"
+    key = "chat"
     BINDINGS = [
         Binding("left_square_bracket,right_square_bracket", "page", "换页", show=False), Binding("t", "trace", "调用记录"),
         Binding("p", "project", "项目"), Binding("y", "act(True)", "批准", show=False), Binding("N", "act(False)", "不批", show=False),

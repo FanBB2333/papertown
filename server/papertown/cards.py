@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from .agents import AgentError
 from .db import now, read_json, write_json
 from .linked import _git
-from .workspace import WsError, list_files, repo_info
+from .workspace import list_files, repo_info
 
 if TYPE_CHECKING:
     from .town import Town
@@ -201,10 +201,7 @@ class Cards:
         out = {}
         linked = self.town.linked.summary(line_id)
         for which in ("code", "paper"):
-            try:
-                root = self.town.workspace.root(line_id, which)
-            except (OSError, WsError):
-                root = None
+            root = self.town.workspace.find(line_id, which)
             info = linked[which] if linked else None
             if info and info.get("missing"):
                 out[which] = {"path": info["path"], "name": Path(info["path"]).name, "missing": True}

@@ -22,7 +22,7 @@ from ..widgets import Confirm, Pane, Place, row_key, sync_rows, transcript, writ
 
 
 class Staff(Place):
-    key, title = "staff", "员工"
+    key = "staff"
     BINDINGS = [
         Binding("s", "say", "对它说"), Binding("b", "brief", "发简报"), Binding("S", "start", "启动"), Binding("x", "stop", "停下"),
         Binding("exclamation_mark", "abort", "打断"), Binding("y", "permit(True)", "允许", show=False), Binding("N", "permit(False)", "拒绝", show=False),

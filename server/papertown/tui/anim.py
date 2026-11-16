@@ -149,7 +149,3 @@ class Glow:
             self.at.pop(key, None)
             return 0.0
         return k * k
-
-    @property
-    def live(self) -> bool:
-        return bool(self.at)

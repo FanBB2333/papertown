@@ -35,7 +35,7 @@ def shown(f: str, status: str) -> bool:
 
 
 class Projects(Place):
-    key, title = "projects", "项目"
+    key = "projects"
     BINDINGS = [
         Binding("left_square_bracket", "tab(-1)", "上一页", show=False), Binding("right_square_bracket", "tab(1)", "下一页", show=False),
         Binding("f", "filter", "筛选"), Binding("slash", "search", "搜索"), Binding("n", "idea", "新 idea"),

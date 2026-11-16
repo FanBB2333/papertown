@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Callable
 from mcp import Client, StdioServerParameters
 
 from .config import SERVER_DIR
+from .db import read_json
 from .tools import Tool, ToolCtx
 
 if TYPE_CHECKING:
@@ -62,10 +63,7 @@ class McpHub:
         return self.town.s.data_dir / "mcp.json"
 
     def _town_config(self) -> dict:
-        try:
-            d = json.loads(self.town_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            d = {}
+        d = read_json(self.town_file, {})
         return {"mcpServers": d.get("mcpServers") or {}, "disabled": d.get("disabled") or []}
 
     def _save_town(self, d: dict) -> None:
