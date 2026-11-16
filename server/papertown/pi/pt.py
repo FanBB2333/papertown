@@ -29,8 +29,10 @@ Any agent of a project has:
     .papertown/pt publish page.html ["title"] [--kind report|explain]
                                              a page in HTML for the user, under 汇报与讲解 in 进展
                                              (the assistant adds --line <project>)
-    .papertown/pt checks [run]               the project's checkpoints: hard checks and where they fail
-                                             (run: check again now), soft checks and the lead's verdicts
+    .papertown/pt checks [run]               the project's checks: hard ones and where they fail
+                                             (run: check again now), soft ones and the lead's verdicts
+    .papertown/pt tasks                      the tasks the user put on the project's canvas for you
+    .papertown/pt task <id> done|blocked "…" close one: what came of it, or why it is stuck
 
 The console's assistant has more (see its AGENTS.md):
 
@@ -213,6 +215,12 @@ def main(a):
         opts, rest = options(a[1:], many=(), flags=())
         q = f"?line={quote(opts['line'])}" if opts.get("line") else ""
         print((call("/checks/run" + q, {}) if rest[:1] == ["run"] else call("/checks" + q))["text"])
+    elif a[0] == "tasks":
+        print(call("/tasks")["text"])
+    elif a[0] == "task":
+        if len(a) < 4 or a[2] not in ("done", "blocked"):
+            sys.exit('用法：pt task <编号> done|blocked "结果或原因"')
+        print(call("/task", {"id": a[1], "status": a[2], "text": " ".join(a[3:])})["text"])
     elif a[0] == "check":
         if len(a) < 4 or a[2] not in ("pass", "warn", "fail"):
             sys.exit('用法：pt check <编号> pass|warn|fail "理由"')

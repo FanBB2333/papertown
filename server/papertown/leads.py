@@ -26,6 +26,7 @@ STATUS = {"hatching": "孵化中", "waiting": "等你决定", "running": "在做
 STAGE = {"todo": "没开始", "run": "进行中", "wait": "等你", "done": "完成"}
 JOB = {"queued": "排队", "running": "在跑", "done": "完成", "failed": "失败", "cancelled": "已取消"}
 CHECK = {"pass": "通过", "warn": "有问题", "fail": "没过"}
+TASK = {"sent": "已经发出", "done": "完成", "blocked": "卡住了"}
 WORKER = {"working": "在干活", "idle": "空闲", "starting": "启动中", "error": "出错", "stopped": "没在运行"}
 YES = ("可以", "允许", "同意", "好", "行", "yes", "ok", "y")
 DEFAULTS = {"supervise": True, "every": 60}  # every: minutes of quiet before a check-in comes anyway
@@ -257,7 +258,7 @@ class Leads:
         if asks:
             out += ["", "等用户回答的问题："]
             out += [f"- 问题 {q['id']}（{q['data'].get('who')}，{_ago(q['ts'])}）：{clip(q['data']['question'], 160)}" for q in asks]
-        out += ["", "关卡：" + self.town.checks.brief(line_id)]
+        out += ["", "检查：" + self.town.checks.brief(line_id)]
         reps = [r for r in self.reports(line_id, 12) if r["kind"] == "report"][-3:]
         if reps:
             out += ["", "最近的汇报："]
@@ -309,6 +310,7 @@ class Leads:
         names = {h.id: h.title for h in self.town.checks.hard(line_id)}
         f |= {f"check:{k}": (r["status"], f"硬检查「{names[k]}」" + (f"（{int(r['value'])} 处）" if r["value"] else ""))
               for k, r in self.town.checks.latest(line_id).items() if k in names and r["status"] in CHECK}
+        f |= self.town.canvas.task_facts(line_id)
         return f
 
     def _changes(self, line_id: str, old: dict, new: dict) -> list[str]:
@@ -329,6 +331,8 @@ class Leads:
                 out.append(what)
             elif kind == "check" and was is not None:
                 out.append(f"{what}：{CHECK.get(was, was)} → {CHECK.get(v, v)}")
+            elif kind == "task" and v in ("done", "blocked"):
+                out.append(f"{what}：{TASK[v]}")
             elif kind == "stage" and was is not None:
                 out.append(f"{what}：{STAGE.get(was, was)} → {STAGE.get(v, v)}")
             elif kind == "line" and was is not None:
@@ -382,7 +386,7 @@ class Leads:
             mins = int((time.time() - self._last[lid]) / 60)
             out.append(f"已经 {mins} 分钟没有新动静了。看看员工是不是闲着、有没有该催的、有没有该告诉用户的。")
         if due:
-            out += [*([""] if changes else []), "到期的软检查（关卡图上要你判断的问题）：", *self.town.checks.ask_text(due)]
+            out += [*([""] if changes else []), "到期的软检查（研究画布上要你判断的问题）：", *self.town.checks.ask_text(due)]
         out += ["", "现在的情况：", self.status(lid), "</checkin>"]
         self._last[lid] = time.time()
         if due:

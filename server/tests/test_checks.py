@@ -98,5 +98,79 @@ def test_hard_checks_read_the_paper_and_soft_ones_go_to_the_lead(tmp_path):
         assert {s["id"] for s in town.checks.due(lid)} == {"method"}
         design = next(x for x in c.get(f"/api/lines/{lid}/checks").json()["checks"] if x["id"] == "design")
         assert design["last"]["status"] == "warn" and design["last"]["note"] == "没有消融实验"
-        assert "关卡：硬检查" in town.leads.status(lid)
+        assert "检查：硬检查" in town.leads.status(lid)
         assert c.get("/api/cards").json()["cards"][0]["checks"]["soft"]["warn"] == 1
+
+
+def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
+    from .test_farm_agents import FakeLink
+
+    app = create_app(make_settings(tmp_path))
+    with TestClient(app) as c:
+        town = app.state.town
+        link = FakeLink()
+        for name in ("conversations", "status", "create", "send", "interrupt", "list"):
+            setattr(town.agents.paseo, name, getattr(link, name))
+        lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
+        wait_for(town, lid, {"waiting"})
+
+        # the first layout: every stage and check a node, checks wired to their stage, and the way back from review
+        v = c.get(f"/api/lines/{lid}/canvas").json()
+        ids = {n["id"]: n for n in v["nodes"]}
+        assert {"stage:idea", "stage:ship", "check:words", "check:design"} <= ids.keys() and ids["check:design"]["kind"] == "soft"
+        pairs = {(e["source"], e["target"]) for e in v["edges"]}
+        assert {("stage:exp", "check:design"), ("stage:review", "stage:write"), ("stage:hatch", "stage:team")} <= pairs
+
+        # nodes move, connect and come off; a built-in check taken off is turned off and can be put back
+        assert c.post(f"/api/lines/{lid}/canvas/move", json={"at": {"check:design": [40, 400]}}).json() == {"ok": True}
+        v = c.delete(f"/api/lines/{lid}/canvas/nodes/check:pdf").json()
+        assert "check:pdf" not in {n["id"] for n in v["nodes"]} and v["gone"] == [{"id": "check:pdf", "title": "PDF 最新"}]
+        assert not next(x for x in c.get(f"/api/lines/{lid}/checks").json()["checks"] if x["id"] == "pdf")["on"]
+        v = c.post(f"/api/lines/{lid}/canvas/nodes/check:pdf/restore").json()
+        assert next(n for n in v["nodes"] if n["id"] == "check:pdf")["check"]["on"] and not v["gone"]
+        v = c.delete(f"/api/lines/{lid}/canvas/nodes/stage:idea").json()
+        assert "stage:idea" not in {n["id"] for n in v["nodes"]} and not any("stage:idea" in (e["source"], e["target"]) for e in v["edges"])
+
+        # a soft check of the user's own, drawn from a node: wired to nothing but that node, so due whatever the stage
+        v = c.post(f"/api/lines/{lid}/canvas/nodes", json={"kind": "soft", "x": 10, "y": 20, "title": "要有消融", "text": "每个模块都有消融吗？",
+                                                           "link": "check:design"}).json()
+        new = next(n for n in v["nodes"] if n["id"] == v["added"])
+        assert (new["id"], new["x"], new["y"], new["check"]["text"]) == ("check:ask-1", 10, 20, "每个模块都有消融吗？")
+        assert ("check:design", "check:ask-1") in {(e["source"], e["target"]) for e in v["edges"]}
+        town.db.x("update lines set status = 'running' where id = ?", lid)
+        assert {s["id"] for s in town.checks.due(lid)} == {"ask-1"}
+        town.db.x("update stages set status = 'run' where line_id = ? and key = 'exp'", lid)
+        assert {s["id"] for s in town.checks.due(lid)} == {"ask-1", "direction", "design"}
+        edge = next(e["id"] for e in v["edges"] if e["target"] == "check:direction")
+        c.delete(f"/api/lines/{lid}/canvas/edges/{edge}")
+        c.post(f"/api/lines/{lid}/canvas/edges", json={"source": "check:direction", "target": "stage:ship"})
+        assert {s["id"] for s in town.checks.due(lid)} == {"ask-1", "design"}
+
+        # a task: kept as a draft until its agent is there, then sent with what it is wired to, and closed by the agent
+        v = c.post(f"/api/lines/{lid}/canvas/nodes", json={"kind": "task", "x": 0, "y": 300, "title": "补消融实验", "text": "三个模块各去掉一次",
+                                                           "to": "lead", "link": "check:design", "send": False}).json()
+        tid = v["added"]
+        assert next(n for n in v["nodes"] if n["id"] == tid)["status"] == "draft" and v["tasks"]["draft"] == 1
+        assert c.post(f"/api/lines/{lid}/canvas/nodes/{tid}/send").status_code == 400  # no lead yet
+        lead = c.post("/api/agents", json={"line_id": lid, "role": "lead"}).json()["id"]
+        c.post(f"/api/agents/{lead}/start", json={"runtime": "paseo", "provider": "claude", "model": "claude-opus-5-5", "thinking": "high"})
+        said = []
+        town.agents.say = lambda agent_id, text, *a, **k: said.append((agent_id, text))
+        v = c.put(f"/api/lines/{lid}/canvas/nodes/{tid}", json={"text": "三个模块各去掉一次，报 Mean-5"}).json()
+        v = c.post(f"/api/lines/{lid}/canvas/nodes/{tid}/send").json()
+        assert next(n for n in v["nodes"] if n["id"] == tid)["status"] == "sent"
+        assert said[-1][0] == lead
+        sent = said[-1][1]
+        assert f'<task id="{tid}">' in sent and "补消融实验" in sent and "软检查 design「实验设计」" in sent and f"pt task {tid} done" in sent
+        assert tid in town.canvas.tasks_text(lead)
+        r = town.canvas.close(lead, tid, "done", "三个消融都跑了，Mean-5 各降 1.2 到 2.0")
+        assert "完成" in r["text"]
+        node = next(n for n in c.get(f"/api/lines/{lid}/canvas").json()["nodes"] if n["id"] == tid)
+        assert node["status"] == "done" and node["result"].startswith("三个消融")
+        assert town.leads.reports(lid, 5)[-1]["data"]["text"].startswith("画布上的任务「补消融实验」完成")
+        assert town.leads._facts(lid)[f"task:{tid}"][0] == "done"
+
+        # tidying puts stages and checks back where they started; the task stays where the user left it
+        v = c.post(f"/api/lines/{lid}/canvas/tidy").json()
+        at = {n["id"]: (n["x"], n["y"]) for n in v["nodes"]}
+        assert at["stage:exp"] == (3 * 400, 300) and at["stage:method"] == (3 * 400, 0) and at[tid] == (0, 300)

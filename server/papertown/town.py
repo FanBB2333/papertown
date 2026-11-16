@@ -21,6 +21,7 @@ from .db import DB, now
 from .depots import Depots
 from .events import EventBus
 from .farm import Farm, summarize
+from .canvas import Canvas
 from .checks import Checks
 from .leads import Leads
 from .graph import Genealogy
@@ -73,6 +74,7 @@ class Town:
         self.bounds = Bounds(self)
         self.leads = Leads(self)
         self.checks = Checks(self)
+        self.canvas = Canvas(self)
         self.relay = Relay(self)
         self.paseo_models = PaseoModels(self)
         self.cards = Cards(self)

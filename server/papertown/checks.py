@@ -1,4 +1,4 @@
-"""Checks on a project, drawn in 进展 as its 关卡图 (checkpoint map): each one hangs on a stage of the research loop.
+"""Checks on a project. They are nodes on its canvas in 进展 (canvas.py), wired to whatever they guard.
 
 Hard checks are code: counts, patterns and fixed formats in the paper's source, the duplicate check, the jobs'
 results and the PDF. They must pass. Papertown runs them again whenever what they read changes, and a worker runs
@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from .db import now, read_json, write_json
-from .pipeline import INDEX, NAMES
+from .pipeline import INDEX
 
 if TYPE_CHECKING:
     from .town import Town
@@ -535,7 +535,7 @@ def pattern_check(d: dict) -> Hard:
         out = [_hit(p, m, d.get("hint") or "按规则改掉") for p in x.paper.paras for m in rx.finditer(p.text)]
         return len(out), out, ""
 
-    return Hard(d["id"], d.get("title") or d["id"], d.get("stage") or "write", d.get("prio") or "P1", "你加的规则",
+    return Hard(d["id"], d.get("title") or d["id"], d.get("stage") or "", d.get("prio") or "P1", "你加的规则",
                 f"论文里不出现 /{d.get('pattern', '')}/。", run, max=int(d.get("max") or 0), custom=True)
 
 
@@ -656,7 +656,8 @@ class Checks:
     # soft checks: when they are due, and asking the lead
 
     def due(self, line_id: str) -> list[dict]:
-        """Soft checks the lead should answer now: on a stage the project has reached, not answered or asked lately."""
+        """Soft checks the lead should answer now: wired on the canvas to a stage the project has reached (or to no
+        stage at all), and not answered or asked lately."""
         ln = self.db.one("select status from lines where id = ?", line_id)
         if not ln or ln["status"] not in ("running", "linked"):
             return []
@@ -665,7 +666,8 @@ class Checks:
         cfg, last = self.config(line_id), self.latest(line_id)
         out = []
         for s in cfg["soft"]:
-            if s["id"] in cfg["off"] or s.get("stage") not in reached:
+            wired = self.town.canvas.stages_of(line_id, s["id"])
+            if s["id"] in cfg["off"] or wired and not wired & reached:
                 continue
             seen = max([t for t in ((last.get(s["id"]) or {}).get("ts"), cfg["asked"].get(s["id"])) if t] or [""])
             if not seen or _hours(seen) >= float(s.get("every") or SOFT_EVERY):
@@ -741,6 +743,11 @@ class Checks:
         return self.view(line_id)
 
     def add(self, line_id: str, kind: str, stage: str, title: str, text: str, prio: str = "P1", most: int = 0) -> dict:
+        self.create(line_id, kind, stage, title, text, prio, most)
+        return self.view(line_id)
+
+    def create(self, line_id: str, kind: str, stage: str, title: str, text: str, prio: str = "P1", most: int = 0) -> str:
+        """A check of the user's own: a question for the lead (soft) or a pattern the paper must not contain (hard)."""
         self._line(line_id)
         title, text = clip(title, 20), str(text or "").strip()
         if not title or not text:
@@ -770,7 +777,8 @@ class Checks:
                 raise CheckError("检查分硬（hard）和软（soft）两种")
             self._save(line_id, cfg)
         self.run(line_id, force=True)
-        return self.view(line_id)
+        self.town.bus.publish("checks", line_id=line_id)
+        return cid
 
     def remove(self, line_id: str, check_id: str) -> dict:
         self._line(line_id)
@@ -792,7 +800,7 @@ class Checks:
     # views
 
     def view(self, line_id: str) -> dict:
-        """The checkpoint map: the stages, each check on its stage with its last result and history, and the trend."""
+        """The project's checks: the stages, each check with its last result and history, and the trend."""
         ln = self._line(line_id)
         snap = self.town.pipeline.snapshot(line_id) or {}
         cfg, last = self.config(line_id), self.latest(line_id)
@@ -810,7 +818,7 @@ class Checks:
                         "custom": h.custom, "on": h.id not in cfg["off"], "last": self._last(last.get(h.id)),
                         "history": hist.get(h.id, [])[::-1]})
         for s in cfg["soft"]:
-            out.append({"id": s["id"], "kind": "soft", "stage": s.get("stage") or "exp", "title": s["title"], "prio": "", "rule": s.get("rule") or "",
+            out.append({"id": s["id"], "kind": "soft", "stage": s.get("stage") or "", "title": s["title"], "prio": "", "rule": s.get("rule") or "",
                         "text": s["prompt"], "every": s.get("every") or SOFT_EVERY, "custom": s["id"].startswith("ask-"),
                         "on": s["id"] not in cfg["off"], "last": self._last(last.get(s["id"])), "asked": cfg["asked"].get(s["id"]),
                         "due": s["id"] in due, "history": hist.get(s["id"], [])[::-1]})
@@ -877,7 +885,7 @@ class Checks:
         v = self.view(line_id)
         mark = {"pass": "✓", "warn": "!", "fail": "✗", "none": "·", "wait": "?"}
         s = v["summary"]
-        out = [f"#{v['seq']} 的关卡：硬检查 {s['hard']['pass']}/{s['hard']['total'] - s['hard']['none']} 通过，"
+        out = [f"#{v['seq']} 的检查：硬检查 {s['hard']['pass']}/{s['hard']['total'] - s['hard']['none']} 通过，"
                f"软检查 {s['soft']['pass']}/{s['soft']['total']} 通过", "",
                "硬检查（Papertown 用代码查，要满足；改完论文用 `pt checks run` 再跑一遍）："]
         for c in v["checks"]:
@@ -886,7 +894,7 @@ class Checks:
             last = c["last"] or {}
             st = last.get("status") or "none"
             val = last.get("value")
-            out.append(f"- {mark[st]} {c['id']}「{c['title']}」[{c['prio']}，{NAMES.get(c['stage'], c['stage'])}，{c['rule']}]："
+            out.append(f"- {mark[st]} {c['id']}「{c['title']}」[{c['prio']}，{c['rule']}]："
                        + (STATUS[st] if val is None else f"{int(val)} {c['unit']}（最多 {int(c['max'])}）") + (f"；{last['note']}" if last.get("note") else ""))
             if st in ("fail", "warn"):
                 for f in last.get("findings", [])[:12]:
@@ -937,6 +945,9 @@ def stamp() -> str:
 
 
 def _stage(key: str) -> str:
+    """A stage a check is first placed by; none is fine, the canvas says what it is wired to."""
+    if not key:
+        return ""
     if key not in INDEX:
         raise CheckError(f"没有这道工序：{key}")
     return key

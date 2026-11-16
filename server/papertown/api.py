@@ -21,6 +21,7 @@ from .ask import AskError
 from .assistant import ID as ASSISTANT, ActError
 from .auth import COOKIE, DAYS, Auth, AuthError, Gate
 from .bounds import BoundsError
+from .canvas import CanvasError
 from .cards import CardError
 from .checks import CheckError
 from .paseo_models import ModelError
@@ -129,6 +130,40 @@ class CheckAddIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     prio: str = "P1"
     max: int = Field(default=0, ge=0, le=10000)
+
+
+class NodeIn(BaseModel):
+    kind: str
+    x: float = 0
+    y: float = 0
+    title: str = Field(default="", max_length=80)
+    text: str = Field(default="", max_length=4000)
+    to: str = "lead"
+    prio: str = "P1"
+    link: str | None = None
+    send: bool = False
+
+
+class NodeSetIn(BaseModel):
+    title: str | None = Field(default=None, max_length=80)
+    text: str | None = Field(default=None, max_length=4000)
+    to: str | None = None
+    status: str | None = None
+
+
+class MoveIn(BaseModel):
+    at: dict[str, list[float]]
+
+
+class EdgeIn(BaseModel):
+    source: str
+    target: str
+
+
+class TaskIn(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    status: str
+    text: str = Field(min_length=1, max_length=4000)
 
 
 class VerdictIn(BaseModel):
@@ -313,6 +348,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     agents, assistant = mapped(AgentError), mapped(AgentError, ActError)
     leads = mapped(LeadError, AgentError, CardError)
     checks = mapped(CheckError, AgentError, LeadError)
+    canvas = mapped(CanvasError, CheckError, AgentError, LeadError)
     known = mapped(HistoryError, AskError, AgentError, CardError, PageError)
     skim, mcp = mapped(SkimError), mapped(McpError)
 
@@ -802,6 +838,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def line_check_ask(line_id: str, check_id: str):
         return checks(town.checks.ask_now, line_id, check_id)
 
+    @app.get("/api/lines/{line_id}/canvas")
+    def line_canvas(line_id: str):
+        checks(town.checks.run, line_id)
+        return canvas(town.canvas.view, line_id)
+
+    @app.post("/api/lines/{line_id}/canvas/nodes")
+    def canvas_add(line_id: str, body: NodeIn):
+        return canvas(town.canvas.add, line_id, body.kind, body.x, body.y, body.title, body.text, body.to, body.prio, body.link, body.send)
+
+    @app.put("/api/lines/{line_id}/canvas/nodes/{node_id}")
+    def canvas_set(line_id: str, node_id: str, body: NodeSetIn):
+        return canvas(town.canvas.set, line_id, node_id, body.title, body.text, body.to, body.status)
+
+    @app.delete("/api/lines/{line_id}/canvas/nodes/{node_id}")
+    def canvas_remove(line_id: str, node_id: str):
+        return canvas(town.canvas.remove, line_id, node_id)
+
+    @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/send")
+    def canvas_send(line_id: str, node_id: str):
+        return canvas(town.canvas.send, line_id, node_id)
+
+    @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/restore")
+    def canvas_restore(line_id: str, node_id: str):
+        return canvas(town.canvas.restore, line_id, node_id)
+
+    @app.post("/api/lines/{line_id}/canvas/move")
+    def canvas_move(line_id: str, body: MoveIn):
+        return canvas(town.canvas.move, line_id, body.at)
+
+    @app.post("/api/lines/{line_id}/canvas/edges")
+    def canvas_connect(line_id: str, body: EdgeIn):
+        return canvas(town.canvas.connect, line_id, body.source, body.target)
+
+    @app.delete("/api/lines/{line_id}/canvas/edges/{edge_id}")
+    def canvas_disconnect(line_id: str, edge_id: str):
+        return canvas(town.canvas.disconnect, line_id, edge_id)
+
+    @app.post("/api/lines/{line_id}/canvas/tidy")
+    def canvas_tidy(line_id: str):
+        return canvas(town.canvas.tidy, line_id)
+
     @app.get("/api/lines/{line_id}/lead")
     def lead(line_id: str):
         if not town.pipeline.line(line_id):
@@ -986,6 +1063,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def bridge_check(agent_id: str, body: VerdictIn, x_papertown_token: str | None = Header(default=None)):
         bridged(agent_id, x_papertown_token)
         return checks(town.checks.verdict, agent_id, body.id, body.status, body.text)
+
+    @app.get("/api/bridge/{agent_id}/tasks")
+    def bridge_tasks(agent_id: str, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        return {"text": canvas(town.canvas.tasks_text, agent_id)}
+
+    @app.post("/api/bridge/{agent_id}/task")
+    def bridge_task(agent_id: str, body: TaskIn, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        return canvas(town.canvas.close, agent_id, body.id, body.status, body.text)
 
     @app.get("/api/bridge/{agent_id}/card")
     def bridge_card(agent_id: str, x_papertown_token: str | None = Header(default=None)):
