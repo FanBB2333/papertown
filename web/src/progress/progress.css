@@ -7,7 +7,7 @@
 /* the overlays render at the app's root, outside .p-prog, so they need the colours too */
 .p-prog, .pd-back { --pc-ok: var(--ok); --pc-risk: var(--warn); --pc-blocked: var(--bad); --lw: 58px; }
 html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
-.proto[data-mode=cards] .p-prog { display: block; animation: con-in .5s var(--out) both; }
+.proto[data-mode=cards] .p-prog { display: block; animation: rise-in .5s var(--out) both; }
 .proto[data-mode=cards] .w-only { display: none; }
 .proto[data-mode=cards] :is(.p-world, .t3) { visibility: hidden; }
 .proto[data-mode=cards] .dock:not(.open) { display: none; }
@@ -203,7 +203,7 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 [data-stages=off] .pc-stages:not(.named) { display: none; }
 
 /* ---------- a project in full ---------- */
-.pj { display: flex; flex-direction: column; gap: 14px; animation: con-in .4s var(--out) both; }
+.pj { display: flex; flex-direction: column; gap: 14px; animation: rise-in .4s var(--out) both; }
 .pj-card { --h: var(--line); position: relative; overflow: hidden; }
 .pj-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--h); }
 .pj-crumb a { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); text-decoration: none; }

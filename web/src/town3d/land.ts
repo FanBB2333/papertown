@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { N, tileMat } from '@design/world.js';
 import type { World } from './body';
-import { GLOW, INK, TOP, WADE_Y, WATER_Y, disposeGeometry, hash, type Materials } from './scene';
+import { GLOW, INK, TOP, WADE_Y, WATER_Y, clamp01, disposeGeometry, hash, type Materials } from './scene';
 import { EDGES, PX, ZS, type V3 } from './pen3';
 
 const CH = 16; // tiles a chunk
@@ -27,7 +27,6 @@ function fbm(x: number, y: number, s: number) {
   return v / 0.9375; // 0..1
 }
 
-export const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const onBoard = (x: number, y: number) => x >= 0 && y >= 0 && x < N && y < N;
 
 const cache = new Map<number, Tile>();

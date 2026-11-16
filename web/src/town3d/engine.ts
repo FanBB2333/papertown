@@ -12,9 +12,9 @@ import { doorOf, free, gap, loadPos, REACH, savePos, START, typing, type Pos } f
 import { Body, WALK, type Input, type World } from './body';
 import { Hand } from './hand';
 import { buildHall, type Hall, type HallData, type Thing } from './halls';
-import { buildLand, clamp01, worldOf, type Land } from './land';
+import { buildLand, worldOf, type Land } from './land';
 import { buildLife, type Life, type Walker } from './life';
-import { BRAND, buildTown, disposeGeometry, figure, Materials, PAPER, type Town } from './scene';
+import { BRAND, buildTown, clamp01, disposeGeometry, figure, Materials, PAPER, type Town } from './scene';
 
 // the palette is given in display colours and the lights are tuned for them: no linear workflow
 THREE.ColorManagement.enabled = false;

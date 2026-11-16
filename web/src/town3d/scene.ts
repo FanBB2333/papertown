@@ -19,6 +19,7 @@ export const WATER_Y = -0.1;
 export const WADE_Y = -0.16; // where your feet are in the shallows
 export const GLOW = new THREE.Color('#ffc46b'); // lit windows and lamps after dark
 
+export const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 export const mix = (a: string, b: string, t: number) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
 
 export function disposeGeometry(o: THREE.Object3D) {
@@ -374,7 +375,7 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
   for (let j = 0; j < 128; j++) for (let i = 0; i < 128; i++) {
     const wx = -SEA + (i + 0.5) / 128 * span, wz = -SEA + (j + 0.5) / 128 * span;
     const out = Math.hypot(Math.max(0, -wx), Math.max(0, -wz)) / (SEA - 1);
-    const a = Math.round(255 * Math.max(0, Math.min(1, 1 - out * out)));
+    const a = Math.round(255 * clamp01(1 - out * out));
     img.data.set([a, a, a, 255], (j * 128 + i) * 4);
   }
   fx.putImageData(img, 0, 0);

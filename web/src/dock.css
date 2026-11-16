@@ -13,7 +13,6 @@
 .proto[data-mode=console] .cm::after { content: ''; position: absolute; left: 0; right: 0; bottom: 64px; height: 1px; background: var(--line); pointer-events: none; }
 .proto .p-status { padding-bottom: 100px; }
 .proto .walk-hint { bottom: 92px; }
-.pt-hint { bottom: 84px; }
 .dock .ic { width: 18px; height: 18px; }
 .dk-fab { display: none; } /* mobile.css shows it on phones */
 

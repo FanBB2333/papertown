@@ -6,10 +6,9 @@
   display: none; position: absolute; inset: var(--hud-h) 0 0 0; z-index: 5; flex-direction: column; background: var(--bg); color: var(--ink);
 }
 .p-console, .edp { --side: color-mix(in srgb, var(--panel2) 55%, var(--bg)); }
-.proto[data-mode=console] .p-console { display: flex; animation: con-in .55s var(--out) both; }
+.proto[data-mode=console] .p-console { display: flex; animation: rise-in .55s var(--out) both; }
 .proto[data-mode=console] .w-only { display: none; }
 .proto[data-mode=console] :is(.p-world, .t3) { visibility: hidden; }
-@keyframes con-in { from { opacity: 0; transform: translateY(8px); } }
 
 .p-console .sp { flex: 1; }
 .p-console kbd { font: 10.5px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--muted); background: var(--panel); }
