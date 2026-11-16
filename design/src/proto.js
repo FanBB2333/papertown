@@ -420,7 +420,7 @@ mmSvg.addEventListener('click', e => {
 
 function hover(e) {
   const tip = $('tip');
-  const g = root.dataset.mode === 'world' && $('modal').hidden && e.target.closest?.('.p-world [data-b]');
+  const g = root.dataset.mode === 'world' && $('modal').hidden && e.target.closest('.p-world [data-b]');
   if (!g) { tip.hidden = true; return; }
   const pl = place(g.dataset.id), b = BUILDINGS[pl.type];
   tip.innerHTML = `<b>${placementName(pl)}</b><span>${DISTRICTS[b.district].name}</span><p>${b.rep}</p><em>${b.tech} · 点击查看流水线</em>`;
