@@ -23,7 +23,7 @@ struct PapertownApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.appearance = NSAppearance(named: .aqua) // the town is on paper, there is no dark page
+        NSApp.appearance = NSAppearance(named: .aqua) // the splash is on paper; the page says what comes after it
         Task { await Shell.shared.start() }
     }
 
@@ -103,7 +103,7 @@ struct MainView: View {
         .frame(minWidth: 960, minHeight: 600)
         // under the (hidden) title bar: the paper while starting, then the colour of the page's
         // top bar, so the two read as one
-        .background(Color(nsColor: shell.phase == .ready ? .hud : .paper).ignoresSafeArea())
+        .background(Color(nsColor: shell.phase == .ready ? shell.strip : .paper).ignoresSafeArea())
         .background(OneWindow())
     }
 }

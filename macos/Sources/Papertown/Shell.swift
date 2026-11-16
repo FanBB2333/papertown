@@ -17,6 +17,7 @@ final class Shell {
     var phase = Phase.starting("")
     var lang: Lang { didSet { defaults.set(lang.rawValue, forKey: "lang") } }
     private(set) var ownsServer = false
+    private(set) var strip = NSColor.hud // under the hidden title bar, the colour of the page's top bar
 
     // the app's own settings (the page has its own, behind ⌘,)
     var repoPath: String { didSet { defaults.set(repoPath, forKey: "repo") } }
@@ -53,6 +54,10 @@ final class Shell {
         stopOnQuit = d.object(forKey: "stopOnQuit") as? Bool ?? true
         page = Page(lang: lang)
         page.onLang = { [weak self] in self?.lang = $0 }
+        page.onLook = { [weak self] strip, dark in
+            self?.strip = strip
+            NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        }
         page.onFinish = { [weak self] in self?.loaded() }
         page.onFail = { [weak self] e in
             guard let self, self.phase != .ready else { return }
@@ -227,6 +232,11 @@ final class Shell {
 }
 
 extension NSColor {
+    convenience init?(hex: String) {
+        guard hex.count == 7, hex.hasPrefix("#"), let v = UInt32(hex.dropFirst(), radix: 16) else { return nil }
+        self.init(srgbRed: CGFloat(v >> 16 & 255) / 255, green: CGFloat(v >> 8 & 255) / 255, blue: CGFloat(v & 255) / 255, alpha: 1)
+    }
+
     static let paper = NSColor(srgbRed: 0xf4 / 255, green: 0xee / 255, blue: 0xe2 / 255, alpha: 1) // --bg
     static let hud = NSColor(srgbRed: 0xf3 / 255, green: 0xe2 / 255, blue: 0xd5 / 255, alpha: 1) // the page's top bar
     static let ink = NSColor(srgbRed: 0x2f / 255, green: 0x26 / 255, blue: 0x1d / 255, alpha: 1)

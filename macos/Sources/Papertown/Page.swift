@@ -13,6 +13,7 @@ final class Page: NSObject {
     var onFinish: (() -> Void)?
     var onFail: ((Error) -> Void)?
     var onLang: ((Lang) -> Void)?
+    var onLook: ((NSColor, Bool) -> Void)? // the colour of the page's top bar, and whether it is dark
     private var popups: [WKWebView: NSWindow] = [:]
     private var titles: [WKWebView: NSKeyValueObservation] = [:]
     private var downloads = Set<WKDownload>()
@@ -35,6 +36,7 @@ final class Page: NSObject {
         super.init()
         web.navigationDelegate = self
         web.uiDelegate = self
+        web.configuration.userContentController.add(self, name: "look")
     }
 
     func load(_ url: URL) {
@@ -88,6 +90,17 @@ final class Page: NSObject {
         a.addButton(withTitle: t("好"))
         if cancel { a.addButton(withTitle: t("取消")).keyEquivalent = "\u{1b}" }
         return a
+    }
+}
+
+// the page says which look it has whenever that changes (web/src/settings.ts), and the window takes
+// it up: what shows past the page's edges, the strip under the title bar, light or dark
+extension Page: WKScriptMessageHandler {
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let look = message.body as? [String: Any], let bar = (look["bar"] as? String).flatMap(NSColor.init(hex:)) else { return }
+        let strip = look["ui"] as? String == "paper" ? NSColor.hud : bar // the paper's top bar is not its page colour
+        web.underPageBackgroundColor = strip
+        onLook?(strip, look["dark"] as? Bool ?? false)
     }
 }
 
