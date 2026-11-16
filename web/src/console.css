@@ -1187,7 +1187,7 @@ td.heat.best { font-weight: 700; }
   .ov-steps::before, .ov-steps::after { display: none; }
 }
 
-/* ---------- the assistant's sidebar ---------- */
+/* ---------- the assistant (in the floating window) and the lead's chat (in the sidebar, and in 进展) ---------- */
 .fb-side {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--line); border-radius: 99px; flex: none;
   background: var(--panel); font: 13px var(--font); color: var(--muted); cursor: pointer; transition: color .2s, background-color .2s, border-color .2s, transform .45s var(--spring);
@@ -1200,10 +1200,6 @@ td.heat.best { font-weight: 700; }
   background: var(--side); border-left: 1px solid var(--line); animation: asst-in .45s var(--out) both;
 }
 @keyframes asst-in { from { opacity: 0; transform: translateX(18px); } }
-.as-grip { position: absolute; left: -3px; top: 0; bottom: 0; z-index: 3; width: 6px; cursor: col-resize; transition: background .2s; }
-.as-grip:hover, .pt-resizing .as-grip { background: color-mix(in srgb, var(--brand) 28%, transparent); }
-.pt-resizing { cursor: col-resize; user-select: none; }
-.pt-resizing iframe { pointer-events: none; }
 
 .as-head { flex: none; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 8px 0 15px; border-bottom: 1px solid var(--line); }
 .as-head > .dot { margin-right: 9px; }
@@ -1447,3 +1443,83 @@ g.pt-flash > rect:not(.g-pad) { animation: pt-flash-svg 2.4s var(--out); }
 .mn-role .small { overflow-wrap: anywhere; }
 .mnews > p.small { margin: 0; line-height: 1.5; }
 .mnews .btns { display: flex; gap: 8px; }
+
+/* ---------- 部门: what each department is doing ---------- */
+.dp-page { display: flex; flex-direction: column; gap: 12px; }
+.dp-st { width: 7px; height: 7px; border-radius: 50%; flex: none; background: color-mix(in srgb, var(--ink) 20%, transparent); }
+.dp-st.s-busy { background: var(--brand); animation: dp-beat 2s var(--in-out) infinite; }
+.dp-st.s-wait { background: var(--warn); }
+.dp-st.s-off { background: none; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 28%, transparent); }
+@keyframes dp-beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 50%, transparent); } 70%, 100% { box-shadow: 0 0 0 5px transparent; } }
+.dp-dept {
+  --dc: var(--muted);
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 12px 16px; border-radius: 14px;
+  background: color-mix(in srgb, var(--dc) 6%, var(--panel)); box-shadow: inset 3px 0 0 var(--dc), inset 0 0 0 1px color-mix(in srgb, var(--dc) 20%, transparent);
+  animation: rise-in .4s var(--out) both;
+}
+.dp-dept header { display: flex; align-items: center; gap: 8px; }
+.dp-dept h4 { margin: 0; font: 18px var(--head); color: var(--ink); }
+.dp-district { font-size: 12px; color: var(--muted); }
+.dp-job { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.dp-op {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; margin-left: auto; padding: 0 8px 0 10px; border: 0; border-radius: 8px; background: none;
+  font: 12.5px var(--font); color: var(--muted); white-space: nowrap; cursor: pointer; transition: background-color .2s var(--out), color .2s;
+}
+.dp-op + .dp-op { margin-left: 0; }
+.dp-op:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
+.dp-op .ic { width: 14px; height: 14px; }
+.dp-rows { display: flex; flex-direction: column; gap: 1px; margin: 0 -6px; }
+.dp-row { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 3px 6px; border-radius: 8px; transition: background-color .2s var(--out); }
+.dp-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.dp-row > .dot { width: 8px; height: 8px; }
+.dp-rt {
+  flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; padding: 0; border: 0; background: none; font: 13px var(--font);
+  color: var(--ink); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+}
+.dp-rt b { flex: none; font-weight: 600; }
+.dp-rt em { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-style: normal; color: var(--muted); }
+.dp-rs { flex: none; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.dp-ra { flex: none; display: flex; gap: 6px; }
+.theme-sketch .dp-ra .btn { padding: 1px 11px; font-size: 12.5px; }
+.dp-ld { width: 8px; height: 8px; flex: none; border-radius: 50%; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+.dp-ld:is(.d-running, .d-hatching, .j-running) { background: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); }
+.dp-ld.d-waiting { background: var(--warn); }
+.dp-ld.d-paused { background: color-mix(in srgb, var(--warn) 50%, var(--muted)); }
+.dp-ld.d-linked { background: var(--ok); }
+.dp-ld.j-queued { background: none; box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 35%, transparent); }
+.dp-more { margin: 2px 6px 0; font-size: 12px; color: var(--muted); }
+.dp-asker { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; color: var(--muted); }
+.dp-asker .ava { width: 24px; height: 24px; flex: none; }
+
+/* the message box's choice between the assistant and a new idea, and the idea's budget */
+.as-to { flex: none; margin-right: 2px; }
+.as-to button { padding: 2px 9px; font-size: 12px; }
+.as-budget { flex: none; height: 28px; margin-left: auto; padding: 0 6px; border: 0; background: none; font: 12.5px var(--font); color: var(--muted); }
+.as-budget + .as-send { margin-left: 0; }
+
+/* the lead's chat: in the console's sidebar, or the column of 进展's conversation page */
+.lc-side { width: 400px; }
+.p-console:has(.lc-side) { --asst-w: 400px; }
+.lc-page { flex: 1; min-height: 0; width: auto; max-width: none; background: none; border: 0; animation: none; }
+.lc-page > :is(.as-head, .as-mid, .lc-asks, .as-foot, .as-start, .as-wait) { width: min(840px, 100%); margin-inline: auto; box-sizing: border-box; }
+.lc-page .as-head { border-bottom: 0; }
+.lc-log .msg-u, .lc-log .msg-a { max-width: 92%; font-size: 13.5px; }
+.lc-page .lc-log .msg-u, .lc-page .lc-log .msg-a { font-size: 14.5px; }
+.lc-asks { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 12px 10px; }
+
+/* what an agent of the project asks you */
+.lc-ask {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; animation: rise-in .3s var(--out) both;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line)); background: color-mix(in srgb, var(--warn) 6%, var(--panel));
+}
+.lc-k { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: color-mix(in srgb, var(--warn) 80%, var(--ink)); }
+.lc-ask p { margin: 0; font-size: 14px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lc-choices { display: flex; gap: 6px; flex-wrap: wrap; }
+.lc-reply { display: flex; gap: 6px; }
+.lc-reply input {
+  flex: 1; min-width: 0; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel);
+  font: 13px var(--font); color: var(--ink);
+}
+.lc-reply input:focus { outline: none; border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); }
+.chat-head .btns { position: relative; }
+.chat-head .as-pop { top: calc(100% + 6px); right: 0; }

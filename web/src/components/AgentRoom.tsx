@@ -1,13 +1,14 @@
 // A project's agent at the depot, the press or the mill: hiring it in Paseo or in pi (a background
-// tmux terminal), then its conversation. The console's assistant reuses the hooks and pieces here.
+// tmux terminal), then its conversation. The assistant and the lead's chat reuse the hooks and pieces here.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { api, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
+import { api, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type SayMode, type StartOpts } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
 import { Select, type Opt } from './Select';
 import { FileLinks } from './Sheet';
 import { ConvSkills } from './SkillRoom';
+import { History } from '../console/Convs';
 import { LeadAside } from '../console/Lead';
 import { ago, enterSends } from '../console/util';
 import { tr, trx } from '../i18n';
@@ -80,7 +81,7 @@ function Seat(p: Props & { row: Roster['roster'][number]; ok: boolean; onDone: (
   const { row: cur } = p, line = p.lines.find(l => l.id === cur.line.id);
   return cur.agent?.started
     ? cur.agent.runtime === 'paseo'
-      ? <PaseoChat key={cur.agent.id} {...p} agent={cur.agent} line={line} />
+      ? <PaseoChat key={cur.agent.ext_id ?? cur.agent.id} {...p} agent={cur.agent} line={line} />
       : <AgentChat key={cur.agent.id} {...p} agent={cur.agent} line={line} />
     : <Hire key={cur.line.id} line={cur.line} role={p.role} agent={cur.agent} ok={p.ok} toast={p.toast} onDone={p.onDone}
       repo={line?.linked?.[p.role === 'writer' ? 'paper' : 'code']?.path} />;
@@ -398,6 +399,9 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
   const { agent, items, asks, err, sent, wrote, answered } = usePaseoTalk(initial);
   const [full, setFull] = useState(false);
   const [text, setText] = useState('');
+  const [hist, setHist] = useState(false);
+  const [mode, setMode] = useState<SayMode>('steer');
+  const working = agent.status === 'working';
   const scroll = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const r = ROLE[role];
@@ -413,8 +417,8 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
     if (!t) return;
     setText('');
     stick.current = true;
-    wrote(t);
-    run(() => api.say(agent.id, t));
+    if (!(working && mode === 'queue')) wrote(t);
+    run(() => api.say(agent.id, t, working ? mode : undefined));
   }
 
   const rows = useMemo(() => fold(items ?? [], i => i.kind === 'tool'), [items]);
@@ -427,9 +431,12 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
             <div><b>{r.name}{line ? ` · #${line.seq}` : ''}</b><span className="muted small">{AGENT_STATUS[agent.status]} · {agent.model ?? 'Paseo'}</span></div>
           </div>
           <div className="btns">
-            {agent.status === 'working' && <button className="btn" onClick={() => run(() => api.abort(agent.id))}>{tr('打断')}</button>}
+            {working && <button className="btn" onClick={() => run(() => api.abort(agent.id))}>{tr('打断')}</button>}
+            <button className={`btn as-hist${hist ? ' on' : ''}`} aria-expanded={hist} onClick={() => setHist(h => !h)}>{tr('之前的对话')}</button>
+            <button className="btn" title={tr('新对话：用同一个模型重新开始')} onClick={() => run(() => api.newConv(agent.id))}>{tr('新对话')}</button>
             <button className="btn" disabled={!agent.web} title={agent.web ? tr('Paseo 自己的界面：命令、模型切换、权限审批') : tr('Paseo 的网页端没开')} onClick={() => setFull(f => !f)}>{full ? tr('精简视图') : tr('完整界面')}</button>
             <button className="btn" onClick={() => run(() => api.openInPaseo(agent.id))}>{tr('桌面端')}</button>
+            {hist && <History agent={agent.id} onPick={c => { setHist(false); run(() => api.resumeConv(agent.id, c.id)); }} onClose={() => setHist(false)} />}
           </div>
         </header>
         {full && agent.web
@@ -442,13 +449,21 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
               }}>
                 {err && <div className="note err">{err}</div>}
                 {items && !items.length && !sent.length && <div className="room-empty small-empty"><p>{tr('还没有对话。')}</p></div>}
-                <PaseoLog rows={rows} sent={sent} asks={asks} working={agent.status === 'working'}
+                <PaseoLog rows={rows} sent={sent} asks={asks} working={working}
                   onPermit={(id, allow) => { answered(id); run(() => api.permit(agent.id, id, allow)); }} />
               </div>
               <div className="chat-compose">
-                <textarea value={text} rows={2} placeholder={agent.status === 'working' ? tr('它在忙，发出的消息会插进它手上的事') : tr('对{0}说点什么，Enter 发送', r.name)}
+                <textarea value={text} rows={2} placeholder={!working ? tr('对{0}说点什么，Enter 发送', r.name) : mode === 'steer' ? tr('插话，它做完这一步就会看到') : tr('排队，等它做完手上的事')}
                   onChange={e => setText(e.target.value)}
                   onKeyDown={enterSends(send)} />
+                {working && (
+                  <div className="seg mini" role="radiogroup" aria-label={tr('它在忙时，消息怎么交给它')}>
+                    <button role="radio" aria-checked={mode === 'steer'} className={mode === 'steer' ? 'on' : ''} onClick={() => setMode('steer')}
+                      title={tr('插进它手上的事：做完当前这一步就会看到')}>{tr('插话')}</button>
+                    <button role="radio" aria-checked={mode === 'queue'} className={mode === 'queue' ? 'on' : ''} onClick={() => setMode('queue')}
+                      title={tr('等它把手上的事做完再交给它')}>{tr('排队')}</button>
+                  </div>
+                )}
                 <button className="btn pri" disabled={!text.trim()} onClick={send}>{tr('发送')}</button>
               </div>
             </>

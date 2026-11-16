@@ -11,9 +11,8 @@ import { setSettings, useSettings, type PgGroup, type PgSort, type Settings as S
 import { AskPage } from './Ask';
 import { DisplayMenu, rowCols } from './Display';
 import { pagesPath, PagesView, type PageOpen } from './Pages';
-import { MemoryViewer } from './Memory';
 import { AskButton, CardPane, opens, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
-import { hitOpener, Project, type ConsoleTarget, type Decide } from './Project';
+import { Project, type ConsoleTarget, type Decide } from './Project';
 import { ProjectRows, type Group } from './Rows';
 import './progress.css';
 
@@ -64,7 +63,6 @@ export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
   const [filter, setFilter] = useState<Filter>('all');
   const [defs, setDefs] = useState<PaseoDefaults | null>(null);
   const [busy, setBusy] = useState(false);
-  const [viewer, setViewer] = useState<{ lineId: string; id: string; msg?: number } | null>(null);
   const [, setNow] = useState(0);
   const again = useRef(0);
   const s = useSettings();
@@ -168,11 +166,9 @@ export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
         )}
       </div>
       {active && project && sub === 'ask' && (
-        <AskPage r={project} rows={sorted} toast={toast} onOpenPage={opener(project)}
-          onOpenHit={hitOpener(project.line.id, onOpen, (id, msg) => setViewer({ lineId: project.line.id, id, msg }), () => go(`/progress/${project.line.seq}`))} />
+        <AskPage r={project} rows={sorted} toast={toast} />
       )}
       {active && project && sub === 'pages' && <PagesView r={project} pid={page} toast={toast} onOpen={opener(project)} />}
-      {viewer && <MemoryViewer lineId={viewer.lineId} id={viewer.id} msg={viewer.msg} onClose={() => setViewer(null)} />}
     </main>
   );
 }

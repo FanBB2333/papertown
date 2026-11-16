@@ -137,15 +137,6 @@ export interface MemoryItem {
 }
 export interface MemoryFull extends MemoryItem { messages?: { role: 'user' | 'assistant'; text: string; at: string | null }[]; text?: string }
 
-export type HitKind = 'card' | 'report' | 'line' | 'job' | 'code' | 'paper' | 'session' | 'note';
-export interface Hit {
-  n: number; kind: HitKind; title: string; where: string; snippet: string; terms: string[]; score: number;
-  ref: { file?: string; job?: string; memory?: string; msg?: number; report?: number; card?: boolean; mod?: string };
-}
-export interface Question {
-  id: string; n: number; q: string; at: string; hits: Hit[]; answer: string | null; by: string | null; status: 'done' | 'waiting';
-  lead: { id: string; asked: string; text?: string; at?: string; by?: string; page?: string; title?: string } | null;
-}
 export type PageKind = 'report' | 'explain' | 'answer';
 export interface Page { id: string; n: number; title: string; kind: PageKind; by: string; agent: string; question: string | null; at: string; size: number }
 export interface AuthState { local: boolean; password: boolean; authed: boolean; signed_in: boolean; sessions?: number }
@@ -311,7 +302,7 @@ const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'tex
 const carded = (v: object) => said(v) || ('summary' in v && 'health' in v);
 const asIs = () => true;
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
-const KEEP_EVENT: Record<string, (v: object) => boolean> = { report: written, card: carded, agent_event: said, agent_delta: said, question: asIs, page: asIs };
+const KEEP_EVENT: Record<string, (v: object) => boolean> = { report: written, card: carded, agent_event: said, agent_delta: said, page: asIs };
 
 async function call<T>(method: string, url: string, body?: unknown, keep?: (v: object) => boolean): Promise<T> {
   if (DEMO) return localize(await demoCall(method, url), keep) as T;
@@ -386,9 +377,6 @@ export const api = {
     'POST', `/api/lines/${lineId}/memory/import`, { keys }, asIs),
   memoryItem: (lineId: string, id: string) => call<MemoryFull>('GET', `/api/lines/${lineId}/memory/${id}`, undefined, asIs),
   memoryRemove: (lineId: string, id: string) => call<{ counts: MemoryCounts }>('DELETE', `/api/lines/${lineId}/memory/${id}`),
-  questions: (lineId: string) => call<{ questions: Question[]; lead: boolean; offline: boolean }>('GET', `/api/lines/${lineId}/questions`, undefined, asIs),
-  askProject: (lineId: string, q: string, lead = false) => call<Question>('POST', `/api/lines/${lineId}/questions`, { q, lead }, asIs),
-  dropQuestion: (lineId: string, id: string) => call<{ ok: boolean }>('DELETE', `/api/lines/${lineId}/questions/${id}`),
   pages: (lineId: string) => call<{ pages: Page[] }>('GET', `/api/lines/${lineId}/pages`, undefined, asIs),
   dropPage: (lineId: string, id: string) => call<{ ok: boolean }>('DELETE', `/api/lines/${lineId}/pages/${id}`),
   pageUrl: (lineId: string, id: string) => `/api/lines/${lineId}/pages/${id}/view${pageLook()}`,
@@ -421,9 +409,10 @@ export const api = {
   assistant: () => call<AssistantView>('GET', '/api/assistant'),
   assistantPage: (page: PageCtx) => call<{ ok: boolean }>('POST', '/api/assistant/page', { page }),
   assistantSay: (text: string, page: PageCtx | null) => call<AgentEvent>('POST', '/api/assistant/say', { text, page }),
-  assistantNew: () => call<Agent>('POST', '/api/assistant/new'),
-  assistantHistory: () => call<{ conversations: AssistantConv[] }>('GET', '/api/assistant/history'),
-  assistantResume: (id: string) => call<Agent>('POST', '/api/assistant/resume', { id }),
+  // an agent's conversations in Paseo: the list, a new one, going back to one
+  convs: (id: string) => call<{ conversations: AssistantConv[] }>('GET', `/api/agents/${id}/conversations`),
+  newConv: (id: string) => call<Agent>('POST', `/api/agents/${id}/conversations/new`),
+  resumeConv: (id: string, ext: string) => call<Agent>('POST', `/api/agents/${id}/conversations/${encodeURIComponent(ext)}`),
   decide: (id: number, allow: boolean) => call<AgentEvent>('POST', `/api/assistant/acts/${id}`, { allow }),
 };
 
@@ -447,7 +436,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'question', 'page'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);

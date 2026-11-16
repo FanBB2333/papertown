@@ -4,13 +4,15 @@
 
 import { typing } from './components/walk';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, subscribe, type Line, type Message, type TraceRow, type WorldState } from './api';
+import { api, listen, subscribe, type Line, type ShowTarget, type WorldState } from './api';
 import { Logo } from './art';
 import { DemoWelcome, RepoLink } from './components/Demo';
-import { Chat, type Composer, type Tab } from './components/Chat';
+import { Dock } from './components/Dock';
 import { Interior } from './components/Interior';
 import { SettingsPage } from './components/Settings';
+import type { Target } from './console/Assistant';
 import { Console } from './console/Console';
+import { setPlace } from './console/page';
 import { Icon } from './console/icons';
 import { Progress } from './progress/Progress';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
@@ -79,17 +81,13 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const [world, setWorld] = useState<WorldState | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [linesIn, setLinesIn] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [trace, setTrace] = useState<TraceRow[]>([]);
   const [chatOpen, setChatOpen] = useState(hp.has('chat'));
-  const [tab, setTab] = useState<Tab>('chat');
-  const [composer, setComposer] = useState<Composer>({ kind: 'idea' });
+  const [target, setTarget] = useState<Target>({ kind: 'assistant' });
   const [focusKey, setFocusKey] = useState(0);
   const [sheet, setSheetId] = useState<string | null>(hp.get('open'));
   const [focus, setFocus] = useState<string | null>(hp.get('line'));
   const [tick, setTick] = useState(0);
   const [online, setOnline] = useState(true);
-  const [asking, setAsking] = useState(false);
   const { toasts, push } = useToasts();
   const refresh = useRef<number>();
   const [dim, setDim] = useState<Dim>('2d');
@@ -120,17 +118,10 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   useEffect(() => {
     api.world().then(setWorld).catch(e => push(tr('连不上服务器：{0}', e.message)));
     api.lines().then(ls => { setLines(ls); setLinesIn(true); }).catch(() => {});
-    api.messages().then(setMessages).catch(() => {});
-    api.trace().then(setTrace).catch(() => {});
   }, [push]);
 
   useEffect(() => subscribe(e => {
-    if (e.type === 'message') {
-      setMessages(m => m.some(x => x.id === e.message.id) ? m : [...m, e.message].slice(-300));
-      if ((e.message.role === 'worker' && e.message.body?.from) || e.message.kind === 'error') setAsking(false);
-    } else if (e.type === 'trace') {
-      setTrace(t => [...t, e.row].slice(-200));
-    } else if (e.type === 'line') {
+    if (e.type === 'line') {
       setLines(ls => {
         const i = ls.findIndex(l => l.id === e.line.id);
         return i < 0 ? [e.line, ...ls] : ls.map(l => l.id === e.line.id ? { ...l, ...e.line } : l);
@@ -155,40 +146,36 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     return n;
   }, [world]);
 
-  const openChat = useCallback((c: Composer = { kind: 'idea' }, focus = false) => {
+  // the floating assistant, opened to ask it, to write a new idea, or to rewrite a waiting one
+  const openDock = useCallback((t: Target) => {
     setChatOpen(true);
-    setTab('chat');
-    setComposer(c);
-    if (focus) setFocusKey(k => k + 1);
+    setTarget(t);
+    setFocusKey(k => k + 1);
   }, []);
 
   async function act(fn: () => Promise<unknown>) {
     try {
       await fn();
       load();
+      return true;
     } catch (e) {
       push((e as Error).message);
+      return false;
     }
   }
-
-  async function onSend(text: string, budget: number) {
-    if (composer.kind === 'ask') {
-      setAsking(true);
-      await act(() => api.ask(text, composer.building));
-    } else if (composer.kind === 'adjust') {
-      const id = composer.lineId;
-      await act(() => api.adjust(id, text));
-      setComposer({ kind: 'idea' });
-    } else {
-      await act(() => api.idea(text, budget));
-    }
-  }
+  const onIdea = async (text: string, budget: number) =>
+    (await act(() => api.idea(text, budget))) && (push(tr('孵化员去图书馆和 arXiv 查重了，结果出来后在「进展」里决定。')), true);
+  const onAdjust = async (lineId: string, text: string) =>
+    (await act(() => api.adjust(lineId, text))) && (push(tr('孵化员按改过的 idea 重新查重了。')), true);
 
   const hatch = (id: string) => act(() => api.hatch(id));
   const resume = (id: string) => act(() => api.resume(id));
-  const newIdea = () => openChat({ kind: 'idea' }, true);
-  const askAt = (id: string, name: string) => openChat({ kind: 'ask', building: id, name }, true);
-  const adjust = (id: string) => openChat({ kind: 'adjust', lineId: id }, true);
+  const newIdea = () => openDock({ kind: 'idea' });
+  const askAt = (_id: string, name: string) => openDock({ kind: 'assistant', draft: tr('关于{0}：', name) });
+  const adjust = (id: string) => {
+    const l = lines.find(x => x.id === id);
+    if (l) openDock({ kind: 'adjust', line: { id, seq: l.seq, idea: l.idea } });
+  };
   const decide = { onHatch: hatch, onResume: resume, onAdjust: adjust };
 
   const [door, setDoor] = useState<{ x: number; y: number } | null>(null);
@@ -280,6 +267,29 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     if (route.view === 'console') go(`/console/${seq}/${mod}`, true);
   }, [route.view]);
 
+  // what the assistant opens is in the console: from 进展 or the map, go there first, then show it
+  const here = useRef({ view, lines, up: consoleUp });
+  here.current = { view, lines, up: consoleUp };
+  useEffect(() => {
+    const away = (t: ShowTarget) => {
+      const { view: v, lines: ls, up } = here.current;
+      if (v === 'console') return;
+      const l = t.line ? ls.find(x => x.id === t.line || `#${x.seq}` === t.line || String(x.seq) === t.line) : undefined;
+      go(l ? `/console/${l.seq}` : boardAt.current);
+      setTimeout(() => dispatchEvent(new CustomEvent('pt-show', { detail: { ...t, again: true } })), up ? 80 : 400);
+    };
+    const on = (e: Event) => { const d = (e as CustomEvent<ShowTarget & { again?: boolean }>).detail; if (d && !d.again) away(d); };
+    addEventListener('pt-show', on);
+    const off = listen(e => { if (e.type === 'assistant_show') away(e.target ?? {}); });
+    return () => { removeEventListener('pt-show', on); off(); };
+  }, []);
+  // the page the assistant is told you are on, outside the console (which says so itself)
+  useEffect(() => {
+    if (view === 'console') return;
+    const l = route.view === 'cards' && route.seq ? lines.find(x => x.seq === route.seq) : undefined;
+    setPlace(l ? { id: l.id, seq: l.seq, title: l.title } : null, view === 'cards' ? 'progress' : 'town', view === 'cards' ? tr('进展') : tr('小镇地图'));
+  }, [view, route, lines]);
+
   // commands from the macOS app's menus (macos/)
   useEffect(() => {
     const on = (e: Event) => {
@@ -323,7 +333,6 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   }
 
   const hud = world?.hud;
-  const busy = asking || lines.some(l => l.status === 'hatching');
   const walking = !sheet && view === 'world' && !chatOpen && !settingsOpen;
   const running = world?.running ?? [];
 
@@ -375,8 +384,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
             {!online ? tr('连接断开') : DEMO ? tr('静态演示') : hud.offline ? tr('离线模式') : hud.provider}</span>}
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>
-          <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('指挥小镇的员工，看各部门在做什么（/ 直接开始写）')}
-            onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('小镇对话')}</button>
+          <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('问这一页的事、请它帮你办，或者写一个新 idea（/）')}
+            onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('小助手')}</button>
         </div>
       </header>
 
@@ -395,9 +404,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
       {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('走动 · 到门口按')} <kbd>F</kbd> {tr('进去 · 也可以直接点建筑')}</div>}
 
-      <Chat view={view} open={chatOpen} setOpen={setChatOpen} away={!!sheet || (view === 'world' && dim !== '2d')} tab={tab} onTab={setTab}
-        messages={messages} trace={trace} lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer}
-        focusKey={focusKey} busy={busy} tick={tick} onSend={onSend} onRoom={room} toast={push} onHatch={hatch} onResume={resume} />
+      <Dock view={view} open={chatOpen} setOpen={setChatOpen} away={!!sheet || (view === 'world' && dim !== '2d')}
+        target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} onAdjust={onAdjust} toast={push} />
 
       {sheet && (
         <Interior key={`${sheet}:${swap}`} id={sheet} focus={focus} tick={tick} placements={world?.placements ?? []} lines={lines}

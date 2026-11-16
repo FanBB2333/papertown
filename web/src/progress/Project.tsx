@@ -2,7 +2,7 @@
 // memory, each linking to the console panel with the detail; beside them its conversation and the pages its agents wrote.
 
 import { useEffect, useState } from 'react';
-import { type Hit, type PaseoDefaults, type ProjectCard } from '../api';
+import { type PaseoDefaults, type ProjectCard } from '../api';
 import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { ago } from '../console/util';
@@ -18,17 +18,6 @@ type Open = (lineId: string, t?: ConsoleTarget) => void;
 export interface Decide { onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void }
 
 const LISTS = [['need_you', tr('要你决定')], ['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')]] as const;
-
-// where a piece found for a question opens: its file, its job, its conversation, or the card
-export function hitOpener(lineId: string, onConsole: Open, onMemory: (id: string, msg?: number) => void, onCard: () => void) {
-  return (h: Hit) => {
-    if (h.ref.file) onConsole(lineId, { file: h.ref.file });
-    else if (h.ref.job) onConsole(lineId, { job: h.ref.job });
-    else if (h.ref.memory) onMemory(h.ref.memory, h.ref.msg);
-    else if (h.ref.card) onCard();
-    else onConsole(lineId, { mod: 'overview' });
-  };
-}
 
 export function Project({ r, defs, toast, onChange, onConsole, decide }: {
   r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onConsole: Open; decide: Decide;

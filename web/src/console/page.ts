@@ -1,5 +1,5 @@
-// What the console shows, for the assistant in the sidebar: the open project and panel, what each
-// panel notes (usePanelNote), and the data-ref parts of the page that pointing lands on.
+// What the page shows, for the assistant in its floating window: the open project and console panel (or the
+// 进展 page, or the map), what each panel notes (usePanelNote), and the data-ref parts that pointing lands on.
 
 import { useEffect, useSyncExternalStore } from 'react';
 import type { Focus, PageCtx } from '../api';
@@ -37,7 +37,9 @@ export function usePanelNote(mod: string, part: string, note: Note) {
 }
 
 const squash = (s: string) => s.replace(/[ \t ]+/g, ' ').replace(/\s*\n[\s\n]*/g, '\n').trim();
-const panel = () => document.querySelector<HTMLElement>('.p-console .cm-mod.on');
+// the part of the page the assistant reads and points into: the open console panel, or the 进展 page
+export const SCOPE = '.proto[data-mode=console] .p-console, .proto[data-mode=cards] :is(.p-prog, .ak)';
+const panel = () => document.querySelector<HTMLElement>('.proto[data-mode=console] .p-console .cm-mod.on, .proto[data-mode=cards] .ak, .proto[data-mode=cards] .p-prog');
 const textOf = (el: Element) => (el as HTMLElement).innerText ?? el.textContent ?? '';
 const worded = (s: string) => /\p{L}/u.test(s);
 
@@ -66,7 +68,7 @@ function whereOf(el: Element): string | undefined {
 }
 
 const BLOCK = 'button, a, li, tr, th, td, figure, pre, p, h2, h3, h4, h5, label, [role=button], .card, .pnl';
-const EDGE = '.cm-mod, .jd, .p-console, .asst';
+const EDGE = '.cm-mod, .jd, .p-console, .p-prog, .ak, .asst';
 // what pointing lands on: the nearest data-ref part, else the block it is in, widened until it has words
 export function pickable(target: Element) {
   let el = target.closest('[data-ref]') ?? target.closest(BLOCK) ?? target;
@@ -102,12 +104,12 @@ export function snapshot(focus: Focus | null, sel: Selected | null = null): Page
   return { line: at.line, mod: at.mod, mod_name: at.name, state, focus, refs, text, ...(sel?.text ? { selection: sel.text, selection_at: sel.at } : {}) };
 }
 
-// text selected in the console (not in the sidebar), with the part of the page a short one is in
+// text selected on the page (not in the assistant's window), with the part of the page a short one is in
 export function onSelect(fn: (sel: Selected | null) => void) {
   const on = () => {
     const s = getSelection();
     const n = s?.anchorNode instanceof Element ? s.anchorNode : s?.anchorNode?.parentElement;
-    if (!s || !n?.closest('.p-console') || n.closest('.asst')) return;
+    if (!s || !n?.closest(SCOPE) || n.closest('.asst, .dock')) return;
     const text = s.isCollapsed ? '' : s.toString().trim().slice(0, 4000);
     if (text.length < 2) return fn(null);
     const c = s.getRangeAt(0).commonAncestorContainer, el = c instanceof Element ? c : c.parentElement;
@@ -120,7 +122,7 @@ export function onSelect(fn: (sel: Selected | null) => void) {
 
 // light up a part of the page the assistant talks about, once it has rendered
 export function flash(ref: string, tries = 24) {
-  const el = document.querySelector(`.p-console [data-ref="${CSS.escape(ref)}"]`);
+  const el = [...document.querySelectorAll(SCOPE)].map(s => s.querySelector(`[data-ref="${CSS.escape(ref)}"]`)).find(Boolean);
   if (!el) {
     if (tries > 0) setTimeout(() => flash(ref, tries - 1), 150);
     return;

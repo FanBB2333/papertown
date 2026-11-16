@@ -10,7 +10,6 @@ import { Logo } from '../art';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
 import { ICON_THEMES, THEMES, autoTheme, chooseLook } from '../console/edthemes';
-import { applyLlm, withProvider } from './Chat';
 import { Card, Note, OptionControl, Pick, PROGRESS_OPTIONS, Range, Row, set, Toggle } from './controls';
 import { AccentPicker, GlassSlider, GlassStage, LookPicker, ModePicker, WallPicker } from './looks';
 import { Showcase } from './Showcase';
@@ -204,6 +203,20 @@ function ModelBox({ label, value, options, onChange }: { label: string; value: s
       </Autocomplete.Content>
     </Autocomplete>
   );
+}
+
+type LlmDraft = Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>;
+
+function withProvider(llm: Llm, draft: LlmDraft, id: string): LlmDraft {
+  const d = llm.providers.find(x => x.id === id);
+  return { ...draft, provider: id, model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' };
+}
+
+// choosing the town's own model: a new provider first, then what you picked for it
+async function applyLlm(llm: Llm, draft: LlmDraft) {
+  const changed = draft.provider !== llm.provider;
+  const out = await api.setLlm(changed ? { provider: draft.provider } : draft);
+  return changed && (draft.model_strong || draft.model_cheap) ? api.setLlm({ model_strong: draft.model_strong, model_cheap: draft.model_cheap, effort: draft.effort }) : out;
 }
 
 // the town's own model: the same as the switch in the chat, as a form on the page

@@ -1,5 +1,5 @@
-// The console: the town's work as one screen of panels, projects in a path bar, the assistant in a
-// sidebar. On a phone it is one column: the project bar on top, the most-used panels as bottom tabs.
+// The console: the town's work as one screen of panels, projects in a path bar, the project's lead to talk
+// to in a sidebar. On a phone it is one column: the project bar on top, the most-used panels as bottom tabs.
 //   #view=console&line=line_2&m=paper   — open a project's panel directly
 
 import { typing } from '../components/walk';
@@ -12,22 +12,23 @@ import { StatusTag } from '../components/MillRoom';
 import { RagRoom } from '../components/RagRoom';
 import { SkillRoom } from '../components/SkillRoom';
 import { tr, trx } from '../i18n';
-import { Assistant } from './Assistant';
 import { Bounds } from './Bounds';
 import { Code } from './Code';
 import { Data } from './Data';
 import { EdPicker } from './EdPicker';
 import { Experiments } from './Experiments';
 import { Icon, type IconName } from './icons';
+import { LeadChat } from './LeadChat';
 import { NewModels } from './NewModels';
 import { Overview, STAGE_MOD } from './Overview';
 import { flash, setPlace, usePanelNote } from './page';
 import { Paper } from './Paper';
 import { Survey } from './Survey';
+import { Departments, Trace } from './Town';
 import { gist, PHONE, revealX, useFetch, useMedia } from './util';
 import '../console.css';
 
-export type ModId = 'overview' | 'survey' | 'code' | 'exp' | 'data' | 'paper' | 'agents' | 'skills' | 'mcp' | 'rag' | 'rules';
+export type ModId = 'overview' | 'survey' | 'code' | 'exp' | 'data' | 'paper' | 'agents' | 'depts' | 'skills' | 'mcp' | 'rag' | 'rules' | 'trace';
 
 const MODS: { id: ModId; name: string; sub: string; icon: IconName; town?: boolean }[] = [
   { id: 'overview', name: tr('概览'), sub: tr('项目走到哪一步、在等你做什么'), icon: 'compass' },
@@ -37,10 +38,12 @@ const MODS: { id: ModId; name: string; sub: string; icon: IconName; town?: boole
   { id: 'data', name: tr('数据'), sub: tr('实验的元数据、结果和数据文件'), icon: 'table' },
   { id: 'paper', name: tr('论文'), sub: tr('LaTeX 源码和排出的 PDF，左右对照'), icon: 'doc' },
   { id: 'agents', name: tr('员工'), sub: tr('这个项目的负责人、代码员工和写作员工'), icon: 'people' },
+  { id: 'depts', name: tr('部门'), sub: tr('小镇各部门在做什么：项目、员工和实验'), icon: 'dots', town: true },
   { id: 'skills', name: 'Skills', sub: tr('给全局、项目、对话配 skill'), icon: 'spark', town: true },
   { id: 'mcp', name: 'MCP', sub: tr('小镇接的 MCP server 和它们给的工具'), icon: 'plug', town: true },
   { id: 'rag', name: tr('图书馆'), sub: tr('馆藏、RAG 检索设置和检索试验台'), icon: 'books', town: true },
   { id: 'rules', name: tr('工作边界'), sub: tr('全局、项目、员工三层：必须完成、不能做、需要询问'), icon: 'shield', town: true },
+  { id: 'trace', name: tr('调用轨迹'), sub: tr('小镇最近的模型和工具调用'), icon: 'clock', town: true },
 ];
 const IDS = MODS.map(m => m.id);
 const isMod = (s: unknown): s is ModId => IDS.includes(s as ModId);
@@ -97,9 +100,7 @@ export function Console(p: Props) {
   const [mod, setMod] = useState<ModId>(isMod(p.at?.mod) ? p.at.mod : isMod(hm) ? hm : first.mod ?? 'overview');
   const [narrow, setNarrow] = useState(!!first.narrow);
   const [side, setSide] = useState(!!first.side);
-  // the sidebar's box takes the keys only when you opened it, not when it was left open last time
-  const opened = useRef(false);
-  const toggleSide = () => setSide(o => { opened.current ||= !o; return !o; });
+  const toggleSide = () => setSide(o => !o);
   const [dir, setDir] = useState(1);
   const [rail, setRail] = useState(false);
   const [railTab, setRailTab] = useState<'projects' | 'papers'>('projects');
@@ -128,7 +129,9 @@ export function Console(p: Props) {
     try { localStorage.setItem(KEY, JSON.stringify({ line: cur.id, mod, narrow, side })); } catch { /* private mode */ }
   }, [cur?.id, mod, narrow, side]); // eslint-disable-line react-hooks/exhaustive-deps
   const squeezed = useMedia('(max-width: 1320px)') && side;
-  useEffect(() => setPlace(cur ? { id: cur.id, seq: cur.seq, title: cur.title } : null, mod, here.name), [cur?.id, cur?.title, mod]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (p.active) setPlace(cur ? { id: cur.id, seq: cur.seq, title: cur.title } : null, mod, here.name);
+  }, [p.active, cur?.id, cur?.title, mod]); // eslint-disable-line react-hooks/exhaustive-deps
   usePanelNote('agents', 'role', { 员工: mod === 'agents' ? ROLES[role][0] : null });
 
   useEffect(() => {
@@ -289,8 +292,10 @@ export function Console(p: Props) {
             <kbd>⌘K</kbd>
           </label>
           <button className="btn pri fb-new" onClick={p.onIdea}><Icon n="plus" size={14} />{tr('新 idea')}</button>
-          <button className={`fb-side${side ? ' on' : ''}`} onClick={toggleSide} title={side ? tr('收起小助手（⌘J）') : tr('小助手：问这一页的事，请它帮你办（⌘J）')}
-            aria-pressed={side}><Icon n="chat" size={16} /><span>{tr('小助手')}</span></button>
+          {cur && (
+            <button className={`fb-side${side ? ' on' : ''}`} onClick={toggleSide} title={side ? tr('收起（⌘J）') : tr('和 #{0} 的负责人对话（⌘J）', cur.seq)}
+              aria-pressed={side}><Icon n="person" size={16} /><span>{tr('负责人')}</span></button>
+          )}
         </div>
       </div>
 
@@ -322,7 +327,10 @@ export function Console(p: Props) {
                         : mod === 'skills' ? <SkillRoom key={id} {...actions} focus={id} tick={p.tick} />
                           : mod === 'mcp' ? <McpRoom {...actions} tick={p.tick} />
                             : mod === 'rag' ? <RagRoom {...actions} tick={p.tick} />
-                              : mod === 'rules' ? <Bounds line={line} toast={p.toast} /> : null}
+                              : mod === 'rules' ? <Bounds line={line} toast={p.toast} />
+                                : mod === 'depts' ? <Departments tick={p.tick} onRoom={openBuilding} onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust}
+                                  onAgent={a => { if (a.role === 'lead' || a.role === 'coder' || a.role === 'writer') setRole(a.role); go({ mod: 'agents', line: a.line_id ?? undefined }); }} />
+                                  : mod === 'trace' ? <Trace /> : null}
             </section>
           )}
           {kept.has('code') && (
@@ -336,7 +344,7 @@ export function Console(p: Props) {
             </section>
           )}
         </div>
-        {side && <Assistant actions={actions} autoFocus={opened.current} onClose={() => setSide(false)} />}
+        {side && cur && <LeadChat key={cur.id} lineId={cur.id} seq={cur.seq} layout="side" onClose={() => setSide(false)} toast={p.toast} />}
       </div>
       {phone && <PhoneTabs mod={mod} line={line} code={ws.data?.code?.dirty ?? 0} onPick={m => { setSide(false); go({ mod: m }); }} />}
       {p.active && <NewModels toast={p.toast} />}

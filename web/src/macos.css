@@ -207,8 +207,8 @@ html.ui-mac .theme-sketch .pt-hint {
 html.ui-mac .theme-sketch .pt-hint kbd { border: 0; background: light-dark(rgb(0 0 0 / .07), rgb(255 255 255 / .12)); }
 html.ui-mac .theme-sketch :is(.map-bg, .t3) { top: 0; }
 
-html.ui-mac .sel:not(.dk-budget, .fb-sort) { border: 0; background: light-dark(#fff, rgb(255 255 255 / .1)); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), 0 .5px 1.5px rgb(0 0 0 / .1); }
-html.ui-mac .sel:not(.dk-budget, .fb-sort):focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 34%, transparent); }
+html.ui-mac .sel:not(.as-budget, .fb-sort) { border: 0; background: light-dark(#fff, rgb(255 255 255 / .1)); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), 0 .5px 1.5px rgb(0 0 0 / .1); }
+html.ui-mac .sel:not(.as-budget, .fb-sort):focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 34%, transparent); }
 html.ui-mac .sel-pop {
   border: 0; background: rgb(var(--lg-tint) / max(.72, var(--lg-a))); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
   -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
@@ -216,10 +216,7 @@ html.ui-mac .sel-pop {
 html.ui-mac .sel-o { min-height: 26px; border-radius: 7px; }
 html.ui-mac .sel-o.at { background: var(--mac-accent); color: var(--mac-accent-ink); }
 html.ui-mac .sel-o.at em { color: inherit; opacity: .8; }
-html.ui-mac.ui-cf .theme-sketch :is(.dk-menu, .cmd-menu, .llm-pop, .as-pop) { border: 0 !important; border-radius: 12px; background: var(--mac-panel); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop); }
-html.ui-mac .dk-mi { border-radius: 7px; }
-html.ui-mac .dk-mi:is(.on, :hover) { background: var(--mac-accent); color: var(--mac-accent-ink); }
-html.ui-mac .dk-mi:is(.on, :hover) :is(em, span, small, i) { color: inherit; }
+html.ui-mac.ui-cf .theme-sketch :is(.cmd-menu, .llm-pop, .as-pop) { border: 0 !important; border-radius: 12px; background: var(--mac-panel); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop); }
 
 html.ui-mac .theme-sketch .dk-shell {
   border-radius: 26px; background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
@@ -227,11 +224,6 @@ html.ui-mac .theme-sketch .dk-shell {
 }
 html.ui-mac .theme-sketch .dock:not(.open) .dk-shell:focus-within { background-image: none; box-shadow: var(--lg-edge), var(--lg-rim), 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent), var(--lg-drop); }
 html.ui-mac .theme-sketch .dock.open .dk-shell { background: rgb(var(--lg-tint) / max(.93, var(--lg-a))); backdrop-filter: var(--lg-filter); }
-html.ui-mac .dock :is(.msg.mine, .msg-u) { border-radius: 18px; background: var(--mac-accent); color: var(--mac-accent-ink); }
-html.ui-mac .dock .msg-u.held { color: var(--ink); background: color-mix(in srgb, var(--warn) 18%, var(--mac-panel)); }
-html.ui-mac .dock :is(.msg.bot, .msg-a) { border: 0; border-radius: 18px; background: light-dark(rgb(0 0 0 / .05), rgb(255 255 255 / .09)); }
-html.ui-mac .dock .msg.bot.err { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 45%, transparent); }
-html.ui-mac .dk-tabs button { font-weight: 500; }
 
 /* ---------- the progress page ---------- */
 html.ui-mac .pg-title h1 { font: 700 26px/1.2 var(--font); letter-spacing: -.012em; }

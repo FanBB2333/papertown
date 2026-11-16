@@ -10,7 +10,6 @@ import { Icon } from '../console/icons';
 import { ago, enterSends } from '../console/util';
 import { tr } from '../i18n';
 import { follow, go, href } from '../route';
-import { askPath } from './Ask';
 import './ask.css';
 
 const KIND: Record<PageKind, string> = { report: tr('汇报'), explain: tr('讲解'), answer: tr('回答') };
@@ -147,7 +146,6 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
             <div className="pv-title">
               <b title={cur.title}>{cur.title}</b>
               <span><i className={`pv-k k-${cur.kind}`}>{KIND[cur.kind]}</i><span className="pc-seq">#{line.seq}</span>{cur.by ? ` · ${cur.by}` : ''} · {ago(cur.at)}
-                {cur.question && <> · <a href={href(askPath(line.seq, cur.question))} onClick={e => follow(e, askPath(line.seq, cur.question!))}>{tr('看这个问题')}</a></>}
               </span>
             </div>
           ) : (
@@ -185,7 +183,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
   );
 }
 
-// asks the lead for a page: a question it answers with a page
+// asks the lead for a page, in its conversation
 function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: string) => void; big?: boolean; onDone?: () => void }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -194,7 +192,7 @@ function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: st
     if (!q || busy) return;
     setBusy(true);
     try {
-      await api.askProject(lineId, q, true);
+      await api.say(`lead-${lineId}`, `请写成一页给我看，用 \`pt publish 页面.html --kind explain\` 发布：\n\n${q}`);
       setText('');
       toast(tr('已经交给负责人，它写好的页面会出现在这里。'));
       onDone?.();
