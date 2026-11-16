@@ -1,7 +1,5 @@
-// Picking the editor's colour theme or file icon theme, the way VS Code does: a list at the top of
-// the page, light themes then dark ones, ↑↓ trying each on the editor as you go, Enter keeping it,
-// Esc putting back what was there. Tab switches between colours and icons. Opened from the tab
-// bar's palette button or with ⌘K ⌘T in the editor; the settings page shows the same choices.
+// Picking the editor's colour theme or file icon theme the way VS Code does: ↑↓ previews each,
+// Enter keeps it, Esc puts back what was there, Tab switches between colours and icons.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -14,8 +12,7 @@ type Item = { kind: 'theme'; th: EdTheme } | { kind: 'icons'; id: IconTheme; nam
 
 export function EdPicker() {
   const { picker } = useLook();
-  // on the page's own root (where its colours and font are set), so that no panel it is opened
-  // from decides where it sits
+  // portalled onto the themed root, where the page's colours and font are set
   return picker ? createPortal(<Picker mode={picker} />, document.querySelector('[class*="theme-"]') ?? document.body) : null;
 }
 
@@ -42,13 +39,13 @@ function Picker({ mode }: { mode: 'theme' | 'icons' }) {
   const [at, setAt] = useState(-1);
   const cur = at >= 0 && pickable.includes(at) ? at : savedAt >= 0 ? savedAt : pickable[0] ?? -1;
 
-  const close = () => { closePicker(); (back.current as HTMLElement | null)?.focus?.(); };
+  const close = () => { closePicker(); (back.current as HTMLElement | null)?.focus(); };
   const keep = (x: Item | undefined) => {
     if (!x || x.kind === 'head') return;
     chooseLook(x.kind === 'theme' ? { theme: x.th.id } : { icons: x.id });
     close();
   };
-  // moving through the list tries each one; the list being filtered or switched does not
+  const switchTo = (t: 'theme' | 'icons') => { setTab(t); setQ(''); setAt(-1); previewLook(null); };
   const move = (d: number) => {
     if (!pickable.length) return;
     const k = pickable.indexOf(cur);
@@ -61,7 +58,7 @@ function Picker({ mode }: { mode: 'theme' | 'icons' }) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); move(e.key === 'ArrowDown' ? 1 : -1); }
     else if (e.key === 'Enter') { e.preventDefault(); keep(items[cur]); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
-    else if (e.key === 'Tab') { e.preventDefault(); setTab(t => (t === 'theme' ? 'icons' : 'theme')); setQ(''); setAt(-1); previewLook(null); }
+    else if (e.key === 'Tab') { e.preventDefault(); switchTo(tab === 'theme' ? 'icons' : 'theme'); }
   };
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { list.current?.querySelector('.edp-it.cur')?.scrollIntoView({ block: 'nearest' }); }, [cur, tab]);
@@ -72,7 +69,7 @@ function Picker({ mode }: { mode: 'theme' | 'icons' }) {
         <div className="edp-tabs" role="tablist">
           {(['theme', 'icons'] as const).map(t => (
             <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onMouseDown={e => e.preventDefault()}
-              onClick={() => { setTab(t); setQ(''); setAt(-1); previewLook(null); }}>
+              onClick={() => switchTo(t)}>
               {t === 'theme' ? tr('颜色主题') : tr('文件图标主题')}
             </button>
           ))}
@@ -100,7 +97,7 @@ function Picker({ mode }: { mode: 'theme' | 'icons' }) {
 }
 
 // a theme in a glance: its background with four of its token colours
-export function Swatch({ th }: { th: EdTheme }) {
+function Swatch({ th }: { th: EdTheme }) {
   return (
     <span className="edp-sw" style={{ background: th.ui.bg, borderColor: th.ui.border }}>
       {(['kw', 'str', 'fn', 'num'] as const).map(k => <i key={k} style={{ background: th.tok[k] }} />)}

@@ -1,10 +1,6 @@
-// Work boundaries: what the agents must get done, must never do, and must ask you about first.
-// Three levels, each with an agent of its own: the global one is the assistant's and reaches
-// every project; a project's is its lead's and reaches its workers; a worker's is its own. A rule
-// passes down as its inheritance says: 继承, and a lower level may switch it off for itself;
-// 不继承, it stays where it is written; 必须继承, every level below keeps it. A never or ask rule
-// may name an action that goes through Papertown, which then refuses it or holds it for you.
-// Beside the editor, what each agent keeps once saved.
+// Work boundaries (must / never / ask) at three levels: global (the assistant's), project (its lead's), worker.
+// A rule passes down as its inheritance says: 继承, a lower level may switch it off; 不继承, it stays
+// where it is written; 必须继承, every level below keeps it.
 
 import { useEffect, useState } from 'react';
 import { api, type Bound, type BoundInherit, type BoundKind, type BoundsLevel, type BoundsView, type Line } from '../api';
@@ -14,7 +10,7 @@ import { Icon } from './icons';
 
 type Lv = 'global' | 'project' | 'coder' | 'writer';
 type Who = 'assistant' | 'lead' | 'coder' | 'writer';
-type Row = Bound & { k: string }; // k keys a row in the editor before the server gives it an id
+type Row = Bound & { k: string }; // k keys a row before the server assigns an id
 type Draft = { rules: Row[]; off: string[] };
 type Came = { r: Bound; from: 'global' | 'project'; locked: boolean };
 
@@ -31,7 +27,7 @@ let made = 0;
 
 export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) => void }) {
   const lid = line?.id;
-  const [got, setGot] = useState<{ lid?: string; v: BoundsView } | null>(null); // the levels, with the project they were read for
+  const [got, setGot] = useState<{ lid?: string; v: BoundsView } | null>(null);
   const [err, setErr] = useState('');
   const [drafts, setDrafts] = useState<Partial<Record<Lv, Draft>>>({});
   const [worker, setWorker] = useState<'coder' | 'writer'>('coder');
@@ -70,7 +66,7 @@ export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) 
     try {
       const d = bare(cur(l));
       let x = await api.saveBounds({ line_id: l === 'global' ? undefined : lid, role: isWorker(l) ? l : undefined, rules: d.rules, off: l === 'global' ? undefined : d.off });
-      if (l === 'global' && lid) x = await api.bounds(lid); // the global level comes back alone
+      if (l === 'global' && lid) x = await api.bounds(lid); // the global save returns only the global level
       setGot({ lid, v: x });
       drop(l);
       toast(tr('保存了。规则有变的 agent 会收到新的一份。'));
@@ -161,7 +157,7 @@ export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) 
       <div className="bd-grid">
         <div className="bd-levels">
           {level('global', tr('全局'), tr('小助手，以及往下的每个项目'))}
-          {lid && line && level('project', tr('项目 #{0}', line.seq), tr('这个项目的负责人，以及往下的员工'))}
+          {line && level('project', tr('项目 #{0}', line.seq), tr('这个项目的负责人，以及往下的员工'))}
           {lid && level(worker, tr('员工'), tr('只管这一个员工'), (
             <div className="seg mini" role="tablist">
               {(['coder', 'writer'] as const).map(w => <button key={w} className={worker === w ? 'on' : ''} onClick={() => setWorker(w)}>{WHO[w]}{dirty(w) ? ' •' : ''}</button>)}

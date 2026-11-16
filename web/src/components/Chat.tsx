@@ -1,19 +1,17 @@
-// The chat (B): a box at the bottom of every page for telling the town's workers what to do.
-// Closed it is one line to write in, with a light for every department at work. Open, it grows
-// upward into the conversation with whoever you write to: the town (a new idea goes to the
-// hatchery), a department (its worker answers), or a project's coding or writing agent, which
-// takes what you send into the work in hand (steer) or after it (queue). Along its top run all
-// the departments and what each is doing; the line and the trace are a tab away.
+// The chat box at the bottom of every page: one line to write in while closed; open, the conversation
+// with the town (a new idea), a department or a project's agent, beside tabs for the line and the trace.
 
+import { typing } from './walk';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, fileUrl, listen, type Agent, type AgentEvent, type Department, type DeptAgent, type Line, type Llm, type Message, type Placement, type SayMode, type TraceRow } from '../api';
+import { api, listen, type Agent, type AgentEvent, type Department, type DeptAgent, type Line, type Llm, type Message, type Placement, type SayMode, type TraceRow } from '../api';
 import { Ava, Item, ROLE_NAMES } from '../art';
 import { Icon } from '../console/icons';
 import { tr } from '../i18n';
-import { Entry, fold, paseoTool, piTool, Text, Tool, Trail, UserMsg, usePaseoTalk, usePiTalk } from './AgentRoom';
+import { fold, PaseoLog, PiLog, Text, Thinking, usePaseoTalk, usePiTalk } from './AgentRoom';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import { useLens } from '../glass';
 import { Combo, Select } from './Select';
+import { FileLinks } from './Sheet';
 import '../dock.css';
 
 export type Composer = { kind: 'idea' } | { kind: 'ask'; building: string; name: string } | { kind: 'adjust'; lineId: string }
@@ -24,7 +22,7 @@ interface Props {
   view: string;
   open: boolean;
   setOpen: (open: boolean) => void;
-  away: boolean; // in a room or on the 3D walk, where it shows only while open
+  away: boolean;
   tab: Tab;
   onTab: (t: Tab) => void;
   messages: Message[];
@@ -46,7 +44,7 @@ interface Props {
 const BUDGETS = [0.5, 1, 2];
 const MODE = 'pt-say-mode';
 
-export function traceRow(t: TraceRow) {
+function traceRow(t: TraceRow) {
   return (
     <div className="tr" key={t.id} title={t.ts}>
       <span className={`k k-${t.kind.toLowerCase()}`}>{t.kind}</span><code>{t.label}</code><em>{t.detail}</em>
@@ -54,9 +52,11 @@ export function traceRow(t: TraceRow) {
   );
 }
 
+const placeName = (placements: Placement[], id: string) => placements.find(p => p.id === id)?.name ?? id;
+
 function Who({ m, placements }: { m: Message; placements: Placement[] }) {
   const w = m.worker;
-  const at = placements.find(p => p.id === (m.body?.from ?? ''));
+  const at = placements.find(p => p.id === m.body?.from);
   if (!w) return <div className="who"><b>Papertown</b>{m.kind === 'error' && <span className="chip bad">{tr('出错')}</span>}</div>;
   return (
     <div className="who">
@@ -105,7 +105,7 @@ function Report({ m, line, onHatch, onAdjust }: { m: Message; line?: Line; onHat
 function Bubble({ m, lines, placements, onHatch, onAdjust, onRoom }: {
   m: Message; lines: Line[]; placements: Placement[]; onHatch: (id: string) => void; onAdjust: (id: string) => void; onRoom: (id: string) => void;
 }) {
-  if (m.role === 'user') return <div className="msg mine">{m.body.to ? `@${placements.find(p => p.id === m.body.to)?.name ?? m.body.to} ` : ''}{m.body.text}</div>;
+  if (m.role === 'user') return <div className="msg mine">{m.body.to ? `@${placeName(placements, m.body.to)} ` : ''}{m.body.text}</div>;
   const line = lines.find(l => l.id === m.line_id);
   return (
     <div className={`msg bot${m.kind === 'error' ? ' err' : ''}`}>
@@ -114,13 +114,7 @@ function Bubble({ m, lines, placements, onHatch, onAdjust, onRoom }: {
         ? <Report m={m} line={line} onHatch={() => onHatch(m.line_id!)} onAdjust={() => onAdjust(m.line_id!)} />
         : <p>{m.body.text}</p>}
       {m.kind === 'team' && m.body.mill && <div className="btns"><button className="btn pri" onClick={() => onRoom(m.body.mill)}>{tr('去造纸厂')}</button></div>}
-      {m.kind === 'paper' && m.line_id && (
-        <div className="btns">
-          {(m.body.files ?? []).filter((f: string) => f !== 'refs.bib').map((f: string) => (
-            <a key={f} className={`btn${f === 'main.pdf' ? ' pri' : ''}`} href={fileUrl(m.line_id!, f)} target="_blank" rel="noreferrer">{f}</a>
-          ))}
-        </div>
-      )}
+      {m.kind === 'paper' && m.line_id && <FileLinks lineId={m.line_id} files={(m.body.files ?? []).filter((f: string) => f !== 'refs.bib')} />}
     </div>
   );
 }
@@ -129,7 +123,6 @@ function LinePane({ lines, placements, onRoom }: { lines: Line[]; placements: Pl
   const [sel, setSel] = useState<string | null>(null);
   const line = lines.find(l => l.id === sel) ?? lines.find(l => ['running', 'hatching', 'waiting', 'paused'].includes(l.status)) ?? lines[0];
   if (!line) return <div className="pane-pad"><p className="muted">{tr('还没有论文在生产。到「对话」里写下一个 idea。')}</p></div>;
-  const name = (id: string) => placements.find(p => p.id === id)?.name ?? id;
   return (
     <div className="pane-pad">
       {lines.length > 1 && (
@@ -141,7 +134,7 @@ function LinePane({ lines, placements, onRoom }: { lines: Line[]; placements: Pl
         {line.stages.map((s, i) => (
           <li key={s.key} className={s.status === 'wait' ? 'run' : s.status} onClick={() => onRoom(s.building)}>
             <i>{i + 1}</i><b>{s.name}{s.status === 'wait' ? tr(' · 等你决定') : s.status === 'run' && s.pct ? ` · ${s.pct}%` : ''}</b>
-            <span>{name(s.building)}</span>
+            <span>{placeName(placements, s.building)}</span>
           </li>
         ))}
       </ol>
@@ -151,15 +144,21 @@ function LinePane({ lines, placements, onRoom }: { lines: Line[]; placements: Pl
   );
 }
 
+type LlmDraft = Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>;
+
+export function withProvider(llm: Llm, draft: LlmDraft, id: string): LlmDraft {
+  const d = llm.providers.find(x => x.id === id);
+  return { ...draft, provider: id, model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' };
+}
+
 // choosing the town's own model: a new provider first, then what you picked for it
-export async function applyLlm(llm: Llm, draft: { provider: string; model_strong: string; model_cheap: string; effort: string }) {
+export async function applyLlm(llm: Llm, draft: LlmDraft) {
   const changed = draft.provider !== llm.provider;
   const out = await api.setLlm(changed ? { provider: draft.provider } : draft);
   return changed && (draft.model_strong || draft.model_cheap) ? api.setLlm({ model_strong: draft.model_strong, model_cheap: draft.model_cheap, effort: draft.effort }) : out;
 }
 
-// the town's own model: provider, the strong and the cheap model, effort (the settings page has the
-// same as a form of its own); switching lasts until the server restarts
+// the town's own model: provider, the strong and the cheap model, effort
 function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => void }) {
   const [draft, setDraft] = useState({ provider: llm.provider, model_strong: llm.model_strong, model_cheap: llm.model_cheap, effort: llm.effort });
   const [err, setErr] = useState('');
@@ -174,10 +173,7 @@ function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => void })
   return (
     <div className="llm-form">
       <label className="field">{tr('供应商')}
-        <Select value={draft.provider} options={llm.providers.map(x => ({ value: x.id, label: x.name }))} onChange={id => {
-          const d = llm.providers.find(x => x.id === id);
-          setDraft(x => ({ ...x, provider: id, model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' }));
-        }} />
+        <Select value={draft.provider} options={llm.providers.map(x => ({ value: x.id, label: x.name }))} onChange={id => setDraft(x => withProvider(llm, x, id))} />
       </label>
       <label className="field">{tr('强模型（Lv.3 以上的员工、最终回答）')}
         <Combo value={draft.model_strong} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_strong: v }))} />
@@ -200,7 +196,7 @@ function LlmForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm | null) => void })
 function LlmSwitch({ shown }: { shown: boolean }) {
   const [llm, setLlm] = useState<Llm | null>(null);
   const [open, setOpen] = useState(false);
-  useEffect(() => { if (!shown) setOpen(false); }, [shown]); // folding the chat away folds the picker too
+  useEffect(() => { if (!shown) setOpen(false); }, [shown]);
 
   useEffect(() => { api.llm().then(setLlm).catch(() => {}); }, []);
   useEffect(() => listen(e => { if (e.type === 'llm') setLlm(e.llm); }), []);
@@ -218,8 +214,6 @@ function LlmSwitch({ shown }: { shown: boolean }) {
     </div>
   );
 }
-
-// ---------- the departments ----------
 
 // every department and what it is doing, read again soon after anything in the town moves
 function useDepartments(tick: number) {
@@ -261,7 +255,7 @@ function brief(d: Department): string {
 }
 
 const agentName = (a: Pick<DeptAgent, 'name' | 'seq'>) => (a.seq ? `${a.name} · #${a.seq}` : a.name);
-const runtimeOf = (a: Pick<DeptAgent, 'runtime' | 'model'>) => `${a.runtime === 'paseo' ? 'Paseo' : 'pi'}${a.model ? ` · ${a.model}` : ''}`;
+const agentSub = (a: DeptAgent) => `${AGENT_STATUS[a.status] ?? a.status} · ${a.runtime === 'paseo' ? 'Paseo' : 'pi'}`;
 
 function DeptCard({ d, onRoom, onAgent, onHatch, onResume, onAdjust }: {
   d: Department; onRoom: (id: string, lineId?: string | null) => void; onAgent: (a: DeptAgent) => void;
@@ -296,7 +290,7 @@ function DeptCard({ d, onRoom, onAgent, onHatch, onResume, onAdjust }: {
               <button className="dk-rt" onClick={() => onAgent(a)} title={a.last?.text ?? ''}>
                 <b>{agentName(a)}</b>{a.last?.text && <em>{a.last.kind === 'user' ? tr('你：') : ''}{a.last.text}</em>}
               </button>
-              <span className="dk-rs">{AGENT_STATUS[a.status] ?? a.status} · {a.runtime === 'paseo' ? 'Paseo' : 'pi'}</span>
+              <span className="dk-rs">{agentSub(a)}</span>
               <span className="dk-ra"><button className="btn" onClick={() => onAgent(a)}>{tr('跟它说')}</button></span>
             </div>
           ))}
@@ -352,8 +346,6 @@ function Lights({ depts, onClick }: { depts: Department[]; onClick: () => void }
   );
 }
 
-// ---------- whom you write to ----------
-
 interface Opt { key: string; c: Composer; label: string; sub: string; group: string; color?: string; st?: string; icon?: 'egg' | 'compose' }
 
 function options(depts: Department[], lines: Line[]): Opt[] {
@@ -362,7 +354,7 @@ function options(depts: Department[], lines: Line[]): Opt[] {
     ...depts.map(d => ({ key: d.id, c: { kind: 'ask', building: d.id, name: d.name } as Composer, label: d.name, sub: brief(d), group: tr('部门'), color: d.color, st: d.state })),
     ...depts.flatMap(d => d.agents).map(a => ({
       key: a.id, c: { kind: 'agent', agentId: a.id, name: agentName(a) } as Composer, label: agentName(a),
-      sub: `${AGENT_STATUS[a.status] ?? a.status} · ${a.runtime === 'paseo' ? 'Paseo' : 'pi'}`, group: tr('员工'), st: a.status,
+      sub: agentSub(a), group: tr('员工'), st: a.status,
     })),
     ...lines.filter(l => l.status === 'waiting').map(l => ({
       key: `adjust:${l.id}`, c: { kind: 'adjust', lineId: l.id } as Composer, label: tr('调整 #{0} 的 idea', l.seq), sub: l.title, group: tr('等你决定'), icon: 'compose' as const,
@@ -390,8 +382,6 @@ function Menu({ found, at, onPick, onHover }: { found: Opt[]; at: number; onPick
     </div>
   );
 }
-
-// ---------- talking to a project's agent ----------
 
 // what you sent a Paseo agent, until its conversation (open or opened later) shows it as sending
 interface Out { id: number; agent: string; text: string }
@@ -423,29 +413,14 @@ function PaseoTalk({ agent, outbox, took, toast }: { agent: Agent; outbox: Out[]
     answered(id);
     api.permit(a.id, id, allow).catch(e => toast((e as Error).message));
   };
-  if (!items && !err) return <div className="thinking"><i /><i /><i /></div>;
+  if (!items && !err) return <Thinking />;
   return (
     <>
       {err && <div className="note err">{err}</div>}
       {items && !items.length && !sent.length && !held.length && <p className="dk-hint">{tr('还没有对话。写下第一件要它做的事。')}</p>}
-      {rows.map((x, i) => Array.isArray(x)
-        ? <Trail key={i} tools={x.map(paseoTool)} />
-        : x.kind === 'user' ? <UserMsg key={i} text={x.text ?? ''} />
-          : x.kind === 'assistant' ? <div key={i} className="msg-a"><Text text={x.text ?? ''} /></div>
-            : <div key={i} className={`note${x.kind === 'error' ? ' err' : ''}`}>{x.text}</div>)}
-      {sent.map((t, i) => <div key={`s${i}`} className="msg-u"><Text text={t} /><span className="meta">{tr('发送中')}</span></div>)}
-      {held.map(h => <div key={h.id} className="msg-u held"><Text text={h.data.text} /><span className="meta">{tr('排队中 · 它做完手上的事就交给它')}</span></div>)}
-      {asks.map(q => (
-        <div key={q.id} className="ask">
-          <p><b>{tr('它想')}{q.name === 'Bash' ? tr('运行命令') : tr('用 {0}', q.name)}</b>{q.title && q.title !== q.name ? ` · ${q.title}` : ''}</p>
-          {q.arg && <pre className="code">{q.arg}</pre>}
-          <div className="btns">
-            <button className="btn pri" onClick={() => permit(q.id, true)}>{tr('允许')}</button>
-            <button className="btn" onClick={() => permit(q.id, false)}>{tr('拒绝')}</button>
-          </div>
-        </div>
-      ))}
-      {a.status === 'working' && !asks.length && <div className="thinking"><i /><i /><i /></div>}
+      <PaseoLog rows={rows} sent={sent} asks={asks} working={a.status === 'working'} onPermit={permit}>
+        {held.map(h => <div key={h.id} className="msg-u held"><Text text={h.data.text} /><span className="meta">{tr('排队中 · 它做完手上的事就交给它')}</span></div>)}
+      </PaseoLog>
     </>
   );
 }
@@ -456,19 +431,13 @@ function PiTalk({ agent }: { agent: Agent }) {
   return (
     <>
       {!items.length && !live && <p className="dk-hint">{tr('还没有对话。写下第一件要它做的事。')}</p>}
-      {rows.map(x => Array.isArray(x)
-        ? <Trail key={x[0].ev.id} tools={x.map(piTool)}><div className="trail-list">{x.map(t => <Tool key={t.ev.id} {...t} />)}</div></Trail>
-        : <Entry key={x.ev.id} ev={x.ev} end={x.end} />)}
-      {live && <div className="msg-a streaming"><Text text={live} /><i className="caret" /></div>}
-      {a.status === 'working' && !live && <div className="thinking"><i /><i /><i /></div>}
+      <PiLog rows={rows} live={live} working={a.status === 'working'} />
     </>
   );
 }
 
-// ---------- where it stands ----------
-
-// under the middle of the page, or of the console's panel column, whose width moves with the
-// sidebars beside it and which is a new element for every project
+// the console's panel column the box centres under (null: the middle of the page); the column is
+// replaced for every project and resized with the sidebars beside it
 function useColumn(view: string) {
   const [col, setCol] = useState<{ x: number; w: number } | null>(null);
   useLayoutEffect(() => {
@@ -497,8 +466,6 @@ function useColumn(view: string) {
   return col;
 }
 
-// ---------- the box ----------
-
 export function Chat(p: Props) {
   const lens = useLens<HTMLDivElement>(14, 30);
   const depts = useDepartments(p.tick);
@@ -512,7 +479,7 @@ export function Chat(p: Props) {
   const [sending, setSending] = useState(false);
   const [mode, setMode] = useState<SayMode>(() => { try { return localStorage.getItem(MODE) === 'queue' ? 'queue' : 'steer'; } catch { return 'steer'; } });
   const [menu, setMenu] = useState<{ q: string; at: number; typed: boolean } | null>(null);
-  const [shown, setShown] = useState(p.open); // the inside stays while the box folds away
+  const [shown, setShown] = useState(p.open);
   const c = p.composer;
 
   const agents = useMemo(() => depts.flatMap(d => d.agents), [depts]);
@@ -532,19 +499,13 @@ export function Chat(p: Props) {
     return () => clearTimeout(t);
   }, [p.open]);
   useEffect(() => { if (p.focusKey) setTimeout(() => box.current?.focus(), 60); }, [p.focusKey]);
-  useEffect(() => {
-    if (c.kind !== 'adjust') return;
-    const ln = p.lines.find(l => l.id === c.lineId);
-    if (ln) setText(ln.idea);
-  }, [c]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (line) setText(line.idea); }, [c]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { try { localStorage.setItem(MODE, mode); } catch { /* private mode */ } }, [mode]);
 
-  // "/" from anywhere on the page starts writing
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      const t = e.target instanceof HTMLElement ? e.target : null;
       if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey || (p.away && !p.open) || document.querySelector('.settings')) return;
-      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.closest('.cm-editor'))) return;
+      if (typing(e, '.cm-editor')) return;
       e.preventDefault();
       box.current?.focus();
     };
@@ -552,7 +513,6 @@ export function Chat(p: Props) {
     return () => removeEventListener('keydown', key);
   }, [p.away, p.open]);
 
-  // the box grows with what you write, up to a few lines
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -560,7 +520,6 @@ export function Chat(p: Props) {
     if (text) el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
   }, [text, p.open]);
 
-  // the conversation stays at its newest unless you have scrolled up to read
   useEffect(() => {
     const el = body.current;
     if (!el) return;
@@ -572,7 +531,6 @@ export function Chat(p: Props) {
     return () => mo.disconnect();
   }, [shown, p.tab, c]);
 
-  // a menu opened from the chip closes when you click elsewhere
   useEffect(() => {
     if (!menu || menu.typed) return;
     const off = (e: MouseEvent) => { if (!(e.target as Element).closest('.dk-menu, .dk-to')) setMenu(null); };
@@ -649,6 +607,7 @@ export function Chat(p: Props) {
 
   const abort = (id: string) => api.abort(id).catch(e => p.toast((e as Error).message));
   const toAgent = (a: DeptAgent) => choose({ kind: 'agent', agentId: a.id, name: agentName(a) });
+  const adjust = (id: string) => choose({ kind: 'adjust', lineId: id });
 
   const placeholder = c.kind === 'ask' ? tr('问问{0}的员工…', c.name)
     : c.kind === 'adjust' ? tr('改写你的 idea，孵化员会重新查重…')
@@ -669,7 +628,7 @@ export function Chat(p: Props) {
         <>
           <div className="dk-ahead">
             <span className={`dot s-${agent.status}`} />
-            <div className="dk-who"><b>{agentName(agent)}</b><span>{AGENT_STATUS[agent.status] ?? agent.status} · {runtimeOf(agent)}</span></div>
+            <div className="dk-who"><b>{agentName(agent)}</b><span>{agentSub(agent)}{agent.model ? ` · ${agent.model}` : ''}</span></div>
             {working && <button className="dk-op" onClick={() => abort(agent.id)}><Icon n="stop" size={14} className="fill" />{tr('打断')}</button>}
             <button className="dk-op" onClick={() => p.onRoom(agent.role === 'coder' ? 'depot' : 'press', agent.line_id)}>
               {agent.role === 'coder' ? tr('去仓库看完整对话') : tr('去印刷厂看完整对话')}<Icon n="right" size={14} />
@@ -685,16 +644,14 @@ export function Chat(p: Props) {
       const qa = asked(p.messages, dept?.id ?? c.building);
       return (
         <>
-          {dept && <DeptCard d={dept} onRoom={p.onRoom} onAgent={toAgent} onHatch={p.onHatch} onResume={p.onResume}
-            onAdjust={id => choose({ kind: 'adjust', lineId: id })} />}
-          {qa.map(m => <Bubble key={m.id} m={m} lines={p.lines} placements={p.placements} onHatch={p.onHatch} onRoom={p.onRoom}
-            onAdjust={id => choose({ kind: 'adjust', lineId: id })} />)}
+          {dept && <DeptCard d={dept} onRoom={p.onRoom} onAgent={toAgent} onHatch={p.onHatch} onResume={p.onResume} onAdjust={adjust} />}
+          {qa.map(m => <Bubble key={m.id} m={m} lines={p.lines} placements={p.placements} onHatch={p.onHatch} onRoom={p.onRoom} onAdjust={adjust} />)}
           {!qa.length && !p.busy && (
             <div className="dk-asks">
               {[tr('现在在忙什么？'), tr('有什么要我决定的吗？')].map(q => <button key={q} onClick={() => send(q)}>{q}</button>)}
             </div>
           )}
-          {p.busy && <div className="thinking"><i /><i /><i /></div>}
+          {p.busy && <Thinking />}
         </>
       );
     }
@@ -702,16 +659,14 @@ export function Chat(p: Props) {
       <>
         {p.messages.length === 0 && <div className="msg bot"><p>{tr('这里是 Papertown。写下一个研究 idea，孵化员会去图书馆和 arXiv 查重，再决定要不要建一座造纸厂。')}</p></div>}
         {p.messages.map(m => (
-          <Bubble key={m.id} m={m} lines={p.lines} placements={p.placements} onHatch={p.onHatch} onRoom={p.onRoom}
-            onAdjust={id => choose({ kind: 'adjust', lineId: id })} />
+          <Bubble key={m.id} m={m} lines={p.lines} placements={p.placements} onHatch={p.onHatch} onRoom={p.onRoom} onAdjust={adjust} />
         ))}
-        {p.busy && <div className="thinking"><i /><i /><i /></div>}
+        {p.busy && <Thinking />}
       </>
     );
   }
 
   const style = col ? { left: col.x, ['--dk-room' as string]: `${col.w}px` } : undefined;
-  // opening the closed box: on what waits for you first
   const wake = () => {
     const wait = depts.find(d => d.state === 'wait');
     if (wait) choose({ kind: 'ask', building: wait.id, name: wait.name });
@@ -754,7 +709,7 @@ export function Chat(p: Props) {
                   const el = e.currentTarget;
                   stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
                 }}>
-                  {p.tab === 'line' ? <LinePane lines={p.lines} placements={p.placements} onRoom={id => p.onRoom(id)} />
+                  {p.tab === 'line' ? <LinePane lines={p.lines} placements={p.placements} onRoom={p.onRoom} />
                     : p.tab === 'trace' ? (
                       <div className="pane-pad">
                         <h5>{tr('最近的调用')}</h5>

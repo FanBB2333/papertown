@@ -10,8 +10,7 @@ export const ROLE_NAMES: Record<string, string> = {
   hatcher: tr('孵化员'), scout: tr('调研员'), designer: tr('方法设计师'), experimenter: tr('实验员'), writer: tr('写手'), reviewer: tr('审稿人'), keeper: tr('仓管员'),
 };
 
-// Papertown's mark: a sheet of paper whose top edge is cut into the town's roofs, with the mill's
-// chimney smoking at the end and the sheet's corner folded over (also web/public/logo.svg)
+// Papertown's mark, drawn to match web/public/logo.svg
 const SHEET = 'M8 56V32l11.5-12.5L29 29l10-11 7 7V11h6v34L41 56Z';
 export function Logo() {
   const clip = `pt-${useId().replace(/:/g, '')}`;
@@ -45,7 +44,7 @@ export function Item({ k }: { k: string }) {
 
 export function Ava({ role, level, code }: { role: string; level?: number; code?: string }) {
   if (!WORKERS[role]) return null;
-  const title = `${ROLE_NAMES[role] ?? role}${code ? ' ' + code : ''}${level ? ' Lv.' + level : ''}`;
+  const title = `${ROLE_NAMES[role]}${code ? ' ' + code : ''}${level ? ' Lv.' + level : ''}`;
   return <span className="ava" title={title} {...html(workerSVG(role))} />;
 }
 

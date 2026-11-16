@@ -1,23 +1,17 @@
-// The experiments panel. One row of filters scopes everything under it (the time range and a
-// search, and the state picked from the counts below, shown there while you scroll); then the
-// counts, one tile a state, which filter when clicked; what to look at first (the
-// newest results, what runs now, the newest failures); a timeline of the project's jobs on each
-// GPU (drag across it to look closer, double-click to step back); the cluster, live (Cluster.tsx);
-// and the jobs themselves, as a table, cards, a board, groups or a grid (JobViews.tsx). Each
-// state keeps its colour everywhere, as a mark and as a wash behind its row. Any job opens in
-// full, and ←/→ walk the list it was opened from. Read only.
+// The experiments panel: filters, counts per state, what to look at first, a timeline of the
+// project's jobs per GPU, the live cluster (Cluster.tsx) and the jobs (JobViews.tsx). Read only.
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Job } from '../api';
 import { tr } from '../i18n';
-import { Gantt, Legend, ST, elapsed, fmtNum, when, type GJob, type St } from './charts';
+import { Gantt, Legend, ST, fmtNum, when, type GJob, type St } from './charts';
 import { Cluster } from './Cluster';
 import { Icon } from './icons';
 import { JobDrawer } from './JobDrawer';
 import { JobViews } from './JobViews';
-import { endOf, jobRef, placeOf, resOf, startOf, stj, t } from './jobs';
+import { endOf, jobRef, lineOf, placeOf, resOf, startOf, stj, t } from './jobs';
 import { usePanelNote } from './page';
-import { ago, headline, headlines, lastLine, pctOf, useFetch } from './util';
+import { ago, dur, headline, headlines, pctOf, useFetch } from './util';
 
 interface Props { lineId: string; tick: number; onData: () => void }
 
@@ -34,9 +28,9 @@ export function Experiments(p: Props) {
   const [zoom, setZoom] = useState<[number, number] | null>(null);
   const [st, setSt] = useState<St | null>(null);
   const [q, setQ] = useState('');
-  // the job open in full, and the list it was opened from, for ←/→
   const [open, setOpenAt] = useState<{ id: string; list: string[] } | null>(null);
-  const openIn = (list: string[]) => (id: string) => setOpenAt({ id, list });
+  const openAt = (id: string, list: string[]) => setOpenAt({ id, list });
+  const openIn = (list: string[]) => (id: string) => openAt(id, list);
   const now = Date.now();
 
   const jobs = board.data?.jobs ?? [];
@@ -45,10 +39,8 @@ export function Experiments(p: Props) {
     const first = Math.min(...jobs.map(j => startOf(j)).filter(Number.isFinite), now - 864e5);
     return [first, now + (now - first) * 0.02];
   }, [range, jobs.length, Math.floor(now / 60000)]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => setZoom(null), [range]);
   const [d0, d1] = zoom ?? [r0, r1];
 
-  // the range scopes everything below it; the state and the search scope the timeline and the table
   const inRange = jobs.filter(j => {
     const s = stj(j);
     if (s === 'queued' || s === 'running') return true;
@@ -58,21 +50,21 @@ export function Experiments(p: Props) {
   const needle = q.trim().toLowerCase();
   const shown = inRange.filter(j => (!st || stj(j) === st)
     && (!needle || `${j.id} ${j.name} ${j.nvidb?.notes ?? ''} ${placeOf(j)}`.toLowerCase().includes(needle)));
-  const count = (s: St) => inRange.filter(j => stj(j) === s).length;
   const gpuHours = inRange.reduce((a, j) => {
     const b = startOf(j), cards = j.nvidb ? j.nvidb.gpu_ids.length : 0;
     if (!Number.isFinite(b) || !cards) return a;
     const e = Number.isFinite(endOf(j)) ? endOf(j) : now;
     return a + Math.max(0, Math.min(e, d1) - Math.max(b, d0)) * cards / 3600e3;
   }, 0);
+  const gh = gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours);
 
   const gjobs: GJob[] = shown.filter(j => Number.isFinite(startOf(j))).map(j => {
-    const s = stj(j), e = endOf(j);
-    const res = headline(j.nvidb?.result ?? j.result, 2);
+    const s = stj(j), b = startOf(j), e = endOf(j);
+    const res = headline(resOf(j), 2);
     return {
-      id: j.id, name: j.name, st: s, row: placeOf(j), start: startOf(j), end: s === 'running' ? null : Number.isFinite(e) ? e : startOf(j) + 60e3,
-      tip: [{ v: ST[s].label, k: tr('状态'), key: ST[s].c }, { v: elapsed(j.nvidb?.elapsed_s ?? (Number.isFinite(e) ? (e - startOf(j)) / 1000 : null)), k: tr('用时') },
-        { v: `${when(startOf(j))} → ${Number.isFinite(e) ? when(e) : tr('现在')}`, k: '' }, { v: placeOf(j), k: tr('在哪') },
+      id: j.id, name: j.name, st: s, row: placeOf(j), start: b, end: s === 'running' ? null : Number.isFinite(e) ? e : b + 60e3,
+      tip: [{ v: ST[s].label, k: tr('状态'), key: ST[s].c }, { v: dur(j.nvidb?.elapsed_s ?? (Number.isFinite(e) ? (e - b) / 1000 : null)), k: tr('用时') },
+        { v: `${when(b)} → ${Number.isFinite(e) ? when(e) : tr('现在')}`, k: '' }, { v: placeOf(j), k: tr('在哪') },
         ...res.map(([k, v]) => ({ v: fmtNum(v), k }))],
     };
   });
@@ -82,7 +74,6 @@ export function Experiments(p: Props) {
     时间范围: zoom ? `${when(d0)} – ${when(d1)}（在时间线上框选放大的）` : RANGES.find(([k]) => k === range)![1],
     状态: st ? ST[st].label : null, 搜索: q.trim(), 符合的任务: `${shown.length} 个（这段时间共 ${inRange.length} 个）`, 打开着详情的任务: open?.id,
   });
-  // the assistant opens a job for you
   useEffect(() => {
     const show = (e: Event) => setOpenAt({ id: (e as CustomEvent<string>).detail, list: [] });
     addEventListener('pt-open-job', show);
@@ -105,18 +96,21 @@ export function Experiments(p: Props) {
       </div>
 
       <div className="tiles">
-        {STATES.map(s => (
-          <button key={s} className={`tile pick st s-${s}${st === s ? ' on' : ''}${count(s) ? '' : ' zero'}`} onClick={() => setSt(x => (x === s ? null : s))}
-            data-ref={`count:${s}`} data-ref-label={`${ST[s].label} ${count(s)}`}>
-            <b>{count(s)}</b><span><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>
-          </button>
-        ))}
+        {STATES.map(s => {
+          const n = inRange.filter(j => stj(j) === s).length;
+          return (
+            <button key={s} className={`tile pick st s-${s}${st === s ? ' on' : ''}${n ? '' : ' zero'}`} onClick={() => setSt(x => (x === s ? null : s))}
+              data-ref={`count:${s}`} data-ref-label={`${ST[s].label} ${n}`}>
+              <b>{n}</b><span><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>
+            </button>
+          );
+        })}
         <div className="tile gh" title={tr('这段时间里这个项目的任务占卡的时长，按卡数累加')} data-ref="count:gpu-hours"
-          data-ref-label={`${tr('GPU 小时')} ${gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours)}`}><b>{gpuHours < 10 ? gpuHours.toFixed(1) : Math.round(gpuHours)}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时')}</span></div>
+          data-ref-label={`${tr('GPU 小时')} ${gh}`}><b>{gh}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时')}</span></div>
       </div>
       {board.err && <p className="warn-box small">{board.err}</p>}
 
-      <Focus jobs={inRange} onOpen={(id, list) => setOpenAt({ id, list })} />
+      <Focus jobs={inRange} onOpen={openAt} />
 
       <section className="cs">
         <div className="cs-h">
@@ -130,7 +124,7 @@ export function Experiments(p: Props) {
 
       <Cluster mine={new Set(jobs.map(j => j.nvidb?.id).filter((x): x is number => x != null))} onOpen={openIn([])} />
 
-      <JobViews jobs={shown} open={open?.id ?? null} onOpen={(id, list) => setOpenAt({ id, list })} onData={p.onData} />
+      <JobViews jobs={shown} open={open?.id ?? null} onOpen={openAt} onData={p.onData} />
 
       {open && <JobDrawer id={open.id} onClose={() => setOpenAt(null)} onJob={id => setOpenAt(o => ({ id, list: o?.list ?? [] }))}
         nav={at >= 0 ? { prev: open.list[at - 1], next: open.list[at + 1] } : undefined} />}
@@ -138,12 +132,9 @@ export function Experiments(p: Props) {
   );
 }
 
-// ---------- what to look at first ----------
-
-// Three short columns, each in its state's colour: the newest results with their numbers, what
-// runs or waits now with its progress, and the newest failures with the line that says why.
+// the newest results, what runs or waits now, and the newest failures, a few of each
 function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list: string[]) => void }) {
-  const fin = (j: Job) => (Number.isFinite(endOf(j)) ? endOf(j) : 0);
+  const fin = (j: Job) => endOf(j) || 0;
   const withRes = jobs.filter(j => stj(j) === 'done' && headline(resOf(j), 1).length).sort((a, b) => fin(b) - fin(a));
   const live = jobs.filter(j => stj(j) === 'running' || stj(j) === 'queued').sort((a, b) => +(stj(a) !== 'running') - +(stj(b) !== 'running') || startOf(b) - startOf(a));
   const failed = jobs.filter(j => stj(j) === 'failed').sort((a, b) => fin(b) - fin(a));
@@ -174,7 +165,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
               const run = stj(j) === 'running', pct = run ? pctOf(j.nvidb?.progress) : null;
               return (
                 <button key={j.id} className="fc-j" {...jobRef(j)} onClick={() => onOpen(j.id)}>
-                  <span className="fc-t"><b title={j.name}>{j.name}</b><em>{run ? elapsed(j.nvidb?.elapsed_s ?? null) : ST.queued.label}</em></span>
+                  <span className="fc-t"><b title={j.name}>{j.name}</b><em>{run ? dur(j.nvidb?.elapsed_s) : ST.queued.label}</em></span>
                   {pct != null && <span className="fc-bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></span>}
                   <span className="fc-s mono">{j.nvidb?.progress || placeOf(j)}</span>
                 </button>
@@ -188,7 +179,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
             {failed.slice(0, 3).map(j => (
               <button key={j.id} className="fc-j" {...jobRef(j)} onClick={() => onOpen(j.id)}>
                 <span className="fc-t"><b title={j.name}>{j.name}</b><em>{when_(j)}</em></span>
-                <span className="fc-s mono" title={j.nvidb?.last_error}>{lastLine(j.nvidb?.last_error) || (j.nvidb?.exit_code != null ? tr('退出码 {0}', j.nvidb.exit_code) : tr('没有留下出错信息'))}</span>
+                <span className="fc-s mono" title={j.nvidb?.last_error}>{lineOf(j)}</span>
               </button>
             ))}
           </div>

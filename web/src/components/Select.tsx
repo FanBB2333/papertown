@@ -1,7 +1,5 @@
-// Choosing from a list, drawn like the rest of the page rather than with the browser's own menus.
-// Select picks one of a few values; Combo is a text box that suggests what to write in it. The
-// list goes to the page's root, beside what opened it, so a panel that scrolls or clips does not
-// cut it off, and it opens upward where there is more room above. Keys work as in a native select.
+// Select and Combo: lists drawn like the page instead of the browser's menus, placed on the page's
+// root so a panel that scrolls or clips does not cut them off. Keys work as in a native select.
 import { Fragment, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../console/icons';
@@ -13,8 +11,7 @@ const GAP = 6, EDGE = 10, TALL = 320;
 const root = () => document.querySelector('.theme-sketch') ?? document.body;
 const printable = (e: React.KeyboardEvent) => e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey;
 
-// an open list stays beside what opened it while the page scrolls or resizes, keeps the active
-// option in view, and closes on a click anywhere else
+// keeps an open list beside what opened it, its active option in view, and closes it on a click elsewhere
 function usePop(open: boolean, at: number, anchor: React.RefObject<HTMLElement>, pop: React.RefObject<HTMLDivElement>, close: () => void) {
   useLayoutEffect(() => {
     if (!open) return;
@@ -141,8 +138,7 @@ export function Select<T extends string | number>({ value, options, onChange, cl
   );
 }
 
-// free text, with what is usually written there to pick from: the whole list until you type,
-// then the ones that contain what you typed
+// free text, with suggestions: the whole list until you type, then the ones containing what you typed
 export function Combo({ value, options, onChange, className = '', placeholder, label }: {
   value: string; options: string[]; onChange: (v: string) => void; className?: string; placeholder?: string; label?: string;
 }) {

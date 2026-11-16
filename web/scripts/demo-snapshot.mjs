@@ -1,12 +1,8 @@
-// Takes the static demo's data from a running Papertown: every GET the page makes, saved as
-// dist-demo/demo/<key>.json (see demoKey in src/demo.ts), plus the shipped papers' files.
-// Point it at a fresh offline instance of its own, never at the one you work in:
+// Snapshots every GET the static demo makes into dist-demo/demo/<key>.json, plus the papers' files.
+// Run it against a fresh offline instance, never the one you work in; it fails if personal data is left.
 //
 //   PAPERTOWN_PROVIDER=mock PAPERTOWN_DATA_DIR=/tmp/pt-demo PAPERTOWN_NVIDB=0 … papertown serve --port 8001
 //   node scripts/demo-snapshot.mjs [http://127.0.0.1:8001] [dist-demo]
-//
-// Absolute paths are cut down to ~ before saving, and the run fails if anything that looks
-// like a home directory, a private address or a temp path is left.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -15,17 +11,17 @@ const SRC = process.argv[2] ?? process.env.PAPERTOWN_DEMO_SOURCE ?? 'http://127.
 const OUT = join(process.argv[3] ?? 'dist-demo', 'demo');
 mkdirSync(join(OUT, 'files'), { recursive: true });
 
-// the same key as src/demo.ts
+// must match demoKey in src/demo.ts
 function demoKey(path, query = '') {
   const q = [...new URLSearchParams(query)].filter(([, v]) => v !== '').sort(([a], [b]) => a.localeCompare(b));
   return [path.replace(/^\/api\//, ''), ...q.map(([k, v]) => `${k}=${v}`)].join('_').replace(/[^\w.=-]+/g, '_');
 }
 
 const HOME = homedir();
+// temp data dir, temp home, this repo and $HOME become ~ paths; other temp paths keep only their name
 function scrub(s) {
-  // the instance's own temp directories: its data directory and the home its skim ran in
   return s.replace(/(?:\/private)?\/(?:tmp|var\/folders)\/[^\s"',)]*?\/(var|home)(?=\/|\b)/g, (_, d) => (d === 'var' ? '~/papertown/server/var' : '~'))
-    .replace(/(?:\/private)?\/(?:tmp|var\/folders)\/[^\s"',)]*\/([^\s"',)/]+)/g, '$1') // anything else there: its name
+    .replace(/(?:\/private)?\/(?:tmp|var\/folders)\/[^\s"',)]*\/([^\s"',)/]+)/g, '$1')
     .split(join(HOME, 'repos', 'papertown')).join('~/papertown')
     .split(HOME).join('~');
 }
@@ -71,7 +67,6 @@ for (const ln of lines) {
     writeFileSync(join(OUT, 'files', ln.id, name), /\.(tex|bib)$/.test(name) ? scrub(buf.toString('utf8')) : buf);
   }
 }
-// the console: each project's code and paper as files, its data, and the text of those files
 const TEXT = /\.(tex|bib|sty|cls|bst|md|txt|py|ts|js|json|jsonl|ya?ml|toml|cfg|sh|csv|tsv)$/i;
 for (const ln of lines) {
   const ws = await get(`/api/lines/${ln.id}/ws`);
@@ -95,7 +90,6 @@ for (const a of agents.values()) {
   await get(`/api/skim/resolve?line_id=${a.line_id}&agent_id=${a.id}`);
 }
 
-// nothing personal may be left: home directories, user names, private addresses, temp paths
 const LEAKS = [/\/Users\/\w/, /\/home\/\w/, /\/private\/|\/var\/folders\//, new RegExp(HOME.split('/').pop()), /\b100\.\d+\.\d+\.\d+\b/,
   /\b192\.168\.\d+\.\d+\b/, /tailscale/i, /@(gmail|qq|163|outlook)\./i];
 const found = [];

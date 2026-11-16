@@ -1,7 +1,5 @@
-// LaTeX and BibTeX for the editor, as stream parsers. The legacy stex mode gives a formula only
-// its dollar signs and reads a .bib as plain text; these tell apart what a paper is made of:
-// commands, a section's title, environments, \cite and \ref keys, the math (its letters, its
-// commands, where it opens and closes), and in a .bib the entry type, key, fields and values.
+// LaTeX and BibTeX for the editor, as stream parsers that, unlike the legacy stex mode, tell apart
+// commands, titles, environments, cite/ref keys and math, and a .bib's entries, keys, fields and values.
 
 import { StreamLanguage, type StringStream } from '@codemirror/language';
 import { Tag } from '@lezer/highlight';
@@ -57,11 +55,11 @@ function texToken(stream: StringStream, s: TexState): string | null {
   }
   if (ch === '}') {
     const kind = s.args.pop();
-    if (kind === 'env' && s.begin && MATH_ENVS.test(s.env.trim())) s.math = s.env.trim(); // \begin{equation}: the formula starts
+    if (kind === 'env' && s.begin && MATH_ENVS.test(s.env.trim())) s.math = s.env.trim();
     return 'brace';
   }
   if (ch === '[') {
-    if (s.next) { stream.match(/^[^\]\n]*\]?/); return 'meta'; } // a command's optional argument: [htbp], [width=…]
+    if (s.next) { stream.match(/^[^\]\n]*\]?/); return 'meta'; }
     return 'squareBracket';
   }
   if (ch === ']') return 'squareBracket';
@@ -99,8 +97,6 @@ export const latex = StreamLanguage.define<TexState>({
   languageData: { commentTokens: { line: '%' } },
 });
 
-// ---------- BibTeX ----------
-
 interface BibState {
   at: 'out' | 'open' | 'key' | 'field' | 'eq' | 'value' | 'after';
   kind: string; // the entry type, lowercased: article, string, comment…
@@ -117,7 +113,7 @@ function bibToken(stream: StringStream, s: BibState): string | null {
     case 'out':
       if (stream.match(/^@[a-zA-Z]+/)) { s.kind = stream.current().slice(1).toLowerCase(); s.at = 'open'; return 'keyword'; }
       stream.match(/^[^@%]+/) || stream.next();
-      return 'comment'; // BibTeX skips whatever is outside an entry
+      return 'comment';
     case 'open':
       if (stream.eat('{') || stream.eat('(')) {
         if (s.kind === 'comment') { s.depth = 1; return 'brace'; }
@@ -139,7 +135,7 @@ function bibToken(stream: StringStream, s: BibState): string | null {
       if (stream.eat('{')) { s.depth = 1; return bibValue(stream, s); }
       if (stream.eat('"')) { s.quote = true; return bibValue(stream, s); }
       if (stream.match(/^\d+/)) { s.at = 'after'; return 'number'; }
-      if (stream.match(/^[a-zA-Z][\w\-:.]*/)) { s.at = 'after'; return 'variableName'; } // a @string's name, or jan…dec
+      if (stream.match(/^[a-zA-Z][\w\-:.]*/)) { s.at = 'after'; return 'variableName'; }
       break;
     case 'after':
       if (stream.eat('#')) { s.at = 'value'; return 'operator'; }

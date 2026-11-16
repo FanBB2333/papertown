@@ -1,25 +1,18 @@
-// 进展: every project in one list, as blocks (a card each, in a grid) or as rows (a project to a
-// line, Rows.tsx), the same on a phone and a desk. A card shows the panes you pick for all of them
-// (how it goes, what needs you, the experiments running and planned, what it is to produce, its
-// code and paper repositories, its imported memory), each in a fixed height, so every card in the
-// grid is as tall as the others. How the list is sorted, grouped and sized is in 显示 (Display.tsx).
-// What Papertown knows itself (the stages, the jobs, the repositories) is live; what the project's
-// lead writes changes only when you press 更新. Each project opens in full at /progress/<number>,
-// and asks it anything (提问) at /progress/<number>/ask, a page of its own over everything else;
-// the pages its agents wrote in HTML are at /progress/<number>/pages.
+// 进展: every project as a card in a grid or as a row (Rows.tsx), and the routes under
+// /progress/<number>: the project in full, asking it (/ask) and the pages its agents wrote (/pages).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type CardLayout, type Pane, type PaseoDefaults, type ProjectCard } from '../api';
-import { STATUS } from '../components/MillRoom';
+import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { tr } from '../i18n';
 import { follow, go, href } from '../route';
 import { setSettings, useSettings, type PgGroup, type PgSort, type Settings as S } from '../settings';
-import { askPath, AskPage } from './Ask';
+import { AskPage } from './Ask';
 import { DisplayMenu, rowCols } from './Display';
 import { pagesPath, PagesView, type PageOpen } from './Pages';
 import { MemoryViewer } from './Memory';
-import { CardPane, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
+import { AskButton, CardPane, opens, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
 import { hitOpener, Project, type ConsoleTarget } from './Project';
 import { ProjectRows, type Group } from './Rows';
 import './progress.css';
@@ -43,7 +36,7 @@ const SORTS: Record<PgSort, (a: ProjectCard, b: ProjectCard) => number> = {
   progress: (a, b) => far(b) - far(a) || b.line.seq - a.line.seq,
   number: (a, b) => a.line.seq - b.line.seq,
 };
-// the list in its sections, in their own order; inside one the sort still holds
+// the list in sections, in their own order; the sort still holds inside each
 function grouped(list: ProjectCard[], by: PgGroup): Group[] {
   if (by === 'none') return [{ key: 'all', name: '', items: list }];
   const found = new Map<string, Group & { at: number }>();
@@ -82,7 +75,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
     const load = () => api.cards().then(r => { if (alive) { setRows(r.cards); setLayout(r.layout); setErr(''); } }, e => alive && setErr((e as Error).message));
     load();
     api.modelNews().then(r => alive && setDefs(r.defaults)).catch(() => {});
-    // a card written comes whole; the facts around it (stages, jobs, questions, the lead, memory) are read again shortly after they move
+    // a card event carries the whole card; other changes reload the cards shortly after
     const off = listen(e => {
       if (e.type === 'card' && e.card) setRows(rs => rs && rs.map(r => (r.line.id === e.card.line.id ? e.card : r)));
       else if (e.type === 'card_layout' && e.layout) setLayout(e.layout);
@@ -92,7 +85,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
       }
       if (e.type === 'paseo_models' && e.defaults) setDefs(e.defaults);
     });
-    const t = setInterval(() => setNow(n => n + 1), 30000); // how long an update has been waiting
+    const t = setInterval(() => setNow(n => n + 1), 30000); // keeps how long an update has waited current
     return () => { alive = false; off(); clearInterval(t); clearTimeout(again.current); };
   }, [active]);
 
@@ -105,7 +98,6 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
   const project = seq != null ? rows?.find(r => r.line.seq === seq) : undefined;
   const panes = layout?.panes ?? [];
 
-  // what a page links to: a file or a job in the console, or another of the project's pages
   const opener = (p: ProjectCard) => (o: PageOpen) => {
     if (o.file) onOpen(p.line.id, { file: /^(code|paper):/.test(o.file) ? o.file : `code:${o.file}` });
     else if (o.job) onOpen(p.line.id, { job: o.job });
@@ -168,8 +160,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
                 <section key={g.key} className="pg-sec">
                   {g.name && <h2 className="pg-gh">{g.name}<span>{g.items.length}</span></h2>}
                   <div className="pg-grid">
-                    {g.items.map((r, i) => <ProjectBox key={r.line.id} r={r} i={i} panes={panes} defs={defs} toast={toast} onChange={put}
-                      onAsk={() => go(askPath(r.line.seq))} />)}
+                    {g.items.map((r, i) => <ProjectBox key={r.line.id} r={r} i={i} panes={panes} defs={defs} toast={toast} onChange={put} />)}
                   </div>
                 </section>
               )))}
@@ -186,23 +177,18 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
   );
 }
 
-// a card in the grid: the panes chosen for all of them, each its fixed height; the rest is on its page
-function ProjectBox({ r, i, panes, defs, toast, onChange, onAsk }: {
-  r: ProjectCard; i: number; panes: Pane[]; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onAsk: () => void;
+// a project's card in the grid: the panes chosen for every card; the rest is on its page
+function ProjectBox({ r, i, panes, defs, toast, onChange }: {
+  r: ProjectCard; i: number; panes: Pane[]; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void;
 }) {
   const acts = useCardActs(r, toast, onChange);
   const { line, card } = r;
-  const to = `/progress/${line.seq}`;
-  const open = () => go(to);
+  const o = opens(line);
   return (
-    <article className={`pc${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} onClick={open}
-      tabIndex={0} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(); } }}
-      aria-label={tr('#{0} {1}，看详情', line.seq, line.title)}>
+    <article className={`pc${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} {...o.box}>
       <header className="pc-head">
-        <span className="pc-name"><span className="pc-seq">#{line.seq}</span>
-          <h3 title={line.title}><a href={href(to)} onClick={e => { e.stopPropagation(); follow(e, to); }} tabIndex={-1}>{line.title}</a></h3>
-        </span>
-        <span className={`pst pst-${line.status}`}>{STATUS[line.status] ?? line.status}</span>
+        <span className="pc-name"><span className="pc-seq">#{line.seq}</span>{o.title}</span>
+        <StatusTag status={line.status} />
       </header>
       <Stages r={r} />
       <div className="pc-panes">
@@ -211,7 +197,7 @@ function ProjectBox({ r, i, panes, defs, toast, onChange, onAsk }: {
       <footer className="pc-foot" onClick={e => e.stopPropagation()}>
         <Who r={r} />
         <div className="pc-acts">
-          <button className="btn pc-ask" onClick={onAsk} title={tr('问这个项目任何问题')}><Icon n="chat" size={14} /><span>{tr('提问')}</span></button>
+          <AskButton seq={line.seq} />
           <UpdateButton r={r} acts={acts} defs={defs} />
         </div>
       </footer>

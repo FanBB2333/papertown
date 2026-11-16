@@ -1,9 +1,10 @@
-// A project's jobs as the experiments panel reads them, whichever backend ran them: where, when,
-// in what state, with what result; their days; and how they fall into groups.
+// A project's jobs as the experiments panel reads them, whichever backend ran them, and how they
+// fall into days and groups.
 
 import type { Job } from '../api';
 import { LANG, tr } from '../i18n';
 import { stOf } from './charts';
+import { lastLine } from './util';
 
 export const t = (s: string | null | undefined) => (s ? Date.parse(s) : NaN);
 // where a job ran: its machine and cards, or the backend that ran it
@@ -17,9 +18,9 @@ export const startOf = (j: Job) => t(j.nvidb?.started_at ?? j.started_at);
 export const endOf = (j: Job) => t(j.nvidb?.finished_at ?? j.ended_at);
 export const stj = (j: Job) => stOf(j.nvidb?.state ?? j.status);
 export const resOf = (j: Job) => j.nvidb?.result ?? j.result;
-// when it last did something: finished, started, or was submitted
 // what the assistant in the sidebar points at for a job, wherever the job is drawn
 export const jobRef = (j: Job) => ({ 'data-ref': `job:${j.id}`, 'data-ref-label': `${tr('任务')} ${j.nvidb ? `#${j.nvidb.id} ` : ''}${j.name}` });
+// when it last did something: finished, started, or was submitted
 export const lastAt = (j: Job) => [endOf(j), startOf(j), t(j.created_at)].find(Number.isFinite) ?? 0;
 // how long it has run: nvidb's count, or the clock for one still running
 export const ranFor = (j: Job, now = Date.now()) => {
@@ -27,23 +28,30 @@ export const ranFor = (j: Job, now = Date.now()) => {
   if (stj(j) === 'running' && Number.isFinite(b)) return (now - b) / 1000;
   return j.nvidb?.elapsed_s ?? (Number.isFinite(b) && Number.isFinite(endOf(j)) ? (endOf(j) - b) / 1000 : null);
 };
+// what a job has to say for itself in a line: its status line, what it waits for, why it failed
+export function lineOf(j: Job) {
+  const s = stj(j), n = j.nvidb;
+  if (s === 'running') return n?.progress || placeOf(j);
+  if (s === 'queued') return n?.held ? n.held_reason || tr('挂起') : n?.depends_on?.length ? tr('等 {0}', n.depends_on.map(x => `#${x}`).join(' '))
+    : n?.lane ? tr('排在 {0}', n.lane) : tr('等一张放得下它的卡');
+  if (s === 'failed') return lastLine(n?.last_error) || (n?.exit_code != null ? tr('退出码 {0}', n.exit_code) : tr('没有留下出错信息'));
+  return '';
+}
 
 // a day's name: today, yesterday, then the date and weekday
 export const dayOf = (ms: number) => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
 export function dayName(d: number) {
   const n = Math.round((dayOf(Date.now()) - d) / 864e5);
   const date = new Date(d);
-  const wd = date.toLocaleDateString(LANG === 'en' ? 'en' : LANG, { weekday: 'short' });
+  const wd = date.toLocaleDateString(LANG, { weekday: 'short' });
   return n === 0 ? tr('今天') : n === 1 ? tr('昨天') : `${date.getMonth() + 1}/${date.getDate()} ${wd}`;
 }
-
-// ---------- groups ----------
 
 export interface Group { key: string; label: string; hint: string; jobs: Job[] }
 const SEP = /(?<=[-_.])/;
 
 // By name: the longest start, at a "-", "_" or "." boundary, that at least three jobs share;
-// what shares none falls into "other". A sweep of seeds or settings named alike lands together.
+// what shares none falls into "other".
 export function byName(jobs: Job[]): Group[] {
   const count = new Map<string, number>();
   const toks = new Map(jobs.map(j => [j.id, j.name.split(SEP)]));
@@ -65,8 +73,8 @@ export function byBatch(jobs: Job[]): Group[] {
   const sorted = [...jobs].sort((a, b) => (t(a.created_at) || 0) - (t(b.created_at) || 0));
   const out: Job[][] = [];
   for (const j of sorted) {
-    const g = out.at(-1), prev = g?.[g.length - 1];
-    if (g && prev && (t(j.created_at) || 0) - (t(prev.created_at) || 0) <= 5 * 60e3) g.push(j); else out.push([j]);
+    const g = out.at(-1);
+    if (g && (t(j.created_at) || 0) - (t(g[g.length - 1].created_at) || 0) <= 5 * 60e3) g.push(j); else out.push([j]);
   }
   return out.map(js => {
     const at = t(js[0].created_at), common = commonStart(js.map(j => j.name));

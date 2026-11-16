@@ -1,11 +1,6 @@
-// The 3D town's engine: renderer, camera, your body, picking, the halls inside the
-// buildings, the name tags and the minimap marker. It has two ways of looking: from the
-// air, at exactly the map's angle (30° down, from the +x +y corner, with a near-orthographic
-// lens), and through your own eyes (or from just behind you). Going in and out of 3D is a
-// camera flight between the two, so the map and the 3D town hand over to each other
-// without a cut. Through your eyes the mouse works as in a first-person game: it is locked
-// to the middle of the screen and moving it turns your head. You walk, run, jump, crouch
-// and fly (body.ts); F or a click goes into the building, machine or person you aim at.
+// The 3D town's engine: renderer, camera, your body, picking, the halls, the name tags and the minimap marker.
+// From the air it looks exactly as the map does, so going in and out of 3D is a camera flight without a cut;
+// through your eyes the mouse is locked and turns your head, as in a first-person game.
 
 import * as THREE from 'three';
 import { BUILDINGS } from '@design/sprites.js';
@@ -13,49 +8,50 @@ import { KEY_LABELS, N, footprint, placementName } from '@design/world.js';
 import type { Placement } from '../api';
 import type { MapView } from '../components/WorldMap';
 import { enterFull } from '../fullscreen';
-import { doorOf, free, gap, loadPos, REACH, savePos, START, type Pos } from '../components/walk';
+import { doorOf, free, gap, loadPos, REACH, savePos, START, typing, type Pos } from '../components/walk';
 import { Body, WALK, type Input, type World } from './body';
 import { Hand } from './hand';
 import { buildHall, type Hall, type HallData, type Thing } from './halls';
-import { buildLand, worldOf, type Land } from './land';
+import { buildLand, clamp01, worldOf, type Land } from './land';
 import { buildLife, type Life, type Walker } from './life';
-import { BRAND, buildTown, figure, Materials, PAPER, type Town } from './scene';
+import { BRAND, buildTown, disposeGeometry, figure, Materials, PAPER, type Town } from './scene';
 
 // the palette is given in display colours and the lights are tuned for them: no linear workflow
 THREE.ColorManagement.enabled = false;
 
 const TURN = 2.2; // rad / s
 const LOOK = 0.0022; // rad per pixel of mouse movement
-const AIM = 4.5; // how far a look at a building reaches its door
+const AIM = 4.5;
 const FOV_AIR = 2;
 const MAP_PX = 32 * Math.SQRT2; // map pixels per tile, across the screen
-const HEADING = -0.75 * Math.PI; // looking the way the map does, towards -x -y
-const AIR_EL = Math.PI / 6, AIR_AZ = Math.PI / 4; // the map's camera, as seen from its target
+const HEADING = -0.75 * Math.PI; // the way the map looks, towards -x -y
+const AIR_EL = Math.PI / 6, AIR_AZ = Math.PI / 4;
 const TAP = 300; // ms between the two taps of a double-tapped space
 const BEHIND = 2.3; // the camera's distance behind you, seen from outside
 const NIGHT = new THREE.Color('#29304a'), MOON = new THREE.Color('#9fb0ff'), WHITE = new THREE.Color('#ffffff');
-const REACH_LAND = { low: 36, mid: 52, high: 68 }; // how far out the land is built, on the ground
+const REACH_LAND = { low: 36, mid: 52, high: 68 };
 
 interface Orbit { t: THREE.Vector3; d: number; az: number; el: number; fov: number }
 
+// what F or a click acts on: a building you aim at or stand at the door of, a thing in a hall, or a townsperson
 export type Target =
-  | { kind: 'building'; pl: Placement; how: 'door' | 'look' } // in the town: a building you aim at or stand at the door of
-  | { kind: 'thing'; thing: Thing } // in a hall: a machine, or the way out
-  | { kind: 'walker'; walker: Walker }; // one of the townsfolk
+  | { kind: 'building'; pl: Placement; how: 'door' | 'look' }
+  | { kind: 'thing'; thing: Thing }
+  | { kind: 'walker'; walker: Walker };
 
 // how you are moving and seeing, for the chips on screen
 export interface Mode { fly: boolean; low: boolean; third: boolean; night: boolean }
 
 // what you can set for the walk (the settings sheet)
 export interface EngineOptions {
-  sensitivity: number; // times LOOK
+  sensitivity: number;
   invertY: boolean;
-  fov: number; // through your eyes, degrees
-  hand: boolean; // your hand and pencil in view
-  bob: boolean; // the view and the hand sway with your steps
-  quality: 'low' | 'mid' | 'high'; // resolution and shadows
-  calm: boolean; // shorter flights in and out
-  fullscreen: boolean; // taking the mouse back also goes full screen again
+  fov: number;
+  hand: boolean;
+  bob: boolean;
+  quality: 'low' | 'mid' | 'high';
+  calm: boolean;
+  fullscreen: boolean;
 }
 const OPTIONS: EngineOptions = { sensitivity: 1, invertY: false, fov: 68, hand: true, bob: true, quality: 'high', calm: false, fullscreen: true };
 const SHADOW = { low: 0, mid: 1024, high: 2048 };
@@ -63,26 +59,20 @@ const SHADOW = { low: 0, mid: 1024, high: 2048 };
 export interface EngineEvents {
   target(t: Target | null): void;
   lock(on: boolean): void;
-  eyes(on: boolean): void; // landed in your own eyes / took off again
-  open(id: string, at: { x: number; y: number }, line?: string | null): void; // a building's room, for a project if given
-  hall(pl: Placement): Promise<HallData>; // what a building's hall is built from
-  inside(pl: Placement | null): void; // went into a building's hall / came back out
-  veil(text: string | null): void; // cover the view while the scene changes (a building's name, or '' for none)
+  eyes(on: boolean): void;
+  open(id: string, at: { x: number; y: number }, line?: string | null): void;
+  hall(pl: Placement): Promise<HallData>;
+  inside(pl: Placement | null): void;
+  veil(text: string | null): void; // cover the view while the scene changes: a building's name, '' for none, null to uncover
   mode(m: Mode): void;
   moved(): void;
-  leave(): void; // asked to go back to the map (M)
+  leave(): void;
 }
 
 const ease = (s: number) => s < 0.5 ? 4 * s * s * s : 1 - Math.pow(-2 * s + 2, 3) / 2;
 const lerp = (a: number, b: number, s: number) => a + (b - a) * s;
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const sig = (ps: Placement[]) => ps.map(p => [p.id, p.type, p.x, p.y, p.accent, p.label, p.name].join(':')).join('|');
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-function typing(e: Event) {
-  const t = e.target as HTMLElement | null;
-  return !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
-}
 
 export class Engine {
   private renderer: THREE.WebGLRenderer;
@@ -98,11 +88,11 @@ export class Engine {
   private life: Life | null = null;
   private hall: Hall | null = null;
   private land: Land;
-  private outdoors: World = worldOf(null); // the town and the land round it
+  private outdoors: World = worldOf(null);
   private hallSig = '';
   private outside: Pos | null = null; // where you come out of the hall
   private entering = false;
-  private me: THREE.Group; // you, seen from the air or from behind
+  private me: THREE.Group;
   private sig = '';
   private places: Placement[] = [];
   private font: string;
@@ -116,15 +106,15 @@ export class Engine {
   pitch = -0.05;
   private bob = 0;
   private keys = new Set<string>();
-  private tapped = 0; // when space was last pressed, for a double tap
-  private third = false; // seen from just behind you
+  private tapped = 0;
+  private third = false;
   private night = 0;
   private nightTo = 0;
   private modeSig = '';
   private orbit: Orbit;
-  private eyes = false; // through your own eyes (vs from the air)
+  private eyes = false;
   private flight: { from: Orbit; to: () => Orbit; t0: number; dur: number; done: () => void } | null = null;
-  private width = 1200; // the map's view width, to come back to
+  private width = 1200;
 
   private active = false;
   private shown = false;
@@ -135,11 +125,11 @@ export class Engine {
   private saved = 0;
   private polled = 0;
   private shadowed = 0;
-  private hidden = new Set<string>(); // tags behind a building
-  private probe = 0; // which tags to test for that next
+  private hidden = new Set<string>();
+  private probe = 0;
   private target: Target | null = null;
   private locked = !!document.pointerLockElement; // the app may have locked it on the way in
-  private started = false; // options applied once
+  private started = false;
 
   constructor(private host: HTMLElement, private tagHost: HTMLElement, private marker: SVGGElement | null, private ev: EngineEvents) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -153,9 +143,6 @@ export class Engine {
 
     this.scene.background = new THREE.Color(PAPER);
     this.scene.fog = new THREE.Fog(PAPER, 8, 46);
-    // lit so that tops come out a little lighter than the map's fill, +y faces as the fill
-    // and +x faces a little darker, as the sprites shade them; a soft fill from the other
-    // corner keeps the sides the map never shows from going muddy
     this.ambient = new THREE.AmbientLight(0xffffff, 0.5 * Math.PI);
     this.scene.add(this.ambient);
     const fill = this.fill = new THREE.DirectionalLight(0xffffff, 0.44 * Math.PI);
@@ -179,15 +166,14 @@ export class Engine {
 
     // the signs are lettered in the page's heading font (set on the themed root, not on <html>)
     this.font = getComputedStyle(host).getPropertyValue('--head').trim() || '"LXGW WenKai Screen", serif';
-    this.fonts = document.fonts?.load?.(`40px ${this.font}`, 'PAPER MILL 人才市场 HIRING 日报 DAILY GPU TeX SIM DATA DDL arXiv GitHub') ?? Promise.resolve();
+    this.fonts = document.fonts.load(`40px ${this.font}`, 'PAPER MILL 人才市场 HIRING 日报 DAILY GPU TeX SIM DATA DDL arXiv GitHub');
     this.orbit = this.air({ cx: 0, cy: 380, w: 1600 });
     const p = loadPos();
     this.body.place(p.x, p.y, this.outdoors);
 
     this.sizer.observe(host);
     this.resize();
-    const c = this.renderer.domElement;
-    c.style.cursor = 'pointer';
+    this.renderer.domElement.style.cursor = 'pointer';
     addEventListener('mousemove', this.onMove);
     addEventListener('mousedown', this.onDown);
     addEventListener('contextmenu', this.onMenu);
@@ -209,7 +195,7 @@ export class Engine {
     removeEventListener('keydown', this.onKey);
     removeEventListener('keyup', this.onKeyUp);
     removeEventListener('blur', this.onBlur);
-    removeEventListener('beforeunload', this.onUnload);
+    this.offUnload();
     document.removeEventListener('pointerlockchange', this.onLock);
     document.removeEventListener('fullscreenchange', this.onBlur);
     this.scene.add(this.me);
@@ -217,7 +203,7 @@ export class Engine {
     this.land.dispose();
     this.life?.dispose();
     this.town?.dispose();
-    this.me.traverse(o => { if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) o.geometry.dispose(); });
+    disposeGeometry(this.me);
     this.mats.dispose();
     this.hand.dispose();
     this.renderer.dispose();
@@ -226,8 +212,6 @@ export class Engine {
 
   private get pos(): Pos { return { x: this.body.x, y: this.body.y }; }
   private get world() { return this.hall?.world ?? this.outdoors; }
-
-  // ---------- the town ----------
 
   setPlaces(places: Placement[], notes: Record<string, string>) {
     this.places = places;
@@ -251,7 +235,6 @@ export class Engine {
       const el = this.tags.get(p.id);
       if (el) el.textContent = notes[p.id] ? `${placementName(p)} · ${notes[p.id]}` : placementName(p);
     }
-    // standing somewhere the new town has a wall: back to the start
     if (!this.hall && this.town && this.body.under(this.world, this.body.x, this.body.y) > this.body.z + 0.3) this.body.place(START.x, START.y, this.world);
     this.wake();
   }
@@ -269,8 +252,7 @@ export class Engine {
     }
   }
 
-  // where you stand on the map: off a roof or out of a treetop, the nearest free spot on the
-  // ground; out in the land past the board, the nearest spot on it
+  // the nearest free spot on the map's board to where you stand (off a roof, out of a treetop, in from the land)
   private groundPos(): Pos {
     const x = Math.max(0.5, Math.min(N - 0.5, this.body.x)), y = Math.max(0.5, Math.min(N - 0.5, this.body.y));
     if (free(this.places, x, y)) return { x, y };
@@ -287,10 +269,7 @@ export class Engine {
     return { ...START };
   }
 
-  // ---------- the halls ----------
-
-  // into a building: the view fades to its name, the hall is built from its data, and you
-  // stand inside the door with its machines in front of you
+  // into a building: the view fades to its name, the hall is built from its data, and you stand inside the door
   private async enterHall(pl: Placement) {
     if (this.entering || this.hall) return;
     this.entering = true;
@@ -303,21 +282,20 @@ export class Engine {
     ]);
     this.entering = false;
     if (this.gone || !this.eyes) { this.ev.veil(null); return; } // left for the map meanwhile
-    this.showHall(pl, data, true);
+    this.showHall(pl, data);
     this.ev.inside(pl);
     this.ev.veil(null);
   }
 
-  private showHall(pl: Placement, data: HallData, fresh: boolean) {
-    const keep = this.hall && !fresh ? this.pos : null;
+  // build the hall; on the way in you stand at its spawn, on a rebuild you stay where you are
+  private showHall(pl: Placement, data: HallData) {
+    const fresh = !this.hall;
     this.scene.add(this.me); // out of the old hall before it goes
     this.hall?.dispose();
     const hall = this.hall = buildHall(pl, data, this.mats, this.font, this.fonts);
     this.hallSig = JSON.stringify(data);
     hall.scene.add(this.me);
-    if (keep) {
-      this.body.x = keep.x; this.body.y = keep.y;
-    } else {
+    if (fresh) {
       this.body.place(hall.spawn.x, hall.spawn.y, hall.world);
       this.heading = hall.spawn.heading;
       this.pitch = hall.spawn.pitch;
@@ -335,7 +313,7 @@ export class Engine {
     if (!hall) return;
     const data = await this.ev.hall(hall.pl).catch(() => null);
     if (!data || this.hall !== hall || JSON.stringify(data) === this.hallSig) return;
-    this.showHall(hall.pl, data, false);
+    this.showHall(hall.pl, data);
   }
 
   // back out at the door you went in by, facing away from the building
@@ -347,7 +325,7 @@ export class Engine {
       this.scene.add(this.me);
       hall.dispose();
       this.hall = null;
-      const at = this.outside ?? this.groundPos();
+      const at = this.outside!;
       this.body.place(at.x, at.y, this.world);
       const f = footprint(hall.pl);
       this.heading = Math.atan2(at.y - (f.y + f.d / 2), at.x - (f.x + f.w / 2));
@@ -365,8 +343,6 @@ export class Engine {
     setTimeout(() => { done(); this.ev.veil(null); }, 320);
   }
 
-  // ---------- the camera ----------
-
   // the map's own view, from the air: same centre, same width on screen
   private air(v: MapView): Orbit {
     const gx = (v.cx / 32 + v.cy / 16) / 2, gy = (v.cy / 16 - v.cx / 32) / 2;
@@ -374,13 +350,12 @@ export class Engine {
     return { t: new THREE.Vector3(gx, 0, gy), d, az: AIR_AZ, el: AIR_EL, fov: FOV_AIR };
   }
 
-  // through your eyes: an orbit of a point a few tiles ahead, from right behind it; seen from
-  // outside, an orbit of your head from a little way back, pulled in where something is in the way
+  // through your eyes, or from just behind you, pulled in where something is in the way
   private eye(): Orbit {
     const cp = Math.cos(this.pitch);
     const f = new THREE.Vector3(Math.cos(this.heading) * cp, Math.sin(this.pitch), Math.sin(this.heading) * cp);
     const walking = this.body.ground ? Math.sin(this.bob) * 0.012 : 0;
-    const e = new THREE.Vector3(this.pos.x, this.body.eye + (this.opt.bob ? walking : 0), this.pos.y);
+    const e = new THREE.Vector3(this.body.x, this.body.eye + (this.opt.bob ? walking : 0), this.body.y);
     const o = { az: Math.atan2(-f.z, -f.x), el: Math.asin(-f.y), fov: this.opt.fov };
     if (!this.third) return { t: e.addScaledVector(f, 3), d: 3, ...o };
     const back = f.clone().negate();
@@ -389,7 +364,7 @@ export class Engine {
     const hit = this.ray.intersectObjects(this.hall ? this.hall.pick : this.town?.pick ?? [], false)[0];
     let d = hit ? Math.max(0.4, hit.distance - 0.15) : BEHIND;
     const [x0, y0, x1, y1] = this.world.bounds, room = this.hall ? this.world.ceiling - 0.05 : Infinity;
-    for (let s = d; s > 0.4; s -= 0.05) { // and keep the camera inside a hall's walls
+    for (let s = d; s > 0.4; s -= 0.05) {
       const c = e.clone().addScaledVector(back, s);
       if (c.x > x0 + 0.05 && c.x < x1 - 0.05 && c.z > y0 + 0.05 && c.z < y1 - 0.05 && c.y < room && c.y > 0.05) break;
       d = s - 0.05;
@@ -406,13 +381,13 @@ export class Engine {
     c.updateProjectionMatrix();
     c.lookAt(o.t);
     const fog = this.scene.fog as THREE.Fog;
-    fog.near = o.d + 6 + Math.max(0, c.position.y - 3) * 0.6; // flying high, you see further
+    fog.near = o.d + 6 + Math.max(0, c.position.y - 3) * 0.6;
     fog.far = o.d + 44 + Math.max(0, c.position.y - 3) * 1.4;
   }
 
   private mix(a: Orbit, b: Orbit, s: number): Orbit {
     let daz = b.az - a.az;
-    daz = Math.atan2(Math.sin(daz), Math.cos(daz)); // the short way round
+    daz = Math.atan2(Math.sin(daz), Math.cos(daz));
     const ta = Math.tan(a.fov / 2 * Math.PI / 180), tb = Math.tan(b.fov / 2 * Math.PI / 180);
     return {
       t: a.t.clone().lerp(b.t, s),
@@ -454,7 +429,7 @@ export class Engine {
     for (let i = 0; i < 24; i++) {
       const h = HEADING + (i / 24) * Math.PI * 2;
       let d = 0;
-      while (d < 10 && free(this.places, this.pos.x + Math.cos(h) * (d + 0.25), this.pos.y + Math.sin(h) * (d + 0.25))) d += 0.25;
+      while (d < 10 && free(this.places, this.body.x + Math.cos(h) * (d + 0.25), this.body.y + Math.sin(h) * (d + 0.25))) d += 0.25;
       const sc = d - 2.5 * (1 - Math.cos(h - HEADING));
       if (sc > score) { score = sc; best = h; }
     }
@@ -462,12 +437,12 @@ export class Engine {
   }
 
   async down() {
-    this.heading = this.openHeading(); // the flight turns you there on the way down
+    this.heading = this.openHeading();
     await this.fly(() => this.eye(), this.opt.calm ? 1200 : 2100);
     this.setEyes(true);
   }
 
-  // back up to the map's angle, over where you stand; the map takes over from there
+  // back up to the map's angle over where you stand; the map takes over from there
   async up(): Promise<MapView> {
     document.exitPointerLock?.();
     this.keys.clear();
@@ -477,7 +452,7 @@ export class Engine {
     this.body.place(g.x, g.y, this.world);
     savePos(g);
     this.third = false;
-    this.nightTo = 0; // the map is drawn by day: the flight brings the morning
+    this.nightTo = 0; // the map is drawn by day
     this.setEyes(false);
     const v = { cx: (g.x - g.y) * 32, cy: (g.x + g.y) * 16, w: this.width };
     await this.fly(() => this.air(v), this.opt.calm ? 900 : 1500);
@@ -494,7 +469,7 @@ export class Engine {
       const size = SHADOW[o.quality];
       this.renderer.setPixelRatio(Math.min(o.quality === 'high' ? 2 : o.quality === 'mid' ? 1.5 : 1, devicePixelRatio));
       this.resize();
-      // lit materials pick up a light that stops or starts casting by themselves
+      // lit materials pick up a light that starts or stops casting by themselves
       this.sun.castShadow = size > 0;
       if (size && this.sun.shadow.mapSize.x !== size) {
         this.sun.shadow.mapSize.set(size, size);
@@ -512,10 +487,10 @@ export class Engine {
     this.ev.eyes(on);
   }
 
-  // take the mouse for looking round; needs a click (or a key) the browser counts as the user's
+  // take the mouse for looking round; needs a click (or a key) the browser counts as the user's, else a click on the town tries again
   lock() {
     const p = this.renderer.domElement.requestPointerLock?.() as Promise<void> | undefined;
-    p?.catch?.(() => {}); // refused: a click on the town tries again
+    p?.catch?.(() => {});
   }
 
   setActive(on: boolean) {
@@ -523,8 +498,7 @@ export class Engine {
     if (!on) {
       this.keys.clear();
       this.offUnload();
-      // a room, the chat or the status view came up: give the mouse back (not while flying in,
-      // when the app has just locked it for the walk ahead)
+      // give the mouse back, but not while flying in, when the app has just locked it for the walk ahead
       if (this.eyes && this.locked) document.exitPointerLock?.();
       this.setTarget(null);
     }
@@ -540,8 +514,6 @@ export class Engine {
     this.hand.setAspect(w / h);
     this.wake();
   }
-
-  // ---------- the loop ----------
 
   private wake() {
     if (!this.raf && this.shown) this.raf = requestAnimationFrame(this.frame);
@@ -568,20 +540,17 @@ export class Engine {
       hall.update(this.clock, dt);
       if (this.active && now - this.polled > 20000) { this.polled = now; void this.refreshHall(); }
     } else if (town) {
-      // a building rising or settling moves its shadow; a few times a second is enough
       const focus = this.target?.kind === 'building' ? this.target.pl.id : null;
       if (town.update(this.clock, dt, focus) && now - this.shadowed > 120) {
         this.shadowed = now;
         this.renderer.shadowMap.needsUpdate = true;
       }
-      this.life?.update(this.clock, dt, new THREE.Vector3(this.body.x, this.body.z, this.body.y), this.night, air);
-      // the land round the town, built out further the higher you fly
+      this.life!.update(this.clock, dt, new THREE.Vector3(this.body.x, this.body.z, this.body.y), this.night, air);
       town.setAir(air);
       this.land.setAir(air);
       const reach = Math.min(110, REACH_LAND[this.opt.quality] + Math.max(0, this.camera.position.y - 3) * 1.2);
       this.land.update(this.body.x, this.body.y, this.clock, reach);
     }
-    // you are seen from the air and from behind, not through your own eyes
     const me = this.me;
     me.position.set(this.body.x, this.body.feet, this.body.y);
     me.scale.set(1, 1 - 0.28 * this.body.low, 1);
@@ -621,8 +590,7 @@ export class Engine {
     this.ev.moved();
   }
 
-  // the light: by day the paper's own; at night a deep blue, a moon instead of the sun, and
-  // every window and lamp lit
+  // the light: the paper's own by day; at night a deep blue, a moon for the sun, and every window and lamp lit
   private dusk(dt: number) {
     const rate = this.flight ? 3 : 0.9;
     if (Math.abs(this.night - this.nightTo) < 0.001) this.night = this.nightTo;
@@ -639,10 +607,7 @@ export class Engine {
     this.land.setNight(n);
   }
 
-  // ---------- what you are looking at ----------
-
-  // what F or a click acts on: in the town, the building or person under the crosshair up
-  // close, or else the door you stand at; in a hall, the machine you aim at, or the way out
+  // what F or a click would act on: the building, person or door in front of you, or in a hall the machine or the way out
   private aim() {
     const ray = this.ray;
     ray.setFromCamera(new THREE.Vector2(0, 0), this.camera);
@@ -655,7 +620,7 @@ export class Engine {
       return;
     }
     if (!this.town) return;
-    const h = ray.intersectObjects([...this.town.pick, ...(this.life?.pick ?? [])], false)[0];
+    const h = ray.intersectObjects([...this.town.pick, ...this.life!.pick], false)[0];
     const walker = h?.object.userData.walker as Walker | undefined;
     if (walker) { this.setTarget({ kind: 'walker', walker }); return; }
     const id = h?.object.userData.id as string | undefined;
@@ -704,14 +669,12 @@ export class Engine {
     this.ev.open(a.building, this.screen(t.thing.at), a.line);
   }
 
-  // stand at a building's door without going in (a click on it in the minimap)
+  // stand at a building's door, facing it, without going in (a click on it in the minimap)
   toDoor(id: string) {
     if (this.hall) this.leaveHall(false);
-    // a step further off than on the map, so the front is in view, still within reach of the door
     const pl = this.places.find(p => p.id === id), d = pl && (doorOf(this.places, pl, 1.0) ?? doorOf(this.places, pl));
     if (!d) return;
     this.body.place(d.x, d.y, this.world);
-    // face the building, the crosshair on its middle
     const f = this.town?.buildings.get(id)?.mid;
     if (f) {
       this.heading = Math.atan2(f.z - d.y, f.x - d.x);
@@ -724,13 +687,12 @@ export class Engine {
 
   // jump to a spot (a click on the minimap)
   teleport(x: number, y: number) {
-    if (!free(this.places, x, y)) return false;
+    if (!free(this.places, x, y)) return;
     if (this.hall) this.leaveHall(false);
     this.body.place(x, y, this.world);
     savePos(this.pos);
     this.ev.moved();
     this.wake();
-    return true;
   }
 
   private tellMode() {
@@ -741,16 +703,13 @@ export class Engine {
     this.ev.mode(m);
   }
 
-  // ---------- tags and the minimap marker ----------
-
   private drawTags() {
     if (!this.town) return;
     this.tagHost.style.visibility = this.hall ? 'hidden' : '';
     if (this.hall) return;
     const r = this.renderer.domElement.getBoundingClientRect(), cam = this.camera;
-    const high = Math.min(1, Math.max(0, (this.orbit.d - 4) / 6)); // up in the air the map's labels show
+    const high = clamp01((this.orbit.d - 4) / 6);
     const v = new THREE.Vector3();
-    // on the ground, a tag behind a building is hidden like the building; a few are tested each frame
     const all = [...this.town.buildings.values()];
     if (high > 0.5) this.hidden.clear();
     else for (let i = 0; i < 5 && all.length; i++) {
@@ -765,14 +724,13 @@ export class Engine {
     }
     const on = this.target?.kind === 'building' ? this.target.pl.id : null;
     for (const [id, b] of this.town.buildings) {
-      const el = this.tags.get(id);
-      if (!el) continue;
+      const el = this.tags.get(id)!;
       v.copy(b.top);
       v.y += b.lift;
       const dist = v.distanceTo(cam.position);
       v.project(cam);
       const key = b.pl.key ?? KEY_LABELS.has(id);
-      const op = Math.max(high * (key ? 1 : 0), (1 - high) * Math.min(1, Math.max(0, (19 - dist) / 6)) * (this.hidden.has(id) ? 0 : 1));
+      const op = Math.max(high * (key ? 1 : 0), (1 - high) * clamp01((19 - dist) / 6) * (this.hidden.has(id) ? 0 : 1));
       if (v.z > 1 || op < 0.02) { el.style.opacity = '0'; continue; }
       el.style.opacity = op.toFixed(2);
       el.style.transform = `translate(${((v.x + 1) / 2 * r.width).toFixed(1)}px, ${((1 - v.y) / 2 * r.height).toFixed(1)}px) translate(-50%, -100%)`;
@@ -783,15 +741,12 @@ export class Engine {
   private drawMarker() {
     const m = this.marker;
     if (!m) return;
-    // out past the board, the marker waits at its edge
-    const at = this.hall ? this.outside ?? this.pos : this.pos, x = Math.max(0, Math.min(N, at.x)), y = Math.max(0, Math.min(N, at.y));
+    const at = this.hall ? this.outside! : this.pos, x = Math.max(0, Math.min(N, at.x)), y = Math.max(0, Math.min(N, at.y));
     const c = Math.cos(this.heading), s = Math.sin(this.heading);
     m.classList.toggle('away', x !== at.x || y !== at.y);
-    const deg = Math.atan2((c + s) * 16, (c - s) * 32) * 180 / Math.PI; // the heading as drawn on the map
+    const deg = Math.atan2((c + s) * 16, (c - s) * 32) * 180 / Math.PI;
     m.setAttribute('transform', `translate(${((x - y) * 32).toFixed(1)},${((x + y) * 16).toFixed(1)}) rotate(${deg.toFixed(1)})`);
   }
-
-  // ---------- input ----------
 
   private onKey = (e: KeyboardEvent) => {
     if (!this.active || !this.eyes || this.flight || typing(e) || e.metaKey || e.altKey) return;
@@ -807,7 +762,6 @@ export class Engine {
     if (c === 'Space') {
       e.preventDefault();
       if (!e.repeat) {
-        // one tap jumps; a second one right after takes off, or lands you if you are flying
         const now = performance.now();
         if (now - this.tapped < TAP) { this.body.setFly(!this.body.fly); this.tapped = 0; }
         else { this.tapped = now; this.body.jump(); }
@@ -827,21 +781,19 @@ export class Engine {
     this.keys.delete(e.code);
     if (e.code === 'ControlLeft' || e.code === 'ControlRight') this.offUnload();
   };
-  // a key let go while the browser had the keyboard (leaving full screen, the mouse let go
-  // with Esc, another window) never sends its keyup: forget what was held
+  // a key let go while the browser had the keyboard (leaving full screen, Esc, another window) never sends its keyup
   private onBlur = () => { this.keys.clear(); this.offUnload(); };
   private onUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
   private offUnload() { removeEventListener('beforeunload', this.onUnload); }
 
-  // with the mouse locked, moving it turns your head; a click acts on what you aim at.
-  // Unlocked, a click on the town takes the mouse back.
+  // with the mouse locked, moving it turns your head and a click acts on what you aim at; unlocked, a click on the town takes the mouse back
   private onMove = (e: MouseEvent) => {
     if (!this.locked || !this.active || !this.eyes) return;
     const clamp = (v: number) => Math.max(-160, Math.min(160, v)); // browsers now and then report a wild jump
-    const k = LOOK * this.opt.sensitivity;
-    this.hand.look(clamp(e.movementX), clamp(e.movementY) * (this.opt.invertY ? -1 : 1));
-    this.heading += clamp(e.movementX) * k;
-    this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch - clamp(e.movementY) * k * (this.opt.invertY ? -1 : 1)));
+    const k = LOOK * this.opt.sensitivity, dx = clamp(e.movementX), dy = clamp(e.movementY) * (this.opt.invertY ? -1 : 1);
+    this.hand.look(dx, dy);
+    this.heading += dx * k;
+    this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch - dy * k));
   };
 
   private onDown = (e: MouseEvent) => {

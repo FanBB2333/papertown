@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { api, type PaperCard, type Shelf } from '../api';
 import { tr } from '../i18n';
 
-export function Card({ p, i = 0 }: { p: PaperCard; i?: number }) {
+function Card({ p, i }: { p: PaperCard; i: number }) {
   return (
     <a className={`pcard${p.closest ? ' close' : ''}`} href={p.url} target="_blank" rel="noreferrer" style={{ ['--i' as string]: i }}>
       <div className="pc-top">

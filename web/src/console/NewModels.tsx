@@ -1,7 +1,5 @@
-// Models Paseo started offering since Papertown last looked (it reads Paseo's list every so
-// often): a card on the console asks whether the assistant and the projects' leads should start
-// on one of them from now on. Agents already running keep the model they have. 不用了 puts the
-// news away for good; × only hides it until the page is opened again.
+// A card offering Paseo's new models as the default for the assistant and the projects' leads.
+// 不用了 dismisses the news for good; × only hides it until the next page load.
 
 import { useEffect, useState } from 'react';
 import { api, listen, type ModelNews, type PaseoDefault, type PaseoDefaults } from '../api';
@@ -32,7 +30,6 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
     });
   }, []);
   const m = news.find(n => n.key === key) ?? news[news.length - 1];
-  // offered first to the roles that start on this provider now
   useEffect(() => { if (m && defs) setRoles(new Set(ROLES.map(r => r[0]).filter(r => defs[r].provider === m.provider))); }, [m?.key, !!defs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!m || !defs || hidden) return null;

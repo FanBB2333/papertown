@@ -1,10 +1,5 @@
-// A building from the inside, full screen. The four core buildings have rooms of their
-// own: the mill is the base camp for every project, the farm runs and watches the
-// experiments, the press and the depot each keep one pi agent per project. Each of them
-// opens on its shop floor (Floor: every paper's lane and the agents working it) and has
-// the full details one switch away. Three more are where the town is configured: the
-// skill academy (skim), the MCP exchange and the library's RAG. The other buildings show
-// their production sheet.
+// A building from the inside, full screen: the four core buildings' rooms (shop floor and details),
+// the three configuration rooms, and a production sheet for every other building.
 
 import { useState } from 'react';
 import { BUILDINGS } from '@design/sprites.js';
@@ -59,28 +54,11 @@ export function Interior(p: Props) {
   const type = pl?.type ?? p.id;
   const room = ROOMS[type];
   const conf = CONFIG[type];
-  // opened for one project (from the running list, another room): straight to its details
+  const info = conf ?? room;
   const [view, setView] = useState<'floor' | 'detail'>(p.focus ? 'detail' : 'floor');
   const [picked, setPicked] = useState<string | null>(null);
 
-  if (conf) {
-    return (
-      <div className={`interior in-${type} m-${p.motion}`} role="dialog" aria-modal="true" style={{ ['--accent' as string]: pl?.accent ?? BUILDINGS[type]?.accent }}>
-        <header className="in-head">
-          <button className="in-back" onClick={p.onClose}><span aria-hidden>←</span> {tr('回到小镇')} <kbd>Esc</kbd></button>
-          <div className="in-title">
-            <span className="in-art"><Sprite type={type} label={pl?.label} accent={pl?.accent} /></span>
-            <div><h1>{conf.title}</h1><p>{conf.sub}</p></div>
-          </div>
-          <div className="in-tools"><button className="btn" onClick={() => p.onAsk(pl?.id ?? type, conf.title)}>{tr('问问这里的员工')}</button></div>
-        </header>
-        <div className="in-body">
-          {type === 'academy' ? <SkillRoom {...p} /> : type === 'exchange' ? <McpRoom {...p} /> : <RagRoom {...p} />}
-        </div>
-      </div>
-    );
-  }
-  if (!room) {
+  if (!info) {
     return (
       <div className={`interior in-sheet m-${p.motion}`} role="dialog" aria-modal="true">
         <Sheet id={p.id} tick={p.tick} placements={p.placements} focus={p.focus} onClose={p.onClose} onOpen={p.onOpen}
@@ -90,10 +68,11 @@ export function Interior(p: Props) {
   }
 
   const q = { ...p, focus: picked ?? p.focus };
-  const body = view === 'floor' ? <Floor type={type as CoreType} lines={p.lines} tick={p.tick} onPick={id => { setPicked(id); setView('detail'); }} />
-    : type === 'mill' ? <MillRoom key={q.focus} {...q} />
-      : type === 'farm' ? <FarmRoom key={q.focus} {...q} />
-        : <AgentRoom key={q.focus} {...q} role={type === 'press' ? 'writer' : 'coder'} />;
+  const body = conf ? (type === 'academy' ? <SkillRoom {...p} /> : type === 'exchange' ? <McpRoom {...p} /> : <RagRoom {...p} />)
+    : view === 'floor' ? <Floor type={type as CoreType} lines={p.lines} tick={p.tick} onPick={id => { setPicked(id); setView('detail'); }} />
+      : type === 'mill' ? <MillRoom key={q.focus} {...q} />
+        : type === 'farm' ? <FarmRoom key={q.focus} {...q} />
+          : <AgentRoom key={q.focus} {...q} role={type === 'press' ? 'writer' : 'coder'} />;
 
   return (
     <div className={`interior in-${type} m-${p.motion}`} role="dialog" aria-modal="true" style={{ ['--accent' as string]: pl?.accent ?? BUILDINGS[type]?.accent }}>
@@ -101,15 +80,17 @@ export function Interior(p: Props) {
         <button className="in-back" onClick={p.onClose}><span aria-hidden>←</span> {tr('回到小镇')} <kbd>Esc</kbd></button>
         <div className="in-title">
           <span className="in-art"><Sprite type={type} label={pl?.label} accent={pl?.accent} /></span>
-          <div><h1>{room.title}</h1><p>{room.sub}</p></div>
+          <div><h1>{info.title}</h1><p>{info.sub}</p></div>
         </div>
-        <div className="seg in-view" role="tablist" title={tr('车间：每个项目的 Agent 在做什么；明细：项目、对话和任务的全部内容')}>
-          <button className={view === 'floor' ? 'on' : ''} onClick={() => setView('floor')}>{tr('车间')}</button>
-          <button className={view === 'detail' ? 'on' : ''} onClick={() => setView('detail')}>{tr('明细')}</button>
-        </div>
+        {room && (
+          <div className="seg in-view" role="tablist" title={tr('车间：每个项目的 Agent 在做什么；明细：项目、对话和任务的全部内容')}>
+            <button className={view === 'floor' ? 'on' : ''} onClick={() => setView('floor')}>{tr('车间')}</button>
+            <button className={view === 'detail' ? 'on' : ''} onClick={() => setView('detail')}>{tr('明细')}</button>
+          </div>
+        )}
         <div className="in-tools">
           {type === 'mill' && <button className="btn pri" onClick={p.onIdea}>{tr('放入一颗新 idea')}</button>}
-          <button className="btn" onClick={() => p.onAsk(pl?.id ?? type, room.title)}>{tr('问问这里的员工')}</button>
+          <button className="btn" onClick={() => p.onAsk(pl?.id ?? type, info.title)}>{tr('问问这里的员工')}</button>
         </div>
       </header>
       <div className="in-body">{body}</div>

@@ -7,21 +7,12 @@
 .k-script { background: #8a6d3b; } .k-tool { background: #7f8a99; }
 .warn-t { color: var(--warn); }
 
-/* main map: the core buildings stand on a pad, the rest recede until hovered */
+/* main map */
 .p-world .core-pad { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
-.p-world .bld.is-dim { opacity: .5; filter: saturate(.3); transition: opacity .15s, filter .15s; }
-.p-world .bld.is-dim:hover { opacity: 1; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--brand) 55%, transparent)); }
 .p-world .blbl.core rect { fill: var(--accent); stroke: none; }
 .p-world .blbl.core text { fill: #fff; }
 .p-world .dlbl { opacity: .7; }
-.lg-core { cursor: pointer; }
-.lg-core:hover { color: var(--brand); }
 
-/* buildings at work glow softly */
-.p-world .bld.is-busy { animation: busy 1.6s ease-in-out infinite; }
-@keyframes busy { 50% { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--brand) 70%, transparent)); } }
-
-.rn-empty { margin: 4px; }
 .running { max-height: calc(100% - 330px); overflow-y: auto; }
 
 /* chat */
@@ -50,7 +41,6 @@
 .p-sheet .btns a.btn { text-decoration: none; }
 
 /* status view */
-/* the paper's masthead carries the town's mark */
 .p-status .mast h1 { display: flex; align-items: center; justify-content: center; gap: 16px; }
 .p-status .mast h1 .logo-ic { width: 58px; height: 58px; margin-top: -8px; }
 .p-status .news a { text-decoration: none; }
@@ -60,5 +50,4 @@
 .toasts { position: absolute; left: 50%; top: 86px; transform: translateX(-50%); z-index: 30; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
 .toast { padding: 8px 16px; font-size: 13px; animation: rise .2s ease-out; }
 
-/* while the 3D town is up, the map waits underneath it */
 .p-world.is-hidden { visibility: hidden; }

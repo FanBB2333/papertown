@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { iso } from '@design/sprites.js';
 import { footprint } from '@design/world.js';
 import type { Placement } from '../api';
-import { START, doorOf, free as freeAt, loadPos, nearest, savePos, slide } from './walk';
+import { START, doorOf, free as freeAt, loadPos, nearest, savePos, slide, typing } from './walk';
 import { tr } from '../i18n';
 
 const SPEED = 4.2; // tiles per second
@@ -31,13 +31,11 @@ const FIGURE = `
 </g>
 <g class="av-hint"><rect rx="10" ry="10" height="20" y="-66"/><text y="-52" text-anchor="middle"></text></g>`;
 
-const foot = (p: Placement) => footprint(p);
-
 interface Opts {
   host: React.RefObject<HTMLElement>;
   placements: Placement[];
   markup: string; // re-mount the figure whenever the map markup is replaced
-  active: boolean; // false while a building is open
+  active: boolean;
   onEnter: (id: string) => void;
   follow: (sx: number, sy: number, k: number) => void;
 }
@@ -65,7 +63,7 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
     for (const b of svg.querySelectorAll('.bld[data-id]')) {
       const p = opts.current.placements.find(q => q.id === b.getAttribute('data-id'));
       if (!p) continue;
-      const f = foot(p);
+      const f = footprint(p);
       if (f.x + f.w / 2 + f.y + f.d / 2 > k) { before = b; break; }
     }
     before ??= svg.querySelector('.dlbl, .blbl');
@@ -94,14 +92,13 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
     }
   }, [hint]);
 
-  // mount the figure into each new map svg
   useEffect(() => {
     const svg = host.current?.querySelector('svg');
     if (!svg) return;
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'avatar');
     g.innerHTML = FIGURE;
-    svg.appendChild(g); // place() sorts it among the buildings
+    svg.appendChild(g);
     el.current = g;
     if (!free(pos.current.x, pos.current.y)) pos.current = { ...START };
     place();
@@ -109,7 +106,6 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
     return () => { g.remove(); if (el.current === g) el.current = null; };
   }, [markup, host, free, place, hint]);
 
-  // the walking loop
   useEffect(() => {
     let raf = 0, last = 0, walking = false, saved = 0;
     const vel = { x: 0, y: 0 };
@@ -119,7 +115,6 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
       last = t;
       let dx = 0, dy = 0;
       for (const k of keys.current) { dx += DIRS[k][0]; dy += DIRS[k][1]; }
-      // ease into a walk and out of it; a room or the chat coming up stops you at once
       const len = Math.hypot(dx, dy), on = opts.current.active;
       const a = 1 - Math.exp(-dt * 12);
       vel.x += ((len && on ? dx / len * SPEED : 0) - vel.x) * a;
@@ -129,8 +124,8 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
       if (moving) {
         const before = pos.current;
         pos.current = slide(opts.current.placements, pos.current, pos.current.x + vel.x * dt, pos.current.y + vel.y * dt);
-        if (pos.current === before) { vel.x = 0; vel.y = 0; } // walked into a wall
-        const sdx = (dx - dy); // screen x direction
+        if (pos.current === before) { vel.x = 0; vel.y = 0; }
+        const sdx = dx - dy;
         if (sdx) el.current?.classList.toggle('face-left', sdx < 0);
         place();
         updateNear();
@@ -149,10 +144,6 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
   }, [place, updateNear]);
 
   useEffect(() => {
-    const typing = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      return !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
-    };
     const down = (e: KeyboardEvent) => {
       if (!opts.current.active || typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       const d = KEYS[e.code];
@@ -181,7 +172,6 @@ export function useAvatar({ host, placements, markup, active, onEnter, follow }:
   }, [active, free, place, updateNear]);
   useEffect(updateNear, [placements, updateNear]);
 
-  // stand at a building's door (after clicking it on the map)
   const goTo = useCallback((id: string) => {
     const p = opts.current.placements.find(q => q.id === id);
     const spot = p && doorOf(opts.current.placements, p);

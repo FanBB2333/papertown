@@ -1,8 +1,5 @@
-// The skill academy: which skills each project and each conversation gets, configured with
-// skim in layers the way git config layers its files. Global covers every project, a
-// project's layer covers its conversations, a conversation's layer covers just that agent;
-// the narrowest one that says something about a skill decides it. The left lists the
-// layers, the middle switches skills in the chosen one, the right shows the files.
+// The skill academy: which skills each project and conversation gets, configured with skim in layers
+// like git config (global, project, conversation); the narrowest layer that sets a skill decides it.
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, type SkimResolution, type SkimScope, type SkimSkill, type SkimStatus, type TownSkill } from '../api';
@@ -15,14 +12,14 @@ interface Props extends RoomActions { focus: string | null; tick: number }
 
 type Sel = { scope: 'global' } | { scope: 'project'; lineId: string } | { scope: 'session'; lineId: string; agentId: string };
 
-export const SCOPE_NAME: Record<string, string> = { global: tr('全局'), project: tr('项目'), session: tr('对话'), env: tr('环境'), active: tr('激活的环境') };
-export const ROLE_NAME: Record<string, string> = { coder: tr('代码员工'), writer: tr('写作员工') };
+const SCOPE_NAME: Record<string, string> = { global: tr('全局'), project: tr('项目'), session: tr('对话'), env: tr('环境'), active: tr('激活的环境') };
+const ROLE_NAME: Record<string, string> = { coder: tr('代码员工'), writer: tr('写作员工') };
 const SCOPE_HINT: Record<SkimScope, string> = {
   global: tr('本机所有项目和对话'), project: tr('这个项目里的每段对话'), session: tr('只管这一段对话'),
 };
 
 // where a skill's state comes from, for its chip
-export function fromLabel(s: SkimSkill, env: string) {
+function fromLabel(s: SkimSkill, env: string) {
   if (!s.scope) return tr('没人配置');
   return s.scope === 'env' ? tr('环境 {0}', env) : SCOPE_NAME[s.scope];
 }
@@ -86,10 +83,14 @@ export function SkillRoom(p: Props) {
     && (show === 'all' || show === 'on' && s.enabled || show === 'here' && `skill.${s.name}.enabled` in here));
   const on = (res?.skills ?? []).filter(s => s.enabled).length;
   const envHere = 'core.env' in here ? here['core.env'] : null;
-  const chain: { scope: SkimScope; label: string; n: number; file?: string }[] = [
-    { scope: 'global', label: tr('全局'), n: res?.scopes.find(s => s.scope === 'global')?.settings.length ?? 0, file: res?.scopes.find(s => s.scope === 'global')?.file },
-    ...(line ? [{ scope: 'project' as const, label: `#${line.seq}`, n: res?.scopes.find(s => s.scope === 'project')?.settings.length ?? 0, file: res?.scopes.find(s => s.scope === 'project')?.file }] : []),
-    ...(agent ? [{ scope: 'session' as const, label: ROLE_NAME[agent.role], n: res?.scopes.find(s => s.scope === 'session')?.settings.length ?? 0, file: res?.scopes.find(s => s.scope === 'session')?.file }] : []),
+  const layer = (scope: SkimScope, label: string) => {
+    const sc = res?.scopes.find(s => s.scope === scope);
+    return { scope, label, n: sc?.settings.length ?? 0, file: sc?.file };
+  };
+  const chain = [
+    layer('global', tr('全局')),
+    ...(line ? [layer('project', `#${line.seq}`)] : []),
+    ...(agent ? [layer('session', ROLE_NAME[agent.role])] : []),
   ];
 
   return (
@@ -218,15 +219,13 @@ function shortPath(f: string) {
 }
 
 function cli(sel: Sel) {
-  const flag = sel.scope === 'global' ? '--global' : sel.scope === 'project' ? `--project --project-dir server/var/projects/${sel.lineId}`
-    : `--session --session-id papertown-${sel.agentId}`;
-  const where = sel.scope === 'global' ? '' : sel.scope === 'project' ? ` --project-dir server/var/projects/${sel.lineId}`
-    : ` --project-dir server/var/projects/${sel.lineId} --session-id papertown-${sel.agentId}`;
-  return tr('skim config {0} skill.<名字>.enabled true\nskim config {1} core.env base\nskim resolve{2}', flag, flag, where);
+  const dir = sel.scope === 'global' ? '' : ` --project-dir server/var/projects/${sel.lineId}`;
+  const sid = sel.scope === 'session' ? ` --session-id papertown-${sel.agentId}` : '';
+  const flag = `--${sel.scope}${sel.scope === 'project' ? dir : sid}`;
+  return tr('skim config {0} skill.<名字>.enabled true\nskim config {1} core.env base\nskim resolve{2}', flag, flag, dir + sid);
 }
 
-// in a coding or writing agent's room: the skills this conversation ends up with, and
-// which layer gave each one
+// in a coding or writing agent's room: the skills its conversation ends up with, and which layer gave each
 export function ConvSkills({ lineId, agentId, onOpen }: { lineId: string; agentId: string; onOpen: (id: string, lineId?: string) => void }) {
   const [res, setRes] = useState<SkimResolution | null>(null);
   const [note, setNote] = useState('');

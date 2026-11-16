@@ -9,7 +9,7 @@ import type { Doc } from './Editor';
 import { openPicker, useLook } from './edthemes';
 import { FileIcon, FolderIcon } from './fileicons';
 import { Icon } from './icons';
-import { base, bytes, ext, revealX, useFetch } from './util';
+import { base, bytes, ext, revealX, toggled, useFetch } from './util';
 
 const Editor = lazy(() => import('./Editor'));
 
@@ -17,7 +17,7 @@ export interface Open {
   path: string; size: number; text: string | null; saved: string | null; rev: number;
   loading: boolean; binary?: boolean; tooBig?: boolean; err?: string;
 }
-export const isDirty = (o: Open) => o.text != null && o.saved != null && o.text !== o.saved;
+const isDirty = (o: Open) => o.text != null && o.saved != null && o.text !== o.saved;
 
 export function useFiles(lineId: string, root: WsRoot, tick: number, toast: (t: string) => void) {
   const tree = useFetch(() => api.wsTree(lineId, root), `${lineId}:${root}`, tick);
@@ -43,7 +43,7 @@ export function useFiles(lineId: string, root: WsRoot, tick: number, toast: (t: 
   const show = useCallback((path: string) => { read(path); setCur(path); }, [read]);
   const edit = useCallback((path: string, text: string) => setOpen(os => os.map(o => (o.path === path ? { ...o, text } : o))), []);
 
-  // the open files with unsaved changes, written back one by one; false when one of them failed
+  // writes back the open files with unsaved changes; false when one of them failed
   const save = useCallback(async (only?: string) => {
     const todo = ref.current.filter(o => isDirty(o) && (!only || o.path === only));
     if (!todo.length) return true;
@@ -74,19 +74,17 @@ export function useFiles(lineId: string, root: WsRoot, tick: number, toast: (t: 
     setCur(c => (c === path ? rest[Math.min(i, rest.length - 1)]?.path ?? null : c));
   }, []);
 
-  // read again from disk what has no unsaved changes: an agent may have written to it meanwhile
+  // re-reads from disk what has no unsaved changes: an agent may have written to it meanwhile
   const reread = useCallback(() => {
     for (const o of ref.current) if (!isDirty(o)) read(o.path, true);
     tree.reload();
   }, [read, tree]);
 
   const status = useMemo(() => new Map((tree.data?.files ?? []).map(f => [f.path, f.status])), [tree.data]);
-  const dirty = open.filter(isDirty).length;
-  return { tree, open, cur, setCur, show, edit, save, close, reread, saving, status, dirty, now: open.find(o => o.path === cur) ?? null };
+  const dirtySet = new Set(open.filter(isDirty).map(o => o.path));
+  return { tree, open, cur, setCur, show, edit, save, close, reread, saving, status, dirtySet, dirty: dirtySet.size, now: open.find(o => o.path === cur) ?? null };
 }
 export type Files = ReturnType<typeof useFiles>;
-
-// ---------- the tree ----------
 
 interface Dir { name: string; path: string; dirs: Map<string, Dir>; files: WsEntry[] }
 
@@ -108,17 +106,15 @@ const MARK: Record<string, [string, string]> = {
   modified: ['M', tr('已修改')], added: ['A', tr('新加入暂存')], deleted: ['D', tr('已删除')], renamed: ['R', tr('改了名')], untracked: ['U', tr('未跟踪的新文件')],
 };
 
-export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }: {
-  files: WsEntry[]; cur: string | null; onOpen: (path: string) => void; dirty: Set<string>; filter?: string; openDirs?: string[];
-  root?: WsRoot; // which tree, for the parts of the page the assistant can point at
+export function Tree({ files, cur, onOpen, dirty, filter = '', root }: {
+  files: WsEntry[]; cur: string | null; onOpen: (path: string) => void; dirty: Set<string>; filter?: string; root: WsRoot;
 }) {
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
     return q ? files.filter(f => f.path.toLowerCase().includes(q)) : files;
   }, [files, filter]);
   const top = useMemo(() => build(shown), [shown]);
-  const [opened, setOpened] = useState<Set<string>>(() => new Set(openDirs ?? []));
-  // the folders down to the open file open with it
+  const [opened, setOpened] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     if (!cur) return;
     const parts = cur.split('/').slice(0, -1);
@@ -128,11 +124,9 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
       return n.size === s.size ? s : n;
     });
   }, [cur]);
-  const toggle = (p: string) => setOpened(s => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; });
   const all = !!filter.trim();
   const { icons } = useLook();
 
-  // a folder is marked when anything inside it is
   const marked = useMemo(() => {
     const m = new Set<string>();
     for (const f of files) if (f.status) { const parts = f.path.split('/'); for (let i = 1; i < parts.length; i++) m.add(parts.slice(0, i).join('/')); }
@@ -144,7 +138,7 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
     for (const sub of [...d.dirs.values()].sort((a, b) => a.name.localeCompare(b.name))) {
       const on = all || opened.has(sub.path);
       out.push(
-        <button key={`d:${sub.path}`} className={`tr-row tr-dir${on ? ' open' : ''}${marked.has(sub.path) ? ' marked' : ''}`} style={{ ['--d' as string]: depth }} onClick={() => toggle(sub.path)}>
+        <button key={`d:${sub.path}`} className={`tr-row tr-dir${on ? ' open' : ''}${marked.has(sub.path) ? ' marked' : ''}`} style={{ ['--d' as string]: depth }} onClick={() => setOpened(s => toggled(s, sub.path))}>
           <Icon n="chevron" size={13} className="tr-chev" /><FolderIcon name={sub.name} open={on} theme={icons} /><span className="tr-name">{sub.name}</span>
         </button>,
       );
@@ -154,7 +148,7 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
       const m = f.status && MARK[f.status];
       out.push(
         <button key={f.path} className={`tr-row tr-file${f.path === cur ? ' on' : ''}${f.status ? ` st-${f.status}` : ''}`} style={{ ['--d' as string]: depth }}
-          onClick={() => onOpen(f.path)} title={`${f.path} · ${bytes(f.size)}`} data-ref={root ? `file:${root}:${f.path}` : undefined} data-ref-label={f.path}>
+          onClick={() => onOpen(f.path)} title={`${f.path} · ${bytes(f.size)}`} data-ref={`file:${root}:${f.path}`} data-ref-label={f.path}>
           <FileIcon path={f.path} theme={icons} /><span className="tr-name">{base(f.path)}</span>
           {dirty.has(f.path) && <i className="tr-dirty" title={tr('还没保存')} />}
           {m && <em className="tr-mark" title={m[1]}>{m[0]}</em>}
@@ -165,8 +159,6 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', openDirs, root }:
   }
   return <div className={`tree ic-${icons}`}>{rows(top, 0)}{!shown.length && <p className="muted small tr-none">{filter ? tr('没有匹配的文件。') : tr('这里还没有文件。')}</p>}</div>;
 }
-
-// ---------- tabs and the open file ----------
 
 export function Tabs({ f, lead, extra }: { f: Files; lead?: React.ReactNode; extra?: React.ReactNode }) {
   const bar = useRef<HTMLDivElement>(null);
@@ -209,7 +201,7 @@ export function FileView({ f, onRun, onCursor, goto, empty }: {
   return (
     <div className="fv">
       <Suspense fallback={<p className="muted fv-wait">{tr('正在载入编辑器…')}</p>}>
-        <Editor doc={doc} readOnly={DEMO} onChange={f.edit} onSave={() => { f.save(); }} onRun={onRun} onCursor={onCursor} goto={goto} />
+        <Editor doc={doc} readOnly={DEMO} onChange={f.edit} onSave={f.save} onRun={onRun} onCursor={onCursor} goto={goto} />
       </Suspense>
       {note && <div className="fv-over">{note}</div>}
     </div>

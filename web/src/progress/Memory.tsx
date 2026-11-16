@@ -1,8 +1,5 @@
-// A project's memory from before Papertown: the conversations agents had in its code and paper
-// repositories (Claude Code, Codex) and the notes they kept, found on this machine and imported
-// when you pick them. The questions search them, and so do the project's agents (pt recall).
-// Importing again brings a conversation that went on since up to date; removing one drops
-// Papertown's copy only.
+// A project's memory from before Papertown: agent conversations and notes found in its repositories
+// on this machine, imported on request and searched by questions and the agents (pt recall).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -11,7 +8,7 @@ import { Icon } from '../console/icons';
 import { ago, bytes } from '../console/util';
 import { tr } from '../i18n';
 
-export const SOURCE: Record<MemorySource, string> = { claude: 'Claude Code', codex: 'Codex', 'claude-memory': tr('Claude 记忆'), repo: tr('仓库说明') };
+const SOURCE: Record<MemorySource, string> = { claude: 'Claude Code', codex: 'Codex', 'claude-memory': tr('Claude 记忆'), repo: tr('仓库说明') };
 const REPO = { code: tr('代码仓库'), paper: tr('论文仓库') };
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '');
 const span = (a: string | null, b: string | null) => (day(a) && day(b) && day(a) !== day(b) ? `${day(a)} – ${day(b)}` : day(b) || day(a));
@@ -42,11 +39,11 @@ export function MemorySection({ lineId, toast, open }: { lineId: string; toast: 
         <p className="psec-empty muted">{tr('还没有导入。Papertown 会在这台电脑上找这个项目的代码和论文仓库里的 Claude Code、Codex 对话，Claude Code 的记忆，以及仓库里的 CLAUDE.md 和 AGENTS.md。')}</p>
       ) : (
         <div className="mem-cols">
-          {[[tr('对话'), sessions], [tr('笔记'), notes]].filter(([, xs]) => (xs as MemoryItem[]).length).map(([name, xs]) => (
-            <div key={name as string}>
-              <h4 className="mem-h">{name as string} <span className="muted">{(xs as MemoryItem[]).length}</span></h4>
+          {([[tr('对话'), sessions], [tr('笔记'), notes]] as [string, MemoryItem[]][]).filter(([, xs]) => xs.length).map(([name, xs]) => (
+            <div key={name}>
+              <h4 className="mem-h">{name} <span className="muted">{xs.length}</span></h4>
               <ul className="mem-list">
-                {(xs as MemoryItem[]).map(m => (
+                {xs.map(m => (
                   <li key={m.id}>
                     <button className="mem-open" onClick={() => open(m.id)}>
                       <b>{m.title}</b>
@@ -66,7 +63,7 @@ export function MemorySection({ lineId, toast, open }: { lineId: string; toast: 
   );
 }
 
-function Overlay({ label, className = '', onClose, children }: { label: string; className?: string; onClose: () => void; children: React.ReactNode }) {
+function Overlay({ label, className, onClose, children }: { label: string; className: string; onClose: () => void; children: React.ReactNode }) {
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopImmediatePropagation(); onClose(); } };
     addEventListener('keydown', k, true);
@@ -83,7 +80,6 @@ function Overlay({ label, className = '', onClose, children }: { label: string; 
   );
 }
 
-// what there is on this machine, by repository, to pick from
 function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toast: (t: string) => void; onClose: () => void; onDone: () => void }) {
   const [scan, setScan] = useState<Awaited<ReturnType<typeof api.memoryScan>> | null>(null);
   const [err, setErr] = useState('');
@@ -92,7 +88,7 @@ function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toas
   useEffect(() => {
     api.memoryScan(lineId).then(s => {
       setScan(s);
-      setPick(new Set(s.found.filter(x => !x.imported || x.changed).map(x => x.key))); // what is new or went on since
+      setPick(new Set(s.found.filter(x => !x.imported || x.changed).map(x => x.key)));
     }, e => setErr((e as Error).message));
   }, [lineId]);
   const groups = useMemo(() => (scan?.roots ?? []).map(r => ({ ...r, items: scan!.found.filter(x => x.repo === r.repo) })), [scan]);

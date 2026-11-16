@@ -1,11 +1,5 @@
-// The world map (layout A): the shared isometric SVG renderer, with drag to pan, wheel
-// to zoom and a hover card per building. Kept quiet on purpose: no goods flows, no
-// district signs, few trees, and the core buildings highlighted. You walk it as
-// a small figure (useAvatar); a click on a building goes straight inside.
-//
-// The view glides rather than jumps: zooming eases towards where it is heading, keeping
-// the spot under the pointer in place, and a drag let go of while moving coasts on and
-// slows to a stop.
+// The 2D world map: the shared isometric SVG with eased drag and wheel zoom, a hover card per
+// building, and a walking figure (useAvatar); a click on a building goes straight inside.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
@@ -18,7 +12,7 @@ import { tr } from '../i18n';
 const BASE = { x: -790, y: -150, w: 1580, h: 950 };
 
 // a strip between two yards says which two it serves
-function where(key: string) {
+export function where(key: string) {
   const d = DISTRICTS[key];
   return d ? (d.dir.includes('↔') ? `${d.name} · ${d.dir}` : d.name) : '';
 }
@@ -31,18 +25,17 @@ export interface MapApi { view(): MapView; setView(v: MapView): void }
 
 interface Props {
   placements: Placement[];
-  highlight: string | null;
   notes: Record<string, string>;
   active: boolean;
   hidden?: boolean; // the 3D town is showing instead
-  api?: React.MutableRefObject<MapApi | null>;
+  api: React.MutableRefObject<MapApi | null>;
   onOpen: (id: string, at: { x: number; y: number }) => void;
 }
 
-export function WorldMap({ placements, highlight, notes, active, hidden, api, onOpen }: Props) {
+export function WorldMap({ placements, notes, active, hidden, api, onOpen }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const vb = useRef({ ...BASE }); // the view on screen
-  const goal = useRef({ ...BASE }); // the view it is easing towards
+  const vb = useRef({ ...BASE });
+  const goal = useRef({ ...BASE });
   const anim = useRef({ raf: 0, last: 0, rate: ZOOM_RATE });
   const drag = useRef<{ x: number; y: number; gx: number; gy: number; id: number; moved: boolean; trail: { t: number; x: number; y: number }[] } | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; pl: Placement } | null>(null);
@@ -51,21 +44,19 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
   opt.current = st;
 
   const markup = useMemo(
-    () => renderMap({ placements, labels: st.mapLabels, highlight, notes, anim: true, flows: false, decor: 'light', districts: false, dashes: false, vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
-    [placements, highlight, notes, st.mapLabels],
+    () => renderMap({ placements, labels: st.mapLabels, highlight: null, notes, anim: true, flows: false, decor: 'light', districts: false, dashes: false, vb: `${BASE.x} ${BASE.y} ${BASE.w} ${BASE.h}` }),
+    [placements, notes, st.mapLabels],
   );
-  // the card belongs to the map in front of you: gone with a room, the chat or the 3D town
   useEffect(() => { if (!active || hidden) setTip(null); }, [active, hidden]);
   const byId = useMemo(() => new Map(placements.map(p => [p.id, p])), [placements]);
 
-  const svg = () => host.current?.querySelector('svg') ?? null;
+  const svg = () => host.current?.querySelector('svg');
 
   function aspect() {
     const r = svg()?.getBoundingClientRect();
     return r && r.width ? r.height / r.width : BASE.h / BASE.w;
   }
 
-  // put the view on screen
   function write() {
     const v = vb.current, s = svg();
     if (!s) return;
@@ -83,8 +74,7 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
     g.x = ncx - g.w / 2; g.y = ncy - g.h / 2;
   }
 
-  // ease the view towards the goal. x, y and w close in at the same exponential rate, so a
-  // point that is under the pointer at both ends stays under it all the way
+  // x, y and w ease at the same exponential rate, so the point under the pointer stays put
   function tick(now: number) {
     const a = anim.current, v = vb.current, g = goal.current;
     a.raf = 0;
@@ -101,17 +91,10 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
   function go(rate = ZOOM_RATE) {
     const a = anim.current;
     a.rate = rate;
-    if (!opt.current.smoothMap) {
-      cancelAnimationFrame(a.raf);
-      a.raf = 0;
-      Object.assign(vb.current, goal.current);
-      write();
-      return;
-    }
+    if (!opt.current.smoothMap) return jump();
     if (!a.raf) { a.last = performance.now(); a.raf = requestAnimationFrame(tick); }
   }
 
-  // jump there at once (a resize, the view handed over from the 3D town)
   function jump() {
     cancelAnimationFrame(anim.current.raf);
     anim.current.raf = 0;
@@ -129,7 +112,6 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
     if (smooth) { settle(); go(); } else jump();
   }
 
-  // zoom by k about a point on screen: the spot of the map under it stays there
   function zoomAt(k: number, cx: number, cy: number) {
     const r = svg()?.getBoundingClientRect();
     if (!r?.width) return;
@@ -139,7 +121,7 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
     g.h = g.w * aspect();
     g.x = px - fx * g.w; g.y = py - fy * g.h;
     settle();
-    go(ZOOM_RATE);
+    go();
   }
 
   function zoomCenter(k: number) {
@@ -150,13 +132,12 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
   // a new map markup replaces the <svg>: carry the current view over
   useLayoutEffect(write, [markup]);
 
-  if (api) api.current = {
+  api.current = {
     view: () => { const v = vb.current; return { cx: v.x + v.w / 2, cy: v.y + v.h / 2, w: v.w }; },
     setView: ({ cx, cy, w }) => { const g = goal.current; g.w = w; g.h = w * aspect(); g.x = cx - w / 2; g.y = cy - g.h / 2; jump(); },
   };
 
-  // keep the walking figure inside the middle of the view; the step is already smoothed
-  // by the walk, so the view moves with it at once (and with any zoom still under way)
+  // keeps the walking figure in the middle of the view; the walk is already smooth, so no easing
   function follow(sx: number, sy: number, k: number) {
     const g = goal.current, v = vb.current, mx = g.w * 0.3, my = g.h * 0.3;
     let tx = g.x, ty = g.y;
@@ -169,7 +150,6 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
     if (anim.current.raf) { v.x += dx; v.y += dy; } else { v.x = g.x; v.y = g.y; write(); }
   }
 
-  // where a building sits on screen, so the room can open from its door
   function screenOf(id: string) {
     const r = svg()?.querySelector(`.bld[data-id="${id}"]`)?.getBoundingClientRect();
     return r ? { x: r.left + r.width / 2, y: r.top + r.height * 0.62 } : { x: innerWidth / 2, y: innerHeight / 2 };
@@ -194,7 +174,6 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
     };
     const down = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      // catch the map where it is if it is still gliding
       cancelAnimationFrame(anim.current.raf);
       anim.current.raf = 0;
       Object.assign(goal.current, vb.current);
@@ -209,7 +188,7 @@ export function WorldMap({ placements, highlight, notes, active, hidden, api, on
       const s = vb.current.w / (svg()?.getBoundingClientRect().width || 1), g = goal.current;
       g.x = d.gx - dx * s; g.y = d.gy - dy * s;
       settle();
-      vb.current.x = g.x; vb.current.y = g.y; // the map stays under the finger
+      vb.current.x = g.x; vb.current.y = g.y;
       write();
       const now = performance.now();
       d.trail.push({ t: now, x: g.x, y: g.y });

@@ -1,6 +1,5 @@
-/* Choosing from a list (components/Select.tsx). The button and the text box look like the fields
-   around them, and a class passed in (a compact one in a toolbar, a bare one in the chat) wins over
-   these; the list looks like the chat's menu. */
+/* Choosing from a list (components/Select.tsx). The button's look is under :where() so that a class
+   passed in (a compact one in a toolbar, a bare one in the chat) wins over it. */
 :where(.sel) {
   display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 6px 8px 6px 10px;
   border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font: 13px var(--font); color: var(--ink);
@@ -14,7 +13,6 @@
 .sel:hover > .ic.sel-chev, .sel.open > .ic.sel-chev { color: var(--ink); }
 .sel.open > .ic.sel-chev { transform: rotate(180deg); }
 
-/* free text with suggestions: the arrow sits inside the box */
 .combo { position: relative; display: flex; min-width: 0; }
 .combo > input { flex: 1; min-width: 0; padding-right: 28px; }
 .combo-b { position: absolute; top: 0; right: 2px; bottom: 0; width: 26px; display: grid; place-items: center; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; }

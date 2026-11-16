@@ -1,9 +1,5 @@
-// The cluster, live: every card on the machines nvidb knows, read again every few seconds. For
-// each card, its utilisation and memory now and over the last hour; who is on it and for how
-// long, whether a job from the queue (this project's or anyone's) or a program the queue did not
-// start; and the jobs lined up for it, with a job's prerequisites lit up under the pointer. Or
-// the same, person by person: who holds how many cards and how much memory, and since when.
-// Then what waits for a card. Read only.
+// The cluster, live and read only: every card nvidb knows, who is on it and what is lined up for
+// it, by card or by person, then what waits for a card.
 
 import { useMemo, useState } from 'react';
 import type { Gpu, GpuNode, GpuProc, GpuStatus, NvJob } from '../api';
@@ -11,18 +7,18 @@ import { gb, refreshGpus, useGpus } from '../components/Gpus';
 import { tr } from '../i18n';
 import { Meter, SPARK, ST, Spark, Tip, useNow, useTip, when, type St } from './charts';
 import { Icon } from './icons';
+import { t } from './jobs';
 import { usePanelNote } from './page';
-import { dur, pctOf } from './util';
+import { dur, pctOf, toggled } from './util';
 
 interface Props { mine: Set<number>; onOpen: (id: string) => void }
 
-// someone on a card: a job from the queue, or one person's run of one program the queue did not start
+// someone on a card: a queue job, or one person's run of one program the queue did not start
 interface Occ {
   key: string; kind: 'job' | 'ext'; user: string; what: string; mem: number; since: number | null; atLeast: boolean;
   job?: NvJob; procs: GpuProc[]; node: string; gpu: number;
 }
 
-const t = (s: string | null | undefined) => (s ? Date.parse(s) : NaN);
 // thor-CloudRendering-f0825767cd50… → thor-CloudRendering
 const prog = (name: string) => name.replace(/-[0-9a-f]{12,}$/i, '');
 
@@ -31,7 +27,7 @@ function occupants(g: GpuStatus, n: GpuNode, x: Gpu): Occ[] {
   const jobs = g.jobs.filter(j => j.state === 'running' && j.node === n.name && j.gpu_ids.includes(x.index));
   for (const j of jobs) {
     const ps = x.procs.filter(p => p.job_id === j.id);
-    out.push({ key: `j${j.id}`, kind: 'job', user: ps[0]?.user ?? j.submitter ?? '?', what: j.name, mem: ps.reduce((a, p) => a + (p.mem_mb || 0), 0),
+    out.push({ key: `j${j.id}`, kind: 'job', user: ps[0]?.user ?? j.submitter ?? '?', what: j.name, mem: ps.reduce((a, p) => a + p.mem_mb, 0),
       since: t(j.started_at), atLeast: false, job: j, procs: ps, node: n.name, gpu: x.index });
   }
   const rest = new Map<string, GpuProc[]>();
@@ -42,21 +38,21 @@ function occupants(g: GpuStatus, n: GpuNode, x: Gpu): Occ[] {
   }
   for (const [k, ps] of rest) {
     const firsts = ps.map(p => t(p.seen_since)).filter(Number.isFinite);
-    out.push({ key: `x${k}`, kind: ps[0].managed ? 'job' : 'ext', user: ps[0].user ?? '?', mem: ps.reduce((a, p) => a + (p.mem_mb || 0), 0),
+    out.push({ key: `x${k}`, kind: ps[0].managed ? 'job' : 'ext', user: ps[0].user ?? '?', mem: ps.reduce((a, p) => a + p.mem_mb, 0),
       what: (ps[0].managed ? ps[0].job_name ?? prog(ps[0].name) : prog(ps[0].name)) + (ps.length > 1 ? ` ×${ps.length}` : ''),
       since: firsts.length ? Math.min(...firsts) : null, atLeast: ps.some(p => p.earlier), procs: ps, node: n.name, gpu: x.index });
   }
   return out.sort((a, b) => b.mem - a.mem);
 }
 
-// how long: a job's from its start; anything else's from when Papertown first saw it, "at least" if it was already there
+// a job's time from its start, anything else's from when Papertown first saw it ("≥" if already there)
 const lasted = (o: Occ, now: number) => (o.since == null || !Number.isFinite(o.since) ? '—'
   : `${o.atLeast ? '≥ ' : ''}${dur(Math.max(0, (now - o.since) / 1000))}`);
 const secsAgo = (ms: number) => (ms < 90e3 ? tr('{0} 秒前', Math.max(0, Math.round(ms / 1000))) : ms < 5400e3 ? tr('{0} 分钟前', Math.round(ms / 60e3)) : tr('{0} 小时前', (ms / 3600e3).toFixed(1)));
 
 export function Cluster({ mine, onOpen }: Props) {
   const g = useGpus();
-  const now = useNow(1000);
+  const now = useNow();
   const [view, setView] = useState<'cards' | 'people'>(() => { try { return localStorage.getItem('papertown.exp.cluster') === 'people' ? 'people' : 'cards'; } catch { return 'cards'; } });
   const pick = (v: 'cards' | 'people') => { setView(v); try { localStorage.setItem('papertown.exp.cluster', v); } catch { /* private mode */ } };
   const [onlyMine, setOnlyMine] = useState(false);
@@ -64,7 +60,6 @@ export function Cluster({ mine, onOpen }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const tip = useTip();
   const byId = useMemo(() => new Map((g?.jobs ?? []).map(j => [j.id, j])), [g]);
-  // a job's prerequisites, theirs in turn, and what waits on it: lit up together under the pointer
   const lit = useMemo(() => {
     if (hover == null) return null;
     const s = new Set<number>([hover]);
@@ -75,8 +70,7 @@ export function Cluster({ mine, onOpen }: Props) {
   }, [hover, byId]);
 
   const head = <span className="cs-ic"><Icon n="gpu" size={15} /></span>;
-  if (!g) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className="muted small">{tr('正在读 nvidb…')}</p></section>;
-  if (!g.ok) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className="muted small">{g.note}</p></section>;
+  if (!g || !g.ok) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className="muted small">{g ? g.note : tr('正在读 nvidb…')}</p></section>;
 
   const up = g.nodes.filter(n => n.state === 'up');
   const probed = Math.max(...up.map(n => t(n.probed_at ?? n.last_seen)).filter(Number.isFinite), 0);
@@ -117,12 +111,9 @@ interface Ctx {
   onOpen: (id: string) => void; tip: ReturnType<typeof useTip>;
 }
 
-// ---------- by card ----------
-
 function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
   const { g, now, mine } = ctx;
   const [shut, setShut] = useState<Set<string>>(new Set());
-  // every card's curve spans the same stretch: as far back as Papertown has been reading, from ten minutes to an hour
   const first = Math.min(...g.nodes.flatMap(n => n.gpus.map(x => x.trend?.[0]?.[0] ?? Infinity)));
   const span = Math.max(600, Math.min(3600, Number.isFinite(first) ? now / 1000 - first + 30 : 600));
   const lanes = g.lanes ?? [];
@@ -138,7 +129,6 @@ function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
       {g.nodes.map(n => {
         const all = n.gpus.map(x => ({ x, occ: occupants(g, n, x), queued: next(n.name, x.index) }))
           .filter(r => !onlyMine || r.occ.some(o => o.job && mine.has(o.job.id)) || r.queued.some(id => mine.has(id)));
-        // a card with nobody on it, nothing lined up and next to nothing in use folds into one line, to leave the room to busy ones
         const quiet = (r: typeof all[number]) => !r.occ.length && !r.queued.length && r.x.util_percent < 5 && r.x.mem_used_mb < 0.02 * r.x.mem_total_mb;
         const rows = all.filter(r => !quiet(r)), idle = all.filter(quiet);
         if (onlyMine && !all.length) return null;
@@ -147,7 +137,7 @@ function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
         const p = t(n.probed_at ?? n.last_seen);
         return (
           <div key={n.name} className={`qb-node${n.state === 'up' ? '' : ' down'}`}>
-            <button className={`qb-nh${closed ? '' : ' open'}`} onClick={() => setShut(s => { const x = new Set(s); if (x.has(n.name)) x.delete(n.name); else x.add(n.name); return x; })}>
+            <button className={`qb-nh${closed ? '' : ' open'}`} onClick={() => setShut(s => toggled(s, n.name))}>
               <Icon n="chevron" size={13} className="tr-chev" /><i className="qb-dot" /><b>{n.name}</b>
               {n.state === 'up' ? <>
                 <span className="qb-pill">{tr('{0} 张卡', n.gpus.length)}</span>
@@ -256,8 +246,6 @@ function NextChip({ id, k, ctx }: { id: number; k: number; ctx: Ctx }) {
   );
 }
 
-// ---------- by person ----------
-
 function ByPerson({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
   const { g, now, mine } = ctx;
   const [open, setOpen] = useState<string | null>(null);
@@ -289,8 +277,6 @@ function ByPerson({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
     </div>
   );
 }
-
-// ---------- what waits for a card ----------
 
 function Waiting({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
   const { g, mine, lit, setHover, onOpen } = ctx;

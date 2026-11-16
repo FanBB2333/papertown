@@ -10,9 +10,9 @@
 .avatar .av-hair { fill: #4a3426; }
 .avatar .av-fig { transform-box: fill-box; transform-origin: 50% 100%; transform: scaleX(var(--face, 1)); }
 .avatar.face-left { --face: -1; }
-.avatar:not(.walking) .av-fig { animation: av-breathe 3.6s var(--in-out, ease-in-out) infinite; }
-.avatar.walking .av-fig { animation: av-bob .34s var(--in-out, ease-in-out) infinite alternate; }
-.avatar.walking .av-leg { transform-box: fill-box; transform-origin: 50% 0; animation: av-step .34s var(--in-out, ease-in-out) infinite alternate; }
+.avatar:not(.walking) .av-fig { animation: av-breathe 3.6s var(--in-out) infinite; }
+.avatar.walking .av-fig { animation: av-bob .34s var(--in-out) infinite alternate; }
+.avatar.walking .av-leg { transform-box: fill-box; transform-origin: 50% 0; animation: av-step .34s var(--in-out) infinite alternate; }
 .avatar.walking .av-leg.r { animation-direction: alternate-reverse; }
 @keyframes av-breathe { 50% { transform: scaleX(var(--face, 1)) scaleY(1.03); } }
 @keyframes av-bob { to { transform: scaleX(var(--face, 1)) translateY(-2.4px); } }
@@ -43,7 +43,6 @@
 .interior.in-sheet { display: block; overflow-y: auto; padding: 24px; }
 .interior.in-sheet .p-sheet { width: min(1320px, 100%); margin: 0 auto; max-height: none; }
 
-/* rooms: a list on the left, the work in the middle, context on the right */
 .room { flex: 1; min-width: 0; display: grid; grid-template-columns: 340px minmax(0, 1fr); }
 .room-agents { grid-template-columns: 320px minmax(0, 1fr) 300px; }
 .room-side { border-right: 1px solid var(--line); overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: color-mix(in srgb, var(--panel) 55%, var(--bg)); }
@@ -74,11 +73,10 @@
 .dots { display: flex; gap: 4px; }
 .dots i { flex: 1; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 10%, transparent); transition: background .4s; }
 .dots i.d-done { background: var(--ok); }
-.dots i.d-run, .dots i.d-wait { background: var(--brand); animation: dot-run 1.4s ease-in-out infinite; }
-@keyframes dot-run { 50% { opacity: .45; } }
+.dots i.d-run, .dots i.d-wait { background: var(--brand); animation: beat-op 1.4s ease-in-out infinite; }
 .crew { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
 .crew-a { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
-.crew-a.s-idle, .crew-a.s-working { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.crew-a.s-idle { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
 .crew-a.s-working { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 40%, transparent); }
 .mon-note { margin: 6px 0 4px; font-size: 12.5px; line-height: 1.5; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
@@ -97,7 +95,7 @@
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 15%, transparent); flex: none; }
 .pulse.on { background: var(--ok); animation: ping 1.6s ease-out infinite; }
 
-/* ---------- mill: the base camp ---------- */
+/* ---------- mill ---------- */
 .tally { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 6px; }
 .tally div { display: flex; flex-direction: column; align-items: center; padding: 10px 4px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
 .tally b { font: 700 18px var(--head); }
@@ -177,7 +175,7 @@
 .t-ok .t-ic { color: var(--ok); } .t-bad .t-ic { color: var(--bad); } .t-run .t-ic { color: var(--brand); }
 .t-arg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
 .tool .code { margin-top: 6px; }
-.chat-compose { display: flex; gap: 10px; align-items: flex-end; padding: 14px 22px 18px; border-top: 1px solid var(--line); }
+.chat-compose { position: relative; display: flex; gap: 10px; align-items: flex-end; padding: 14px 22px 18px; border-top: 1px solid var(--line); }
 .chat-compose textarea { flex: 1; resize: none; font: 14px/1.5 var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; outline: none; transition: border-color .2s, box-shadow .2s; }
 .chat-compose textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 18%, transparent); }
 .pnl-s { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); }
@@ -189,7 +187,6 @@
 .repo { display: flex; flex-direction: column; padding: 6px 0; border-top: 1px dashed var(--line); font-size: 13px; }
 .hire { display: flex; grid-column: span 2; }
 
-/* hiring: Paseo or pi in a terminal */
 .hire-wrap { margin: auto; width: min(760px, 100%); padding: 24px 0; }
 .hire-wrap h2 { margin: 0 0 6px; font-family: var(--head); }
 .hire-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-top: 18px; }
@@ -200,14 +197,11 @@
 .hire-card code, .room-empty code, .pnl-s code { font-size: 11.5px; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--ink) 7%, transparent); }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 
-/* a Paseo agent: Paseo's own page fills the room */
 .paseo-main { padding: 0; }
 .paseo-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: #1b1b1b; border-bottom-left-radius: inherit; animation: rise-in .45s var(--out) both; }
 
-/* pi: model and thinking switches, and the command menu */
 .pi-switch { display: flex; align-items: center; gap: 8px; margin-left: auto; margin-right: 8px; min-width: 0; }
 .pi-switch .sel { max-width: 220px; padding: 4px 6px 4px 8px; font-size: 12px; }
-.chat-compose { position: relative; }
 .cmd-menu { position: absolute; left: 22px; right: 22px; bottom: calc(100% - 6px); display: flex; flex-direction: column; padding: 6px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(40, 28, 16, .14); animation: rise-in .2s var(--out) both; z-index: 5; }
 .cmd-menu button { display: flex; align-items: baseline; gap: 10px; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: 13px var(--font); text-align: left; cursor: pointer; }
 .cmd-menu button:hover, .cmd-menu button:first-child { background: color-mix(in srgb, var(--brand) 10%, transparent); }
@@ -216,17 +210,17 @@
 .cmd-menu em { font-style: normal; font-size: 11px; color: var(--muted); padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); }
 .msg-u.cmd code { font-size: 13px; }
 
-/* the town's model, in the chat drawer */
 .llm-switch { position: relative; margin-left: auto; }
 .llm-btn { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--font); color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; cursor: pointer; transition: color .2s, border-color .2s; }
 .llm-btn:hover, .llm-btn.on { color: var(--ink); border-color: var(--brand); }
 .llm-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; width: 300px; display: flex; flex-direction: column; gap: 10px; padding: 14px; animation: rise-in .25s var(--out) both; }
 .llm-form { display: flex; flex-direction: column; gap: 10px; }
-.llm-form input { font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.llm-form input, .conv-q, .ld-reply input { font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.llm-form input { padding: 6px 8px; }
 
 /* importing a Paseo conversation */
 .import-card { grid-column: 1 / -1; }
-.conv-q { font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+.conv-q { padding: 7px 10px; }
 .conv-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
 .conv { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--ink); font: 13.5px var(--font); text-align: left; cursor: pointer; transition: background .2s; }
 .conv:hover:not(:disabled) { background: color-mix(in srgb, var(--brand) 9%, transparent); }
@@ -238,11 +232,11 @@
 .trail { align-self: flex-start; max-width: min(760px, 86%); font-size: 12.5px; color: var(--muted); animation: rise-in .3s var(--out) both; }
 .trail > button { display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 3px 10px 3px 6px; border: 0; border-radius: 999px; background: color-mix(in srgb, var(--ink) 5%, transparent); color: inherit; font: inherit; cursor: pointer; transition: background .2s; }
 .trail > button:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
-.trail .t-ic { width: 16px; text-align: center; color: var(--ok); }
+.trail .t-ic { color: var(--ok); }
 .trail.t-run .t-ic { color: var(--brand); }
 .trail.t-bad .t-ic, .trail em { color: var(--bad); font-style: normal; }
 .trail b { font-weight: 500; color: var(--ink); white-space: nowrap; }
-.trail .t-arg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+.trail .t-arg { font-size: 11.5px; }
 .trail ul { list-style: none; margin: 6px 0 0 22px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .trail li { display: flex; gap: 8px; min-width: 0; }
 .trail li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
@@ -255,10 +249,10 @@
 .paseo-veil p { margin: 0; }
 .ask { align-self: flex-start; width: min(620px, 86%); padding: 12px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); animation: rise-in .3s var(--out) both; }
 .ask p { margin: 0 0 6px; font-size: 13.5px; }
-.ask .code { margin: 0 0 8px; max-height: 120px; overflow: auto; }
+.ask .code { margin: 0 0 8px; max-height: 120px; }
 
-/* ---------- papers: the library's shelves and a paper's reading list ---------- */
-.shelf, .line-papers { margin: 18px 0 4px; padding: 0 2px; }
+/* ---------- papers ---------- */
+.shelf, .line-papers, .linked { margin: 18px 0 4px; padding: 0 2px; }
 .p-sheet .shelf { padding: 0 18px 18px; }
 .shelf-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
 .shelf-head h4 { margin: 0; font: 17px var(--head); }
@@ -272,7 +266,7 @@
 .shelf-topics button.on span { color: inherit; opacity: .8; }
 .pcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .pcard {
-  position: relative; display: flex; flex-direction: column; gap: 5px; padding: 12px 14px 12px; border-radius: 12px; text-decoration: none; color: var(--ink);
+  position: relative; display: flex; flex-direction: column; gap: 5px; padding: 12px 14px; border-radius: 12px; text-decoration: none; color: var(--ink);
   background: var(--panel); border: 1px solid var(--line); box-shadow: 0 1px 0 rgba(46, 31, 18, .05);
   transition: transform .5s var(--spring), border-color .25s var(--out), box-shadow .35s var(--out);
   animation: rise-in .45s var(--out) both; animation-delay: calc(var(--i, 0) * 28ms);
@@ -288,8 +282,7 @@
 .pc-sim { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .pc-sim i { flex: 1; height: 4px; border-radius: 99px; background: linear-gradient(90deg, var(--brand) calc(var(--v) * 100%), color-mix(in srgb, var(--ink) 10%, transparent) 0); }
 
-/* ---------- a project linked in from local repos ---------- */
-.linked { margin: 18px 0 4px; padding: 0 2px; }
+/* ---------- linked local repos ---------- */
 .p-sheet .linked { padding: 0 18px; }
 .lk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .lk-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 14px 16px; animation: rise-in .45s var(--out) both; }
@@ -311,7 +304,7 @@
 .c-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 900px) { .lk-grid { grid-template-columns: 1fr; } }
 
-/* the little Markdown agents write */
+/* Markdown in messages */
 .msg-a ul, .msg-a ol, .msg-u ul, .msg-u ol { margin: 0 0 6px; padding-left: 20px; }
 .msg-a li, .msg-u li { margin: 2px 0; line-height: 1.55; }
 .msg-a :is(ul, ol):last-child { margin-bottom: 0; }
@@ -319,7 +312,7 @@
 .md-hr { margin: 8px 0; border: 0; border-top: 1px dashed var(--line); }
 .md-h { font-weight: 700; }
 
-/* a project's lead: the questions it waits on you for, and what it reported */
+/* a project's lead: its questions for you and its reports */
 .ld-card .cs-h .ld-who { display: inline-flex; align-items: center; gap: 6px; margin-left: 0; color: var(--muted); }
 .ld-card .cs-h .lnk { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
 .ld-none { margin: 0; line-height: 1.6; }
@@ -328,7 +321,7 @@
 .ld-k { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--warn); }
 .ld-ask .btns { margin-bottom: 8px; }
 .ld-reply { display: flex; gap: 6px; }
-.ld-reply input { flex: 1; min-width: 0; font: 13px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.ld-reply input { flex: 1; min-width: 0; padding: 6px 10px; }
 .ld-reply input:focus { outline: none; border-color: var(--brand); }
 .ld-reps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .ld-rep { padding: 7px 10px 8px 12px; border-left: 3px solid var(--line); border-radius: 0 8px 8px 0; background: color-mix(in srgb, var(--panel2) 50%, transparent); font-size: 13.5px; line-height: 1.55; }
@@ -340,8 +333,7 @@
 .ld-sw input { margin-top: 3px; accent-color: var(--brand); }
 .room-aside .ld-ask { margin-bottom: 8px; }
 
-/* what Papertown put into a conversation rather than you: another agent's message, a check-in,
-   your answer to its question, its work boundaries changed */
+/* what Papertown, not you, put into a conversation */
 .msg-u.msg-tag { align-self: flex-start; max-width: min(760px, 92%); font-size: 13.5px; border-radius: 12px; border: 1px dashed var(--line); background: color-mix(in srgb, var(--panel2) 60%, var(--panel)); }
 .msg-tag .mt-k { display: block; margin-bottom: 4px; font: 600 12px var(--font); color: var(--muted); }
 .msg-tag.t-msg { border-style: solid; border-color: color-mix(in srgb, var(--brand) 35%, var(--line)); background: color-mix(in srgb, var(--brand) 6%, var(--panel)); }

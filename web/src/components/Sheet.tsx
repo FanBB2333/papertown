@@ -1,5 +1,5 @@
-// Building detail (layout C): the building's own production line on a belt, and three
-// panels underneath. A mill shows its paper's eight stages and live outputs.
+// Building detail (layout C): the building's own production line on a belt, with panels
+// underneath. A mill shows its paper's stages and live outputs.
 
 import { useEffect, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
@@ -20,7 +20,7 @@ interface Props {
   onHatch: (lineId: string) => void;
   onResume: (lineId: string) => void;
   onAdjust: (lineId: string) => void;
-  focus?: string | null; // at the power plant: `node:<name>` opens that machine
+  focus?: string | null;
 }
 
 const STAGE_SKILLS: Record<string, string[]> = {
@@ -33,9 +33,18 @@ const STAGE_TOOLS: Record<string, string[]> = {
   write: ['library.get', 'press.typeset'], review: ['press.read'], ship: ['press.package'],
 };
 
-const chip = (st: string, pct?: number) => st === 'done' ? <span className="chip ok">{tr('完成')}</span>
-  : st === 'run' ? <span className="chip pri">{tr('进行中')}{pct ? ` ${pct}%` : ''}</span>
-    : st === 'wait' ? <span className="chip warn">{tr('等你决定')}</span> : <span className="chip">{tr('排队')}</span>;
+const STAGE_WORD: Record<Stage['status'], string> = { done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('排队') };
+
+const chip = (st: string, pct?: number) => st === 'done' ? <span className="chip ok">{STAGE_WORD.done}</span>
+  : st === 'run' ? <span className="chip pri">{STAGE_WORD.run}{pct ? ` ${pct}%` : ''}</span>
+    : st === 'wait' ? <span className="chip warn">{STAGE_WORD.wait}</span> : <span className="chip">{STAGE_WORD.todo}</span>;
+
+const chips = (xs: string[]) => xs.length ? xs.map(x => <span key={x} className="chip">{x}</span>) : <span className="muted">—</span>;
+
+// a project's files as links, main.pdf as the primary one
+export const FileLinks = ({ lineId, files }: { lineId: string; files: string[] }) => (
+  <div className="btns">{files.map(f => <a key={f} className={`btn${f === 'main.pdf' ? ' pri' : ''}`} href={fileUrl(lineId, f)} target="_blank" rel="noreferrer">{f}</a>)}</div>
+);
 
 function Belt({ stations }: { stations: { key: string; name: string; st: string; pct?: number; icon: React.ReactNode; out: string; team: React.ReactNode; open?: string }[] }) {
   const n = stations.length;
@@ -113,9 +122,9 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   return null;
 }
 
-export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, real, tick = 0 }: {
+export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, real, tick }: {
   line: Line; typeOf: (id: string) => string; onOpen: (id: string) => void; onHatch: (id: string) => void;
-  onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; real: string; tick?: number;
+  onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; real: string; tick: number;
 }) {
   const outputs = line.outputs ?? {};
   const done = Object.keys(outputs);
@@ -133,11 +142,11 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
       }))} />
       <section className="detail">
         <div className="pnl">
-          <h4>{line.stages.findIndex(s => s.key === cur.key) + 1}. {cur.name} · {{ done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('排队') }[cur.status]}</h4>
+          <h4>{line.stages.findIndex(s => s.key === cur.key) + 1}. {cur.name} · {STAGE_WORD[cur.status]}</h4>
           <dl className="kv">
             <dt>{tr('员工')}</dt><dd>{cur.workers.length ? cur.workers.map(w => <span key={w.id} className="w"><Ava role={w.role} level={w.level} code={w.id} />{w.title} Lv.{w.level}</span>) : <span className="muted">{tr('不需要 agent')}</span>}</dd>
             <dt>{tr('预算')}</dt><dd>{line.linked ? <span className="muted">{tr('本地项目，不走流水线，不记预算')}</span> : <><div className="bar"><i style={{ width: `${Math.min(100, 100 * line.spent / line.budget)}%` }} /></div>${line.spent.toFixed(4)} / ${line.budget.toFixed(2)}</>}</dd>
-            <dt>Skills</dt><dd>{(STAGE_SKILLS[cur.key] ?? []).map(s => <span key={s} className="chip">{s}</span>)}{!STAGE_SKILLS[cur.key] && <span className="muted">—</span>}</dd>
+            <dt>Skills</dt><dd>{chips(STAGE_SKILLS[cur.key] ?? [])}</dd>
             <dt>{tr('工具')}</dt><dd>{(STAGE_TOOLS[cur.key] ?? []).map(s => <span key={s} className="chip">{s}</span>)}</dd>
             <dt>{tr('状态')}</dt><dd>{line.note ?? cur.note ?? ({ waiting: tr('撞车报告已经发到对话框，等你决定'), done: tr('已出厂') } as Record<string, string>)[line.status] ?? line.status}</dd>
           </dl>
@@ -156,7 +165,7 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
         <div className="pnl">
           <h4>{next ? tr('下一站 · {0}', next.name) : tr('已出厂')}</h4>
           <p className="real">{next ? real : tr('论文和源码都在下面，可以直接下载。')}</p>
-          {line.files.length > 0 && <div className="btns">{line.files.map(f => <a key={f} className={`btn${f === 'main.pdf' ? ' pri' : ''}`} href={fileUrl(line.id, f)} target="_blank" rel="noreferrer">{f}</a>)}</div>}
+          {line.files.length > 0 && <FileLinks lineId={line.id} files={line.files} />}
           {next && <div className="btns" style={{ marginTop: 10 }}><button className="btn" onClick={() => onOpen(next.building)}>{tr('去')}{next.name}{tr('所在的建筑')}</button></div>}
         </div>
       </section>
@@ -179,7 +188,7 @@ export function Sheet(p: Props) {
         const ln = data.line ? await api.line(data.line.id) : null;
         if (live) { setS(data); setLine(ln); setErr(null); }
       } catch (e) {
-        if (live) setErr(String((e as Error).message));
+        if (live) setErr((e as Error).message);
       }
     }, s && s.id === p.id ? 250 : 0);
     return () => { live = false; clearTimeout(t); };
@@ -232,8 +241,8 @@ export function Sheet(p: Props) {
               <h4>{cur ? tr('当前工位 · {0}', cur.name) : s.live ? tr('现在空闲') : tr('还没接入')}</h4>
               <dl className="kv">
                 <dt>{tr('员工')}</dt><dd>{team.length ? team.map(r => <span key={r} className="w"><Ava role={r} />{ROLE_NAMES[r]}</span>) : <span className="muted">{tr('自动运行，没有 agent 员工')}</span>}</dd>
-                <dt>Skills</dt><dd>{s.skills.length ? s.skills.map(x => <span key={x} className="chip">{x}</span>) : <span className="muted">—</span>}</dd>
-                <dt>{tr('工具')}</dt><dd>{s.tools.length ? s.tools.map(x => <span key={x} className="chip">{x}</span>) : <span className="muted">—</span>}</dd>
+                <dt>Skills</dt><dd>{chips(s.skills)}</dd>
+                <dt>{tr('工具')}</dt><dd>{chips(s.tools)}</dd>
                 <dt>{tr('现在')}</dt><dd>{s.job}</dd>
               </dl>
               {s.active_line && <div className="btns" style={{ marginTop: 12 }}><button className="btn pri" onClick={() => p.onOpen(p.placements.find(x => x.line_id === s.active_line)?.id ?? 'hatchery')}>{tr('看这篇论文的流水线')}</button></div>}

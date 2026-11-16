@@ -1,8 +1,5 @@
-// The paper panel, laid out like Overleaf: the paper's files, the LaTeX source, and the PDF it
-// compiles to beside it, with a divider to drag between the two. Recompiling (Mod-Enter in
-// the editor) saves what is unsaved first; a failed run shows LaTeX's errors under the source.
-// A phone has no room for the two side by side: it shows one or the other, the PDF first, and
-// the files over them.
+// The paper panel, laid out like Overleaf: the paper's files, the LaTeX source and the compiled
+// PDF side by side (one at a time on a phone). Recompiling (Mod-Enter) saves what is unsaved first.
 
 import { useEffect, useRef, useState } from 'react';
 import { api, paperPdfUrl, type Compiled, type WsInfo } from '../api';
@@ -55,7 +52,7 @@ function Tex(p: Props) {
   const [want, setLayout] = useState<Layout>('split');
   const layout: Layout = phone && want === 'split' ? 'pdf' : want;
   const [split, setSplit] = useState(loadSplit);
-  const [side, setSide] = useState(() => !matchMedia(PHONE).matches);
+  const [side, setSide] = useState(!phone);
   const [run, setRun] = useState<Compiled | null>(null);
   const [busy, setBusy] = useState(false);
   const [v, setV] = useState(0);
@@ -65,7 +62,6 @@ function Tex(p: Props) {
   const [at, setAt] = useState<{ line: number; picked: string }>({ line: 1, picked: '' });
   const body = useRef<HTMLDivElement>(null);
   const files = f.tree.data?.files ?? [];
-  const dirtySet = new Set(f.open.filter(o => o.text !== o.saved).map(o => o.path));
 
   useEffect(() => p.onDirty(f.dirty), [f.dirty]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (p.reveal) { f.show(p.reveal.path); setLayout(l => (phone ? 'src' : l === 'pdf' ? 'split' : l)); } }, [p.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -89,7 +85,6 @@ function Tex(p: Props) {
     }
   }
 
-  // dragging the divider: the share of the width the source takes, kept for next time
   function onDrag(e: React.PointerEvent) {
     const box = body.current?.querySelector('.tex-panes')?.getBoundingClientRect();
     if (!box) return;
@@ -108,6 +103,7 @@ function Tex(p: Props) {
 
   const d = run && !run.ok ? digest(run.log) : null;
   const url = `${paperPdfUrl(p.lineId, v)}#view=FitH&navpanes=0`;
+  const noTex = !p.info!.latexmk && p.info!.linked;
   usePanelNote('paper', 'tex', {
     论文目录: place.path, 主文件: place.main, 打开的文件: f.cur, 光标: f.cur ? `第 ${at.line} 行` : null, 选中的文字: at.picked,
     版面: { src: '只看源码', split: '源码和 PDF 对照', pdf: '只看 PDF' }[layout], 没保存: f.dirty ? `${f.dirty} 个文件` : null,
@@ -128,8 +124,8 @@ function Tex(p: Props) {
           {run.ok ? tr('编译完成 · {0} 秒', run.seconds.toFixed(1)) + (run.pages ? tr(' · {0} 页', run.pages) : '') : tr('编译失败 · 看日志')}
         </span>}
         {hasPdf && <a className="ib" href={paperPdfUrl(p.lineId, v)} target="_blank" rel="noreferrer" title={tr('在新标签页打开 PDF')}><Icon n="ext" size={15} /></a>}
-        <button className={`btn pri tex-go${busy ? ' busy' : ''}`} disabled={busy || DEMO || (!p.info!.latexmk && p.info!.linked)} onClick={compile}
-          title={!p.info!.latexmk && p.info!.linked ? tr('本机没有 latexmk，装上 TeX 发行版后才能编译') : tr('保存并重新编译（⌘↵）')}>
+        <button className={`btn pri tex-go${busy ? ' busy' : ''}`} disabled={busy || DEMO || noTex} onClick={compile}
+          title={noTex ? tr('本机没有 latexmk，装上 TeX 发行版后才能编译') : tr('保存并重新编译（⌘↵）')}>
           <Icon n={busy ? 'refresh' : 'play'} size={14} />{busy ? tr('编译中…') : tr('重新编译')}
         </button>
       </div>
@@ -137,7 +133,7 @@ function Tex(p: Props) {
         {side && phone && <div className="tex-files-back" onClick={() => setSide(false)} />}
         {side && <aside className="tex-files">
           <span className="ide-t">{tr('文件')}</span>
-          <Tree files={files} cur={f.cur} dirty={dirtySet} root="paper" onOpen={x => {
+          <Tree files={files} cur={f.cur} dirty={f.dirtySet} root="paper" onOpen={x => {
             if (/\.pdf$/i.test(x)) setLayout('pdf');
             else { f.show(x); if (phone) setLayout('src'); }
             if (phone) setSide(false);

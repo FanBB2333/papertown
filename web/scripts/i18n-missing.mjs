@@ -1,9 +1,6 @@
-// Lists the app's tr('…') strings that have no English in src/i18n/en.json yet; those show in
-// Chinese when the page is in English. `pnpm i18n:missing`, exits 1 if any are missing.
-//
-// Text the server sends is translated through the same dictionary (see localize() in i18n.ts):
-// a new server string or f-string template goes into en.json by hand, with {0}, {1}… for the
-// substitutions in the order they appear.
+// `pnpm i18n:missing`: lists tr('…') strings with no entry in src/i18n/en.json; exits 1 if any.
+// Server strings go through the same dictionary (localize() in i18n.ts) and are added by hand,
+// with {0}, {1}… for f-string substitutions in order.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';

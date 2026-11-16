@@ -13,7 +13,7 @@ declare module '@design/sprites.js' {
   export const PROPS: Record<string, { name: string; w: number; d: number; draw(p: Pen): void }>;
   export function iso(x: number, y: number, z?: number): [number, number];
   export const ZU: number;
-  // the isometric sprite pen; Pen3 in town3d re-implements its drawing calls in 3D
+  // Pen3 in town3d re-implements these drawing calls in 3D
   export class Pen {
     constructor(k?: number);
     k: number;
@@ -64,10 +64,6 @@ declare module '@design/world.js' {
   export function placementName(p: { type: string; name?: string | null }): string;
   export function yards(places: { id: string; type: string; x: number; y: number; accent?: string | null }[]): { id: string; pts: [number, number][]; accent: string }[];
   export function decorItems(places: { id: string; type: string; x: number; y: number }[], decor?: 'full' | 'light' | 'none'): { k: number; prop: string; x: number; y: number }[];
-}
-
-declare module '@design/layouts.js' {
-  export const LOGO: string;
 }
 
 declare module '@design/style.css';

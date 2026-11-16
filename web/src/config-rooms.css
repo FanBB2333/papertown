@@ -1,6 +1,5 @@
-/* The configuration rooms: the skill academy (skim's layers), the MCP exchange and the
-   library's RAG. The layers keep one colour each wherever they appear: global, project,
-   conversation. */
+/* The configuration rooms: the skill academy, the MCP exchange and the library's RAG.
+   Each skill layer (global, project, conversation) keeps one colour wherever it appears. */
 
 .room-config { grid-template-columns: 310px minmax(0, 1fr) 330px; }
 .room-config .room-main { padding: 20px 26px 40px; }
@@ -25,7 +24,6 @@
 .sc-project { background: var(--sc-project); }
 .sc-session { background: var(--sc-session); }
 
-/* the chain of layers the chosen one sits in */
 .sk-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
 .sk-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 .sk-link em { font-style: normal; margin: 0 2px; color: var(--muted); }
@@ -33,7 +31,7 @@
 .sk-link.on { color: var(--ink); font-weight: 600; }
 .cr-title { margin: 4px 0 6px; font: 700 20px var(--head); }
 .cr-sub { margin: 18px 0 8px; font: 700 14px var(--head); }
-/* the larger drawn panels need more room inside their pen line */
+/* the larger drawn panels need room inside their pen line */
 .sk-env, .rag-opts, .rag-bench { padding: 16px 20px; }
 .room-config .room-aside code, .room-config .room-aside pre { word-break: break-all; }
 .room-config .room-main > p.muted { margin: 0 0 14px; max-width: 760px; line-height: 1.6; font-size: 13px; }
@@ -96,7 +94,7 @@
 .mcp-st { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; white-space: nowrap; color: var(--muted); background: var(--panel2); }
 .mcp-st.st-ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 .mcp-st.st-error { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
-.mcp-st.st-connecting { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); animation: blink 1.2s var(--in-out, ease-in-out) infinite alternate; }
+.mcp-st.st-connecting { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); animation: blink 1.2s var(--in-out) infinite alternate; }
 @keyframes blink { to { opacity: .45; } }
 .room-exchange .room-side > .btn { margin-top: 6px; align-self: flex-start; }
 .mcp-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 10px; }

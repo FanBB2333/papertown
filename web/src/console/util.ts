@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { tr } from '../i18n';
 
-// Loads `fn` for one project (`id`), again whenever the town ticks. The last answer stays up
-// while the next one comes, but never another project's: switching `id` starts empty.
+// Loads `fn` for project `id`, again on every tick; switching `id` starts empty.
 export function useFetch<T>(fn: () => Promise<T>, id: string, tick = 0, delay = 160) {
   const [s, setS] = useState<{ id: string; data: T | null; err: string }>({ id: '', data: null, err: '' });
   const [bump, setBump] = useState(0);
@@ -12,7 +11,7 @@ export function useFetch<T>(fn: () => Promise<T>, id: string, tick = 0, delay = 
   fnRef.current = fn;
   const mine = s.id === id;
   useEffect(() => {
-    if (!id) return; // nothing to ask for yet (a project still loading)
+    if (!id) return;
     let live = true;
     const t = setTimeout(() => fnRef.current().then(
       data => { if (live) setS({ id, data, err: '' }); },
@@ -20,13 +19,12 @@ export function useFetch<T>(fn: () => Promise<T>, id: string, tick = 0, delay = 
     ), mine ? delay : 0);
     return () => { live = false; clearTimeout(t); };
   }, [id, tick, bump]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { data: mine ? s.data : null, err: mine ? s.err : '', loading: !mine, reload: () => setBump(b => b + 1) };
+  return { data: mine ? s.data : null, err: mine ? s.err : '', reload: () => setBump(b => b + 1) };
 }
 
-// a phone held upright: the console in one column (mobile.css)
+// a phone held upright (mobile.css)
 export const PHONE = '(max-width: 720px)';
 
-// whether a media query holds, kept up to date
 export function useMedia(query: string) {
   const [on, setOn] = useState(() => matchMedia(query).matches);
   useEffect(() => {
@@ -64,7 +62,20 @@ export function dur(s: number | null | undefined) {
   return tr('{0} 小时', (s / 3600).toFixed(1));
 }
 
-// the first sentence of a long text, cut to about n characters: what a reader takes in at a glance
+// Enter sends, Shift+Enter breaks the line, and neither while an IME is composing
+export const enterSends = (send: () => void) => (e: React.KeyboardEvent) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
+};
+
+export const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(1, Math.floor(n) - 1))}…` : s);
+
+export const toggled = <T>(s: Set<T>, k: T) => {
+  const x = new Set(s);
+  if (x.has(k)) x.delete(k); else x.add(k);
+  return x;
+};
+
+// the first sentence of a long text, cut to about n characters
 export function gist(text: string | null | undefined, n = 90) {
   const t = (text ?? '').replace(/\s+/g, ' ').trim();
   if (!t) return '';
@@ -73,7 +84,7 @@ export function gist(text: string | null | undefined, n = 90) {
   return first.length > n ? `${first.slice(0, n - 1).trimEnd()}…` : first;
 }
 
-// a text split into its sentences, for lists of short points
+// a text split into its sentences
 export function points(text: string | null | undefined): string[] {
   return (text ?? '').replace(/\s+/g, ' ').split(/(?<=[。！？!?；;])|(?<=\.)\s+/).map(s => s.trim()).filter(s => s.length > 1);
 }
@@ -81,8 +92,8 @@ export function points(text: string | null | undefined): string[] {
 export const ext = (path: string) => (path.includes('.') ? path.slice(path.lastIndexOf('.') + 1).toLowerCase() : '');
 export const base = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 
-// brings el into view inside its own scrolling row, sideways only: scrollIntoView would scroll
-// every box around it too, the page's own (overflow hidden) included
+// Scrolls el into view sideways inside box only: scrollIntoView would also scroll the ancestors,
+// the page's overflow-hidden root included.
 export function revealX(box: HTMLElement | null, el: Element | null | undefined, center = false) {
   if (!box || !el) return;
   const b = box.getBoundingClientRect(), r = el.getBoundingClientRect();
@@ -92,8 +103,7 @@ export function revealX(box: HTMLElement | null, el: Element | null | undefined,
   if (to !== box.scrollLeft) box.scrollTo({ left: to, behavior: 'smooth' });
 }
 
-// a record's values under the keys that lead to them, "a.b.c", up to a few levels down;
-// lists of records stay whole, as one value
+// a record's values under dotted keys ("a.b.c"), a few levels down; arrays stay whole
 export function flat(v: unknown, pre = '', out: [string, unknown][] = [], depth = 0): [string, unknown][] {
   if (v && typeof v === 'object' && !Array.isArray(v) && depth < 5) {
     for (const [k, x] of Object.entries(v)) flat(x, pre ? `${pre}.${k}` : k, out, depth + 1);
@@ -111,8 +121,8 @@ export function headline(v: unknown, n = 4): [string, number][] {
   return [...good, ...rest].slice(0, n);
 }
 
-// Each key by its shortest dotted tail that no other key in the set shares, so three
-// "…overall"s read as ChartQA.overall, TextVQA.overall…; a generic last part keeps its parent.
+// Each key by its shortest dotted tail no other key shares (ChartQA.overall, TextVQA.overall…);
+// a generic last part keeps its parent.
 const GENERIC = /^(overall|score|scores|acc|accuracy|mean|avg|average|value|total|result|f1|em|exact|all)$/i;
 export function tails(keys: string[]): string[] {
   const parts = keys.map(k => k.split('.'));
@@ -124,7 +134,6 @@ export function tails(keys: string[]): string[] {
     return keys[i];
   });
 }
-// a result's headline numbers with the names to show them by
 export const headlines = (v: unknown, n = 4) => {
   const h = headline(v, n), names = tails(h.map(([k]) => k));
   return h.map(([k, x], i) => ({ k, name: names[i], v: x }));
@@ -137,5 +146,5 @@ export function pctOf(line: string | null | undefined): number | null {
   return m[2] ? (100 * +m[1]) / Math.max(1, +m[2]) : +m[1];
 }
 
-// the line of an error that says what went wrong: a traceback ends with it
+// the last non-empty line of an error, where a traceback says what went wrong
 export const lastLine = (s: string | null | undefined) => (s ?? '').split('\n').map(x => x.trim()).filter(Boolean).at(-1) ?? '';

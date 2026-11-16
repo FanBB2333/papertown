@@ -1,14 +1,12 @@
-// 风格展示: what a look is made of, on one page. The real controls, so changing the look at the top
-// changes everything under it. In the macOS look there is also a piece of Liquid Glass to drag over
-// the town, and the three strengths of the material side by side.
+// The style showcase: what the current look is made of, its glass, controls, menus and colours.
 
-import { Badge, Banner, Button, Checkbox, Dialog, Input, Meter, Popover, Radio, Select, Slider, Switch, Tabs, Tooltip } from '@cloudflare/kumo';
+import { Badge, Banner, Button, Checkbox, Dialog, Input, Meter, Popover, Radio, Select, Tabs, Tooltip } from '@cloudflare/kumo';
 import { CheckCircleIcon, FolderIcon, PlusIcon, TrashIcon, WarningIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 import { bends, useLens } from '../glass';
 import { tr } from '../i18n';
 import { setSettings, type Settings as S } from '../settings';
-import { Card, Note, Row } from './controls';
+import { Card, Note, Range, Row, Toggle } from './controls';
 import { LookPicker, Scene } from './looks';
 
 const PLATES: [string, number][] = [[tr('清透'), .18], [tr('标准'), .5], [tr('着色'), .86]];
@@ -56,7 +54,7 @@ function Controls() {
       </Row>
       <Row label={tr('开关和选择')}>
         <div className="sc-line">
-          <Switch aria-label={tr('开关')} checked={on} onCheckedChange={setOn} />
+          <Toggle label={tr('开关')} value={on} onChange={setOn} />
           <Checkbox aria-label={tr('勾选')} checked={tick} onCheckedChange={setTick} />
           <Radio.Group aria-label={tr('单选')} orientation="horizontal" value={pick} onValueChange={x => setPick(x as string)}>
             <Radio.Legend className="sr-only">{tr('单选')}</Radio.Legend>
@@ -66,7 +64,7 @@ function Controls() {
         </div>
       </Row>
       <Row label={tr('滑块')}>
-        <div className="st-range"><Slider size="sm" value={v} min={0} max={100} getAriaLabel={() => tr('滑块')} onValueChange={x => setV(x as number)} /><output>{v}%</output></div>
+        <Range label={tr('滑块')} value={v} min={0} max={100} fmt={x => `${x}%`} onChange={setV} />
       </Row>
       <Row label={tr('列表')}>
         <Select aria-label={tr('列表')} value={list} items={{ need: tr('等你的在前'), recent: tr('最近更新'), number: tr('编号') }} onValueChange={x => x != null && setList(x as string)} className="kc-select" />

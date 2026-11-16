@@ -1,48 +1,40 @@
-// Asking a project anything, with the whole window given to it as in a chat, at
-// /progress/<number>/ask. Papertown looks through what the project holds (its card and reports,
-// its experiments, its code and paper, the agent conversations imported for it) and answers from
-// the pieces it found, each numbered so you can open it; offline the answer is those pieces' own
-// sentences. "The lead answers too" also sends the question to the project's lead, which reads
-// the project itself and writes back under the same question, mostly as a page in HTML, shown
-// here in a sandbox and kept under 汇报与讲解 (Pages.tsx).
-// On the left are the questions asked before (they are one thread per project) and the other
-// projects to ask; on a phone that list slides in from the side. The project's page has a small
-// box that starts a question here.
+// Asking a project anything, full window, at /progress/<number>/ask: answers from what the project
+// holds, with numbered sources; its lead can answer too, often with a page (Pages.tsx).
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, listen, type Hit, type HitKind, type ProjectCard, type Question } from '../api';
-import { STATUS } from '../components/MillRoom';
+import { StatusTag } from '../components/MillRoom';
 import { Icon, type IconName } from '../console/icons';
-import { ago, useMedia } from '../console/util';
+import { ago, enterSends, useMedia } from '../console/util';
 import { tr } from '../i18n';
 import { follow, go, href, query } from '../route';
 import { PageFrame, pagesPath, type PageOpen } from './Pages';
 import './ask.css';
 
-export const HIT: Record<HitKind, [string, IconName]> = {
+const HIT: Record<HitKind, [string, IconName]> = {
   card: [tr('进展卡片'), 'cards'], report: [tr('汇报'), 'bell'], line: [tr('项目'), 'compass'], job: [tr('实验'), 'flask'],
   code: [tr('代码'), 'code'], paper: [tr('论文'), 'books'], session: [tr('以前的对话'), 'chat'], note: [tr('记忆'), 'quote'],
 };
-export const EXAMPLES: [IconName, string][] = [
+const EXAMPLES: [IconName, string][] = [
   ['flask', tr('现在在跑哪些实验，各跑到哪了？')], ['table', tr('主要结果和 baseline 比怎么样？')],
   ['chat', tr('以前和 agent 讨论过哪些没做完的事？')], ['books', tr('论文还差哪几节？')],
 ];
 
-export type OpenHit = (h: Hit) => void;
+type OpenHit = (h: Hit) => void;
 export const askPath = (seq: number, q?: string) => `/progress/${seq}/ask${q ? `?q=${q}` : ''}`;
 
 // a question typed on the project's page, asked once this page opens
 let later: { lineId: string; q: string } | null = null;
-export function askLater(lineId: string, seq: number, q: string) {
+function askLater(lineId: string, seq: number, q: string) {
   later = { lineId, q };
   go(askPath(seq));
 }
 
-// a project's questions, kept current: asked here, answered by its lead, removed
-export function useQuestions(lineId: string, toast: (t: string) => void) {
+// a project's questions, kept current
+function useQuestions(lineId: string, toast: (t: string) => void) {
   const [qs, setQs] = useState<Question[] | null>(null);
-  const [lead, setLead] = useState(false); // the project has a lead to answer
+  const [lead, setLead] = useState(false);
   const [offline, setOffline] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -50,7 +42,7 @@ export function useQuestions(lineId: string, toast: (t: string) => void) {
     api.questions(lineId).then(r => { if (alive) { setQs(r.questions); setLead(r.lead); setOffline(r.offline); } }).catch(e => toast((e as Error).message));
     const off = listen(e => {
       if (e.type === 'question' && e.line_id === lineId) setQs(q => q && [...q.filter(x => x.id !== e.question.id), e.question].sort((a, b) => a.n - b.n));
-      if (e.type === 'agent' && e.agent?.role === 'lead' && e.agent?.line_id === lineId) setLead(!!e.agent.started);
+      if (e.type === 'agent' && e.agent?.role === 'lead' && e.agent.line_id === lineId) setLead(!!e.agent.started);
     });
     return () => { alive = false; off(); };
   }, [lineId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -61,7 +53,7 @@ export function useQuestions(lineId: string, toast: (t: string) => void) {
   return { qs, lead, offline, put, drop };
 }
 
-// the questions in the list on the left, newest first, under the day they were asked
+// the questions newest first, under the day they were asked
 function byDay(qs: Question[]): [string, Question[]][] {
   const day = 86400000, start = new Date().setHours(0, 0, 0, 0);
   const groups: [string, Question[]][] = [[tr('今天'), []], [tr('昨天'), []], [tr('最近 7 天'), []], [tr('更早'), []]];
@@ -79,8 +71,8 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
   const { qs, lead, offline, put, drop } = useQuestions(line.id, toast);
   const [text, setText] = useState('');
   const [toLead, setToLead] = useState(false);
-  const [asking, setAsking] = useState<string | null>(null); // the question on its way
-  const [nav, setNav] = useState(false); // the list, slid in on a narrow screen
+  const [asking, setAsking] = useState<string | null>(null);
+  const [nav, setNav] = useState(false);
   const [lit, setLit] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -96,14 +88,12 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
     try { put(await api.askProject(line.id, q, withLead && lead)); } catch (e) { toast((e as Error).message); setText(q); } finally { setAsking(null); }
   }
 
-  // a question typed on the project's page; else the cursor in the box
   useEffect(() => {
     setLit(null); setNav(false); setText('');
     if (later?.lineId === line.id) { const q = later.q; later = null; send(q, false); }
     box.current?.focus();
   }, [line.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // opened at one question (?q=): there; otherwise, and whenever one is added, the newest
   const count = (qs?.length ?? -1) + (asking ? 1 : 0);
   const first = useRef(true);
   useLayoutEffect(() => { first.current = true; }, [line.id]);
@@ -178,7 +168,7 @@ export function AskPage({ r, rows, toast, onOpenHit, onOpenPage }: {
           <button className="ib ak-menu" onClick={() => setNav(true)} title={tr('问过的')} aria-label={tr('问过的')}><Icon n="sidebar" size={18} /></button>
           <div className="ak-title">
             <span className="pc-seq">#{line.seq}</span><b title={line.title}>{line.title}</b>
-            <span className={`pst pst-${line.status}`}>{STATUS[line.status] ?? line.status}</span>
+            <StatusTag status={line.status} />
           </div>
           <a className="ib ak-x" href={href(back)} onClick={e => follow(e, back)} title={tr('回到项目')} aria-label={tr('关闭')}><Icon n="close" size={18} /></a>
         </header>
@@ -230,7 +220,6 @@ function Composer({ box, seq, text, setText, lead, toLead, setToLead, busy, onSe
   box: React.RefObject<HTMLTextAreaElement>; seq: number; text: string; setText: (t: string) => void;
   lead: boolean; toLead: boolean; setToLead: (v: boolean) => void; busy: boolean; onSend: () => void;
 }) {
-  // as tall as what is typed, up to a point
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -242,7 +231,7 @@ function Composer({ box, seq, text, setText, lead, toLead, setToLead, busy, onSe
     <form className="ak-comp" onSubmit={e => { e.preventDefault(); onSend(); }}>
       <textarea ref={box} rows={1} value={text} maxLength={1000} placeholder={tr('问 #{0} 任何问题：实验、结果、代码、论文、以前的讨论…', seq)}
         onChange={e => setText(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); onSend(); } }} />
+        onKeyDown={enterSends(onSend)} />
       <div className="ak-comp-row">
         <button type="button" className={`ak-pill${on ? ' on' : ''}`} disabled={!lead} aria-pressed={on} onClick={() => setToLead(!toLead)}
           title={lead ? tr('负责人会读项目，用 pt reply 写回答') : tr('这个项目还没有负责人')}>
@@ -372,7 +361,7 @@ export function AskBox({ r, toast }: { r: ProjectCard; toast: (t: string) => voi
       <form className="ak-comp mini" onSubmit={e => { e.preventDefault(); start(text); }}>
         <textarea rows={2} value={text} maxLength={1000} placeholder={tr('问 #{0} 任何问题：实验、结果、代码、论文、以前的讨论…', line.seq)}
           onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); start(text); } }} />
+          onKeyDown={enterSends(() => start(text))} />
         <div className="ak-comp-row">
           <span className="small muted">{tr('在全屏里回答')}</span>
           <button className="ak-send" type="submit" disabled={!text.trim()} aria-label={tr('提问')}><Icon n="send" size={15} /></button>

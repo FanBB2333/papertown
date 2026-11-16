@@ -1,7 +1,5 @@
-/* Asking a project anything: the whole window, a list of the questions on the left and the
-   thread in a centred column, the box to ask in at the bottom (in the middle while there are
-   none yet). Below 900px the list slides in from the left; below 600px the column fills the
-   width. */
+/* Asking a project (Ask.tsx) and reading the pages agents wrote (Pages.tsx): a full-window
+   view with the list on the left and a centred column. */
 
 .ak {
   position: fixed; inset: 0; z-index: 70; display: grid; grid-template-columns: 276px minmax(0, 1fr);
@@ -176,7 +174,7 @@
     transform: translateX(-104%); transition: transform .32s var(--out); box-shadow: 18px 0 40px -28px rgba(40, 25, 10, .6);
   }
   .ak-side.open { transform: none; }
-  .ak-scrim { display: block; position: fixed; inset: 0; z-index: 1; background: color-mix(in srgb, var(--ink) 24%, transparent); animation: pd-fade .25s var(--out) both; }
+  .ak-scrim { display: block; position: fixed; inset: 0; z-index: 1; background: color-mix(in srgb, var(--ink) 24%, transparent); animation: fade .25s var(--out) both; }
   .ak-menu { display: grid; width: 36px; height: 36px; place-items: center; }
   .ak-top { padding: 0 10px; }
 }

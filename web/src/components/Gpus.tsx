@@ -1,11 +1,10 @@
-// The GPUs on your own machines, from nvidb: a card per machine and a tile per GPU, its
-// memory split into what the queue's jobs hold, what other work holds, what is promised to
-// jobs and what is left; and one machine in full, with the lanes that feed each card. Read
-// only; jobs are still submitted with `nvidb job submit`.
+// The GPUs on your own machines, read only from nvidb: a card per machine, a tile per GPU,
+// and one machine in full with the lanes that feed each card.
 
 import { useEffect, useRef, useState } from 'react';
 import { api, type Gpu, type GpuNode, type GpuStatus, type NvJob, type NvLane } from '../api';
 import { ST, stOf, type St } from '../console/charts';
+import { dur } from '../console/util';
 import '../gpus.css';
 import { tr } from '../i18n';
 
@@ -20,8 +19,7 @@ function ago(ts: string | null | undefined) {
   return s < 60 ? tr('{0} 秒前', Math.round(s)) : s < 3600 ? tr('{0} 分钟前', Math.floor(s / 60)) : tr('{0} 小时前', Math.floor(s / 3600));
 }
 
-// One reading for the whole page, every few seconds while it is visible, shared by every view
-// that shows the cards, so they never disagree. refreshGpus() asks nvidb again at once.
+// One reading shared by every view that shows the cards, polled while the page is visible.
 let last: GpuStatus | null = null;
 let timer = 0;
 const subs = new Set<(g: GpuStatus) => void>();
@@ -82,7 +80,7 @@ function GpuTile({ g, i }: { g: Gpu; i: number }) {
   );
 }
 
-function Head({ g, onFresh }: { g: GpuStatus; onFresh?: () => void }) {
+function Head({ g }: { g: GpuStatus }) {
   const s = g.summary!;
   const run = g.counts.running ?? 0, wait = g.counts.pending ?? 0;
   return (
@@ -97,14 +95,13 @@ function Head({ g, onFresh }: { g: GpuStatus; onFresh?: () => void }) {
       </div>
       <p className="muted small">
         nvidb · {s.up}/{s.nodes} {tr('台在线 ·')} {ago(g.ticked ?? g.at)}{tr('更新')}{g.alerts ? tr(' · {0} 条告警没确认', g.alerts) : ''} {tr('· 只读，提交任务用')} <code>nvidb job submit</code>
-        {onFresh && <button className="lnk" onClick={onFresh}>{tr('刷新')}</button>}
+        <button className="lnk" onClick={refreshGpus}>{tr('刷新')}</button>
       </p>
     </div>
   );
 }
 
-// the whole board: for the farm's details and the power plant. focus `node:<name>` (or
-// `node:<name>/<gpu>`) opens that machine straight away, as its cabinet in the 3D walk does
+// focus `node:<name>` or `node:<name>/<gpu>` opens that machine straight away
 export function GpuBoard({ focus }: { focus?: string | null }) {
   const g = useGpus();
   const want = /^node:(.+?)(?:\/(\d+))?$/.exec(focus ?? '');
@@ -116,7 +113,7 @@ export function GpuBoard({ focus }: { focus?: string | null }) {
   return (
     <section className="gpus">
       <h4>{tr('显卡 · 本机能用的 GPU')}</h4>
-      <Head g={g} onFresh={refreshGpus} />
+      <Head g={g} />
       <div className="nodes">
         {g.nodes.map(n => (
           <div key={n.name} className={`node${n.state === 'up' ? '' : ' down'}`}>
@@ -138,7 +135,7 @@ export function GpuBoard({ focus }: { focus?: string | null }) {
   );
 }
 
-// one line of it, for the top of the farm's floor
+// the board in one line, for the top of the farm's floor
 export function GpuStrip() {
   const g = useGpus();
   if (!g) return null;
@@ -159,24 +156,22 @@ export function GpuStrip() {
   );
 }
 
-// ---------- one machine in full ----------
-
 const JOB_ST: Record<string, string> = {
   running: tr('在跑'), pending: tr('排队'), held: tr('被卡住'), completed: tr('完成'), failed: tr('失败'), lost: tr('丢失'), timeout: tr('超时'), cancelled: tr('已取消'),
 };
-const span = (s: number) => s < 90 ? tr('{0} 秒', Math.round(s)) : s < 5400 ? tr('{0} 分钟', Math.round(s / 60)) : tr('{0} 小时', (s / 3600).toFixed(1));
-// how long a process the queue did not start has been on its card: nvidb does not record when it
-// started, so this counts from when Papertown first saw it, "at least" when it was already there then
-export function seenFor(p: { seen_since?: string; earlier?: boolean }) {
+const queued = (lanes: NvLane[]) => lanes.reduce((a, l) => a + l.queued.length, 0);
+
+// nvidb does not record when an outside process started, so this counts from when Papertown
+// first saw it ("at least" when it was already there then)
+function seenFor(p: { seen_since?: string; earlier?: boolean }) {
   if (!p.seen_since) return '';
   const s = Math.max(0, (Date.now() - Date.parse(p.seen_since)) / 1000);
-  return p.earlier ? tr('至少 {0}', span(s)) : span(s);
+  return p.earlier ? tr('至少 {0}', dur(s)) : dur(s);
 }
 
-// what runs and waits on a machine, for its card on the board
 function nodeLine(g: GpuStatus, n: GpuNode) {
   const run = g.jobs.filter(j => j.state === 'running' && j.node === n.name).length;
-  const wait = (g.lanes ?? []).filter(l => l.node === n.name).reduce((a, l) => a + l.queued.length, 0);
+  const wait = queued((g.lanes ?? []).filter(l => l.node === n.name));
   return run || wait ? tr('在跑 {0} · 队列里 {1}', run, wait) : '';
 }
 
@@ -228,7 +223,7 @@ function JobRow({ j, pos, on, pre = '', quiet }: { j: NvJob; pos?: number; on?: 
           {on && <span className={`nd-fit${fit ? ' ok' : ''}`}>{fit ? tr('现在放得下') : tr('还差 {0}', gb(j.vram_mb - on.free_mb))}</span>}
           <span className="nd-vram" title={tr('预留的显存')}>{j.vram_mb ? gb(j.vram_mb) : tr('不预留显存')}</span>
           {cards > 1 && <span className="nd-vram">{tr('{0} 张卡', cards)}</span>}
-          {run ? j.elapsed_s != null && <span className="nd-when">{tr('跑了 {0}', span(j.elapsed_s))}</span>
+          {run ? j.elapsed_s != null && <span className="nd-when">{tr('跑了 {0}', dur(j.elapsed_s))}</span>
             : j.created_at && <span className="nd-meta">{tr('{0}提交', ago(j.created_at))}</span>}
           {j.submitter && <span className="nd-meta nd-who" title={j.submitter}>{j.submitter}</span>}
         </div>
@@ -244,7 +239,7 @@ function JobRow({ j, pos, on, pre = '', quiet }: { j: NvJob; pos?: number; on?: 
         {j.held_reason && <><dt>{tr('卡在')}</dt><dd className="warn">{j.held_reason}</dd></>}
         {!!j.depends_on?.length && <><dt>{tr('等这些')}</dt><dd>{j.depends_on.map(d => <span key={d} className="nd-dep">#{d}</span>)}</dd></>}
         {j.gpu_mem_mb != null && <><dt>{tr('实际显存')}</dt><dd>{gb(j.gpu_mem_mb)}</dd></>}
-        {j.max_runtime_s != null && <><dt>{tr('限时')}</dt><dd>{span(j.max_runtime_s)}</dd></>}
+        {j.max_runtime_s != null && <><dt>{tr('限时')}</dt><dd>{dur(j.max_runtime_s)}</dd></>}
         {!!j.priority && <><dt>{tr('优先级')}</dt><dd>{j.priority}</dd></>}
         {j.workdir && <><dt>{tr('目录')}</dt><dd className="brk">{j.workdir}</dd></>}
       </dl>
@@ -254,8 +249,7 @@ function JobRow({ j, pos, on, pre = '', quiet }: { j: NvJob; pos?: number; on?: 
   );
 }
 
-// a machine: its lanes, then each card with what runs on it, what waits in its lanes in
-// running order, and the jobs not yet given a card that it could take
+// a machine: its lanes, then each card with what runs on it, what waits for it, and what it could take
 function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: number | null; onBack: () => void }) {
   const top = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -282,7 +276,8 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
   const laneState = (l: NvLane): [string, string] => l.paused ? [tr('暂停'), 'pst-paused'] : l.blocked ? [tr('卡住了'), 'pst-failed']
     : l.running.length ? [tr('在跑'), 'pst-running'] : l.queued.length ? [tr('待启动'), 'pst-waiting'] : [tr('空着'), 'pst-idle'];
   const jobsOf = (ids: number[]) => ids.map(id => byId.get(id)).filter((j): j is NvJob => !!j);
-  const stuck = held.length + lanes.flatMap(l => jobsOf(l.queued)).filter(j => j.held).length; // in its lanes too
+  const stuck = held.length + lanes.flatMap(l => jobsOf(l.queued)).filter(j => j.held).length;
+  const heldPre = shared(held.map(j => j.name));
   return (
     <div className="nd" ref={top}>
       <div className="nd-head">
@@ -297,7 +292,7 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
       {n.last_error && n.state !== 'up' && <p className="warn-box small">{n.last_error}</p>}
       <div className="gpus-sum">
         <div className="s-running"><b>{running.length}</b><span>{tr('在跑')}</span></div>
-        <div className="s-queued"><b>{lanes.reduce((a, l) => a + l.queued.length, 0)}</b><span>{tr('队列里')}</span></div>
+        <div className="s-queued"><b>{queued(lanes)}</b><span>{tr('队列里')}</span></div>
         <div><b>{lanes.length}</b><span>{tr('条队列', lanes.length)}</span></div>
         <div className={stuck ? 's-failed' : ''}><b>{stuck}</b><span>{tr('被卡住')}</span></div>
       </div>
@@ -326,7 +321,7 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
           const now = running.filter(j => j.gpu_ids.includes(x.index));
           const other = x.procs.filter(p => !p.managed);
           const feed = lanes.filter(l => l.gpu_ids.includes(x.index) && l.queued.length);
-          const cand = could(x), shown = cand.slice(0, 5);
+          const cand = could(x), shown = cand.slice(0, 5), shownPre = shared(shown.map(j => j.name));
           const fits = shown.some(j => j.vram_mb <= x.free_mb);
           return (
             <div key={x.index} className={`nd-gpu${gpu === x.index ? ' hot' : ''}`} data-gpu={x.index}>
@@ -339,7 +334,7 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
                   {!now.length && !other.length && <p className="muted small">{tr('没有任务')}</p>}
                 </div>
                 <div>
-                  <h6 className="nd-ch s-queued"><i />{tr('排在这张卡的队列里')}<em>{feed.reduce((a, l) => a + l.queued.length, 0)}</em></h6>
+                  <h6 className="nd-ch s-queued"><i />{tr('排在这张卡的队列里')}<em>{queued(feed)}</em></h6>
                   {feed.map(l => {
                     const js = jobsOf(l.queued), pre = shared(js.map(j => j.name));
                     return (
@@ -353,7 +348,7 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
                 </div>
                 <div>
                   <h6 className={`nd-ch ${!shown.length ? 's-queued' : fits ? 'c-ok' : 'c-warn'}`}><i />{tr('还能派到这里')}<em>{cand.length}</em></h6>
-                  {shown.map(j => <JobRow key={j.id} j={j} on={x} pre={shared(shown.map(c => c.name))} quiet="queued" />)}
+                  {shown.map(j => <JobRow key={j.id} j={j} on={x} pre={shownPre} quiet="queued" />)}
                   {cand.length > 5 && <p className="muted small">{tr('还有 {0} 个', cand.length - 5)}</p>}
                   {!cand.length && <p className="muted small">{tr('没有等分配、放得进这张卡的任务')}</p>}
                 </div>
@@ -365,7 +360,7 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
 
       {held.length > 0 && <>
         <h5 className="nd-h">{tr('指定这台机器、但被卡住的任务')}</h5>
-        <div className="nd-held">{held.map(j => <JobRow key={j.id} j={j} pre={shared(held.map(h => h.name))} quiet="failed" />)}</div>
+        <div className="nd-held">{held.map(j => <JobRow key={j.id} j={j} pre={heldPre} quiet="failed" />)}</div>
       </>}
       <p className="muted small nd-foot">{tr('只读。调顺序、暂停队列、放行被卡住的任务，用 nvidb 的命令：')}<code>nvidb queue lanes --node {n.name}</code></p>
     </div>

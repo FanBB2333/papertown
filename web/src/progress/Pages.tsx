@@ -1,29 +1,26 @@
-// 汇报与讲解, at /progress/<number>/pages[/<page>]: the pages a project's agents wrote for you
-// in HTML (reports, explainers, answers to your questions), the whole window given to one of
-// them, ready to present (演示 puts it on the full screen, ←/→ goes through them). On the left are
-// the project's pages, newest first; on a phone that list slides in.
-// A page runs in a sandbox (pages.py): it says how tall it is and asks to open what it links to,
-// a file, a job or another page, and nothing else reaches this page from it.
+// 汇报与讲解 at /progress/<number>/pages[/<page>]: the HTML pages a project's agents wrote, ready to
+// present. A page runs in a sandbox (pages.py): it only reports its height and asks to open links;
+// nothing else from it reaches this page.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, listen, type Page, type PageKind, type ProjectCard } from '../api';
-import { STATUS } from '../components/MillRoom';
+import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
-import { ago } from '../console/util';
+import { ago, enterSends } from '../console/util';
 import { tr } from '../i18n';
 import { follow, go, href } from '../route';
 import { askPath } from './Ask';
 import './ask.css';
 
-export const KIND: Record<PageKind, string> = { report: tr('汇报'), explain: tr('讲解'), answer: tr('回答') };
+const KIND: Record<PageKind, string> = { report: tr('汇报'), explain: tr('讲解'), answer: tr('回答') };
 export const pagesPath = (seq: number, id?: string) => `/progress/${seq}/pages${id ? `/${id}` : ''}`;
 
 export interface PageOpen { file?: string; job?: string; page?: string }
 
 // one page, sandboxed; given `fit`, the frame grows with the page up to that height
 export function PageFrame({ src, title, fit, onOpen, onKey }: {
-  src: string; title: string; fit?: number; onOpen?: (o: PageOpen) => void; onKey?: (key: string) => void;
+  src: string; title: string; fit?: number; onOpen: (o: PageOpen) => void; onKey?: (key: string) => void;
 }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const [h, setH] = useState<number | null>(null);
@@ -33,7 +30,7 @@ export function PageFrame({ src, title, fit, onOpen, onKey }: {
     const on = (e: MessageEvent) => {
       if (e.source !== ref.current?.contentWindow || !e.data || e.data.pt !== 1) return;
       if (typeof e.data.h === 'number') setH(e.data.h);
-      if (e.data.open) onOpen?.(e.data.open);
+      if (e.data.open) onOpen(e.data.open);
       if (typeof e.data.key === 'string') onKey?.(e.data.key);
     };
     addEventListener('message', on);
@@ -49,7 +46,7 @@ export function PageFrame({ src, title, fit, onOpen, onKey }: {
 }
 
 // a project's pages, kept current
-export function usePages(lineId: string, toast: (t: string) => void) {
+function usePages(lineId: string, toast: (t: string) => void) {
   const [pages, setPages] = useState<Page[] | null>(null);
   useEffect(() => {
     let alive = true;
@@ -81,13 +78,12 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
 
   useEffect(() => { setNav(false); }, [pid, line.id]);
 
-  // ←/→: the page above or below in the list (newest first); from inside the page too
-  const step = useCallback((d: -1 | 1) => {
+  function step(d: -1 | 1) {
     const order = cur && list.some(p => p.id === cur.id) ? list : newest;
     const next = order[order.findIndex(p => p.id === cur?.id) + d];
     if (next) go(pagesPath(line.seq, next.id), true);
-  }, [list, newest, cur, line.seq]);
-  const onKey = useCallback((k: string) => { if (k === 'ArrowLeft') step(-1); else if (k === 'ArrowRight') step(1); }, [step]);
+  }
+  const onKey = (k: string) => { if (k === 'ArrowLeft') step(-1); else if (k === 'ArrowRight') step(1); };
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable]') || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -131,7 +127,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
               const to = pagesPath(line.seq, p.id);
               return (
                 <li key={p.id} className={cur?.id === p.id ? 'on' : ''}>
-                  <a href={href(to)} onClick={e => { follow(e, to); }} aria-current={cur?.id === p.id ? 'page' : undefined}>
+                  <a href={href(to)} onClick={e => follow(e, to)} aria-current={cur?.id === p.id ? 'page' : undefined}>
                     <b>{p.title}</b>
                     <span><i className={`pv-k k-${p.kind}`}>{KIND[p.kind]}</i>{ago(p.at)}{p.by ? ` · ${p.by}` : ''}</span>
                   </a>
@@ -155,7 +151,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
               </span>
             </div>
           ) : (
-            <div className="ak-title"><span className="pc-seq">#{line.seq}</span><b>{line.title}</b><span className={`pst pst-${line.status}`}>{STATUS[line.status] ?? line.status}</span></div>
+            <div className="ak-title"><span className="pc-seq">#{line.seq}</span><b>{line.title}</b><StatusTag status={line.status} /></div>
           )}
           {cur && (
             <div className="pv-acts">
@@ -189,7 +185,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
   );
 }
 
-// asking the lead for a page: a question that goes to it, answered with a page
+// asks the lead for a page: a question it answers with a page
 function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: string) => void; big?: boolean; onDone?: () => void }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -208,7 +204,7 @@ function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: st
     <form className={`ak-comp${big ? '' : ' mini pv-req'}`} onSubmit={e => { e.preventDefault(); send(); }}>
       <textarea rows={big ? 2 : 3} value={text} maxLength={1000} autoFocus={!big} placeholder={tr('想让负责人讲什么？比如「把这周的实验结果做成一页对比」')}
         onChange={e => setText(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} />
+        onKeyDown={enterSends(send)} />
       <div className="ak-comp-row">
         <span className="small muted">{tr('负责人读完项目写成一页')}</span>
         <button className="ak-send" type="submit" disabled={busy || !text.trim()} aria-label={tr('发给负责人')}><Icon n="send" size={15} /></button>

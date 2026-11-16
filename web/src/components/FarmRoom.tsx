@@ -1,7 +1,5 @@
-// The experiment farm: one board for every job, whoever submitted it, and one monitor
-// per project writing down what its jobs are doing. Under the backends strip, the GPUs
-// nvidb sees on your machines; a linked project's jobs in nvidb's queue are on the board
-// too, read only.
+// The experiment farm: one board for every job, a monitor per project noting what its jobs do, the
+// backends and the GPUs nvidb sees. A linked project's jobs in nvidb's queue are shown read only.
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, listen, type Job, type JobBoard, type Line, type RosterRow } from '../api';
@@ -82,7 +80,7 @@ function NvidbJob({ n }: { n: NonNullable<Job['nvidb']> }) {
 }
 
 function Result({ r }: { r: any }) {
-  if (r?.rows && r?.metrics) {
+  if (r.rows && r.metrics) {
     return (
       <table className="rtab"><thead><tr><th>{tr('方法')}</th>{r.metrics.map((m: string) => <th key={m}>{m}</th>)}</tr></thead>
         <tbody>{r.rows.map((x: any) => <tr key={x.method} className={x.ours ? 'ours' : ''}><td>{x.method}</td>{x.values.map((v: number, i: number) => <td key={i}>{v}</td>)}</tr>)}</tbody>
@@ -111,9 +109,10 @@ export function FarmRoom(p: Props) {
     return () => clearTimeout(t);
   }, [bump, p.tick]);
 
-  const active = (backend: string) => (board?.jobs ?? []).filter(j => j.backend === backend && ['queued', 'running'].includes(j.status)).length;
+  const all = board?.jobs ?? [];
+  const active = (backend: string) => all.filter(j => j.backend === backend && ['queued', 'running'].includes(j.status)).length;
   const seq = useMemo(() => Object.fromEntries(p.lines.map(l => [l.id, l.seq])), [p.lines]);
-  const jobs = (board?.jobs ?? []).filter(j => !only || j.line_id === only);
+  const jobs = all.filter(j => !only || j.line_id === only);
   const groups: [string, Job[]][] = [
     [tr('运行中'), jobs.filter(j => j.status === 'running')],
     [tr('排队'), jobs.filter(j => j.status === 'queued')],
@@ -125,12 +124,12 @@ export function FarmRoom(p: Props) {
       <aside className="room-side">
         <h4 className="side-h">{tr('看田员')} <span className="muted small">{tr('每个项目一位，盯实验进度')}</span></h4>
         <button className={`mon${!only ? ' on' : ''}`} onClick={() => setOnly(null)}>
-          <b>{tr('全部项目')}</b><span className="muted small">{tr('{0} 个任务', board?.jobs.length ?? 0)}</span>
+          <b>{tr('全部项目')}</b><span className="muted small">{tr('{0} 个任务', all.length)}</span>
         </button>
         {monitors.map(({ line, agent }, i) => (
           <button key={line.id} className={`mon${only === line.id ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={() => setOnly(line.id)}>
             <div className="proj-top"><b>#{line.seq} {line.title}</b>
-              <span className={`pulse${(board?.jobs ?? []).some(j => j.line_id === line.id && j.status === 'running') ? ' on' : ''}`} /></div>
+              <span className={`pulse${all.some(j => j.line_id === line.id && j.status === 'running') ? ' on' : ''}`} /></div>
             <p className="mon-note">{agent?.last?.data?.text ?? linkedNote(p.lines.find(l => l.id === line.id)) ?? tr('还没有实验。代码员工提交任务后，这里会写下进度。')}</p>
             {agent?.last && <span className="muted small">{ago(agent.last.ts)}</span>}
           </button>

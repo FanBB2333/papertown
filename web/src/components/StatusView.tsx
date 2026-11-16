@@ -1,6 +1,7 @@
 // The status view (layout D): the same town, told plainly — projects, papers, GPUs,
 // agent calls — with no world metaphor.
 
+import { StatusTag } from './MillRoom';
 import { useEffect, useState } from 'react';
 import { api, fileUrl } from '../api';
 import { Item, Logo } from '../art';
@@ -67,7 +68,7 @@ export function StatusView({ tick, active }: { tick: number; active: boolean }) 
             {d.projects.map((p: any) => (
               <div key={p.id} className="fac" data-open={p.mill_id ?? 'hatchery'}>
                 <b>{tr('项目 #')}{p.seq} · {p.title}</b>
-                <div className="row"><span className={`pst pst-${p.status}`}>{STATUS[p.status] ?? p.status}</span>{p.stage}<div className="bar"><i style={{ width: `${p.pct}%` }} /></div><b>{p.pct}%</b></div>
+                <div className="row"><StatusTag status={p.status} labels={STATUS} />{p.stage}<div className="bar"><i style={{ width: `${p.pct}%` }} /></div><b>{p.pct}%</b></div>
               </div>
             ))}
           </section>

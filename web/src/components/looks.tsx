@@ -1,7 +1,5 @@
-// Choosing how the page looks by seeing it: small windows drawn in each look, the light and dark
-// of the macOS look, its colours, wallpapers and Liquid Glass. The macOS parts follow the
-// Appearance pane of System Settings. Everything here is drawn with CSS (settings.css), so it
-// shows the same whichever look is on.
+// Pickers that show what they choose: the looks, and the macOS look's appearance, accent,
+// wallpaper and Liquid Glass. Drawn in CSS (settings.css), so they look the same in every look.
 
 import { Slider } from '@cloudflare/kumo';
 import { CardsIcon, CopyIcon, DotsThreeIcon, MagnifyingGlassIcon, ShareFatIcon } from '@phosphor-icons/react';
@@ -32,8 +30,7 @@ function Choice<T extends string>({ value, on, label, className, onPick, childre
   return <button type="button" role="radio" aria-checked={on} aria-label={label} className={`${className}${on ? ' on' : ''}`} onClick={() => onPick(value)}>{children}</button>;
 }
 
-// a window in one look, small
-export function MiniWindow({ look }: { look: S['ui'] }) {
+function MiniWindow({ look }: { look: S['ui'] }) {
   return (
     <span className={`mw mw-${look}`} aria-hidden="true">
       <span className="mw-bar"><i /><i /><i /></span>

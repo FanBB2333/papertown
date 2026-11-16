@@ -1,8 +1,7 @@
-// The controls of the settings page and of the progress page's display menu, in Cloudflare's
-// components (Kumo): a value from a few is a segmented control, from more a list, on or off a
-// switch. Each option of the progress page is written once here, and both places show it.
+// The settings page's and the progress display menu's controls, in Cloudflare's Kumo components.
+// The progress page's options are defined once here and shown in both places.
 
-import { LayerCard, Select, Switch, Tabs, Text } from '@cloudflare/kumo';
+import { LayerCard, Select, Slider, Switch, Tabs, Text } from '@cloudflare/kumo';
 import { tr } from '../i18n';
 import { setSettings, type Settings as S } from '../settings';
 
@@ -36,6 +35,17 @@ export function Pick<T extends string>({ value, options, onChange, label, small 
     );
   }
   return <Tabs variant="segmented" size={small ? 'sm' : 'base'} value={value} onValueChange={v => onChange(v as T)} tabs={options.map(([v, l]) => ({ value: v, label: l }))} />;
+}
+
+export const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => <Switch aria-label={label} checked={value} onCheckedChange={onChange} />;
+
+export function Range({ label, value, min, max, step, fmt, onChange }: { label: string; value: number; min: number; max: number; step?: number; fmt: (v: number) => string; onChange: (v: number) => void }) {
+  return (
+    <div className="st-range">
+      <Slider size="sm" value={value} min={min} max={max} step={step} getAriaLabel={() => label} onValueChange={v => onChange(v as number)} />
+      <output>{fmt(value)}</output>
+    </div>
+  );
 }
 
 export const set = <K extends keyof S>(k: K) => (v: S[K]) => setSettings({ [k]: v } as Partial<S>);

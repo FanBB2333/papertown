@@ -1,11 +1,9 @@
-// The overview panel: where the project stands and what it waits on you for. Its lead, with
-// the questions it asks you and what it reported; the eight stages as one line of steps (each
-// opens the panel that does its work), what each part of the project has come to so far, and
-// the mill's full sheet folded away underneath.
+// The overview panel: where the project stands, what it waits on you for, its lead, its stages
+// (each opening the panel that does its work) and the mill's full sheet folded away underneath.
 
-import type { Line, Placement, WsInfo } from '../api';
+import type { Line, WsInfo } from '../api';
 import { MillDetail } from '../components/Sheet';
-import { STATUS } from '../components/MillRoom';
+import { StatusTag } from '../components/MillRoom';
 import { tr } from '../i18n';
 import { Icon, type IconName } from './icons';
 import { LeadCard } from './Lead';
@@ -13,9 +11,9 @@ import type { ModId } from './Console';
 import { gist } from './util';
 
 interface Props {
-  line: Line | null; info: WsInfo | null; tick: number; placements: Placement[]; go: (m: ModId) => void;
+  line: Line | null; info: WsInfo | null; tick: number; typeOf: (id: string) => string; go: (m: ModId) => void;
   onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; onOpen: (id: string) => void;
-  toast: (t: string) => void; onLead: () => void; // the project's lead, in the 员工 panel
+  toast: (t: string) => void; onLead: () => void;
 }
 
 export const STAGE_MOD: Record<string, ModId> = {
@@ -29,7 +27,6 @@ export function Overview(p: Props) {
   const done = l.stages.filter(s => s.status === 'done').length;
   const h = l.outputs?.hatch;
   const exp = l.stages.find(s => s.key === 'exp');
-  const typeOf = (id: string) => p.placements.find(x => x.id === id)?.type ?? id;
   const money = (v: number) => (v > 0 && v < 0.01 ? '<$0.01' : `$${v.toFixed(2)}`);
 
   const ask = l.status === 'waiting' ? { t: tr('查重报告出来了，等你决定'), d: gist(h?.summary, 80) || tr('看过调研后，决定立项还是调整 idea。'), btns: <>
@@ -54,7 +51,7 @@ export function Overview(p: Props) {
         <div className="ov-title">
           <span className="ov-seq">#{l.seq}</span>
           <h2>{l.title}</h2>
-          <span className={`pst pst-${l.status}`}>{STATUS[l.status] ?? l.status}</span>
+          <StatusTag status={l.status} />
         </div>
         {l.idea && <p className="ov-idea">{gist(l.idea, 140)}</p>}
       </section>
@@ -108,7 +105,7 @@ export function Overview(p: Props) {
       <details className="cs fold">
         <summary><Icon n="table" size={16} />{tr('完整工序明细')}</summary>
         <div className="ov-mill">
-          <MillDetail line={l} typeOf={typeOf} real={REAL} tick={p.tick} onOpen={p.onOpen} onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={p.onAsk} />
+          <MillDetail line={l} typeOf={p.typeOf} real={REAL} tick={p.tick} onOpen={p.onOpen} onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={p.onAsk} />
         </div>
       </details>
     </div>

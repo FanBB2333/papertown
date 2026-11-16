@@ -1,5 +1,4 @@
-/* The GPU board (from nvidb): machines as cards, GPUs as tiles with a memory bar split into
-   the queue's jobs, other work, promised memory and what is left. */
+/* The GPU board (from nvidb): machines as cards, GPUs as tiles with a split memory bar. */
 
 .gpus { margin: 0 0 18px; }
 .p-sheet .gpus { padding: 0 18px 18px; margin-top: 18px; }
@@ -55,7 +54,7 @@
 .mem-key i { display: inline-block; width: 10px; height: 8px; margin-right: 5px; border-radius: 2px; vertical-align: 0; }
 .m-f { background: color-mix(in srgb, var(--ink) 8%, transparent); }
 
-/* the one-line version at the top of the farm's floor */
+/* the one-line strip on the farm's floor */
 .gstrip {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 9px 14px; border-radius: 12px;
   border: 1px solid var(--line); background: var(--panel); animation: rise-in .45s var(--out) both;
@@ -63,7 +62,7 @@
 .gstrip.off { border-style: dashed; background: transparent; }
 .gstrip > b { font: 14px var(--head); }
 .gstrip em { font-style: normal; }
-.gstrip .k-idle { color: var(--ok); background: none; }
+.gstrip .k-idle { color: var(--ok); }
 .gs-cells { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
 .gs-node { display: flex; gap: 3px; padding: 3px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .gs-node i { width: 12px; height: 16px; border-radius: 3px; background: var(--bad); transition: background-color .4s var(--out); }
@@ -81,14 +80,12 @@
 .kv dd.warn { color: var(--warn); }
 .nv-notes { margin: 0; white-space: pre-wrap; line-height: 1.6; }
 
-/* a machine's card on the board: what runs and waits there, and the way into it */
+/* a machine's card on the board */
 .node .proj-top { gap: 10px; }
 .node .proj-top .node-q { margin-right: auto; }
 .node .proj-top .lnk { margin-left: 0; white-space: nowrap; }
 
-/* one machine in full: its lanes, then a row per card with what runs, what waits in its
-   lanes in running order, and the loose jobs it could take. Each job carries the colour of its
-   state as a stripe, its name in bold without what its list shares, and its memory as a chip. */
+/* one machine in full: its lanes, then a row per card */
 .nd { scroll-margin-top: 12px; }
 .nd-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
 .nd-head kbd { margin-left: 4px; }
@@ -104,7 +101,6 @@
   color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
-/* a count in the colour of the state it counts */
 .gpus-sum :is(.s-running, .s-queued, .s-failed) {
   border-color: color-mix(in srgb, var(--sc) 32%, var(--line)); background: color-mix(in srgb, var(--sc) 7%, var(--panel)); box-shadow: inset 0 3px 0 var(--sc);
 }
@@ -140,7 +136,6 @@
 .nd-groups { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .nd-groups > div + div { padding-left: 14px; border-left: 1px dashed var(--line); }
 .nd-groups p { margin: 0; }
-/* the column's heading: a mark in the colour of what it holds, and how many */
 .nd-ch { display: flex; align-items: center; gap: 7px; margin: 2px 0 9px; font: 600 12.5px var(--font); color: var(--ink); }
 .nd-ch i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--sc); }
 .nd-ch.c-ok { --sc: var(--ok); }
@@ -162,7 +157,7 @@
 .nd-job[open] summary { border-bottom: 1px dashed var(--line); }
 .nd-l1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .nd-jn { flex: 1; display: flex; min-width: 0; font-size: 13px; color: var(--ink); white-space: nowrap; }
-/* when it does not fit, the shared start gives way first and what sets the name apart stays */
+/* when it does not fit, the shared start gives way first */
 .nd-jn > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .nd-pre { flex-shrink: 1000; min-width: 1.6em; color: var(--muted); }
 .nd-id { flex: none; font: 11px ui-monospace, Menlo, monospace; color: var(--muted); }
@@ -179,7 +174,6 @@
 .nd-who { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nd-fit { padding: 0 7px; border-radius: 7px 9px 6px 9px; font-weight: 600; color: color-mix(in srgb, var(--warn) 85%, var(--ink)); background: color-mix(in srgb, var(--warn) 15%, transparent); }
 .nd-fit.ok { color: color-mix(in srgb, var(--ok) 85%, var(--ink)); background: color-mix(in srgb, var(--ok) 15%, transparent); }
-/* a running job's status line, with a bar when it counts how far it is */
 .nd-prog { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 7px; font-size: 11.5px; }
 .nd-pbar { flex: none; width: 70px; height: 5px; border-radius: 99px; overflow: hidden; background: color-mix(in srgb, var(--sc) 20%, transparent); }
 .nd-pbar i { display: block; height: 100%; border-radius: inherit; background: var(--sc); transition: width .8s var(--out); }

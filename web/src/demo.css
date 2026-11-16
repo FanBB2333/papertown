@@ -6,7 +6,7 @@
 .demo-veil {
   position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px;
   background: color-mix(in srgb, var(--ink) 22%, transparent);
-  animation: demo-in .28s ease-out both;
+  animation: fade .28s ease-out both;
 }
 .demo-card { width: min(520px, 100%); padding: 26px 28px 22px; animation: demo-up .34s cubic-bezier(.2, .8, .3, 1) both; }
 .demo-card h2 { margin: 0 0 10px; font-family: var(--head); font-size: 24px; font-weight: 500; }
@@ -15,6 +15,5 @@
 .demo-card .btns { display: flex; flex-wrap: wrap; gap: 10px; }
 .demo-card .btns a { text-decoration: none; }
 
-@keyframes demo-in { from { opacity: 0; } }
 @keyframes demo-up { from { opacity: 0; transform: translateY(14px) scale(.98); } }
 @media (prefers-reduced-motion: reduce) { .demo-veil, .demo-card { animation: none; } }

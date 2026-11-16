@@ -1,17 +1,8 @@
-// Where the page is. Every view has its own address, so a view can be bookmarked, opened in a
-// new tab and reached with the browser's back button:
-//
-//   /                  the landing, where you sign in
-//   /progress          every project's card          /progress/6   project #6 in full
-//                                                     /progress/6/ask   asking #6 anything, full screen
-//                                                     /progress/6/pages[/p3]   the pages its agents wrote
-//   /console           the console                   /console/6/code   project #6, its code panel
-//   /town              the town, walked on the map or in 3D
-//   /status            what the town is doing
-//   /settings/<part>   the settings, over whatever was open
-//
-// The static demo is served as plain files, so there the address lives in the hash (#/progress).
-// Older links (#view=console&line=…, #open=farm, #3d) still open what they named.
+// Client-side routing. The static demo keeps the path in the hash (#/progress).
+//   /   (the landing)
+//   /progress[/6[/ask|/pages[/p3]]]
+//   /console[/6[/<panel>]]
+//   /town   /status   /settings/<part>
 
 import { useSyncExternalStore } from 'react';
 import { DEMO } from './demo';
@@ -39,7 +30,7 @@ if (DEMO) addEventListener('hashchange', changed);
 
 export function path() { return current; }
 
-// to: a path, with a query if any ("/?next=/progress"); replace: no new entry in the history
+// to: a path, optionally with a query ("/?next=/progress")
 export function go(to: string, replace = false) {
   const url = DEMO ? `#${to}` : to;
   if (url === (DEMO ? location.hash : location.pathname + location.search + location.hash)) return;
@@ -49,14 +40,13 @@ export function go(to: string, replace = false) {
 
 export const href = (to: string) => (DEMO ? `#${to}` : to);
 
-// a plain click on a link of ours goes there in the page; with a modifier it opens a tab as usual
+// a plain click navigates in the page; a modified click keeps the browser's default (new tab etc.)
 export function follow(e: React.MouseEvent, to: string) {
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   e.preventDefault();
   go(to);
 }
 
-// the query of the address (?q=…), wherever the address lives
 export function query(): URLSearchParams {
   return new URLSearchParams(DEMO ? location.hash.split('?')[1] ?? '' : location.search);
 }
@@ -77,7 +67,7 @@ export function parse(p: string): Route {
   return { view: 'cards' };
 }
 
-// an older link: the view it named, as an address
+// the path for an old hash link (#view=…, #open=…, #3d, #chat), or null
 export function legacy(): string | null {
   const hp = new URLSearchParams(location.hash.slice(1));
   const v = hp.get('view');
@@ -86,7 +76,7 @@ export function legacy(): string | null {
   return null;
 }
 
-// where the landing sends you on: the page you were asked to sign in for, else the one you start on
+// ?next= after sign-in, else start; only same-origin paths, so it cannot redirect off-site
 export function next(start: string): string {
   const n = DEMO ? null : new URLSearchParams(location.search).get('next');
   return n && n.startsWith('/') && !n.startsWith('//') ? n : start;

@@ -1,14 +1,5 @@
-// The shop floor of a core building: what its agents are doing, laid out the way the
-// building works. Every building uses the same frame (one lane per paper, stations along
-// the lane, workers standing at them) dressed for its trade:
-//
-//   造纸厂  each paper is a production line on a conveyor, a station per stage, the stage's
-//           workers at their station and the paper riding the belt to where it is
-//   仓库    each project is a rack: read the code, write it, test it, ship crates (jobs) to the farm
-//   实验农场 each project is a field row: every experiment is a plot that grows with its progress
-//   印刷厂  each paper is a press: set the type, print, proof, bind and ship
-//
-// A worker that is busy moves; one waiting for you asks; one parked rests; one that broke says so.
+// The shop floor of a core building: one lane per project with stations along it and the agents
+// working them, dressed as the mill's conveyor, the depot's rack, the farm's field row or the press.
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, listen, type Agent, type Job, type Line, type RosterRow } from '../api';
@@ -40,7 +31,7 @@ const AGENT_ROLE: Record<string, string> = { coder: 'keeper', writer: 'writer', 
 const AGENT_NAME: Record<string, string> = { coder: tr('代码员工'), writer: tr('写作员工'), monitor: tr('看田员') };
 
 function agentState(a: Agent | null | undefined): WState {
-  if (!a || !a.started && a.status === 'stopped') return 'off';
+  if (!a) return 'off';
   return ({ working: 'working', starting: 'working', watching: 'working', idle: 'resting', error: 'error', stopped: 'off' } as Record<string, WState>)[a.status] ?? 'resting';
 }
 
@@ -51,8 +42,6 @@ function agentWorker(a: Agent | null | undefined, role: string, say?: string): W
     title: `${AGENT_NAME[role]} · ${a ? AGENT_STATUS[a.status] ?? a.status : tr('还没配')}${a?.model ? ` · ${a.model}` : ''}`,
   };
 }
-
-// ---------- the mill: a production line per paper ----------
 
 function millLanes(lines: Line[]): Lane[] {
   return lines.map(l => {
@@ -66,7 +55,6 @@ function millLanes(lines: Line[]): Lane[] {
       const wstate: WState = state === 'run' ? 'working' : state === 'wait' ? 'waiting' : state === 'rest' ? 'resting' : state === 'bad' ? 'error' : state === 'done' ? 'done' : 'off';
       const say = state === 'run' ? `${s.name}${s.pct ? ` ${s.pct}%` : ''}` : state === 'wait' ? tr('等你决定') : state === 'rest' ? tr('歇着，点继续') : state === 'bad' ? tr('出错了') : undefined;
       let workers: Worker[] = stageWorkers(s, wstate, say);
-      // a station nobody has reached yet shows who will stand there, faintly; the one a line is parked at, resting
       if (!workers.length && STAGE_ROLE[s.key] && (state === 'todo' || state === 'rest' || state === 'bad')) {
         const ids = l.team?.[s.key] ?? [];
         workers = (ids.length ? ids : ['']).slice(0, 2).map((id, k) => ({
@@ -88,10 +76,7 @@ function millLanes(lines: Line[]): Lane[] {
   });
 }
 
-// ---------- the depot: a rack per project ----------
-
-// the first bay is the method stage looking for baselines in the repos; the middle two are
-// the project's coding agent; the last is the crates (jobs) sent on to the farm
+// the method stage's baseline search, two bays for the coding agent, and the jobs shipped to the farm
 const DEPOT = [['find', tr('找 baseline'), 'notes'], ['write', tr('写代码'), 'draft'], ['test', tr('跑测试'), 'table'], ['ship', tr('发往农场'), 'crate']] as const;
 
 // which bay the coding agent is at, from what it did last
@@ -144,8 +129,6 @@ function Crates({ n, live }: { n: number; live: number }) {
   );
 }
 
-// ---------- the farm: a field row per project, a plot per job ----------
-
 function Plant({ status, pct }: { status: Job['status'] | 'none'; pct: number }) {
   const g = status === 'done' ? 1 : status === 'running' ? 0.25 + 0.75 * pct / 100 : status === 'failed' ? 0.7 : status === 'queued' ? 0.08 : 0;
   const cls = status === 'failed' ? 'wither' : status === 'done' ? 'ripe' : status === 'cancelled' ? 'gone' : '';
@@ -166,14 +149,14 @@ function Plant({ status, pct }: { status: Job['status'] | 'none'; pct: number })
   );
 }
 
-const PLOTS = 5; // a row always shows this many plots; jobs take them in order
+const PLOTS = 5;
 
 function farmLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
   const ids = [...new Set([...rows.map(r => r.line.id), ...jobs.map(j => j.line_id).filter(Boolean) as string[]])];
   return ids.map(id => {
     const row = rows.find(r => r.line.id === id), ln = lines.find(l => l.id === id);
     const all = jobs.filter(j => j.line_id === id);
-    const mine = all.slice(0, PLOTS).reverse(); // oldest plot first
+    const mine = all.slice(0, PLOTS).reverse();
     const running = mine.findIndex(j => j.status === 'running');
     const at = running >= 0 ? running : Math.max(0, mine.length - 1);
     const watcher = agentWorker(row?.agent, 'monitor', running >= 0 ? tr('盯着 {0}%', mine[running].progress) : undefined);
@@ -198,8 +181,6 @@ function farmLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
   }).sort((a, b) => b.seq - a.seq);
 }
 
-// ---------- the press: a printing press per paper ----------
-
 // set the type (the write stage), print (typeset and compiled), proof (review), bind and ship
 const PRESS = [['set', tr('排字'), 'tex', 'write'], ['print', tr('开印'), 'tex', 'write'], ['proof', tr('校对'), 'pdf', 'review'], ['bind', tr('装订出厂'), 'pdf', 'ship']] as const;
 
@@ -210,7 +191,7 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
     const paper = l?.linked?.paper;
     const printed = paper ? !!paper.pdf : !!l?.files.some(f => f === 'main.pdf' || f === 'main.tex');
     const parked = !!l && ['paused', 'failed'].includes(l.status);
-    const next = l?.stages.find(s => s.status !== 'done')?.key; // where a parked line will pick up
+    const next = l?.stages.find(s => s.status !== 'done')?.key;
     // a linked paper is still being written while its PDF is already printed
     const done = (i: number) => i === 1 ? printed && (!!paper || stage('write')?.status === 'done') : stage(PRESS[i][3])?.status === 'done';
     let at = PRESS.findIndex((_, i) => !done(i));
@@ -232,7 +213,7 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
         }
       }
       if (i === 0) crew.unshift(writer);
-      return { key, name, state, art: <Item k={item} />, workers: crew, note: i === 2 && stage('review')?.note ? stage('review')!.note! : undefined };
+      return { key, name, state, art: <Item k={item} />, workers: crew, note: i === 2 ? s?.note || undefined : undefined };
     });
     return {
       id: line.id, seq: line.seq, title: line.title, status: l?.status ?? line.status, tag: l ? STATUS[l.status] ?? l.status : line.status,
@@ -243,8 +224,6 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
     };
   });
 }
-
-// ---------- the frame ----------
 
 const CREW = 3; // workers drawn at one station; the rest are counted
 

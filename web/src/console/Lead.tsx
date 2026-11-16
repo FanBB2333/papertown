@@ -1,6 +1,5 @@
-// A project's lead in the console: what it reported, the questions waiting for your answer
-// (its own and its workers'), and whether it gets check-ins. The overview shows these at the
-// top of the project; the 员工 panel beside the lead's conversation.
+// A project's lead in the console: its reports, the questions waiting for you and its check-ins,
+// on the overview and beside the lead's conversation in the 员工 panel.
 
 import { useEffect, useState } from 'react';
 import { api, listen, type LeadView, type Report } from '../api';
@@ -13,7 +12,7 @@ import { ago } from './util';
 
 const EVERY = [15, 30, 60, 120, 240, 480];
 
-export function useLead(lineId: string) {
+function useLead(lineId: string) {
   const [v, setV] = useState<LeadView | null>(null);
   const [bump, setBump] = useState(0);
   useEffect(() => listen(e => {
@@ -27,7 +26,7 @@ export function useLead(lineId: string) {
   return [v, () => setBump(b => b + 1)] as const;
 }
 
-// on the overview: the lead in a line, what waits for your answer, its latest reports
+// the lead on the overview: its state, what waits for your answer, its latest reports
 export function LeadCard({ lineId, toast, onOpen }: { lineId: string; toast: (t: string) => void; onOpen: () => void }) {
   const [v, again] = useLead(lineId);
   if (!v) return null;
@@ -48,7 +47,7 @@ export function LeadCard({ lineId, toast, onOpen }: { lineId: string; toast: (t:
   );
 }
 
-// next to the lead's conversation: whether it gets check-ins, then the same questions and reports
+// beside the lead's conversation: its check-in settings, then the same questions and reports
 export function LeadAside({ lineId, toast }: { lineId: string; toast: (t: string) => void }) {
   const [v, again] = useLead(lineId);
   if (!v) return null;
@@ -78,7 +77,7 @@ export function LeadAside({ lineId, toast }: { lineId: string; toast: (t: string
 }
 
 // a question from the project, answered with one of its choices or in your own words
-export function AskCard({ q, toast, onDone }: { q: Report; toast: (t: string) => void; onDone: () => void }) {
+function AskCard({ q, toast, onDone }: { q: Report; toast: (t: string) => void; onDone: () => void }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   async function answer(t: string) {
@@ -102,8 +101,8 @@ export function AskCard({ q, toast, onDone }: { q: Report; toast: (t: string) =>
   );
 }
 
-// the reports, the latest first; what matters is marked, and a question shows with its answer
-export function Reports({ rows, limit }: { rows: Report[]; limit: number }) {
+// the reports, the latest first; a question shows with its answer
+function Reports({ rows, limit }: { rows: Report[]; limit: number }) {
   const [all, setAll] = useState(false);
   const shown = rows.slice(all ? 0 : -limit).reverse();
   return (

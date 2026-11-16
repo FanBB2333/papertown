@@ -1,46 +1,38 @@
-// The sprite pen in three dimensions. Every building in design/src/sprites.js draws itself
-// with a Pen (boxes, gables, cylinders, windows, signs); Pen3 takes the same calls and
-// collects solid geometry instead of isometric SVG, so the 3D town is built from the very
-// same drawings as the map. Solids are closed on every side, since you can walk round
-// them; windows and signs sit a hair off the wall they are painted on.
-//
-// Tile (x, y, z) maps to three's (x, z·ZS, y): three's y is up. ZS turns the sprites'
-// height unit into tile units, so that seen from the map's angle (30° down, from the
-// +x +y corner) the 3D town lines up with the 2D one.
+// The sprite Pen in three dimensions: takes the same calls as design/src/sprites.js and collects
+// closed solid geometry instead of isometric SVG. Tile (x, y, z) maps to three's (x, z·ZS, y), y up;
+// ZS scales the sprites' height so that, seen from the map's angle, the 3D town lines up with the map.
 
 import * as THREE from 'three';
 import { Pen, ZU } from '@design/sprites.js';
 
-export const ZS = ZU / (32 * Math.SQRT2 * Math.cos(Math.PI / 6)); // ≈ 0.663
+export const ZS = ZU / (32 * Math.SQRT2 * Math.cos(Math.PI / 6));
 export const PX = 1 / 37; // one sprite pixel on a face, in tile units
 
 export type V3 = [number, number, number];
+export const EDGES = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
 
+// a sign's text or a decal's inner SVG, painted on a +y face (L, left on the map) or a +x face (R)
 export interface Glyph {
   kind: 'text' | 'svg';
-  body: string; // the text, or the inner SVG of a decal
-  size: number; // font size in sprite pixels
+  body: string;
+  size: number;
   at: V3;
-  face: 'L' | 'R'; // painted on a +y face (left on the map) or a +x face (right)
+  face: 'L' | 'R';
 }
 
 const matOf = (cls: string) => cls.split(/\s+/).find(c => c.startsWith('m-'))?.slice(2) ?? null;
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 
 export class Pen3 extends Pen {
-  pos = new Map<string, number[]>(); // material -> triangle positions
-  nrm = new Map<string, number[]>(); // and their normals
-  ink: number[] = []; // outline segments, two points each
-  strokes = new Map<string, number[]>(); // coloured lines (p.line), by material
+  pos = new Map<string, number[]>();
+  nrm = new Map<string, number[]>();
+  ink: number[] = [];
+  strokes = new Map<string, number[]>();
   glyphs: Glyph[] = [];
   puffs: { at: V3; s: number }[] = [];
-  ox: number;
-  oy: number;
 
-  constructor(k = 1, ox = 0, oy = 0) {
+  constructor(k = 1, public ox = 0, public oy = 0) {
     super(k);
-    this.ox = ox;
-    this.oy = oy;
   }
 
   W(x: number, y: number, z = 0): V3 {
@@ -48,14 +40,12 @@ export class Pen3 extends Pen {
     return [this.ox + x * k, z * k * ZS, this.oy + y * k];
   }
 
-  // ---------- raw geometry ----------
-
   private arr(m: string) {
     if (!this.pos.has(m)) { this.pos.set(m, []); this.nrm.set(m, []); }
     return [this.pos.get(m)!, this.nrm.get(m)!];
   }
 
-  // a flat polygon (convex, as all the sprite faces are), fan-triangulated
+  // a flat convex polygon, fan-triangulated
   face(P: V3[], m: string | null, ink = true) {
     if (!m || P.length < 3) return;
     const [pos, nrm] = this.arr(m);
@@ -80,7 +70,6 @@ export class Pen3 extends Pen {
     if (!m) return;
     const [pos, nrm] = this.arr(m);
     const ng = g.index ? g.toNonIndexed() : g;
-    if (!ng.getAttribute('normal')) ng.computeVertexNormals();
     pos.push(...(ng.getAttribute('position').array as Float32Array));
     nrm.push(...(ng.getAttribute('normal').array as Float32Array));
     if (ng !== g) ng.dispose();
@@ -94,7 +83,7 @@ export class Pen3 extends Pen {
     }
   }
 
-  // world-space helpers for the bits the sprites draw in screen space
+  // world-space parts for what the sprites draw in screen space
   sphereW(c: V3, r: number, m: string, sy = 1) {
     const g = new THREE.SphereGeometry(r, 18, 12);
     g.scale(1, sy, 1);
@@ -118,10 +107,9 @@ export class Pen3 extends Pen {
   block(x: number, y: number, z: number, w: number, h: number, d: number, m: string | null, ink = true) {
     const c: V3[] = [[x, y, z], [x + w, y, z], [x + w, y, z + d], [x, y, z + d], [x, y + h, z], [x + w, y + h, z], [x + w, y + h, z + d], [x, y + h, z + d]];
     for (const f of [[0, 1, 2, 3], [4, 7, 6, 5], [0, 4, 5, 1], [3, 2, 6, 7], [0, 3, 7, 4], [1, 5, 6, 2]]) this.face(f.map(i => c[i]), m, false);
-    if (ink) for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) this.edge(c[a], c[b]);
+    if (ink) for (const [a, b] of EDGES) this.edge(c[a], c[b]);
   }
 
-  // a round bar from a to b: pipes, rails, legs, rollers
   tube(a: V3, b: V3, r: number, m: string, seg = 14, ink = false) {
     const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length();
     if (len < 1e-6) return;
@@ -131,8 +119,6 @@ export class Pen3 extends Pen {
     this.geom(g, m);
     if (ink) this.edge(a, b);
   }
-
-  // ---------- the Pen's calls ----------
 
   override poly(pts: number[][], cls: string) {
     this.face(pts.map(q => this.W(q[0], q[1], q[2] ?? 0)), matOf(cls));
@@ -148,7 +134,7 @@ export class Pen3 extends Pen {
     return this;
   }
 
-  // screen-space drawing has no meaning here; the few buildings that use it get 3D parts in scene.ts
+  // screen-space drawing has no 3D meaning; the buildings that use it get their parts in scene.ts extras()
   override path() { return this; }
   override ell() { return this; }
   override circ() { return this; }
@@ -160,7 +146,7 @@ export class Pen3 extends Pen {
     ];
     const mt = matOf(m);
     for (const f of [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]]) this.face(f.map(i => c[i]), mt, false);
-    for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) this.edge(c[a], c[b]);
+    for (const [a, b] of EDGES) this.edge(c[a], c[b]);
     return this;
   }
 
@@ -223,7 +209,7 @@ export class Pen3 extends Pen {
     return this;
   }
 
-  // a profile turned round the vertical axis: [radius, height] pairs from the bottom up
+  // [radius, height] pairs from the bottom up, turned round the vertical axis
   private lathe(c: V3, prof: [number, number][], m: string | null) {
     const g = new THREE.LatheGeometry(prof.map(([r, h]) => new THREE.Vector2(r, h)), 22);
     g.translate(...c);
@@ -232,7 +218,6 @@ export class Pen3 extends Pen {
 
   override egg(cx: number, cy: number, z: number, r: number, h: number, m: string) {
     const c = this.W(cx, cy, z), R = r * this.k, H = h * this.k * ZS, prof: [number, number][] = [[0, 0]];
-    // the sprite's curve: widest at the nest, a cubic up to the tip
     for (let i = 0; i <= 12; i++) {
       const t = i / 12, u = 1 - t;
       prof.push([u * u * u * R + 3 * u * u * t * R + 3 * u * t * t * 0.62 * R, 3 * u * u * t * 0.55 * H + 3 * u * t * t * H + t * t * t * H]);
@@ -244,7 +229,7 @@ export class Pen3 extends Pen {
 
   override cooling(cx: number, cy: number, z: number, r: number, h: number, m: string) {
     const c = this.W(cx, cy, z), R = r * this.k, H = h * this.k * ZS, prof: [number, number][] = [];
-    for (let i = 0; i <= 10; i++) { // a quadratic from the base through the waist to the rim
+    for (let i = 0; i <= 10; i++) {
       const t = i / 10, u = 1 - t;
       prof.push([u * u * R + 2 * u * t * 0.6 * R + t * t * 0.7 * R, 2 * u * t * 0.62 * H + t * t * H]);
     }
@@ -258,8 +243,7 @@ export class Pen3 extends Pen {
     return this;
   }
 
-  // how far out from its wall a face sits: one laid over another (a sign's stripe on the
-  // sign) a little further, or the two fight for the same depth and flicker; text stays in front
+  // how far a face sits off its wall: one laid over another sits further out, or the two z-fight and flicker
   private laid = new Map<string, number[][]>();
   private out(wall: string, a0: number, a1: number, z0: number, z1: number) {
     const on = this.laid.get(wall) ?? [];

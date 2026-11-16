@@ -1,15 +1,13 @@
-// The static demo (`pnpm build:demo`): the town as a fresh offline instance showed it, read
-// from demo/*.json beside the page instead of from a server. Looking around works, the
-// library and the retrieval bench search the snapshot in the browser, and anything that
-// would change the town is turned away with a pointer to the repository.
+// The static demo (`pnpm build:demo`): GETs are answered from the demo/*.json snapshot beside the
+// page, the library and retrieval search run in the browser, and every write is refused.
 import type { PaperCard, RagResult, Shelf } from './api';
 import { tr } from './i18n';
 
 export const DEMO = import.meta.env.VITE_DEMO === '1';
 export const REPO = 'https://github.com/FanBB2333/papertown';
 
-// "/api/jobs?line_id=line_1" -> "jobs_line_id=line_1", the snapshot's file name (scripts/demo-snapshot.mjs)
-export function demoKey(path: string, query = '') {
+// "/api/jobs?line_id=line_1" -> "jobs_line_id=line_1"; must match scripts/demo-snapshot.mjs
+function demoKey(path: string, query = '') {
   const q = [...new URLSearchParams(query)].filter(([, v]) => v !== '').sort(([a], [b]) => a.localeCompare(b));
   return [path.replace(/^\/api\//, ''), ...q.map(([k, v]) => `${k}=${v}`)].join('_').replace(/[^\w.=-]+/g, '_');
 }
@@ -27,19 +25,20 @@ function load(key: string): Promise<unknown> {
 const terms = (q: string) => q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(t => t.length > 1);
 const coverage = (p: PaperCard, ts: string[]) => {
   const text = `${p.title} ${p.snippet} ${p.tags.join(' ')}`.toLowerCase();
-  return { hit: ts.filter(t => text.includes(t)), score: ts.length ? ts.filter(t => text.includes(t)).length / ts.length : 0 };
+  const hit = ts.filter(t => text.includes(t));
+  return { hit, score: ts.length ? hit.length / ts.length : 0 };
 };
 
-// the shelves, filtered here: the snapshot holds every paper once
 async function library(q: string, topic: string, limit: number): Promise<Shelf> {
   const all = await load('library_all') as Shelf;
   const ts = terms(q);
-  const papers = all.papers.filter(p => (!topic || p.topic === topic) && (!ts.length || coverage(p, ts).score > 0))
-    .sort((a, b) => (ts.length ? coverage(b, ts).score - coverage(a, ts).score : 0));
-  return { ...all, papers: papers.slice(0, limit) };
+  const papers = all.papers.map(p => ({ p, score: coverage(p, ts).score }))
+    .filter(x => (!topic || x.p.topic === topic) && (!ts.length || x.score > 0))
+    .sort((a, b) => b.score - a.score).slice(0, limit).map(x => x.p);
+  return { ...all, papers };
 }
 
-// the retrieval bench: keyword coverage over the snapshot, the way the server ranks without vectors
+// keyword coverage, the way the server ranks without vectors
 async function ragSearch(q: string, k: number): Promise<RagResult> {
   const all = await load('library_all') as Shelf;
   const ts = terms(q);

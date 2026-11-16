@@ -1,8 +1,5 @@
-// The survey panel, for reading from above: the hatchery's verdict in one line, the gaps, the
-// suggestions and the risks as a few short points each (any of them opens to its full text),
-// the method at a glance, and the reading list as one table, the closest work first with its
-// similarity as a bar. A local project that never went through the hatchery shows its paper's
-// own summary.
+// The survey panel: the hatchery's verdict, gaps, suggestions and risks as short points, the method
+// at a glance and the reading list; a local project without a hatch shows its paper's own summary.
 
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Line, type PaperCard } from '../api';
@@ -12,7 +9,7 @@ import { gist, points, useFetch } from './util';
 
 interface Props { line: Line | null; tick: number; onHatch: (id: string) => void; onAdjust: (id: string) => void }
 
-// the verdict arrives in the page's language
+// the verdict arrives in the page's language, hence the tr()'d keys
 const tone = (verdict: string) => ({ [tr('可孵化')]: 'ok', [tr('需调整')]: 'warn', [tr('已被做过')]: 'bad' } as Record<string, string>)[verdict] ?? 'warn';
 
 // the hatchery's one-line summary without the verdict it starts with, which sits beside it
@@ -72,7 +69,6 @@ export function Survey(p: Props) {
           <div>
             <p className="sv-line">{[lp.sections?.length && tr('{0} 节', lp.sections.length), lp.figures && tr('{0} 张图', lp.figures), lp.tables && tr('{0} 张表', lp.tables),
               lp.words && tr('约 {0} 词', lp.words), lp.bib && tr('{0} 条参考文献', lp.bib)].filter(Boolean).join(' · ') || tr('论文还是空的')}</p>
-            {/* the project's title is in the path bar; the paper's own, only when it says something else */}
             {lp.title && lp.title !== l.title && <span className="muted small">{lp.title}</span>}
           </div>
         </section>
@@ -96,7 +92,7 @@ export function Survey(p: Props) {
         <section className="cs">
           <h3>{tr('摘要要点')}</h3>
           <ul className="sv-abs">{points(lp.abstract).slice(0, 4).map((x, i) => <Point key={x} text={x} n={110} i={i} />)}</ul>
-          {(lp.sections?.length ?? 0) > 0 && <div className="sv-secs">{lp.sections!.map((s, i) => <span key={s} className="chip" style={{ ['--i' as string]: i }}>{s}</span>)}</div>}
+          {!!lp.sections?.length && <div className="sv-secs">{lp.sections.map((s, i) => <span key={s} className="chip" style={{ ['--i' as string]: i }}>{s}</span>)}</div>}
         </section>
       )}
 

@@ -32,7 +32,7 @@ export interface Line {
   mill_id: string | null; verdict: string | null; revisions: number; note: string | null; pct: number;
   current: Stage | null; stages: Stage[]; team: Record<string, string[]>; reason: string | null; files: string[];
   outputs?: Record<string, any>;
-  linked?: Linked | null; // a project linked in from local repositories (status 'linked')
+  linked?: Linked | null;
 }
 
 export interface Commit { hash: string; when: string; author: string; subject: string }
@@ -69,7 +69,6 @@ export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'u
 
 export interface ModelRef { provider: string; id: string; name: string; reasoning: boolean; contextWindow: number | null }
 
-// what a pi's bridge reports: its model and thinking level, the models it can switch to, its session
 export interface PiState {
   model: ModelRef | null; thinking: string; levels: string[];
   session: { id: string; name: string | null; file: string | null };
@@ -89,22 +88,19 @@ export interface PaseoProvider { id: string; label: string; modes: string; model
 export interface PaseoInfo {
   status: { ok: boolean; note: string; server_id?: string; web?: string | null; version?: string };
   providers: PaseoProvider[];
-  defaults?: PaseoDefaults; // what each starts with unless another is picked
+  defaults?: PaseoDefaults;
   news?: ModelNews[];
 }
-// `set`: chosen in the settings page, else the environment's PAPERTOWN_ASSISTANT_MODEL / _LEAD_MODEL
+// set: chosen in the settings page rather than from PAPERTOWN_ASSISTANT_MODEL / _LEAD_MODEL
 export interface PaseoDefault { provider: string | null; model: string | null; thinking: string | null; set?: boolean }
 export type PaseoDefaults = Record<'assistant' | 'lead', PaseoDefault>;
-// a model Paseo started offering since Papertown last looked
 export interface ModelNews { key: string; provider: string; label: string; model: string; name: string; thinking: string[]; default_thinking: string | null; at: string }
 
-// what the agents in a project report to you, and the questions they ask you
 export interface Report {
   id: number; line_id: string; agent_id: string; ts: string; kind: 'report' | 'ask';
   data: { text?: string; key?: boolean; who?: string; question?: string; choices?: string[]; open?: boolean; answer?: string;
     answered_at?: string; by?: string; act?: { action: string } | null; result?: string };
 }
-// a project on the 进展 page: Papertown's own facts, its lead, and the card the lead wrote when asked
 export type Health = 'ok' | 'risk' | 'blocked';
 export type OutputState = 'todo' | 'doing' | 'done';
 export interface Card {
@@ -113,7 +109,6 @@ export interface Card {
   plans: { name: string; goal: string; when: string }[]; outputs: { name: string; due: string; state: OutputState }[];
   at: string; by: string;
 }
-// a job as a card lists it: what, where, how far, since when
 export interface CardRun { id: string; name: string; where: string | null; progress: number | null; line: string | null; since: string | null }
 export interface CardRepo {
   path: string; name: string; missing?: boolean; git?: boolean; branch?: string | null; dirty?: number;
@@ -131,7 +126,6 @@ export interface ProjectCard {
 export type Pane = 'summary' | 'attention' | 'milestone' | 'metrics' | 'running' | 'planned' | 'outputs' | 'code' | 'paper' | 'memory';
 export interface CardLayout { panes: Pane[]; default: Pane[] }
 
-// a project's memory from earlier agent conversations (Claude Code, Codex) and notes
 export type MemorySource = 'claude' | 'codex' | 'claude-memory' | 'repo';
 export interface MemoryFound {
   key: string; source: MemorySource; kind: 'session' | 'note'; repo: 'code' | 'paper'; title: string; cwd: string; origin: string;
@@ -143,7 +137,6 @@ export interface MemoryItem {
 }
 export interface MemoryFull extends MemoryItem { messages?: { role: 'user' | 'assistant'; text: string; at: string | null }[]; text?: string }
 
-// a question about a project, what was found for it and the answers
 export type HitKind = 'card' | 'report' | 'line' | 'job' | 'code' | 'paper' | 'session' | 'note';
 export interface Hit {
   n: number; kind: HitKind; title: string; where: string; snippet: string; terms: string[]; score: number;
@@ -153,13 +146,11 @@ export interface Question {
   id: string; n: number; q: string; at: string; hits: Hit[]; answer: string | null; by: string | null; status: 'done' | 'waiting';
   lead: { id: string; asked: string; text?: string; at?: string; by?: string; page?: string; title?: string } | null;
 }
-// a page an agent wrote in HTML for you: a report, an explainer, an answer to a question
 export type PageKind = 'report' | 'explain' | 'answer';
 export interface Page { id: string; n: number; title: string; kind: PageKind; by: string; agent: string; question: string | null; at: string; size: number }
 export interface AuthState { local: boolean; password: boolean; authed: boolean; signed_in: boolean; sessions?: number }
 export interface LeadView { agent: Agent | null; settings: { supervise: boolean; every: number }; reports: Report[]; asks: Report[] }
 
-// work boundaries: global (the assistant), project (its lead), worker (one coder or writer)
 export type BoundKind = 'must' | 'never' | 'ask';
 export type BoundInherit = 'yes' | 'no' | 'force';
 export interface Bound { id: string; kind: BoundKind; text: string; inherit: BoundInherit; action: string | null; from?: 'global' | 'project' | 'worker'; locked?: boolean }
@@ -176,35 +167,28 @@ export interface PaseoConversation {
   id: string; title: string | null; provider: string; model: string | null; cwd: string; status: string;
   updated: string; last_user: string | null; linked: string | null;
 }
-// a Paseo conversation trimmed for the room: messages, and tools as one-liners
 export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
 export interface PaseoPermission { id: string; name: string; title: string | null; arg: string }
 export interface StartOpts { runtime?: 'pi' | 'paseo'; provider?: string; model?: string; thinking?: string }
 
-// the console's assistant: its agent, the question it is asking you, what it asked to do
 export interface AssistantView { agent: Agent; asks: AgentEvent[]; acts: AgentEvent[]; actions: Record<string, { what: string; args: string }> }
-// what you point at on the page, and what the sidebar tells the assistant you are looking at
 export interface Focus { ref?: string; label: string; where?: string; text?: string }
 export interface PageCtx {
   line: { id: string; seq: number; title: string } | null; mod: string; mod_name: string;
   state: Record<string, string>; focus: Focus | null; refs: { ref: string; label: string }[]; text: string;
-  selection?: string; selection_at?: Focus | null; // text you selected on the page, and the part it is in
+  selection?: string; selection_at?: Focus | null;
 }
-// one of the assistant's conversations in Paseo, named by the first thing asked in it
 export interface AssistantConv { id: string; title: string | null; model: string; at: string | null; current: boolean }
-// what the assistant opens for you or lights up
 export interface ShowTarget { mod?: string; line?: string; file?: string; job?: string; ref?: string }
 
-// a paper in the library, as the cards on its shelves show it
 export interface PaperCard {
   paper_id: string; arxiv_id: string; title: string; year: string; authors: string; snippet: string; url: string;
   tags: string[]; topic?: string; similarity?: number;
-  note?: string; closest?: boolean; // in a paper's survey: why it is close, and whether it is one of the closest three
+  note?: string; closest?: boolean;
 }
 export interface Shelf { total: number; topics: { label: string; n: number }[]; papers: PaperCard[] }
 
 export interface ProjectRef { id: string; seq: number; title: string; status: string; stage: string }
-// what a department is doing: the projects at it, the staff agents and jobs in it, who answers there
 export interface DeptAgent extends Pick<Agent, 'id' | 'role' | 'name' | 'status' | 'runtime' | 'line_id' | 'model' | 'started' | 'cost' | 'updated_at'> {
   seq: number | null; last: { kind: string; text: string } | null;
 }
@@ -221,31 +205,28 @@ export interface Job {
   id: string; line_id: string | null; name: string; backend: string; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   progress: number; command: string | null; cwd: string | null; result: any; note: string | null; submitted_by: string | null;
   created_at: string; started_at: string | null; ended_at: string | null; log?: string;
-  external?: boolean; nvidb?: NvJob; // a job in nvidb's queue, shown here but managed there
+  external?: boolean; nvidb?: NvJob;
 }
 
-// nvidb: the GPUs on your own machines and its job queue, read only
 export interface NvJob {
   id: number; name: string; state: string; node: string | null; gpu_ids: number[]; lane: string | null; vram_mb: number;
   progress: string | null; submitter: string | null; workdir: string | null; command: string; notes: string; held: boolean;
   created_at: string | null; started_at: string | null; finished_at: string | null; elapsed_s: number | null;
   exit_code: number | null; last_error: string; result?: unknown;
-  // where it may go and what it waits for (older readings leave these out)
   pool?: string | null; lane_seq?: number | null; node_constraint?: string | null; gpu_constraint?: number[]; gpus?: number;
   priority?: number; depends_on?: number[]; held_reason?: string | null; gpu_mem_mb?: number | null; max_runtime_s?: number | null;
   progress_at?: string | null;
 }
-// one nvidb job in full, as `nvidb job show` tells it (its environment left out)
 export interface NvJobFull extends NvJob {
   tags: string[]; attempt: number | null; events: { ts: string; kind: string; node: string | null; message: string }[];
 }
-// a lane: one GPU (or a few) and the order it runs its jobs in; running and queued are job ids, in that order
+// running and queued are job ids, in run order
 export interface NvLane {
   name: string; node: string; gpu_ids: number[]; paused: boolean; concurrency: number; runner_up: boolean | null; blocked: string | null;
   running: number[]; queued: number[];
 }
 export interface NvPool { name: string; members: { node: string; gpus: number[] }[] }
-// a process on a card; seen_since: when Papertown first saw it, earlier: it was already there then (its start is earlier still)
+// seen_since: when Papertown first saw the process; earlier: it was already running then
 export interface GpuProc {
   pid: number | null; user: string | null; name: string; mem_mb: number; managed: boolean; job_id: number | null; job_name: string | null;
   seen_since?: string; earlier?: boolean;
@@ -254,16 +235,15 @@ export interface Gpu {
   index: number; name: string; mem_total_mb: number; mem_used_mb: number; free_mb: number; util_percent: number;
   temperature_c: number | null; queue_mem_mb: number; external_mem_mb: number; reserved_mb: number; attribution: string | null;
   state: 'idle' | 'room' | 'full'; procs: GpuProc[];
-  updated_at?: string | null; trend?: [number, number, number][]; // [epoch s, util %, memory used MB], the last hour
+  updated_at?: string | null; trend?: [number, number, number][]; // [epoch s, util %, memory used MB] over the last hour
 }
 export interface GpuNode { name: string; state: string; enabled: boolean; last_seen: string | null; probed_at?: string | null; last_error: string | null; gpus: Gpu[] }
 export interface GpuStatus {
   ok: boolean; note: string; at: string | null; ticked?: string | null; nodes: GpuNode[]; jobs: NvJob[]; lanes?: NvLane[]; pools?: NvPool[];
-  polled_at?: string; poll_s?: number; // when Papertown last read nvidb, and how often it does
+  polled_at?: string; poll_s?: number;
   summary: { nodes: number; up: number; gpus: number; idle: number; room: number; free_mb: number; total_mb: number } | null;
   counts: Record<string, number>; alerts: number;
 }
-// a project's files for the console: its code and its paper, each a folder or a git repository
 export type WsRoot = 'code' | 'paper';
 export interface WsPlace { path: string; name: string; git: boolean; branch?: string | null; dirty?: number; main?: string | null; pdf?: boolean }
 export interface WsInfo { line_id: string; linked: boolean; latexmk: boolean; code: WsPlace | null; paper: WsPlace | null }
@@ -285,13 +265,13 @@ export interface LineData {
 export interface Backend { id: string; name: string; ready: boolean; note: string; active: number }
 export interface JobBoard { jobs: Job[]; backends: Backend[]; plant: Hud['plant'] }
 
-// skim: skills layered per project and conversation, like git config (global → project → session)
+// skim: skills layered like git config (global → project → session)
 export type SkimScope = 'global' | 'project' | 'session';
 export interface SkimSetting { key: string; value: string; scope: SkimScope; file: string; line: number }
 export interface SkimScopeInfo { scope: SkimScope; file: string; exists: boolean; settings: SkimSetting[] }
 export interface SkimSkill {
   name: string; description?: string; enabled: boolean; in_store: boolean; path?: string;
-  scope?: SkimScope | 'env'; origin?: string; // what decided it
+  scope?: SkimScope | 'env'; origin?: string;
 }
 export interface SkimResolution {
   env: string; env_scope?: SkimScope | 'active'; env_origin?: string; env_missing?: boolean;
@@ -304,17 +284,14 @@ export interface SkimStatus {
   global: SkimScopeInfo | null;
   lines: { id: string; seq: number; title: string; status: string; agents: { id: string; role: AgentRole; status: AgentStatus; runtime: string | null; model: string | null }[] }[];
 }
-// the town's own workers' skills (server/skills), hot-swapped
 export interface TownSkill { name: string; description: string; roles: string[]; allowed_tools: string[]; references: string[]; scripts: string[] }
 
-// the MCP exchange
 export interface McpServer {
   name: string; source: 'builtin' | 'file' | 'town'; command: string; args: string[]; env: string[]; cwd: string | null;
   enabled: boolean; state: 'ok' | 'error' | 'connecting' | 'off'; error: string | null; tools: { name: string; description: string }[];
 }
 export interface McpView { servers: McpServer[]; town_file: string; config_file: string | null; self: any }
 
-// the library's retrieval
 export interface RagOpts { top_k: number; candidates: number; vectors: boolean }
 export interface RagView {
   stats: { papers: number; sources: Record<string, number>; vectors: number; terms: number };
@@ -324,22 +301,17 @@ export interface RagView {
 export interface RagHit extends PaperCard { matched: string[] }
 export interface RagResult { query: string; expanded: string; terms: string[]; method: 'coverage' | 'embedding'; hits: RagHit[] }
 
-// what you and the agents say in a conversation stays as it was written; the dictionary is for
-// what the town says
-// an agent's page is served in the look the app is in
 const pageLook = () => {
   const h = document.documentElement;
   return h.classList.contains('ui-cf') ? `?look=${h.dataset.mode === 'dark' ? 'dark' : 'light'}` : '';
 };
+// localize() keep-predicates: what you and the agents wrote stays as written; only the town's own text is translated
 const said = (v: object) => ['user', 'assistant'].includes((v as { kind?: string }).kind ?? '') || (v as { type?: string }).type === 'agent_delta';
-// a report or a question as its agent wrote it (and your answer)
 const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'text' in v);
-// a card as the lead wrote it
 const carded = (v: object) => said(v) || ('summary' in v && 'health' in v);
-// what the agents and you wrote before, found in the project: as it was written
 const asIs = () => true;
-// a work boundary as you wrote it
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
+const KEEP_EVENT: Record<string, (v: object) => boolean> = { report: written, card: carded, agent_event: said, agent_delta: said, question: asIs, page: asIs };
 
 async function call<T>(method: string, url: string, body?: unknown, keep?: (v: object) => boolean): Promise<T> {
   if (DEMO) return localize(await demoCall(method, url), keep) as T;
@@ -347,7 +319,7 @@ async function call<T>(method: string, url: string, body?: unknown, keep?: (v: o
     method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined,
   });
   const data = await r.json().catch(() => ({}));
-  if (r.status === 401 && !url.startsWith('/api/auth/')) dispatchEvent(new Event('pt-signed-out')); // the login ran out: back to the landing
+  if (r.status === 401 && !url.startsWith('/api/auth/')) dispatchEvent(new Event('pt-signed-out')); // back to the landing, except for the auth calls themselves
   if (!r.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? trx(data.detail) : tr('输入有误')) : tr('请求失败 {0}', r.status));
   return localize(data, keep) as T;
 }
@@ -435,7 +407,7 @@ export const api = {
   answer: (id: number, text: string) => call<Report>('POST', `/api/reports/${id}/answer`, { text }),
   bounds: (lineId?: string) => call<BoundsView>('GET', `/api/bounds${lineId ? `?line_id=${lineId}` : ''}`, undefined, ruled),
   saveBounds: (o: { line_id?: string; role?: string; rules: Partial<Bound>[]; off?: string[] }) => call<BoundsView>('PUT', '/api/bounds', o, ruled),
-  say: (id: string, text: string, mode?: SayMode) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text, ...(mode ? { mode } : {}) }),
+  say: (id: string, text: string, mode?: SayMode) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text, mode }),
   brief: (id: string) => call<AgentEvent>('POST', `/api/agents/${id}/brief`),
   abort: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/abort`),
   ws: (lineId: string) => call<WsInfo>('GET', `/api/lines/${lineId}/ws`),
@@ -456,16 +428,15 @@ export const api = {
 };
 
 export const fileUrl = (lineId: string, name: string) => (DEMO ? demoFile(lineId, name) : `/api/lines/${lineId}/files/${name}`);
-// a linked project's paper, compiled in its own repository
 export const linkedPdfUrl = (lineId: string) => `/api/lines/${lineId}/linked/pdf`;
-// the paper's newest PDF, built in the console or beside its main file; v makes the view load it again
+// v changes the URL so the viewer loads the PDF again
 export const paperPdfUrl = (lineId: string, v = 0) => (DEMO ? demoFile(lineId, 'main.pdf') : `/api/lines/${lineId}/ws/paper/pdf?v=${v}`);
 
 export type ServerEvent = { id: number; type: string; ts: string; [k: string]: any };
 
 const listeners = new Set<(e: ServerEvent) => void>();
 
-// Components that need live events (an agent's transcript, the job board) listen here.
+// Lets components receive the events subscribe() reads.
 export function listen(fn: (e: ServerEvent) => void): () => void {
   listeners.add(fn);
   return () => { listeners.delete(fn); };
@@ -473,13 +444,12 @@ export function listen(fn: (e: ServerEvent) => void): () => void {
 
 // One EventSource for the app; the browser reconnects on its own.
 export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boolean) => void): () => void {
-  if (DEMO) { onState(true); return () => {}; } // the demo is a snapshot: nothing happens live
+  if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
     'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'question', 'page'];
   for (const t of types) es.addEventListener(t, ev => {
-    const e = localize(JSON.parse((ev as MessageEvent).data), t === 'report' ? written : t === 'card' ? carded : t === 'agent_event' || t === 'agent_delta' ? said
-      : t === 'question' || t === 'page' ? asIs : undefined);
+    const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);
     for (const fn of listeners) fn(e);
   });

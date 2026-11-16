@@ -1,9 +1,5 @@
-// The landing, at /: where things stand, said plainly (a greeting, how many projects wait for
-// you, which are stuck or at risk, what runs), a drawing of the town with the same numbers, and
-// the way in. On the machine it runs on you go straight in (and can set the access password
-// there); from anywhere else you sign in with that password, and until then the landing shows
-// nothing of the projects. Going in opens the view you start on, the projects' progress unless
-// you chose otherwise in the settings, or the page you were on when you were asked to sign in.
+// The landing at /: a plain-language summary of the projects, the town's four buildings with live
+// numbers, and the way in (straight in on the local machine, otherwise the access password).
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, type AuthState, type ProjectCard } from '../api';
@@ -20,7 +16,9 @@ import './landing.css';
 
 const START = { cards: PATHS.cards, console: PATHS.console, '2d': PATHS.world, '3d': PATHS.world } as const;
 
-// the town in four buildings, each a part of a project: what is in it now, or what it is for
+const jobsIn = (r: ProjectCard[]) => [r.reduce((n, x) => n + x.running.length, 0), r.reduce((n, x) => n + x.queued.length, 0)] as const;
+
+// building, name, what it is for, and what it holds now
 const TOWN: [string, string, string, (r: ProjectCard[]) => string][] = [
   ['depot', tr('代码仓库'), tr('每次提交、改动和分支'), r => {
     const code = r.map(x => x.repos.code).filter(c => c && !c.missing);
@@ -28,7 +26,7 @@ const TOWN: [string, string, string, (r: ProjectCard[]) => string][] = [
     return dirty ? tr('{0} 个仓库 · {1} 处没提交', code.length, dirty) : tr('{0} 个仓库，都提交了', code.length);
   }],
   ['farm', tr('实验'), tr('在跑的、排队的、规划中的'), r => {
-    const run = r.reduce((n, x) => n + x.running.length, 0), q = r.reduce((n, x) => n + x.queued.length, 0);
+    const [run, q] = jobsIn(r);
     return run || q ? tr('{0} 个在跑 · {1} 个排队', run, q) : tr('现在没有实验在跑');
   }],
   ['press', tr('论文'), tr('LaTeX 仓库，字数和页数'), r => {
@@ -49,7 +47,6 @@ const FEATURES: [Parameters<typeof Icon>[0]['n'], string, string][] = [
 
 export function Landing({ auth, err, reload }: { auth: AuthState | null; err: string; reload: () => Promise<AuthState | null> }) {
   const enter = () => go(next(START[getSettings().start] ?? PATHS.cards));
-  // the projects, once you may see them
   const [rows, setRows] = useState<ProjectCard[] | null>(null);
   useEffect(() => {
     if (!auth?.authed) { setRows(null); return; }
@@ -89,7 +86,7 @@ export function Landing({ auth, err, reload }: { auth: AuthState | null; err: st
   );
 }
 
-// a line of the headline kept whole: when it is wider than the column its type shrinks to fit
+// keeps a headline line on one line by shrinking its font to fit the column
 function useOneLine(text: string) {
   const ref = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
@@ -103,15 +100,13 @@ function useOneLine(text: string) {
     fit();
     const ro = new ResizeObserver(fit);
     ro.observe(el.parentElement!);
-    document.fonts?.ready.then(fit);
+    document.fonts.ready.then(fit);
     return () => ro.disconnect();
   }, [text]);
   return ref;
 }
 
-// where things stand: a greeting, then in one line how many projects and how many wait for you,
-// then which are stuck or at risk (each a link to its page). Before you may see them, only the
-// greeting and a word about signing in.
+// greeting, project count and how many wait for you, then the blocked or at-risk ones as links
 function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] | null }) {
   const hi = greeting();
   const n = rows?.length ?? 0, wait = rows?.filter(youNeeded).length ?? 0;
@@ -122,7 +117,7 @@ function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] 
   if (!rows) return <h1>{head}</h1>;
   const marked = [...rows.filter(r => r.card?.health === 'blocked'), ...rows.filter(r => r.card?.health === 'risk')];
   const shown = marked.slice(0, 3);
-  const run = rows.reduce((k, x) => k + x.running.length, 0), q = rows.reduce((k, x) => k + x.queued.length, 0);
+  const [run, q] = jobsIn(rows);
   const last = rows.map(r => r.card?.at).filter(Boolean).sort().pop();
   const facts = [run ? tr('{0} 个实验在跑', run) : tr('没有实验在跑'), q ? tr('{0} 个排队', q) : '', last ? tr('最近一次更新：{0}', ago(last)) : ''].filter(Boolean);
   return (
@@ -149,14 +144,13 @@ function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] 
   );
 }
 
-// the way in, as things stand: straight in here, a password elsewhere, or nothing to sign in with yet
+// the way in: straight in locally, a password elsewhere, or instructions when none is set yet
 function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: string; reload: () => Promise<AuthState | null>; enter: () => void }) {
   const [pw, setPw] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => { if (auth && !auth.authed && auth.password) field.current?.focus(); }, [auth]);
-  // Enter goes in when nothing is being typed
   useEffect(() => {
     if (!auth?.authed) return;
     const k = (e: KeyboardEvent) => {
@@ -233,7 +227,7 @@ function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: strin
   );
 }
 
-// on this machine: set the password other devices sign in with
+// on the local machine: set the password other devices sign in with
 function Password({ auth, reload }: { auth: AuthState; reload: () => Promise<AuthState | null> }) {
   const [open, setOpen] = useState(false);
   const [a, setA] = useState('');

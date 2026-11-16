@@ -1,8 +1,5 @@
-// The console's text editor (CodeMirror 6), for code and for TeX. One view stays mounted and
-// each open file keeps its own state in it, so switching tabs keeps each file's undo
-// history, selection and scroll. Mod-S saves, Mod-Enter runs (the paper: compile), Mod-K Mod-T
-// picks a colour theme. Tokens are drawn by class and coloured by the theme's variables
-// (edthemes.ts), so a theme change reaches every open file at once.
+// The console's text editor (CodeMirror 6), for code and TeX. One view stays mounted and each
+// open file keeps its own EditorState, so switching tabs keeps its undo history, selection and scroll.
 
 import { useEffect, useRef } from 'react';
 import { basicSetup } from 'codemirror';
@@ -32,17 +29,18 @@ interface Props {
   onChange?: (id: string, text: string) => void;
   onSave?: () => void;
   onRun?: () => void;
-  onCursor?: (line: number, col: number, picked: string) => void; // picked: the selected text, if any
+  onCursor?: (line: number, col: number, picked: string) => void;
   goto?: { line: number; n: number } | null; // asked from outside: put the cursor on this line
 }
 
 const ext = (path: string) => path.slice(path.lastIndexOf('.') + 1).toLowerCase();
 
 function language(path: string): Extension[] {
-  switch (ext(path)) {
+  const e = ext(path);
+  switch (e) {
     case 'py': case 'pyi': return [python()];
     case 'js': case 'mjs': case 'cjs': case 'jsx': return [javascript({ jsx: true })];
-    case 'ts': case 'tsx': case 'mts': return [javascript({ typescript: true, jsx: ext(path) === 'tsx' })];
+    case 'ts': case 'tsx': case 'mts': return [javascript({ typescript: true, jsx: e === 'tsx' })];
     case 'json': case 'jsonl': case 'ipynb': return [json()];
     case 'md': case 'markdown': return [markdown(), EditorView.lineWrapping];
     case 'css': case 'scss': return [css()];
@@ -123,7 +121,6 @@ export default function Editor({ doc, readOnly = false, onChange, onSave, onRun,
     return () => { view.current?.destroy(); view.current = null; };
   }, []);
 
-  // another file, or the same one read again (rev): keep the one we leave, bring back the one we open
   useEffect(() => {
     const v = view.current;
     if (!v) return;
@@ -142,7 +139,6 @@ export default function Editor({ doc, readOnly = false, onChange, onSave, onRun,
     fns.current.onCursor?.(ln.number, h - ln.from + 1, '');
   }, [doc?.id, doc?.rev, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // after the file is in: the line asked for, in the middle of the view
   const went = useRef(0);
   useEffect(() => {
     const v = view.current;

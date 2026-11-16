@@ -1,8 +1,5 @@
-// The lens at the edge of Liquid Glass. A blur alone reads as frosted plastic; glass also bends
-// what is behind it near its edge. backdrop-filter takes an SVG filter only in Chromium, so there
-// a piece of glass gets a displacement map of its own shape, and everywhere else (Safari, the Mac
-// app's WebKit, Firefox) it stays the plain blur the stylesheet already gives it. The map pulls
-// each point on the rim toward the middle, most at the very edge and fading out over `bezel`.
+// The refracting edge of Liquid Glass: an SVG displacement map per piece of glass. backdrop-filter takes
+// an SVG filter only in Chromium; Safari/WebKit (incl. the macOS app) and Firefox keep the plain blur.
 
 import { useEffect, useRef } from 'react';
 import { useSettings } from './settings';
@@ -12,11 +9,11 @@ const brands = (navigator as Navigator & { userAgentData?: { brands: { brand: st
 export const bends = !!brands?.some(b => b.brand === 'Chromium');
 const plain = matchMedia('(prefers-reduced-transparency: reduce)');
 
-const KEEP = 48; // filters kept; a piece of glass changes size rarely, and only the last few matter
+const KEEP = 48;
 const made = new Map<string, SVGFilterElement>();
 let defs: SVGSVGElement | null = null;
 
-// one pixel per CSS pixel, red and green carrying the pull across and down around a middle of 128
+// one pixel per CSS pixel; red/green carry the inward pull around 128, fading out over `bezel`
 function map(w: number, h: number, r: number, bezel: number) {
   const c = document.createElement('canvas');
   c.width = w;
@@ -25,7 +22,6 @@ function map(w: number, h: number, r: number, bezel: number) {
   const hw = w / 2, hh = h / 2;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      // the signed distance to a rounded box, and which way is out
       const px = x + .5 - hw, py = y + .5 - hh;
       const qx = Math.abs(px) - (hw - r), qy = Math.abs(py) - (hh - r);
       const ox = Math.max(qx, 0), oy = Math.max(qy, 0);
@@ -78,8 +74,8 @@ function filterFor(w: number, h: number, r: number, bezel: number, strength: num
   return id;
 }
 
-// A piece of glass: put the ref on it, and in its rule `backdrop-filter: var(--lens,) blur(…)`.
-// While it changes size the map would be the wrong shape, so it goes back to the blur until it stops.
+// Put the ref on a piece of glass whose rule has `backdrop-filter: var(--lens,) blur(…)`; while it
+// resizes it falls back to the blur.
 export function useLens<T extends HTMLElement>(bezel = 16, strength = 44) {
   const ref = useRef<T>(null);
   const on = useSettings().ui === 'macos' && bends && !plain.matches;

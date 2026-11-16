@@ -5,8 +5,13 @@
 import { footprint, tileMat } from '@design/world.js';
 import type { Placement } from '../api';
 
+export function typing(e: Event, extra?: string): boolean {
+  const t = e.target;
+  return t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || !!(extra && t.closest(extra)));
+}
+
 const N = 24;
-export const R = 0.22; // body radius
+const R = 0.22; // body radius
 export const REACH = 1.1; // how close counts as "at the door"
 const STORE = 'pt-avatar-2'; // bumped when the town is laid out anew
 export const START = { x: 7.5, y: 4.5 }; // on the ring road, at the mill's door
@@ -22,7 +27,7 @@ export function loadPos(): Pos {
 }
 
 export function savePos(p: Pos) {
-  try { localStorage.setItem(STORE, JSON.stringify({ x: +p.x.toFixed(2), y: +p.y.toFixed(2) })); } catch { /* ignore */ }
+  try { localStorage.setItem(STORE, JSON.stringify({ x: +p.x.toFixed(2), y: +p.y.toFixed(2) })); } catch { /* private mode */ }
 }
 
 function blocked(places: Placement[], x: number, y: number) {

@@ -1,15 +1,10 @@
-// Papertown: the projects' progress is home, a card each; the console is everything the town
-// does, as panels, for anyone who would rather click than walk. The world map is the same town,
-// walked as a small figure. The chat waits at the bottom of every page (B), a building opens full
-// screen from the inside (C), and the status view (D) sits beside the world. The town can be walked
-// in 3D too, through your own eyes; the camera flies between the map's view and yours, so either
-// hands over to the other.
-//
-// Each view has its own address (route.ts): /progress, /progress/6, /console/6/code, /town, /status.
-//   /town#open=farm   /town#open=depot&line=line_1   /town#chat   /town#3d   — open a state directly
+// The app behind the landing: progress cards, the console, the town (2D map or 3D walk) and the status
+// view, with the chat, building rooms and settings over them. Hash params open a state directly:
+// #open=<building>[&line=<id>], #chat, #3d.
 
+import { typing } from './components/walk';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
+import { api, subscribe, type Line, type Message, type TraceRow, type WorldState } from './api';
 import { Logo } from './art';
 import { DemoWelcome, RepoLink } from './components/Demo';
 import { Chat, type Composer, type Tab } from './components/Chat';
@@ -28,7 +23,6 @@ import './mobile.css';
 
 const Town3D = lazy(() => import('./components/Town3D'));
 
-// the map, the 3D town, and the flights between them
 type Dim = '2d' | 'to3d' | '3d' | 'to2d';
 const PHASE = { '2d': 'off', to3d: 'enter', '3d': 'live', to2d: 'leave' } as const;
 const TICK_EVENTS = new Set(['line', 'world', 'building', 'bank', 'power', 'workers', 'library', 'skills']);
@@ -59,10 +53,9 @@ function Gear() {
   );
 }
 
-// covered: the landing is over it (you went back to /); it keeps what it has open meanwhile
+// covered: the landing is shown over the app, which keeps its state meanwhile
 export function App({ route: at, covered }: { route: Route; covered: boolean }) {
-  const hp = new URLSearchParams(location.hash.slice(1));
-  // the settings open over what was open, which stays as it was underneath
+  const [hp] = useState(() => new URLSearchParams(location.hash.slice(1)));
   const settingsOpen = at.view === 'settings';
   const under = useRef(at), leaveTo = useRef('/progress'), cameIn = useRef(false);
   if (!settingsOpen) { under.current = at; leaveTo.current = path(); }
@@ -70,10 +63,10 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const last = useRef<View>('cards');
   const view: View = route.view === 'landing' || route.view === 'settings' ? last.current : route.view;
   last.current = view;
-  const [consoleUp, setConsoleUp] = useState(view === 'console'); // mounted once shown, and kept
+  const [consoleUp, setConsoleUp] = useState(view === 'console');
   const [world, setWorld] = useState<WorldState | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
-  const [linesIn, setLinesIn] = useState(false); // the first list has come: until then "no projects" would be a guess
+  const [linesIn, setLinesIn] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [trace, setTrace] = useState<TraceRow[]>([]);
   const [chatOpen, setChatOpen] = useState(hp.has('chat'));
@@ -89,7 +82,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const refresh = useRef<number>();
   const [dim, setDim] = useState<Dim>('2d');
   const [from3d, setFrom3d] = useState<MapView | null>(null);
-  const [want3d, setWant3d] = useState(false); // the 3D code has been asked for
+  const [want3d, setWant3d] = useState(false);
   const mapApi = useRef<MapApi | null>(null);
   const hash3d = useRef(hp.has('3d') || (getSettings().start === '3d' && !hp.has('open') && view === 'world'));
   const st = useSettings();
@@ -119,11 +112,10 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     api.trace().then(setTrace).catch(() => {});
   }, [push]);
 
-  useEffect(() => subscribe((e: ServerEvent) => {
+  useEffect(() => subscribe(e => {
     if (e.type === 'message') {
       setMessages(m => m.some(x => x.id === e.message.id) ? m : [...m, e.message].slice(-300));
-      if (e.message.role === 'worker' && e.message.body?.from) setAsking(false);
-      if (e.message.kind === 'error') setAsking(false);
+      if ((e.message.role === 'worker' && e.message.body?.from) || e.message.kind === 'error') setAsking(false);
     } else if (e.type === 'trace') {
       setTrace(t => [...t, e.row].slice(-200));
     } else if (e.type === 'line') {
@@ -180,8 +172,12 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     }
   }
 
-  // going inside: the room opens like ink spreading from the door you came through, and
-  // folds back into it when you leave; room to room is a plain cross-fade
+  const hatch = (id: string) => act(() => api.hatch(id));
+  const resume = (id: string) => act(() => api.resume(id));
+  const newIdea = () => openChat({ kind: 'idea' }, true);
+  const askAt = (id: string, name: string) => openChat({ kind: 'ask', building: id, name }, true);
+  const adjust = (id: string) => openChat({ kind: 'adjust', lineId: id }, true);
+
   const [door, setDoor] = useState<{ x: number; y: number } | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [swap, setSwap] = useState(0);
@@ -193,6 +189,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     else setDoor(at ?? { x: innerWidth / 2, y: innerHeight / 2 });
     setSheet(id, lineId);
   }, [setSheet]);
+  const room = (id: string, lineId?: string | null) => openRoom(id, lineId);
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
   const leaveRoom = useCallback(() => {
@@ -203,15 +200,14 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (e.key === ',' && !e.metaKey && !e.ctrlKey && !e.altKey && !(t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)))) {
+      if (e.key === ',' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e)) {
         e.preventDefault();
         if (settingsOpen) closeSettings();
         else openSettings();
         return;
       }
       if (e.key !== 'Escape') return;
-      if (settingsOpen) return; // the settings page takes its own Esc
+      if (settingsOpen) return;
       if (chatOpen) setChatOpen(false);
       else if (sheet) leaveRoom();
     };
@@ -219,10 +215,9 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     return () => removeEventListener('keydown', key);
   }, [sheet, chatOpen, settingsOpen, leaveRoom, openSettings, closeSettings]);
 
-  // over the 3D walk in full screen, Esc closes what is open before it leaves full screen
   useEffect(() => holdEscape(dim === '3d' && (!!sheet || chatOpen || settingsOpen)), [dim, sheet, chatOpen, settingsOpen]);
 
-  // anything with data-open opens that building (stations, goods, list rows); data-line picks the project
+  // any [data-open] element outside the map and console opens that building; data-line picks the project
   function onRootClick(e: React.MouseEvent) {
     const t = e.target as Element;
     const el = t.closest('[data-open]');
@@ -233,15 +228,14 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
   const root = useRef<HTMLDivElement>(null);
   const tabs = useRef<HTMLElement>(null);
-  // lock: take the mouse for looking round right away (this runs in the click on the switch,
-  // which the browser requires); from a link there is no click, and the town asks for one
+  // lock: pointer lock and full screen must be requested inside the click (user-gesture requirement)
   const go3d = useCallback((lock = true) => {
     if (dim !== '2d') return;
     if (lock) {
       enterFull();
       (root.current?.requestPointerLock?.() as Promise<void> | undefined)?.catch?.(() => {});
     }
-    setChatOpen(false); // the chat belongs to the view it was opened in
+    setChatOpen(false);
     setFrom3d(mapApi.current?.view() ?? null);
     setWant3d(true);
     setDim('to3d');
@@ -255,16 +249,13 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   useEffect(() => {
     if (world && hash3d.current) { hash3d.current = false; go3d(false); }
   }, [world, go3d]);
-  // the console is not part of the walk: going there from the 3D town lands back on the map
-  const show = useCallback((v: View) => go(PATHS[v]), []);
+  // the console leaves the 3D walk
   useEffect(() => {
     if (view !== 'console') return;
     setConsoleUp(true);
     go2d();
   }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // a project opened in the console from elsewhere (its card, a piece found for a question): its
-  // address says which project and which panel; a file or a job in it opens once the console is up
   const openProject = useCallback((lineId: string, t: { mod?: string; file?: string; job?: string } = {}) => {
     const seq = lines.find(l => l.id === lineId)?.seq;
     const mod = t.mod ?? (t.job ? 'exp' : t.file?.startsWith('paper:') ? 'paper' : t.file ? 'code' : 'overview');
@@ -272,24 +263,22 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     go(seq ? `/console/${seq}/${mod}` : PATHS.console);
     if (t.file || t.job) setTimeout(() => dispatchEvent(new CustomEvent('pt-show', { detail: { line: lineId, file: t.file, job: t.job } })), wasUp ? 80 : 400);
   }, [lines, consoleUp]);
-  // the console tells where it is, and its address follows without a step in the history
   const onPlace = useCallback((seq: number, mod: string) => {
     if (route.view === 'console') go(`/console/${seq}/${mod}`, true);
   }, [route.view]);
 
-  // the macOS app (macos/) drives the page from its menus: the settings, the view, a note
+  // commands from the macOS app's menus (macos/)
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ type?: string; view?: string; text?: string }>).detail ?? {};
       if (d.type === 'settings') openSettings();
-      else if (d.type === 'view' && (d.view === 'cards' || d.view === 'console' || d.view === 'world' || d.view === 'status')) show(d.view);
+      else if (d.type === 'view' && (d.view === 'cards' || d.view === 'console' || d.view === 'world' || d.view === 'status')) go(PATHS[d.view]);
       else if (d.type === 'toast' && d.text) push(d.text);
     };
     addEventListener('papertown:command', on);
     return () => removeEventListener('papertown:command', on);
-  }, [show, push, openSettings]);
+  }, [push, openSettings]);
 
-  // the walking hint fades once you have moved or after a while
   const [hint, setHint] = useState(true);
   useEffect(() => {
     const t = setTimeout(() => setHint(false), 9000);
@@ -298,14 +287,13 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     return () => { clearTimeout(t); removeEventListener('keydown', k); };
   }, []);
 
-  // where the open view is in the top bar, for the pill that slides under it in the macOS look
+  // --tx/--tw place the macOS look's sliding pill under the open tab
   useLayoutEffect(() => {
-    const nav = tabs.current;
-    if (!nav) return;
+    const nav = tabs.current!;
     const place = () => {
-      const on = nav.querySelector<HTMLElement>('a.on');
-      nav.style.setProperty('--tx', `${on?.offsetLeft ?? 0}px`);
-      nav.style.setProperty('--tw', `${on?.offsetWidth ?? 0}px`);
+      const on = nav.querySelector<HTMLElement>('a.on')!;
+      nav.style.setProperty('--tx', `${on.offsetLeft}px`);
+      nav.style.setProperty('--tw', `${on.offsetWidth}px`);
     };
     place();
     const watch = new ResizeObserver(place);
@@ -321,7 +309,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   return (
     <div ref={root} className={`proto la theme-sketch${chatOpen ? ' chat-open' : ''}${sheet && !leaving ? ' in-room' : ''}${dim !== '2d' ? ' in-3d' : ''}${st.motion === 'calm' ? ' calm' : ''}`} data-mode={view} onClick={onRootClick}
       style={{ ['--grain-k' as string]: st.grain, ...(door ? { ['--ox' as string]: `${door.x}px`, ['--oy' as string]: `${door.y}px` } : {}) }}>
-      {world && <WorldMap placements={world.placements} highlight={null} notes={notes} active={walking && dim === '2d'}
+      {world && <WorldMap placements={world.placements} notes={notes} active={walking && dim === '2d'}
         hidden={dim === '3d' || dim === 'to2d'} api={mapApi} onOpen={(id, at) => openRoom(id, null, at)} />}
       {world && want3d && (
         <Suspense fallback={null}>
@@ -339,10 +327,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
       {consoleUp && (
         <Console active={view === 'console' && !covered} at={route.view === 'console' ? route : undefined} onPlace={onPlace}
           lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
-          onRoom={(id, lineId) => openRoom(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
-          onAsk={(id, name) => openChat({ kind: 'ask', building: id, name }, true)}
-          onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
-          onAdjust={id => openChat({ kind: 'adjust', lineId: id }, true)} />
+          onRoom={room} onIdea={newIdea} onAsk={askAt} onHatch={hatch} onResume={resume} onAdjust={adjust} />
       )}
 
       <header className="hud">
@@ -388,16 +373,12 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
       <Chat view={view} open={chatOpen} setOpen={setChatOpen} away={!!sheet || (view === 'world' && dim !== '2d')} tab={tab} onTab={setTab}
         messages={messages} trace={trace} lines={lines} placements={world?.placements ?? []} composer={composer} setComposer={setComposer}
-        focusKey={focusKey} busy={busy} tick={tick} onSend={onSend} onRoom={(id, lineId) => openRoom(id, lineId)} toast={push}
-        onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))} />
+        focusKey={focusKey} busy={busy} tick={tick} onSend={onSend} onRoom={room} toast={push} onHatch={hatch} onResume={resume} />
 
       {sheet && (
         <Interior key={`${sheet}:${swap}`} id={sheet} focus={focus} tick={tick} placements={world?.placements ?? []} lines={lines}
           motion={leaving ? 'leave' : swap ? 'swap' : 'enter'} onClose={leaveRoom}
-          onOpen={(id, lineId) => openRoom(id, lineId)} onIdea={() => openChat({ kind: 'idea' }, true)}
-          onAsk={(id, name) => openChat({ kind: 'ask', building: id, name }, true)}
-          onHatch={id => act(() => api.hatch(id))} onResume={id => act(() => api.resume(id))}
-          onAdjust={id => openChat({ kind: 'adjust', lineId: id }, true)} toast={push} />
+          onOpen={room} onIdea={newIdea} onAsk={askAt} onHatch={hatch} onResume={resume} onAdjust={adjust} toast={push} />
       )}
       {settingsOpen && <SettingsPage section={at.mod} hud={hud ?? null} onClose={closeSettings} />}
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>

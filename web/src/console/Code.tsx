@@ -1,7 +1,5 @@
-// The code panel, laid out like VS Code: the repository's files down the left with git's marks,
-// the open files as tabs, the editor, and a status bar. Mod-S writes the file back into the
-// repository; a changed file can be compared with what git has. On a phone the files and the
-// editor take the whole width in turn: opening a file shows it, 文件 goes back to the list.
+// The code panel, laid out like VS Code: the repository's files with git's marks, tabs, the
+// editor and a status bar; Mod-S writes back into the repository. On a phone, files and editor take turns.
 
 import { useEffect, useState } from 'react';
 import { api, type WsInfo } from '../api';
@@ -45,10 +43,8 @@ function Repo(p: Props) {
   const [browse, setBrowse] = useState(false);
   const files = f.tree.data?.files ?? [];
   const changed = files.filter(x => x.status);
-  const dirtySet = new Set(f.open.filter(o => o.text !== o.saved).map(o => o.path));
 
   useEffect(() => p.onDirty(f.dirty), [f.dirty]); // eslint-disable-line react-hooks/exhaustive-deps
-  // the README first, the way a repository introduces itself
   useEffect(() => {
     if (f.open.length || !files.length) return;
     const readme = files.find(x => /^readme(\.md|\.txt|\.rst)?$/i.test(x.path)) ?? files.find(x => /(^|\/)readme\.md$/i.test(x.path));
@@ -95,13 +91,13 @@ function Repo(p: Props) {
             {changed.length > 6 && <span className="muted small">{tr('还有 {0} 个', changed.length - 6)}</span>}
           </div>
         )}
-        <Tree files={files} cur={f.cur} onOpen={open} dirty={dirtySet} filter={q} root="code" />
+        <Tree files={files} cur={f.cur} onOpen={open} dirty={f.dirtySet} filter={q} root="code" />
         {f.tree.data?.truncated && <p className="muted small tr-none">{tr('文件太多，只列出前 4000 个。')}</p>}
       </aside>
       <section className="ide-main">
         <Tabs f={f} lead={phone && <button className="ib ide-files" onClick={() => setBrowse(true)}><Icon n="folder" size={16} />{tr('文件')}</button>} extra={cur && <>
           {st && st !== 'untracked' && <button className={`ib${diff ? ' on' : ''}`} title={tr('和 git 里的版本对比')} onClick={showDiff}><Icon n="diff" size={15} /></button>}
-          {!DEMO && <button className="ib" title={tr('保存（⌘S）')} disabled={!dirtySet.has(cur.path) || f.saving} onClick={() => f.save(cur.path)}><Icon n="save" size={15} /></button>}
+          {!DEMO && <button className="ib" title={tr('保存（⌘S）')} disabled={!f.dirtySet.has(cur.path) || f.saving} onClick={() => f.save(cur.path)}><Icon n="save" size={15} /></button>}
         </>} />
         <div className="ide-ed">
           <FileView f={f} goto={goto} onCursor={(l, c, s) => { setPos([l, c]); setPicked(s); }} empty={

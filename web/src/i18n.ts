@@ -1,9 +1,6 @@
-// The language the town is shown in: English (the default), Simplified or Traditional Chinese.
-// The sources and the server write Simplified Chinese; tr() turns one of the app's own strings
-// into the chosen language and localize() does the same for what the server sends. English
-// comes from the dictionary in i18n/en.json, keyed by the Chinese; Traditional Chinese is
-// converted with OpenCC. Switching saves the choice and reloads the page, so the strings that
-// are worked out once when a module loads are always in the language in use.
+// UI language: English (default, from i18n/en.json keyed by the Simplified Chinese source), Simplified,
+// or Traditional (converted with OpenCC). tr() is for the app's strings, localize() for server data.
+// Switching reloads the page, because modules compute tr() strings once when they load.
 import EN from './i18n/en.json';
 
 export type Lang = 'en' | 'zh-Hans' | 'zh-Hant';
@@ -17,14 +14,14 @@ function stored(): Lang {
   try {
     const v = localStorage.getItem(KEY);
     if (v === 'en' || v === 'zh-Hans' || v === 'zh-Hant') return v;
-  } catch { /* storage blocked: the default */ }
+  } catch { /* storage blocked */ }
   return 'en';
 }
 
 export const LANG: Lang = stored();
 let hant: ((s: string) => string) | null = null;
 
-// before the app's modules load: the converter for Traditional Chinese, and the font's glyph set
+// Must finish before the app's modules load: the OpenCC converter and the font's glyph set.
 export async function loadLang() {
   document.documentElement.lang = LANG;
   if (LANG === 'zh-Hant') {
@@ -37,11 +34,11 @@ export async function loadLang() {
 
 export function setLang(lang: Lang) {
   if (lang === LANG) return;
-  try { localStorage.setItem(KEY, lang); } catch { /* the choice lasts this page only */ }
+  try { localStorage.setItem(KEY, lang); } catch { /* storage blocked */ }
   location.reload();
 }
 
-// {0}, {1}… are the arguments; in English {0|paper|papers} picks a word by the number in {0}
+// {0}, {1}… are the arguments; {0|paper|papers} picks a word by the number in {0}
 function fill(s: string, args: unknown[]) {
   if (!args.length) return s;
   return s.replace(/\{(\d+)(?:\|([^|{}]*)\|([^|{}]*))?\}/g, (m, i, one, many) => {
@@ -52,17 +49,13 @@ function fill(s: string, args: unknown[]) {
 
 const toHant = (s: string) => (hant && CJK.test(s) ? hant(s) : s);
 
-// one of the app's own strings, written in Simplified Chinese in the source
 export function tr(key: string, ...args: unknown[]): string {
   if (LANG === 'en') return fill(DICT[key] ?? key, args);
   return fill(LANG === 'zh-Hant' ? toHant(key) : key, args);
 }
 
-// ---------- what the server sends ----------
-
-// the dictionary's templates ("{0} 个项目在跑"), as patterns that match a filled-in string; only
-// those with enough fixed text, some of it Chinese, to be recognised, so that nobody's prose
-// matches by accident
+// The dictionary's templates ("{0} 个项目在跑") as regexes for filled-in strings; only those with enough
+// Chinese fixed text, so free prose cannot match by accident. Longest first, so the most specific wins.
 interface Pattern { re: RegExp; en: string }
 let patterns: Pattern[] | null = null;
 function compile(): Pattern[] {
@@ -77,12 +70,11 @@ function compile(): Pattern[] {
       const m = part.match(/^\{(\d+)\}$/);
       if (!m) return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       order.push(+m[1]);
-      // "{0}{1}": the first of two values side by side is a sentence of its own, or nothing
+      // "{0}{1}": the first of two adjacent values is a whole sentence, or empty
       return parts[i + 1] === '' && /^\{\d+\}$/.test(parts[i + 2] ?? '') ? '((?:[\\s\\S]*?[。！？；.!?])?)' : '([\\s\\S]*?)';
     }).join('');
     out.push({ re: new RegExp(`^${src}$`), en: en.replace(/\{(\d+)/g, (_, i) => `{${order.indexOf(+i)}`) });
   }
-  // the longest fixed text first, so the most specific template wins
   return out.sort((a, b) => b.re.source.length - a.re.source.length);
 }
 
@@ -91,7 +83,6 @@ const PUNCT: Record<string, string> = { '；': '; ', '、': ', ', '：': ': ', '
 const punct = (s: string) => s.replace(/[；、：，。（）「」]/g, c => PUNCT[c]).replace(/ +$/, '');
 const cache = new Map<string, string>();
 
-// the dictionary entry or template for the whole of s, or null
 function direct(s: string, depth: number): string | null {
   const hit = DICT[s];
   if (hit !== undefined) return hit;
@@ -105,20 +96,19 @@ function direct(s: string, depth: number): string | null {
   return null;
 }
 
+// Tries the whole string, then a truncated title, lines, runs of sentences, separators, "（…）",
+// "label：text", and finally word by word when every Chinese word is in the dictionary.
 function english(s: string, depth = 0): string {
   if (depth > 3 || s.length > 400) return DICT[s] ?? s;
   const whole = direct(s, depth);
   if (whole !== null) return whole;
   const sub = (x: string) => (CJK.test(x) ? english(x, depth + 1) : x);
-  // a long text cut short ("多智能体通过 model context pr…"), as the server titles a project by its idea
   if (s.endsWith('…') && s.length > 12) {
     const head = s.slice(0, -1);
     const full = Object.keys(DICT).find(k => k.length > s.length && k.startsWith(head));
     if (full) { const en = DICT[full]; return en.length > 40 ? `${en.slice(0, 39).trimEnd()}…` : en; }
   }
-  // a line at a time
   if (s.includes('\n')) return s.split('\n').map(sub).join('\n');
-  // a sentence at a time, the longest run of sentences that one entry covers first
   const sen = s.split(/(?<=[。！？])/).filter(x => x.trim());
   if (sen.length > 1) {
     const out: string[] = [];
@@ -131,22 +121,18 @@ function english(s: string, depth = 0): string {
     }
     return out.join(' ');
   }
-  // "a · b", "a；b", "a、b": the parts one by one
   const parts = s.split(SEPARATORS);
   if (parts.length > 1) return parts.map((x, i) => (i % 2 ? PUNCT[x] ?? x : sub(x))).join('');
-  // "（text）"
   const paren = s.match(/^（([^（）]+)）$/);
   if (paren) return `(${sub(paren[1])})`;
-  // "label：text"
   const colon = s.indexOf('：');
   if (colon > 0 && colon < s.length - 1) return `${sub(s.slice(0, colon))}: ${sub(s.slice(colon + 1))}`;
-  // names and terms among other text ("方法设计师 D-03 Lv.2"), only when every Chinese word is known
   const words = s.match(/[\u4e00-\u9fff]+/g) ?? [];
   if (words.length && words.every(w => DICT[w] !== undefined)) return punct(s.replace(/[\u4e00-\u9fff]+/g, w => DICT[w]));
   return s;
 }
 
-// one string from the server (or from the shared design sources) in the language in use
+// a string from the server or the shared design sources
 export function trx(s: string): string;
 export function trx(s: string | null | undefined): string | null | undefined;
 export function trx(s: string | null | undefined) {
@@ -160,14 +146,14 @@ export function trx(s: string | null | undefined) {
   return v;
 }
 
-// every string in a server response, in place; keys are left alone
+// Translates every string value in place; objects that keep() accepts are left as written.
 export function localize<T>(data: T, keep?: (v: object) => boolean): T {
   if (LANG === 'zh-Hans') return data;
   const walk = (v: unknown): unknown => {
     if (typeof v === 'string') return trx(v);
     if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) v[i] = walk(v[i]); return v; }
     if (v && typeof v === 'object') {
-      if (keep?.(v)) return v; // left as it is, whatever language it is in
+      if (keep?.(v)) return v;
       for (const k of Object.keys(v)) (v as Record<string, unknown>)[k] = walk((v as Record<string, unknown>)[k]);
       return v;
     }

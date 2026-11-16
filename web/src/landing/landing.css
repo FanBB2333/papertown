@@ -1,12 +1,11 @@
-/* The landing: the town's paper, a line or two of what it is, four of its buildings drawn by hand,
-   and the way in on the right (first, on a phone). It scrolls on its own: the page under it does not. */
+/* The landing: a greeting and the town's status, four of its buildings, and the way in. */
 
 .landing {
   position: fixed; inset: 0; z-index: 120; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; min-height: 100%;
   background: radial-gradient(1200px 600px at 78% 8%, color-mix(in srgb, var(--brand) 9%, transparent), transparent 70%),
               radial-gradient(900px 520px at 6% 96%, color-mix(in srgb, var(--ok) 8%, transparent), transparent 70%), var(--bg);
-  color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.55; animation: ld-in .5s var(--out) both;
+  color: var(--ink); font-family: var(--font); font-size: 15px; line-height: 1.55; animation: fade .5s var(--out) both;
 }
 .landing h1, .landing h2 { font-family: var(--head); font-weight: 400; margin: 0; }
 .landing p { margin: 0; }
@@ -26,22 +25,19 @@
 }
 .ld-hero { grid-area: hero; display: flex; flex-direction: column; gap: 18px; }
 .ld-hero h1 { font-size: clamp(30px, 3.7vw, 46px); line-height: 1.25; letter-spacing: .01em; }
-/* the greeting, set apart from the status: a smaller italic serif in the brand's colour */
 .ld-hi { display: block; margin-bottom: .18em; font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; font-style: italic; font-size: .6em; letter-spacing: 0; color: var(--brand); }
 :lang(zh) .ld-hi { font-family: "Songti SC", STSong, "Noto Serif SC", serif; font-style: normal; letter-spacing: .04em; }
-/* the status: always one line (useOneLine shrinks it when the column is narrower) */
+/* always one line: useOneLine shrinks it when the column is narrower */
 .ld-st { display: block; white-space: nowrap; }
-/* the second line: which projects are stuck or at risk, each a link to it */
+/* the projects stuck or at risk, each a link */
 .ld-h2 { display: block; margin-top: .35em; font-size: .62em; line-height: 1.45; color: color-mix(in srgb, var(--ink) 70%, var(--muted)); }
-.ld-h2 a { color: var(--hc, var(--brand)); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .22em; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); }
+.ld-h2 a { color: var(--hc); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .22em; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); }
 .ld-h2 a:hover { text-decoration-color: currentColor; }
 .ld-h2 a.h-blocked { --hc: var(--bad); } .ld-h2 a.h-risk { --hc: var(--warn); }
-.ld-lede { max-width: 34em; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ld-lede { max-width: 34em; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-/* four buildings, each a part of a project */
 .ld-town { grid-area: town; align-self: start; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .ld-town li { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; animation: rise-in .6s var(--out) both; animation-delay: calc(.15s + var(--i) * 90ms); }
-/* each drawing fits the same box, the tall ones (a chimney) smaller */
 .ld-sp { --sp-h: 112px; display: flex; align-items: flex-end; justify-content: center; width: 100%; height: var(--sp-h); margin-bottom: 6px; transition: transform .5s var(--spring); }
 .ld-sp .sp-svg { width: 100%; height: var(--sp-h); filter: drop-shadow(0 8px 10px rgba(70, 45, 20, .12)); }
 .ld-town li:hover .ld-sp { transform: translateY(-4px); }
@@ -49,7 +45,6 @@
 .ld-town li > span:last-child { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 .ld-town li > span.ld-now { color: color-mix(in srgb, var(--ink) 75%, var(--muted)); font-variant-numeric: tabular-nums; }
 
-/* the way in */
 .ld-card {
   grid-area: card; align-self: center; padding: 28px 28px 24px; display: flex; flex-direction: column; gap: 14px; animation: rise-in .55s var(--out) .1s both;
 }
@@ -77,7 +72,6 @@
 .ld-pwf { display: flex; flex-direction: column; gap: 8px; }
 .ld-pwf .btns { display: flex; gap: 8px; }
 
-/* what it does, in three lines */
 .ld-feats { grid-area: feats; list-style: none; margin: 0; padding: 22px 0 0; border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
 .ld-feats li { display: flex; gap: 12px; align-items: flex-start; animation: rise-in .55s var(--out) both; animation-delay: calc(.35s + var(--i) * 80ms); }
@@ -97,10 +91,8 @@
   .ld-lang { min-width: 0; }
   .ld-hero { gap: 14px; }
   .ld-h2 { font-size: .56em; }
-  .ld-lede { font-size: 15px; }
   .ld-town { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; }
   .ld-sp { --sp-h: 96px; }
   .ld-card { padding: 22px 18px 18px; }
 }
-@keyframes ld-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .landing, .ld-town li, .ld-card, .ld-feats li { animation: none; } }

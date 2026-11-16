@@ -8,7 +8,7 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#f4eee2" />
     <script>
-      // the look chosen in the settings, before anything is painted (settings.ts keeps it up to date)
+      // applyLook() from settings.ts, run before first paint; both must decide the look the same way
       (function () {
         var s = {}, h = document.documentElement;
         try { s = JSON.parse(localStorage.getItem('pt-settings')) || {}; } catch (e) { /* private mode */ }
@@ -23,7 +23,7 @@
       })();
     </script>
     <style>
-      /* the mark on the paper while the app loads; the app replaces it when it starts */
+      /* boot mark, replaced when the app renders */
       body.proto-page { margin: 0; background: #f4eee2; }
       .boot {
         position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px;

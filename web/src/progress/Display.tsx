@@ -1,6 +1,5 @@
-// How the progress page is shown: the options of the page and, in one list, what each project
-// carries. For cards that list is everyone's (it is kept on the server, so every card stays as
-// tall as the others); a row's columns are this browser's, like the rest of this menu.
+// The progress page's 显示 menu. Card panes are kept on the server and shared by everyone, so every
+// card is as tall as the others; row columns, like the rest of the menu, belong to this browser.
 
 import { Button, Checkbox, Popover } from '@cloudflare/kumo';
 import { CaretDownIcon, CaretUpIcon } from '@phosphor-icons/react';

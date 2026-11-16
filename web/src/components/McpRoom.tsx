@@ -1,6 +1,5 @@
-// The MCP exchange: every MCP server the town is wired to, as lines on a switchboard. Each
-// shows where it is configured, whether it is connected and the tools it gives the agents;
-// lines added here can be changed and removed, any line can be switched off or redialled.
+// The MCP exchange: every MCP server the town is wired to, as lines on a switchboard, with where each
+// is configured, whether it is connected and the tools it gives the agents.
 
 import { useEffect, useState } from 'react';
 import { api, type McpServer, type McpView } from '../api';

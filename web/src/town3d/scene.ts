@@ -1,7 +1,5 @@
-// The town as a three.js scene, built from the same data as the map: ground tiles from
-// tileMat, yards and trees from world.js, every building from its own sprite drawing
-// (through Pen3), coloured from the ink-and-wash palette. Outlines are drawn as ink
-// lines that overshoot their corners a little, like the map's pen strokes.
+// The town as a three.js scene, built from the same data as the map, every building from its own
+// sprite drawing (through Pen3). Ink outlines overshoot their corners a little, like the map's pen strokes.
 
 import * as THREE from 'three';
 import { BUILDINGS } from '@design/sprites.js';
@@ -12,23 +10,27 @@ import { free } from '../components/walk';
 import type { World } from './body';
 import { PX, Pen3, ZS, type Glyph, type V3 } from './pen3';
 
-const THEME = THEMES.sketch as { mats: Record<string, unknown>; ink: string; text: string; ui: { bg: string; head: string } };
+const THEME = THEMES.sketch as { mats: Record<string, unknown>; text: string; ui: { bg: string; brand: string } };
 export const PAPER = THEME.ui.bg;
-export const BRAND = (THEMES.sketch as { ui: { brand: string } }).ui.brand;
+export const BRAND = THEME.ui.brand;
 export const TOP = 1.15; // how much brighter the lights make an upward face than the map's flat fill
 export const INK = '#2e1f12';
 export const WATER_Y = -0.1;
 export const WADE_Y = -0.16; // where your feet are in the shallows
-const GLOW = new THREE.Color('#ffc46b'); // lit windows and lamps after dark
+export const GLOW = new THREE.Color('#ffc46b'); // lit windows and lamps after dark
 
-// ---------- materials ----------
+export const mix = (a: string, b: string, t: number) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
+
+export function disposeGeometry(o: THREE.Object3D) {
+  o.traverse(c => { if (c instanceof THREE.Mesh || c instanceof THREE.LineSegments || c instanceof THREE.Points) c.geometry.dispose(); });
+}
 
 export class Materials {
   private solid = new Map<string, THREE.Material>();
   private lines = new Map<string, THREE.LineBasicMaterial>();
   textures: THREE.Texture[] = [];
 
-  color(mat: string, accent: string) {
+  color(mat: string, accent = '#c47a3a') {
     try { return matColor(THEME, mat, accent); } catch { return null; } // a class the theme has no colour for
   }
 
@@ -62,12 +64,15 @@ export class Materials {
   }
 }
 
-// ---------- ink ----------
+// a fixed pseudo-random 0..1 for integer coordinates and a seed
+export function hash(x: number, y: number, s: number) {
+  let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
 
 function noise(a: number, b: number, c: number) {
-  let h = (Math.imul(Math.round(a * 97), 374761393) + Math.imul(Math.round(b * 89), 668265263) + Math.imul(c, 982451653)) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return (((h ^ (h >>> 16)) >>> 0) / 4294967296) * 2 - 1;
+  return hash(Math.round(a * 97), Math.round(b * 89), c) * 2 - 1;
 }
 
 // segments as hand-drawn strokes: shared edges drawn once, each a touch long at both ends and off by a hair
@@ -92,8 +97,6 @@ export function inkLines(seg: number[], mat: THREE.Material) {
   return new THREE.LineSegments(g, mat);
 }
 
-// ---------- signs and decals ----------
-
 // a sign's lettering or a decal as a little textured plane on the face it is painted on
 function glyphMesh(g: Glyph, accent: string, mats: Materials, font: string, ready: Promise<unknown>) {
   const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d')!;
@@ -112,7 +115,7 @@ function glyphMesh(g: Glyph, accent: string, mats: Materials, font: string, read
     h = canvas.height / S * PX;
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.font = `${g.size * S}px ${font}`;
+      ctx.font = `${g.size * S}px ${font}`; // again: resizing the canvas reset it
       ctx.fillStyle = THEME.text;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'alphabetic';
@@ -132,7 +135,6 @@ function glyphMesh(g: Glyph, accent: string, mats: Materials, font: string, read
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
   }
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-  // text sits on its baseline; a decal is centred on its point
   const lift = g.kind === 'text' ? h * (0.5 - 0.22) : 0;
   m.position.set(g.at[0], g.at[1] + lift, g.at[2]);
   if (g.face === 'R') m.rotation.y = Math.PI / 2;
@@ -140,31 +142,26 @@ function glyphMesh(g: Glyph, accent: string, mats: Materials, font: string, read
   return m;
 }
 
-// ---------- the parts the sprites draw in screen space ----------
-
-// the map's screen-right and screen-up, as directions in the world: these parts face the map's viewer
+// the map's screen-right, up and toward-the-viewer, as directions in the world
 const RIGHT = new THREE.Vector3(1, 0, -1).normalize(), UP = new THREE.Vector3(0, 1, 0), TOWARD = new THREE.Vector3(1, 0, 1).normalize();
 const at = (c: V3, dx: number, dy: number, out = 0): V3 => [
   c[0] + RIGHT.x * dx * PX + TOWARD.x * out, c[1] - dy * PX, c[2] + RIGHT.z * dx * PX + TOWARD.z * out,
 ];
 
-interface Extra { beam?: THREE.Object3D }
-
-function extras(type: string, p: Pen3, group: THREE.Group): Extra {
-  const out: Extra = {};
+// 3D parts for what some sprites draw in screen space; returns the lighthouse's beam
+function extras(type: string, p: Pen3, group: THREE.Group) {
   if (type === 'lighthouse') {
     const c = p.W(0.5, 0.5, 2.43);
     const cone = new THREE.ConeGeometry(0.75, 7, 24, 1, true);
     cone.translate(0, -3.5, 0);
-    cone.rotateZ(Math.PI / 2); // apex at the lamp, opening sideways
+    cone.rotateZ(Math.PI / 2);
     const beam = new THREE.Mesh(cone, new THREE.MeshBasicMaterial({ color: '#ffecaa', transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
     const pivot = new THREE.Group();
     pivot.position.set(...c);
     pivot.add(beam);
     group.add(pivot);
-    out.beam = pivot;
+    return pivot;
   } else if (type === 'qa') {
-    // the magnifying glass with its tick, standing on the roof mast
     const c = p.W(1.04, 0.99, 2.25);
     const ring = new THREE.TorusGeometry(13 * PX, 0.035, 8, 28);
     const disc = new THREE.CircleGeometry(13 * PX, 28);
@@ -176,14 +173,12 @@ function extras(type: string, p: Pen3, group: THREE.Group): Extra {
     const tick = [at(c, -6, 0, 0.03), at(c, -1, 5, 0.03), at(c, 7, -5, 0.03)];
     for (let i = 0; i + 1 < tick.length; i++) p.edge(tick[i], tick[i + 1]);
   } else if (type === 'genealogy') {
-    // the family tree's crown and the ancestors hanging in it
     const c = p.W(0.8, 0.63, 1.8);
     p.sphereW(at(c, -15, 5), 17 * PX, 'leaf');
     p.sphereW(at(c, 15, 3), 17 * PX, 'leaf');
     p.sphereW(at(c, 0, -11), 20 * PX, 'leaf');
     for (const [dx, dy] of [[0, -24], [-13, -6], [12, -8], [-20, 10], [-4, 10], [18, 8]]) p.sphereW(at(c, dx, dy, 0.42), 3.2 * PX, 'acc2');
   } else if (type === 'weather') {
-    // the anemometer plate on its mast, and its pointer
     const c = p.W(1.35, 0.45, 2.3);
     const dish = new THREE.CylinderGeometry(16 * PX, 13 * PX, 0.05, 24);
     dish.translate(...c);
@@ -191,10 +186,7 @@ function extras(type: string, p: Pen3, group: THREE.Group): Extra {
     p.ring([c[0], c[1] + 0.025, c[2]], 16 * PX, 24);
     p.cylW(c, 0.015, 0.32, 'dark');
   }
-  return out;
 }
-
-// ---------- props ----------
 
 function drawProp(prop: string, x: number, y: number, p: Pen3) {
   if (prop === 'tree_round') {
@@ -211,13 +203,9 @@ function drawProp(prop: string, x: number, y: number, p: Pen3) {
   }
 }
 
-// ---------- the small things on the ground ----------
-
 const FLOWERS = ['#e0705c', '#efc24a', '#f6f1e4', '#b08ad0', '#6f9fd4'];
 
-// what is only seen up close: flowers and tufts on the grass, stones on the sand, benches on
-// the square, a step and a mat at every door and lanterns at the big ones. Blocky, as the
-// town's own blocks are, and drawn without ink where they are too small to outline.
+// what is only seen up close: flowers, tufts, stones, benches, and a step and mat at every door
 function details(places: Placement[], taken: Set<string>, p: Pen3) {
   const n = (x: number, y: number, s: number) => (noise(x, y, s) + 1) / 2;
   for (let x = 1; x < N; x++) for (let y = 1; y < N; y++) {
@@ -244,7 +232,6 @@ function details(places: Placement[], taken: Set<string>, p: Pen3) {
         p.block(rx, 0, ry, s * 1.4, s * 0.6, s, 'edge');
       }
     } else if (m === 'plaza' && free(places, x + 0.5, y + 0.5) && n(x, y, 35) < 0.3) {
-      // a bench along the tile, its back to the tile's far side
       const bx = x + 0.22, by = y + 0.62;
       for (const lx of [0.03, 0.5]) p.block(bx + lx, 0, by, 0.03, 0.11, 0.14, 'dark');
       p.block(bx, 0.11, by - 0.02, 0.56, 0.035, 0.18, 'wood');
@@ -256,10 +243,10 @@ function details(places: Placement[], taken: Set<string>, p: Pen3) {
     if (!b) continue;
     const f = footprint(pl), cx = f.x + f.w / 2, y = f.y + f.d;
     if (!free(places, cx, y + 0.3)) continue;
-    p.block(cx - 0.3, 0, y + 0.01, 0.6, 0.03, 0.16, 'edge'); // the step
-    p.block(cx - 0.22, 0, y + 0.2, 0.44, 0.012, 0.26, pl.accent || b.accent, false); // the mat, in the building's colour
+    p.block(cx - 0.3, 0, y + 0.01, 0.6, 0.03, 0.16, 'edge');
+    p.block(cx - 0.22, 0, y + 0.2, 0.44, 0.012, 0.26, pl.accent || b.accent, false);
     if (!pl.core) continue;
-    for (const s of [-1, 1]) { // lanterns either side
+    for (const s of [-1, 1]) {
       const lx = cx + s * 0.5;
       p.block(lx - 0.015, 0, y + 0.16, 0.03, 0.34, 0.03, 'dark');
       p.block(lx - 0.045, 0.34, y + 0.13, 0.09, 0.09, 0.09, 'win');
@@ -267,8 +254,6 @@ function details(places: Placement[], taken: Set<string>, p: Pen3) {
     }
   }
 }
-
-// ---------- the town ----------
 
 export interface Building {
   pl: Placement;
@@ -278,8 +263,8 @@ export interface Building {
   lift: number; // how far it is raised right now (hover / at its door)
   busy: boolean;
   beam?: THREE.Object3D;
-  parts: THREE.Mesh[]; // its solid surfaces
-  box: THREE.Box3; // round them, unraised
+  parts: THREE.Mesh[];
+  box: THREE.Box3; // round its parts, unraised
   heights: Map<number, number>; // the top of it at a point, measured as you come near
 }
 
@@ -302,18 +287,17 @@ export function figure(mats: Materials, coat: string, scarf = '#e7ca7b') {
   p.cylW([0, 0, 0], 0.05, 0.14, 'dark');
   p.cylW([0, 0.44, 0], 0.11, 0.05, 'scarf');
   p.sphereW([0, 0.6, 0], 0.11, 'egg');
-  for (const o of meshes(p, m => m === 'coat' ? coat : m === 'scarf' ? scarf : mats.color(m, '#c47a3a'), mats)) g.add(o);
+  for (const o of meshes(p, m => m === 'coat' ? coat : m === 'scarf' ? scarf : mats.color(m), mats)) g.add(o);
   return g;
 }
 
 // how high a building's solid top is at a point, unraised (-Infinity: nothing of it there)
-const down = new THREE.Raycaster(), DOWN = new THREE.Vector3(0, -1, 0);
+const down = new THREE.Raycaster(undefined, undefined, 0, 60), DOWN = new THREE.Vector3(0, -1, 0);
 function heightOf(b: Building, x: number, y: number) {
   const k = Math.round(x * 24) * 4096 + Math.round(y * 24);
   let h = b.heights.get(k);
   if (h === undefined) {
     down.set(new THREE.Vector3(Math.round(x * 24) / 24, 40, Math.round(y * 24) / 24), DOWN);
-    down.far = 60;
     const hit = down.intersectObjects(b.parts, false)[0];
     h = hit ? hit.point.y - b.group.position.y : -Infinity;
     b.heights.set(k, h);
@@ -354,10 +338,8 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
   const buildings = new Map<string, Building>();
   const pick: THREE.Object3D[] = [];
   const puffs: Puff[] = [];
-  const disposables: THREE.BufferGeometry[] = [];
-  const plain = (m: string) => mats.color(m, '#c47a3a');
+  const plain = (m: string) => mats.color(m);
 
-  // ground: one top per land tile, merged per material; the shore gets a little bank
   const ground = new Pen3();
   const isWater = (x: number, y: number) => x < 0 || y < 0 || (x < N && y < N && tileMat(x, y) === 'water');
   for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
@@ -370,8 +352,6 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
     if (isWater(x, y - 1)) bank([x + 1, 0, y], [x, 0, y]);
     if (isWater(x, y + 1)) bank([x, 0, y + 1], [x + 1, 0, y + 1]);
   }
-  // the board's near edges, where it drops to the paper: seen only from the air, as on the
-  // map; on the ground the land goes on past them (land.ts)
   const E = -0.6 * ZS, edge = new Pen3(), rim = new THREE.Group();
   edge.face([[0, 0, N], [N, 0, N], [N, E, N], [0, E, N]], 'edge', false);
   edge.face([[N, 0, 0], [N, 0, N], [N, E, N], [N, E, 0]], 'edge', false);
@@ -379,7 +359,6 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
   edge.edge([N, 0, 0], [N, 0, N]);
   for (const o of meshes(edge, plain, mats, true)) rim.add(o);
   root.add(rim);
-  // centre dashes along the ring road
   for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) {
     if (tileMat(x, y) !== 'road') continue;
     const d = 0.004, w = 0.035;
@@ -388,19 +367,18 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
   }
   for (const o of meshes(ground, plain, mats, true)) root.add(o);
 
-  // the sea on the far sides, washing out into the paper a few tiles off shore
   const SEA = 6, span = N + SEA;
   const fade = document.createElement('canvas');
   fade.width = fade.height = 128;
   const fx = fade.getContext('2d')!, img = fx.createImageData(128, 128);
   for (let j = 0; j < 128; j++) for (let i = 0; i < 128; i++) {
-    const wx = -SEA + (i + 0.5) / 128 * span, wz = -SEA + (j + 0.5) / 128 * span; // texture row 0 is the far edge (z = -SEA)
+    const wx = -SEA + (i + 0.5) / 128 * span, wz = -SEA + (j + 0.5) / 128 * span;
     const out = Math.hypot(Math.max(0, -wx), Math.max(0, -wz)) / (SEA - 1);
     const a = Math.round(255 * Math.max(0, Math.min(1, 1 - out * out)));
     img.data.set([a, a, a, 255], (j * 128 + i) * 4);
   }
   fx.putImageData(img, 0, 0);
-  const alpha = new THREE.CanvasTexture(fade); // flipped as usual: canvas row 0 lands at v = 1, the far edge
+  const alpha = new THREE.CanvasTexture(fade); // canvas row 0 lands at v = 1, the far edge (z = -SEA)
   mats.textures.push(alpha);
   const seaGeo = new THREE.PlaneGeometry(span, span);
   seaGeo.rotateX(-Math.PI / 2); // plane (x, y) -> world (x, 0, -y)
@@ -410,7 +388,6 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
   sea.receiveShadow = true;
   sea.renderOrder = -1;
   root.add(sea);
-  // ripples in two sets that sway against each other
   const waves = [[], []] as number[][];
   for (let x = -4; x < N; x++) for (let y = -4; y < N; y++) {
     if (!isWater(x, y) || noise(x, y, 7) < 0.1) continue;
@@ -429,23 +406,19 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
   });
   for (const w of waveSets) root.add(w);
 
-  // the core buildings' yards: a tinted pad with an ink rim
   for (const y of yards(places)) {
     const shape = new THREE.Shape(y.pts.map(([a, b]) => new THREE.Vector2(a, b)));
     const g = new THREE.ShapeGeometry(shape);
     g.rotateX(Math.PI / 2); // shape (x, y) -> world (x, 0, y)
     g.translate(0, 0.008, 0);
-    const tint = new THREE.Color(plain('grass')!).lerp(new THREE.Color(y.accent), 0.15);
-    const pad = new THREE.Mesh(g, mats.surface('#' + tint.getHexString(), true));
+    const pad = new THREE.Mesh(g, mats.surface(mix(plain('grass')!, y.accent, 0.15), true));
     pad.receiveShadow = true;
     root.add(pad);
     const rim = new Pen3();
     y.pts.forEach((q, i) => { const r = y.pts[(i + 1) % y.pts.length]; rim.edge([q[0], 0.012, q[1]], [r[0], 0.012, r[1]]); });
-    root.add(inkLines(rim.ink, mats.line('#' + new THREE.Color(y.accent).lerp(new THREE.Color(INK), 0.28).getHexString(), 0.75)));
+    root.add(inkLines(rim.ink, mats.line(mix(y.accent, INK, 0.28), 0.75)));
   }
 
-  // trees, from the same scatter as the map, and the street lamps; you bump into them,
-  // and can stand on a treetop if you fly up to one
   const decor = new Pen3(), solids: { x: number; y: number; r: number; top: number }[] = [], taken = new Set<string>();
   const items = [...decorItems(places, 'light'), ...decorItems(places, 'full').filter(i => i.prop === 'lamp')];
   for (const it of items) {
@@ -461,7 +434,6 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
     if (o instanceof THREE.Mesh && o.userData.mat === 'win') glow.add(o.material as THREE.MeshLambertMaterial);
   }
 
-  // the buildings
   const hasCore = places.some(p => p.core);
   for (const pl of places) {
     const b = BUILDINGS[pl.type];
@@ -471,12 +443,11 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
     const group = new THREE.Group();
     group.userData.id = pl.id;
     b.draw(p, pl as unknown as Record<string, unknown>);
-    const ex = extras(pl.type, p, group);
-    // as on the map, the buildings that are not core are a lighter wash with fainter ink
+    const beam = extras(pl.type, p, group);
     const quiet = hasCore && !pl.core;
     const colorOf = (m: string) => {
       const c = mats.color(m, accent);
-      return c && quiet ? '#' + new THREE.Color(c).lerp(new THREE.Color(PAPER), 0.38).getHexString() : c;
+      return c && quiet ? mix(c, PAPER, 0.38) : c;
     };
     const parts: THREE.Mesh[] = [];
     for (const o of meshes(p, colorOf, mats, false, quiet ? 0.45 : 0.72)) {
@@ -491,7 +462,6 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
     for (const s of p.puffs) {
       for (let i = 0; i < 4; i++) {
         const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshLambertMaterial({ color: '#fffaf2', transparent: true, depthWrite: false }));
-        disposables.push(mesh.geometry);
         group.add(mesh);
         puffs.push({ mesh, at: s.at, s: s.s, phase: i / 4 });
       }
@@ -500,7 +470,7 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
     const box = new THREE.Box3();
     for (const m of parts) { m.geometry.computeBoundingBox(); box.union(m.geometry.boundingBox!); }
     buildings.set(pl.id, {
-      pl, group, lift: 0, busy: pl.status === 'busy', beam: ex.beam, parts, box, heights: new Map(),
+      pl, group, lift: 0, busy: pl.status === 'busy', beam, parts, box, heights: new Map(),
       top: new THREE.Vector3(f.x + f.w / 2, (b.h * k + 0.55) * ZS, f.y + f.d / 2),
       mid: new THREE.Vector3(f.x + f.w / 2, b.h * k * ZS * 0.4, f.y + f.d / 2),
     });
@@ -537,11 +507,11 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
         if (Math.abs(next - b.lift) > 1e-4) moving = true;
         b.lift = next;
         b.group.position.y = b.lift;
-        if (b.beam) b.beam.rotation.y = t * 0.9 + Math.sin(t * 1.8) * 0.35; // sweeps faster past the land, lingers over the sea
+        if (b.beam) b.beam.rotation.y = t * 0.9 + Math.sin(t * 1.8) * 0.35;
       }
       for (const q of puffs) {
-        const u = (t / 3.4 + q.phase) % 1; // each puff rises, drifts and thins over 3.4 s
-        const up = 1 - (1 - u) * (1 - u), wide = Math.sqrt(u); // pushed out fast, slowing as it cools
+        const u = (t / 3.4 + q.phase) % 1;
+        const up = 1 - (1 - u) * (1 - u), wide = Math.sqrt(u);
         const r = (0.07 + wide * 0.16) * q.s;
         q.mesh.scale.setScalar(r);
         q.mesh.position.set(q.at[0] + u * u * 0.32 * q.s, q.at[1] + 0.06 + up * 0.95 * q.s, q.at[2] - u * u * 0.1 * q.s);
@@ -557,9 +527,8 @@ export function buildTown(places: Placement[], mats: Materials, font: string, fo
       seaMat.opacity = a;
     },
     dispose() {
-      root.traverse(o => { if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) o.geometry.dispose(); });
+      disposeGeometry(root);
       for (const q of puffs) (q.mesh.material as THREE.Material).dispose();
-      for (const g of disposables) g.dispose();
       seaMat.dispose();
       for (const b of buildings.values()) b.group.traverse(o => { if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshBasicMaterial) o.material.dispose(); });
     },

@@ -1,16 +1,12 @@
-// 进展 as rows: a project to a line, in the columns you picked, so a column can be read down the
-// projects. It never scrolls sideways: when the columns do not fit the width (a narrow window, a
-// phone, many columns) a project folds in two, the parts under its name, and leaves out what has
-// nothing to say.
+// 进展 as rows: a project to a line, in the columns you picked. It never scrolls sideways: when the
+// columns do not fit the width, a project folds in two, the parts under its name.
 
 import { useEffect, useRef, useState } from 'react';
 import type { Pane, PaseoDefaults, ProjectCard } from '../api';
-import { STATUS } from '../components/MillRoom';
+import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { tr } from '../i18n';
-import { follow, go, href } from '../route';
-import { askPath } from './Ask';
-import { CardPane, PANES, Stages, UpdateButton, useCardActs, Who } from './parts';
+import { AskButton, CardPane, opens, PANES, Stages, UpdateButton, useCardActs, Who } from './parts';
 
 export interface Group { key: string; name: string; items: ProjectCard[] }
 
@@ -58,23 +54,20 @@ export function ProjectRows({ groups, cols, ...rest }: { groups: Group[]; cols: 
 function ProjectRow({ r, i, cols, defs, toast, onChange }: { r: ProjectCard; i: number; cols: Pane[] } & Props) {
   const acts = useCardActs(r, toast, onChange);
   const { line, card } = r;
-  const to = `/progress/${line.seq}`;
-  const open = () => go(to);
+  const o = opens(line);
   return (
-    <div className={`pr${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} role="row" onClick={open} tabIndex={0}
-      onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(); } }}
-      aria-label={tr('#{0} {1}，看详情', line.seq, line.title)}>
+    <div className={`pr${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} role="row" {...o.box}>
       <div className="pr-name" role="cell">
         <span className="pc-seq">#{line.seq}</span>
         <div className="pr-t">
-          <h3 title={line.title}><a href={href(to)} onClick={e => { e.stopPropagation(); follow(e, to); }} tabIndex={-1}>{line.title}</a></h3>
-          <span className="pr-sub"><span className={`pst pst-${line.status}`}>{STATUS[line.status] ?? line.status}</span><Who r={r} /></span>
+          {o.title}
+          <span className="pr-sub"><StatusTag status={line.status} /><Who r={r} /></span>
         </div>
       </div>
       <div className="pr-stage" role="cell"><Stages r={r} /></div>
       <div className="pr-cells">{cols.map(p => <CardPane key={p} pane={p} r={r} bare />)}</div>
       <div className="pc-acts pr-acts" role="cell" onClick={e => e.stopPropagation()}>
-        <button className="btn pc-ask" onClick={() => go(askPath(line.seq))} title={tr('问这个项目任何问题')}><Icon n="chat" size={14} /><span>{tr('提问')}</span></button>
+        <AskButton seq={line.seq} />
         <UpdateButton r={r} acts={acts} defs={defs} />
       </div>
     </div>

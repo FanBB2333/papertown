@@ -1,6 +1,5 @@
-// Paper and pencil for the hand-drawn look, made once at start and handed to CSS as
-// custom properties: a paper grain, a soft watercolour bloom, and a few hand-drawn box
-// outlines that panels and buttons stretch over themselves as a background image.
+// Textures for the hand-drawn look, generated once at start and handed to CSS as custom properties:
+// paper grain, a watercolour bloom, and hand-drawn boxes, rings and rules used as background images.
 
 const INK = 'rgba(46,31,18,.5)';
 
@@ -17,7 +16,6 @@ function canvas(size: number) {
   return { c, g: c.getContext('2d')! };
 }
 
-// mostly white with sparse darker specks and a few fibres
 function grain(size = 240): string {
   const { c, g } = canvas(size);
   const img = g.createImageData(size, size), r = rng(7);
@@ -52,7 +50,6 @@ function bloom(size = 384): string {
         const at = (i: number, j: number) => o.grid[(j % o.n) * o.n + (i % o.n)];
         v += o.w * ((at(ix, iy) * (1 - tx) + at(ix + 1, iy) * tx) * (1 - ty) + (at(ix, iy + 1) * (1 - tx) + at(ix + 1, iy + 1) * tx) * ty);
       }
-      // warm, faint pooling: never grey, at most a light tea stain
       const k = (y * size + x) * 4, d = Math.max(0, v - 0.42) * 30;
       img.data[k] = 255 - d * 0.6; img.data[k + 1] = 255 - d * 0.9; img.data[k + 2] = 255 - d * 1.6; img.data[k + 3] = 255;
     }
@@ -96,7 +93,6 @@ function ring(seed: number, color = INK): string {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
-// a single hand-drawn rule, for underlines and dividers
 function rule(seed: number, color = INK): string {
   const r = rng(seed), j = (a: number) => (r() - 0.5) * a;
   const d = `M0.5,${f(5 + j(1.5))}Q25,${f(5 + j(3))} 50,${f(5 + j(2))}T99.5,${f(5 + j(1.5))}`;

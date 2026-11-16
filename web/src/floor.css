@@ -1,6 +1,5 @@
 /* The shop floor of a core building: one lane per paper, stations along it, workers at
-   the stations. The frame is shared; the rail under the stations is dressed per trade
-   (a conveyor, a shelf, a furrow, a press bed). */
+   the stations; the rail under the stations is dressed per trade. */
 
 .floor { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 26px 32px; display: flex; flex-direction: column; gap: 14px; }
 .fl-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; }
@@ -14,14 +13,13 @@
 .lane {
   display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 18px; align-items: stretch; padding: 12px 18px 8px 16px;
   text-align: left; color: var(--ink); font: inherit; cursor: pointer; border-radius: 16px;
-  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 1px 0 rgba(46, 31, 18, .05);
+  --ls: transparent; background: var(--panel); border: 1px solid var(--line); box-shadow: inset 4px 0 0 var(--ls), 0 1px 0 rgba(46, 31, 18, .05);
   animation: rise-in .55s var(--out) both; animation-delay: calc(var(--i, 0) * 60ms);
   transition: transform .55s var(--spring), box-shadow .4s var(--out), border-color .3s var(--out);
 }
 .lane:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent, var(--brand)) 45%, var(--line)); box-shadow: inset 4px 0 0 var(--ls), 0 12px 30px -20px rgba(46, 31, 18, .55); }
 .lane.ls-done { background: color-mix(in srgb, var(--ok) 4%, var(--panel)); }
-/* the row's state as a stripe down its left edge, so the rows read apart before their words do */
-.lane { --ls: transparent; box-shadow: inset 4px 0 0 var(--ls), 0 1px 0 rgba(46, 31, 18, .05); }
+/* the lane's state as a stripe down its left edge */
 .lane:is(.ls-running, .ls-hatching, .ls-working) { --ls: var(--brand); }
 .lane:is(.ls-waiting, .ls-queued) { --ls: var(--warn); }
 .lane:is(.ls-done, .ls-linked) { --ls: var(--ok); }
@@ -29,9 +27,8 @@
 .ln-tag { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .ln-tag .proj-top > b { font: 15px var(--head); color: var(--brand); }
 .ln-tag h4 { margin: 6px 0 4px; font-size: 14px; font-weight: 600; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.ln-tag small { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ln-tag small { color: var(--muted); font-size: 11.5px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 
-/* the track: stations in columns, the rail across them at the height of the art's feet */
 .ln-track { position: relative; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); align-items: end; min-height: 132px; }
 .ln-rail { position: absolute; left: 4px; right: 4px; bottom: 21px; height: 12px; border-radius: 6px; }
 .ln-token {
@@ -68,6 +65,7 @@
 .wk { position: relative; display: inline-flex; flex-direction: column; align-items: center; }
 .wk .ava { width: 32px; height: 32px; transition: opacity .5s var(--out), filter .5s var(--out); }
 .fst-crew .wk + .wk { margin-left: -8px; }
+.wk-more { align-self: center; margin-left: 2px; font-size: 11px; color: var(--muted); padding: 0 5px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 7%, transparent); }
 .bub {
   position: absolute; z-index: 4; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-style: normal;
   font-size: 11px; line-height: 1.5; padding: 0 7px; border-radius: 8px; color: var(--panel); background: var(--ink); pointer-events: none;
@@ -98,7 +96,7 @@
 
 /* ---------- the rails, per trade ---------- */
 
-/* the mill: a conveyor that indexes forward while the line runs */
+/* the mill: a conveyor */
 .floor-mill .ln-rail {
   background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--ink) 20%, transparent) 0 9px, color-mix(in srgb, var(--ink) 8%, transparent) 9px 18px);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent);
@@ -110,13 +108,14 @@
 .floor-mill .lane.moving .ln-rail { animation: belt-run 1.2s cubic-bezier(.6, 0, .3, 1) infinite; }
 @keyframes belt-run { to { background-position: 18px 0; } }
 
-/* the depot: wooden shelving, an upright at every bay */
+/* the depot: shelving with an upright at every bay */
 .floor-depot .ln-rail { height: 10px; border-radius: 3px; background: linear-gradient(#c9a06c, #a77c4c); box-shadow: inset 0 -2px 0 rgba(60, 35, 15, .25), 0 2px 0 rgba(60, 35, 15, .12); }
-.floor-depot .fst::before {
-  content: ''; position: absolute; z-index: -1; left: 6px; bottom: 21px; width: 5px; height: 92px; border-radius: 2px;
+.floor-depot .fst::before, .floor-depot .fst:last-child::after {
+  content: ''; position: absolute; z-index: -1; bottom: 21px; width: 5px; height: 92px; border-radius: 2px;
   background: linear-gradient(#b48a58, #8f6a40); opacity: .55;
 }
-.floor-depot .fst:last-child::after { content: ''; position: absolute; z-index: -1; right: 6px; bottom: 21px; width: 5px; height: 92px; border-radius: 2px; background: linear-gradient(#b48a58, #8f6a40); opacity: .55; }
+.floor-depot .fst::before { left: 6px; }
+.floor-depot .fst:last-child::after { right: 6px; }
 .crates { display: flex; align-items: flex-end; gap: 2px; height: 32px; }
 .crates i { width: 13px; height: 13px; border-radius: 2px; background: #d2a066; border: 1px solid rgba(60, 35, 15, .55); box-shadow: inset 0 -3px 0 rgba(60, 35, 15, .15); }
 .crates i:nth-child(even) { height: 17px; }
@@ -125,11 +124,12 @@
 .crates em { font-style: normal; font-size: 10.5px; color: var(--muted); margin-left: 2px; }
 @keyframes crate-go { to { transform: translateX(3px) translateY(-2px); } }
 
-/* the farm: a furrow of soil, a plot per job */
+/* the farm: a furrow of soil */
 .floor-farm .ln-rail { height: 14px; bottom: 19px; border-radius: 8px; background: repeating-linear-gradient(90deg, #8d6b49 0 14px, #9b7853 14px 28px); box-shadow: inset 0 3px 0 rgba(255, 255, 255, .12); }
-.floor-farm .fst-art { height: 52px; margin-bottom: 14px; }
+.floor-farm .fst-art { height: 60px; margin-bottom: 12px; }
 .floor-farm .fst-crew { min-height: 40px; }
 .plant { width: 52px; height: 52px; overflow: visible; }
+.floor-farm .plant { width: 62px; height: 62px; }
 .plant .mound { fill: #7a5a3c; }
 .plant .seed { fill: #e2b84a; animation: seed 2s var(--in-out) infinite; transform-origin: 30px 49px; }
 @keyframes seed { 50% { transform: scale(1.25); } }
@@ -145,8 +145,9 @@
 .plant.wither .stalk { transform: scaleY(var(--g)) rotate(14deg); }
 .plant.gone { opacity: .35; }
 .floor-farm .st-todo .fst-art { opacity: .55; filter: none; }
+.floor-farm .st-todo .fst-name { opacity: .6; }
 
-/* the press: a steel bed on rollers; sheets pile up as versions come off */
+/* the press: a steel bed on rollers */
 .floor-press .ln-rail {
   height: 12px; background: linear-gradient(#5a6070, #3e4350); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
 }
@@ -162,7 +163,7 @@
 .sheets i:nth-child(4) { transform: translate(-6px, -6px) rotate(-2deg); }
 .sheets i::after { content: ''; position: absolute; left: 3px; right: 3px; top: 4px; height: 8px; background: repeating-linear-gradient(transparent 0 2px, color-mix(in srgb, var(--ink) 30%, transparent) 2px 3px); }
 
-/* the switch between the floor and the details, in the room's header */
+/* the floor/details switch in a room's header */
 .in-view { flex: none; }
 
 @media (max-width: 900px) {
@@ -170,7 +171,3 @@
   .ln-track { min-height: 120px; }
   .fl-head { flex-direction: column; align-items: flex-start; }
 }
-.wk-more { align-self: center; margin-left: 2px; font-size: 11px; color: var(--muted); padding: 0 5px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 7%, transparent); }
-.floor-farm .plant { width: 62px; height: 62px; }
-.floor-farm .fst-art { height: 60px; margin-bottom: 12px; }
-.floor-farm .st-todo .fst-name { opacity: .6; }

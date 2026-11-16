@@ -1,12 +1,9 @@
-// A project in full, at /progress/<its number>: the card its lead wrote, every experiment that
-// runs or waits and those planned, what it is to produce, its code and paper repositories, the
-// memory imported from earlier agent conversations, and beside it a box that asks it anything
-// on the full-screen page at /progress/<number>/ask, with the latest questions asked, and the
-// latest pages its agents wrote (/progress/<number>/pages). On a phone it is one column.
+// A project in full at /progress/<number>: its card, experiments, outputs, repositories and memory,
+// beside boxes for asking it and for the pages its agents wrote.
 
 import { useEffect, useState } from 'react';
 import { type Hit, type PaseoDefaults, type ProjectCard } from '../api';
-import { STATUS } from '../components/MillRoom';
+import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
@@ -14,7 +11,7 @@ import { follow, href, PATHS } from '../route';
 import { AskBox, askPath } from './Ask';
 import { PagesBox } from './Pages';
 import { MemorySection, MemoryViewer } from './Memory';
-import { Meter, OUT_STATE, repoLine, runText, Stages, UpdateButton, useCardActs, Who } from './parts';
+import { Meter, noCardText, OUT_STATE, repoLine, runText, Stages, UpdateButton, useCardActs, Who } from './parts';
 
 export interface ConsoleTarget { mod?: string; file?: string; job?: string }
 type Open = (lineId: string, t?: ConsoleTarget) => void;
@@ -51,7 +48,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
         <div className="pj-title">
           <span className="pc-seq">#{line.seq}</span>
           <h1>{line.title}</h1>
-          <span className={`pst pst-${line.status}`}>{STATUS[line.status] ?? line.status}</span>
+          <StatusTag status={line.status} />
         </div>
         <div className="pj-acts">
           <a className="btn pri" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={14} />{tr('提问')}</a>
@@ -88,9 +85,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
                 <p className="small muted">{tr('{0}由 {1} 写', ago(card.at), card.by)}</p>
               </>
             ) : (
-              <p className="psec-empty muted">
-                {r.lead?.started ? tr('还没有卡片。按「更新」，负责人读完项目后会写第一张。') : tr('这个项目还没有负责人。配一个以后，按「更新」让它把进展写成卡片。')}
-              </p>
+              <p className="psec-empty muted">{noCardText(r)}</p>
             )}
             <div className="pj-upd">
               {r.lead?.started && !r.pending && (

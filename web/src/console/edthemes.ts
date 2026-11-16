@@ -1,9 +1,5 @@
-// The editor's looks, chosen the way VS Code chooses them: a colour theme for the code panel and
-// the paper's source (the file list, the tabs, the editor and its status bar), and a file icon
-// theme for the lists of files. A theme is a set of CSS variables set on the panel; the editor
-// marks each token with a class (pt-…) whose colour is one of those variables, so switching, or
-// previewing while you move through the list, needs no editor rebuilt (the classes are in
-// highlight.ts, with the editor, so that nothing here loads CodeMirror). Kept in settings.ts.
+// The editor's colour themes and file icon themes, kept in settings.ts. A theme is a set of CSS
+// variables on the panel; the token classes live in highlight.ts so that this file does not load CodeMirror.
 
 import { useSyncExternalStore, type CSSProperties } from 'react';
 import { getSettings, onSettings, setSettings } from '../settings';
@@ -151,7 +147,7 @@ export const THEMES: EdTheme[] = [
   },
 ];
 
-// the default goes with the look of the page: ink on paper, or plain light or dark with Cloudflare's
+// the default theme for the page's look: ink on paper, or plain light or dark with Cloudflare's
 function fitting() {
   const h = document.documentElement;
   return !h.classList.contains('ui-cf') ? 'paper' : h.dataset.mode === 'dark' ? 'dark' : 'light';
@@ -165,25 +161,21 @@ const onMac = (th: EdTheme): EdTheme => ({
     rowOn: 'color-mix(in srgb, var(--mac-accent) 18%, transparent)', cursor: 'var(--mac-accent)',
   },
 });
-export function themeOf(id: string) {
+function themeOf(id: string) {
   const th = THEMES.find(x => x.id === (id === 'auto' ? fitting() : id)) ?? THEMES[0];
   return id === 'auto' && document.documentElement.classList.contains('ui-mac') ? onMac(th) : th;
 }
 export const autoTheme = (): EdTheme => ({ ...themeOf('auto'), id: 'auto', name: tr('跟随界面（默认）') });
 
-// the CSS variables a theme sets on the panel it colours
 export function themeVars(th: EdTheme): CSSProperties {
   const v: Record<string, string> = {};
   for (const [k, c] of Object.entries(th.ui)) v[`--ed-${k}`] = c;
   for (const [k, c] of Object.entries(th.tok)) v[`--tk-${k}`] = c;
   v['--tk-com-style'] = th.italic ? 'italic' : 'normal';
-  // a theme of its own colours also stands in for the page's, so what the panel borrows from the
-  // page (buttons, notes, muted text) follows it; the paper theme is made of the page's colours
+  // a theme with its own colours also overrides the page's; the paper theme is made of the page's
   if (!th.ui.fg.startsWith('var(')) Object.assign(v, { '--ink': th.ui.fg, '--muted': th.ui.muted, '--line': th.ui.border, '--panel': th.ui.input, '--panel2': th.ui.side, '--side': th.ui.side });
   return v as CSSProperties;
 }
-
-// ---------- file icon themes ----------
 
 export type IconTheme = 'dots' | 'glyphs' | 'badges' | 'none';
 export const ICON_THEMES: [IconTheme, string, string][] = [
@@ -192,8 +184,6 @@ export const ICON_THEMES: [IconTheme, string, string][] = [
   ['badges', tr('徽章'), tr('实心的文件和文件夹图标，常见文件夹各有颜色')],
   ['none', tr('无图标'), tr('只有文件名')],
 ];
-
-// ---------- the choice, and a preview while choosing ----------
 
 let preview: { theme?: string; icons?: IconTheme } | null = null;
 let picker: 'theme' | 'icons' | null = null;

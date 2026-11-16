@@ -1,7 +1,5 @@
 /* The chat at the bottom of every page: one line to write in that opens upward into the
-   conversation, the departments along its top. Drawn like the other panels; while you write,
-   the closed box is drawn in the brand colour. In the console it keeps a band of its own under
-   the panel column, so nothing there is ever hidden behind it. */
+   conversation, with the departments along its top. */
 
 .dock {
   --dk-w: 680px;
@@ -17,7 +15,7 @@
 .proto .walk-hint { bottom: 92px; }
 .pt-hint { bottom: 84px; }
 .dock .ic { width: 18px; height: 18px; }
-.dk-fab { display: none; } /* a phone's (mobile.css) */
+.dk-fab { display: none; } /* mobile.css shows it on phones */
 
 .dk-shell {
   position: relative; display: flex; flex-direction: column; border-radius: 18px; background: var(--panel);
@@ -26,14 +24,12 @@
 .theme-sketch .dk-shell { background: var(--panel) var(--box-a) center / 100% 100% no-repeat; }
 .theme-sketch .dock:not(.open) .dk-shell:focus-within { background-image: var(--box-brand); }
 
-/* opening: the panel grows from nothing above the line you write in */
 .dk-grow { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .5s var(--out); }
 .dock.open .dk-grow { grid-template-rows: 1fr; }
 .dk-panel { min-height: 0; overflow: hidden; }
-.dk-in { height: min(560px, calc(100vh - var(--hud-h, 62px) - 150px)); display: flex; flex-direction: column; opacity: 0; transition: opacity .2s var(--out); }
+.dk-in { height: min(560px, calc(100vh - var(--hud-h) - 150px)); display: flex; flex-direction: column; opacity: 0; transition: opacity .2s var(--out); }
 .dock.open .dk-in { opacity: 1; transition: opacity .35s var(--out) .1s; }
 
-/* its top: what to look at, the town's model, folding it away */
 .dk-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 10px 10px 0 12px; }
 .dk-tabs { display: flex; gap: 2px; }
 .dk-tabs button {
@@ -53,7 +49,7 @@
 }
 .dk-x:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
 
-/* every department and what it is doing; the edge in its district's colour, as on the map */
+/* the departments, each edged in its district's colour */
 .dk-depts {
   flex: none; display: flex; gap: 6px; padding: 10px 14px 12px; overflow-x: auto; scrollbar-width: none;
   mask-image: linear-gradient(90deg, #000 calc(100% - 30px), transparent);
@@ -77,7 +73,6 @@
   box-shadow: inset 3px 0 0 var(--dc), inset 0 0 0 1px color-mix(in srgb, var(--dc) 45%, transparent);
 }
 
-/* a department's state: at work beats, waiting for you is amber, idle is a grey dot, not connected an empty ring */
 .dk-st { width: 7px; height: 7px; border-radius: 50%; flex: none; background: color-mix(in srgb, var(--ink) 20%, transparent); }
 .dk-st.s-busy { background: var(--brand); animation: dk-beat 2s var(--in-out) infinite; }
 .dk-st.s-wait { background: var(--warn); }
@@ -112,7 +107,7 @@
 }
 .dk-asks button:hover { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); background: color-mix(in srgb, var(--brand) 6%, var(--panel)); transform: translateY(-1px); }
 
-/* a department you talk to: what it is doing, who is at work in it, who answers there */
+/* a department you talk to */
 .dk-dept {
   --dc: var(--muted);
   display: flex; flex-direction: column; gap: 8px; padding: 12px 12px 12px 16px; border-radius: 14px;

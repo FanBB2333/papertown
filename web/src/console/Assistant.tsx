@@ -1,9 +1,5 @@
-// The console's assistant, in a sidebar on the right: an agent like the depot's and the
-// press's (Paseo or pi), told with every message what you are looking at: the panel, what you
-// point at, the text you selected. It can ask you back, open things and light them up for you,
-// and ask to do things in the town, which wait here until you allow them. A job or a file it
-// names in a reply opens when clicked, and its earlier conversations in Paseo can be taken up
-// again.
+// The console's assistant sidebar: an agent (Paseo or pi) told with every message what you are
+// looking at, which can ask you back, open and light up things, and ask leave to act in the town.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -12,14 +8,15 @@ import { fold, paseoTool, PaseoPick, piTool, PiSwitch, Text, Tool, Trail, UserMs
 import type { RoomActions } from '../components/Interior';
 import { AGENT_STATUS } from '../components/MillRoom';
 import { tr, trx } from '../i18n';
+import { useNow } from './charts';
 import { Icon } from './icons';
 import { describe, onPageChange, onSelect, pickable, snapshot, usePlace, type Selected } from './page';
-import { ago } from './util';
+import { ago, enterSends } from './util';
 
 const ID = 'assistant';
 const WIDTH = 'pt-assistant-w';
 
-// what to ask first, by the panel you are on; and about what you point at or select
+// starter questions: per panel, on any panel, about what you point at, about what you selected
 const ASK: Record<string, string[]> = {
   overview: [tr('这个项目走到哪一步了？'), tr('接下来最该做什么？'), tr('有什么要我处理的？')],
   survey: [tr('和最接近的几篇比，我们新在哪？'), tr('哪篇最值得细读？')],
@@ -36,11 +33,10 @@ const ASK_ANY = [tr('这一页在讲什么？'), tr('有什么要我处理的？
 const ASK_AT = [tr('这是什么？'), tr('这里有问题吗？')];
 const ASK_SEL = [tr('解释一下这段'), tr('这段有什么问题？')];
 
-// a message as it went out: the page it was written on, where the projects you named stood, then
-// your words; or a note from the town. Paseo drops the <start> mark from a conversation's first
-// prompt, so its opening words mark it too.
+// a sent message split into what went along with it and your words, or a note from the town
 type Said = { text: string; where?: string; pointed?: string; selected?: string; selectedAt?: string; projects?: string[]; event?: string };
-export function parse(t: string): Said {
+function parse(t: string): Said {
+  // Paseo drops the <start> mark from a conversation's first prompt, so its opening words mark it too
   if (/^(<start>|你是 Papertown 中控屏的小助手)/.test(t)) return { text: '', event: tr('小助手启动了，先读了一遍它的说明。') };
   const ev = /^<event>\n?([\s\S]*?)\n?<\/event>\s*$/.exec(t);
   if (ev) return { text: '', event: ev[1].trim() };
@@ -58,7 +54,7 @@ export function parse(t: string): Said {
   };
 }
 
-// the conversation as the sidebar shows it, whichever runtime it is in
+// a conversation row, whichever runtime it came from
 type YouRow = { k: 'you'; text: string; ctx: Said; sending?: boolean };
 type ItRow = { k: 'it'; text: string; err?: boolean; live?: boolean };
 type Row = { key: string } & (YouRow | ItRow
@@ -70,8 +66,7 @@ const said = (key: string, text: string, sending?: boolean): Row => {
   const m = parse(text);
   return m.event !== undefined ? { key, k: 'ev', text: m.event } : { key, k: 'you', text: m.text, ctx: m, sending };
 };
-// your messages and its replies are keyed by their place in line, so a message sent and then
-// confirmed, or a reply streamed and then finished, stays the same row
+// keyed by place in line, so a message sent then confirmed, or a reply streamed then finished, stays one row
 function keyed(rows: Row[]): Row[] {
   const n = { you: 0, it: 0 };
   return rows.map(r => (r.k === 'you' || r.k === 'it' ? { ...r, key: `${r.k}${n[r.k]++}` } : r));
@@ -104,8 +99,7 @@ function piRows(items: Item[], live: string): Row[] {
   return keyed(rows);
 }
 
-// what a reply names, made to click: a job opens in the experiments panel, a file in the code or
-// paper panel at its line. The assistant's own files are left alone.
+// a job or file named in a reply opens on click; the assistant's own files (OWN) are left alone
 const JOB = /(#\d{3,}|nvidb-\d+|job_[0-9a-z]{6,})/;
 const ONLY_JOB = new RegExp(`^${JOB.source}$`);
 const FILE = /^(?:\.\/)?((?:[\w.-]+\/)*[\w-][\w.-]*\.(?:py|ipynb|sh|js|mjs|ts|tsx|jsx|json|jsonl|ya?ml|toml|cfg|ini|txt|csv|tsv|md|tex|bib|sty|cls|c|cc|cpp|h|hpp|cu|rs|go|java|r|jl|lua|sql))(?::(\d+))?$/i;
@@ -127,7 +121,6 @@ const LINK: Linker = {
   },
 };
 
-// what the sidebar's parts share: the header, sending, and what goes along with a message
 interface Side {
   view: AssistantView;
   head: (a: Agent) => React.ReactNode;
@@ -154,7 +147,7 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
   const [busy, setBusy] = useState(false);
   const [w, setW] = useState(() => { try { return Number(localStorage.getItem(WIDTH)) || 400; } catch { return 400; } });
   const focusRef = useRef<Focus | null>(null), selRef = useRef<Selected | null>(null);
-  const last = useRef<{ focus: Focus | null; sel: Selected | null }>({ focus: null, sel: null }); // what went with your last message
+  const last = useRef<{ focus: Focus | null; sel: Selected | null }>({ focus: null, sel: null });
   const setFocus = (f: Focus | null) => { focusRef.current = f; setFocusState(f); };
   const setSel = (s: Selected | null) => { selRef.current = s; setSelState(s); };
   const place = usePlace();
@@ -176,7 +169,6 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
     return () => { host?.style.removeProperty('--asst-w'); };
   }, [w]);
 
-  // what you point at and select belongs to the page it is on: moving on drops it
   useEffect(() => {
     setFocus(null);
     setSel(null);
@@ -184,8 +176,6 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
   }, [place.line?.id, place.mod]);
   useEffect(() => onSelect(setSel), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // page.md follows you while it runs: the page you are on, a moment after you move, with what
-  // went along with your last message until you move on
   const started = !!view?.agent.started;
   useEffect(() => {
     if (!started) return;
@@ -201,7 +191,7 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
 
   async function send(text: string) {
     try {
-      if (view?.agent.runtime === 'pi' && text.startsWith('/')) await api.say(ID, text); // pi's own commands go as they are
+      if (view?.agent.runtime === 'pi' && text.startsWith('/')) await api.say(ID, text);
       else {
         const f = focusRef.current, s = selRef.current;
         last.current = { focus: f, sel: s };
@@ -229,7 +219,6 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
   }
   const point = (then: (f: Focus) => void) => setPointing(() => (f: Focus) => { setPointing(null); then(f); });
 
-  // drag the left edge to make it wider
   function resize(e: React.PointerEvent) {
     const x0 = e.clientX, w0 = w;
     const move = (ev: PointerEvent) => setW(Math.min(720, Math.max(320, w0 + x0 - ev.clientX)));
@@ -239,7 +228,6 @@ export function Assistant({ actions, onClose, autoFocus }: { actions: RoomAction
     addEventListener('pointerup', up);
   }
 
-  // who it is and how it is, then buttons of one size: earlier conversations, a new one, Paseo, close
   const head = (a?: Agent) => (
     <header className="as-head">
       <span className={`dot s-${a?.started ? a.status : 'stopped'}`} />
@@ -324,8 +312,6 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
     if (!(agent.runtime === 'pi' && text.startsWith('/'))) onSent?.(text);
     side.send(text);
   }
-  // stay at the latest while you are there, also when the box below grows; scrolled up, a
-  // button brings you back
   useLayoutEffect(() => {
     const el = scroll.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
@@ -384,7 +370,6 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
   );
 }
 
-// one of your messages: what went along with it in small type, then your words
 function YouMsg({ r }: { r: YouRow }) {
   const { where, pointed, selected, selectedAt, projects } = r.ctx;
   return (
@@ -403,7 +388,6 @@ function YouMsg({ r }: { r: YouRow }) {
   );
 }
 
-// one of its replies, on the page rather than in a box; what it names opens when clicked
 function ReplyMsg({ r, last, again }: { r: ItRow; last: boolean; again?: () => void }) {
   const [copied, setCopied] = useState(false);
   function copy() {
@@ -422,7 +406,7 @@ function ReplyMsg({ r, last, again }: { r: ItRow; last: boolean; again?: () => v
   );
 }
 
-// before your first question: what it is for, and questions to start with on this panel
+// before your first question: what it is for, and starter questions for this panel
 function Hello({ mod, onAsk }: { mod: string; onAsk: (text: string) => void }) {
   return (
     <div className="as-hello">
@@ -432,14 +416,12 @@ function Hello({ mod, onAsk }: { mod: string; onAsk: (text: string) => void }) {
   );
 }
 
-// while it works: what it is doing right now
 function Busy({ tail }: { tail?: Row }) {
   const tool = tail?.k === 'tools' ? [...tail.tools].reverse().find(t => t.st === 'run') : undefined;
   return <div className="as-busy"><span className="thinking"><i /><i /><i /></span>{tool ? tr('在用 {0}', tool.name) : tr('在想…')}</div>;
 }
 
-// the box you write in, with what goes along with your message: the page, what you point at, the
-// text you selected. While it works and you have written nothing, send turns into stop.
+// the message box, with the page, what you point at and the selected text going along
 function Composer({ agent, side, onSubmit }: { agent: Agent; side: Side; onSubmit: (text: string) => void }) {
   const [text, setText] = useState('');
   const box = useRef<HTMLTextAreaElement>(null);
@@ -449,7 +431,6 @@ function Composer({ agent, side, onSubmit }: { agent: Agent; side: Side; onSubmi
   const hints = typed ? null : sel ? ASK_SEL : focus ? ASK_AT : null;
   const lines = sel ? sel.text.split('\n').length : 0;
 
-  // the box grows with what you write, up to about eight lines
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -482,7 +463,7 @@ function Composer({ agent, side, onSubmit }: { agent: Agent; side: Side; onSubmi
         <textarea ref={box} rows={1} value={text}
           placeholder={!working ? tr('问这一页的事，或者请它帮你办') : agent.runtime === 'pi' ? tr('它在忙，发出的消息会排在它手上的事之后') : tr('它在忙，发出的消息会插进它手上的事')}
           onChange={e => setText(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); go(text); } }} />
+          onKeyDown={enterSends(() => go(text))} />
         <div className="as-tools">
           <button className={`as-tool${side.pointing ? ' on' : ''}`} title={tr('在页面上点一下你想问的地方')}
             onClick={() => (side.pointing ? side.unpoint() : side.point(side.setFocus))}>
@@ -497,7 +478,7 @@ function Composer({ agent, side, onSubmit }: { agent: Agent; side: Side; onSubmi
   );
 }
 
-// its question for you, and what it asked to do, each answered here
+// its question for you and what it asks to do, each answered here
 function Cards({ view, send, toast, onPoint }: {
   view: AssistantView; send: (t: string) => void; toast: (t: string) => void; onPoint: (then: () => void) => void;
 }) {
@@ -507,9 +488,7 @@ function Cards({ view, send, toast, onPoint }: {
     if (el && !shown.current.has(el)) { shown.current.add(el); requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })); }
   };
   const ask = view.asks[0];
-  // what it did on its own (a message, an answer passed on) shows for a moment too
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 5000); return () => clearInterval(t); }, []);
+  const now = useNow(5000);
   const fresh = (e: AgentEvent) => e.data.auto && now - Date.parse(e.data.decided_at ?? e.ts) < 15000;
   const acts = view.acts.filter(e => e.data.status === 'pending' || done[e.id] || fresh(e));
   async function decide(e: AgentEvent, allow: boolean) {
@@ -552,7 +531,7 @@ function Cards({ view, send, toast, onPoint }: {
   );
 }
 
-// the assistant's conversations in Paseo, the latest first, each named by the first thing asked
+// the assistant's earlier conversations in Paseo, the latest first
 function Earlier({ onPick, limit, title }: { onPick: (c: AssistantConv) => void; limit?: number; title?: string }) {
   const [list, setList] = useState<AssistantConv[] | null>(null);
   const [err, setErr] = useState('');
@@ -575,13 +554,13 @@ function Earlier({ onPick, limit, title }: { onPick: (c: AssistantConv) => void;
   );
 }
 
-// earlier conversations, dropped from the header; a click elsewhere or Esc closes it
+// earlier conversations, dropped down from the header
 function History({ onPick, onClose }: { onPick: (c: AssistantConv) => void; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const down = (e: PointerEvent) => {
       const t = e.target as Element;
-      if (!ref.current?.contains(t) && !t.closest?.('.as-hist')) onClose();
+      if (!ref.current?.contains(t) && !t.closest('.as-hist')) onClose();
     };
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
     addEventListener('pointerdown', down, true);
@@ -596,7 +575,7 @@ function History({ onPick, onClose }: { onPick: (c: AssistantConv) => void; onCl
   );
 }
 
-// pointing: the part under the mouse is outlined and named; a click takes it, Esc gives up
+// picking a part of the page: the part under the mouse is outlined and named, a click takes it
 function Pointer({ onPick, onCancel }: { onPick: (f: Focus) => void; onCancel: () => void }) {
   const [box, setBox] = useState<{ r: DOMRect; label: string } | null>(null);
   useEffect(() => {

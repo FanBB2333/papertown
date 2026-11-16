@@ -18,6 +18,9 @@ export const STATUS: Record<string, string> = {
   hatching: tr('查重中'), waiting: tr('等你决定'), running: tr('生产中'), paused: tr('已暂停'), failed: tr('出错'), done: tr('已出厂'), dropped: tr('已放弃'),
   linked: tr('本地项目'),
 };
+export function StatusTag({ status, labels = STATUS }: { status: string; labels?: Record<string, string> }) {
+  return <span className={`pst pst-${status}`}>{labels[status] ?? status}</span>;
+}
 export const AGENT_STATUS: Record<string, string> = {
   stopped: tr('未启动'), starting: tr('启动中'), idle: tr('待命'), working: tr('工作中'), error: tr('出错'), watching: tr('值守'),
 };
@@ -84,7 +87,7 @@ export function MillRoom(p: Props) {
             const coder = crew[`coder-${l.id}`], writer = crew[`writer-${l.id}`];
             return (
               <button key={l.id} className={`proj${l.id === cur ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={() => setSel(l.id)}>
-                <div className="proj-top"><b>#{l.seq}</b><span className={`pst pst-${l.status}`}>{STATUS[l.status] ?? l.status}</span></div>
+                <div className="proj-top"><b>#{l.seq}</b><StatusTag status={l.status} /></div>
                 <h3>{l.title}</h3>
                 <div className="dots" aria-label={`${l.pct}%`}>
                   {l.stages.map(s => <i key={s.key} className={`d-${s.status}`} title={s.name} />)}
@@ -108,7 +111,7 @@ export function MillRoom(p: Props) {
           <>
             <div className="proj-head">
               <div>
-                <span className={`pst pst-${line.status}`}>{STATUS[line.status]}</span>
+                <StatusTag status={line.status} />
                 <h2>#{line.seq} {line.title}</h2>
                 <p>{line.idea}</p>
               </div>

@@ -1,7 +1,5 @@
-// Cloudflare's component library (Kumo) in this page. Its stylesheet only reaches inside .kumo-ui
-// (see vite.config.ts), so what it draws sits in a layer of its own beside the app: the settings
-// page and every list, menu and popover its components open. The app under it is one stacking
-// context (isolation in cloudflare.css), so the layer is over all of it.
+// Kumo (Cloudflare's components). Its CSS is scoped under .kumo-ui by vite.config.ts, so its portals
+// render into a .kumo-ui layer; the app is one stacking context (cloudflare.css), so the layer sits above it.
 
 import { KumoPortalProvider } from '@cloudflare/kumo';
 import '@cloudflare/kumo/styles/standalone';

@@ -1,16 +1,11 @@
-// The land round the town, made up as you go. Past the board the world carries on: the sea
-// on the harbour side, and on the others first meadows, then rolling hills in terraces,
-// woods, fields, lakes and now and then a village with a windmill. It is built in chunks of
-// 16×16 tiles round wherever you are, nearest first and a few each frame, and the chunks
-// left behind are dropped again. Everything comes from a fixed noise, so the land is the
-// same every time and the ground under you can be asked for (top) without building any of
-// it. From the air, at the map's view, it fades away and leaves the board on its paper.
+// The endless land round the board, from a fixed noise: sea on the harbour side, then meadows, terraced
+// hills, woods, fields and villages. Built in chunks round you as you go and dropped again behind you.
 
 import * as THREE from 'three';
 import { N, tileMat } from '@design/world.js';
 import type { World } from './body';
-import { INK, TOP, WADE_Y, WATER_Y, type Materials } from './scene';
-import { PX, ZS } from './pen3';
+import { GLOW, INK, TOP, WADE_Y, WATER_Y, disposeGeometry, hash, type Materials } from './scene';
+import { EDGES, PX, ZS, type V3 } from './pen3';
 
 const CH = 16; // tiles a chunk
 const STEP = 0.2; // terraces, a step you walk up
@@ -18,14 +13,6 @@ const BANK = WATER_Y - 0.05;
 
 type Kind = 'water' | 'sand' | 'grass' | 'grass2' | 'field' | 'forest' | 'stone';
 interface Tile { h: number; kind: Kind; tree: number; seed: number }
-
-// ---------- noise ----------
-
-function hash(x: number, y: number, s: number) {
-  let h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s, 982451653) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
 
 function vnoise(x: number, y: number, s: number) {
   const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
@@ -40,30 +27,24 @@ function fbm(x: number, y: number, s: number) {
   return v / 0.9375; // 0..1
 }
 
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+export const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const onBoard = (x: number, y: number) => x >= 0 && y >= 0 && x < N && y < N;
-
-// the board's own tiles, as the land sees them from outside: ground at 0, or the sea
-const boardTop = (tx: number, ty: number) => (tileMat(tx, ty) === 'water' ? BANK : 0);
-
-// ---------- what is where ----------
 
 const cache = new Map<number, Tile>();
 
-export function tileAt(tx: number, ty: number): Tile {
+function tileAt(tx: number, ty: number): Tile {
   const key = tx * 65536 + ty;
   let t = cache.get(key);
   if (t) return t;
   if (cache.size > 60000) cache.clear();
   const dx = Math.max(0, -tx, tx - (N - 1)), dy = Math.max(0, -ty, ty - (N - 1)), d = Math.hypot(dx, dy);
-  // the harbour side stays sea for a good way out; the other sides stay land close in
   const seaward = tx < 0 || ty < 0;
   const bias = seaward ? -1.1 * clamp01(1 - d / 16) : 0.9 * clamp01(1 - d / 6);
   const L = (fbm(tx / 26, ty / 26, 1) - 0.5) * 1.7 + 0.12 + bias;
   const seed = hash(tx, ty, 5);
   if (L <= 0) t = { h: 0, kind: 'water', tree: 0, seed };
   else {
-    const ramp = clamp01((d - 3) / 12); // flat by the town, hillier further out
+    const ramp = clamp01((d - 3) / 12);
     const h = Math.floor(Math.min(3.4, Math.pow(L, 1.25) * 3.6 * ramp) / STEP) * STEP;
     const wood = fbm(tx / 17, ty / 17, 7), crop = fbm(tx / 13, ty / 13, 9);
     let kind: Kind = L < 0.07 ? 'sand' : h >= 2.4 ? 'stone' : wood > 0.58 ? 'forest' : crop > 0.62 && h <= 0.6 && d > 4 ? 'field' : hash(tx, ty, 3) < 0.3 ? 'grass2' : 'grass';
@@ -75,7 +56,7 @@ export function tileAt(tx: number, ty: number): Tile {
   return t;
 }
 
-// a village every so often: a few cottages round a windmill, out of sight of the town
+// a few cottages round a windmill, now and then, out of sight of the town
 function villageOf(tx: number, ty: number) {
   const gx = Math.floor(tx / 36), gy = Math.floor(ty / 36);
   if (hash(gx, gy, 11) > 0.55) return null;
@@ -102,9 +83,7 @@ const millAt = (tx: number, ty: number, t: Tile) => {
 
 const treeSpot = (tx: number, ty: number, t: Tile) => [tx + 0.5 + (hash(tx, ty, 21) - 0.5) * 0.3, ty + 0.5 + (hash(tx, ty, 22) - 0.5) * 0.3, 0.85 + t.seed * 0.5] as const;
 
-// ---------- the ground you stand on ----------
-
-export function landTop(x: number, y: number) {
+function landTop(x: number, y: number) {
   const tx = Math.floor(x), ty = Math.floor(y), t = tileAt(tx, ty);
   if (t.kind === 'water') return WADE_Y;
   let h = t.h;
@@ -113,33 +92,27 @@ export function landTop(x: number, y: number) {
     if ((x - px) ** 2 + (y - py) ** 2 < 0.17 * 0.17) h = Math.max(h, t.h + 0.9 * s);
   }
   if (cottageAt(tx, ty, t) && x > tx + 0.15 && x < tx + 0.85 && y > ty + 0.2 && y < ty + 0.8) {
-    h = t.h + 0.42 + 0.3 * (1 - Math.abs(y - (ty + 0.5)) / 0.36); // up the slope of its roof
+    h = t.h + 0.42 + 0.3 * (1 - Math.abs(y - (ty + 0.5)) / 0.36);
   }
   if (millAt(tx, ty, t) && (x - tx - 0.5) ** 2 + (y - ty - 0.5) ** 2 < 0.3 * 0.3) h = t.h + 1.55;
   return h;
 }
 
-export const landWet = (x: number, y: number) => tileAt(Math.floor(x), Math.floor(y)).kind === 'water';
-
-// the whole world: the town on its board, the land made up round it
+// the town on its board, the land round it
 export function worldOf(town: World | null): World {
   return {
     bounds: [-1e6, -1e6, 1e6, 1e6],
     ceiling: 40,
     top: (x, y) => (onBoard(x, y) ? town?.top(x, y) ?? 0 : landTop(x, y)),
-    wet: (x, y) => (onBoard(x, y) ? !!town?.wet?.(x, y) : landWet(x, y)),
+    wet: (x, y) => (onBoard(x, y) ? !!town?.wet?.(x, y) : tileAt(Math.floor(x), Math.floor(y)).kind === 'water'),
   };
 }
 
-// ---------- building a chunk ----------
-
-type V3 = [number, number, number];
 interface Shape { pos: Float32Array; nrm: Float32Array }
 
 function shape(...gs: THREE.BufferGeometry[]): Shape {
   const pos: number[] = [], nrm: number[] = [];
   for (const g of gs) {
-    if (!g.getAttribute('normal')) g.computeVertexNormals(); // before unindexing, so round things stay smooth
     const n = g.index ? g.toNonIndexed() : g;
     pos.push(...(n.getAttribute('position').array as Float32Array));
     nrm.push(...(n.getAttribute('normal').array as Float32Array));
@@ -149,7 +122,7 @@ function shape(...gs: THREE.BufferGeometry[]): Shape {
   return { pos: new Float32Array(pos), nrm: new Float32Array(nrm) };
 }
 
-// the town's two trees, as in drawProp, and a windmill's sails
+// the town's two trees, as in drawProp, and a windmill's tower and cap
 const PINE = [0, 1, 2].map(k => {
   const r = (14 - k * 3.5) * PX, h = (22 - k * 3) * PX * 1.06;
   return new THREE.ConeGeometry(r, h, 8).translate(0, (0.3 + k * 0.32) * ZS + h / 2, 0);
@@ -178,7 +151,7 @@ class Buf {
   box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, col: THREE.Color, ink = false) {
     const c: V3[] = [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]];
     for (const [a, b, d, e] of [[4, 7, 6, 5], [0, 4, 5, 1], [3, 2, 6, 7], [0, 3, 7, 4], [1, 5, 6, 2]]) this.quad(c[a], c[b], c[d], c[e], col);
-    if (ink) for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) this.edge(c[a], c[b]);
+    if (ink) for (const [a, b] of EDGES) this.edge(c[a], c[b]);
   }
 
   put(s: Shape, x: number, y: number, z: number, k: number, col: THREE.Color) {
@@ -211,8 +184,8 @@ export interface Land {
 
 export function buildLand(mats: Materials): Land {
   const root = new THREE.Group();
-  const C = (m: string, k = 1) => new THREE.Color(mats.color(m, '#c47a3a') ?? m).multiplyScalar(k);
-  const top = (m: string) => C(m, 1 / TOP); // tops are dimmed like the town's ground, so lit from above they match it
+  const C = (m: string, k = 1) => new THREE.Color(mats.color(m) ?? m).multiplyScalar(k);
+  const top = (m: string) => C(m, 1 / TOP); // dimmed like the town's ground, so lit from above they match it
   const COL = {
     grass: top('grass'), grass2: top('grass2'), sand: top('sand'), soil: top('soil'), stone: top('#cfc4ae'), forest: top('#c9d6a6'),
     dirt: C('edge'), lip: C('#c3cf9a'), trunk: C('trunk'), leaf: C('leaf'), leaf2: C('leaf2'), crop: C('crop'), crop2: C('crop2'),
@@ -223,13 +196,12 @@ export function buildLand(mats: Materials): Land {
 
   // the land's own materials, so that all of it can fade at once on the way up to the map
   const solid = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
-  const lit = new THREE.MeshLambertMaterial({ color: mats.color('win', '#c47a3a') ?? '#6f5b45', side: THREE.DoubleSide });
+  const lit = new THREE.MeshLambertMaterial({ color: C('win'), side: THREE.DoubleSide });
   const ink = new THREE.LineBasicMaterial({ color: INK, transparent: true, opacity: 0.5 });
   const water = new THREE.MeshLambertMaterial({ color: C('water', 1 / TOP) });
   const sail = new THREE.MeshLambertMaterial({ color: '#f6efe0', side: THREE.DoubleSide });
   const all = [solid, lit, ink, water, sail];
 
-  // the sea under everything, kept under you wherever you go
   const seaGeo = new THREE.PlaneGeometry(700, 700).rotateX(-Math.PI / 2);
   const sea = new THREE.Mesh(seaGeo, water);
   sea.position.y = WATER_Y - 0.004;
@@ -238,7 +210,7 @@ export function buildLand(mats: Materials): Land {
 
   const chunks = new Map<string, Chunk>();
   const heightOf = (tx: number, ty: number) => {
-    if (onBoard(tx, ty)) return boardTop(tx, ty);
+    if (onBoard(tx, ty)) return tileMat(tx, ty) === 'water' ? BANK : 0;
     const t = tileAt(tx, ty);
     return t.kind === 'water' ? BANK : t.h;
   };
@@ -250,7 +222,6 @@ export function buildLand(mats: Materials): Land {
       const t = tileAt(tx, ty);
       if (t.kind === 'water') continue;
       const h = t.h, x0 = tx, x1 = tx + 1, z0 = ty, z1 = ty + 1;
-      // the top, and a side down to each lower neighbour: dirt with a strip of turf, outlined in ink
       b.quad([x0, h, z0], [x0, h, z1], [x1, h, z1], [x1, h, z0], COL[(t.kind === 'field' ? 'soil' : t.kind) as 'grass']);
       const sides: [number, number, V3, V3][] = [[-1, 0, [x0, 0, z1], [x0, 0, z0]], [1, 0, [x1, 0, z0], [x1, 0, z1]], [0, -1, [x0, 0, z0], [x1, 0, z0]], [0, 1, [x1, 0, z1], [x0, 0, z1]]];
       for (const [dx, dy, a, c] of sides) {
@@ -263,7 +234,6 @@ export function buildLand(mats: Materials): Land {
       }
       const r = (s: number) => hash(tx, ty, s);
       if (millAt(tx, ty, t)) {
-        // a windmill: a tapering tower, a cap, and sails that turn
         b.put(SHAPES.tower, tx + 0.5, h, ty + 0.5, 1, COL.wall);
         b.put(SHAPES.cap, tx + 0.5, h, ty + 0.5, 1, ROOFS[0]);
         b.box(tx + 0.44, h, ty + 0.75, tx + 0.56, h + 0.22, ty + 0.78, COL.dark);
@@ -279,7 +249,6 @@ export function buildLand(mats: Materials): Land {
         continue;
       }
       if (cottageAt(tx, ty, t)) {
-        // a cottage: walls, a gabled roof with a little overhang, a door, two windows, a chimney
         const X0 = tx + 0.15, X1 = tx + 0.85, Z0 = ty + 0.2, Z1 = ty + 0.8, wh = h + 0.42, rt = h + 0.72, zm = ty + 0.5, roof = ROOFS[Math.floor(r(43) * ROOFS.length)];
         b.box(X0, h, Z0, X1, wh, Z1, COL.wall, true);
         b.quad([X0 - 0.05, wh - 0.03, Z0 - 0.06], [X1 + 0.05, wh - 0.03, Z0 - 0.06], [X1 + 0.05, rt, zm], [X0 - 0.05, rt, zm], roof);
@@ -300,7 +269,6 @@ export function buildLand(mats: Materials): Land {
         continue;
       }
       if (t.kind === 'field') {
-        // rows of a crop, the same crop over the whole field
         const c = fbm(tx / 13, ty / 13, 10) > 0.5 ? COL.crop2 : COL.crop;
         for (let row = 0; row < 3; row++) {
           const z = ty + 0.2 + row * 0.3;
@@ -321,7 +289,7 @@ export function buildLand(mats: Materials): Land {
       }
     }
     const m = b.mesh(solid);
-    if (m) { m.receiveShadow = false; group.add(m); }
+    if (m) group.add(m);
     const lw = w.mesh(lit);
     if (lw) group.add(lw);
     if (b.ink.length) {
@@ -336,7 +304,7 @@ export function buildLand(mats: Materials): Land {
   function drop(key: string) {
     const c = chunks.get(key)!;
     root.remove(c.group);
-    c.group.traverse(o => { if (o instanceof THREE.Mesh || o instanceof THREE.LineSegments) o.geometry.dispose(); });
+    disposeGeometry(c.group);
     chunks.delete(key);
   }
 
@@ -346,26 +314,23 @@ export function buildLand(mats: Materials): Land {
       sea.position.x = Math.round(x / 10) * 10;
       sea.position.z = Math.round(y / 10) * 10;
       const R = Math.ceil(reach / CH), pcx = Math.floor(x / CH), pcy = Math.floor(y / CH);
+      const away = (cx: number, cy: number) => Math.hypot(Math.max(cx * CH - x, 0, x - (cx + 1) * CH), Math.max(cy * CH - y, 0, y - (cy + 1) * CH));
       const want: [number, number, number][] = [];
       for (let a = -R; a <= R; a++) for (let b = -R; b <= R; b++) {
-        const cx = pcx + a, cy = pcy + b;
-        // the distance to the chunk's nearest point
-        const dx = Math.max(cx * CH - x, 0, x - (cx + 1) * CH), dy = Math.max(cy * CH - y, 0, y - (cy + 1) * CH);
-        const d = Math.hypot(dx, dy);
+        const cx = pcx + a, cy = pcy + b, d = away(cx, cy);
         if (d > reach || chunks.has(`${cx},${cy}`)) continue;
-        if (cx * CH >= 0 && cy * CH >= 0 && (cx + 1) * CH <= N && (cy + 1) * CH <= N) continue; // the town's own
+        if (cx * CH >= 0 && cy * CH >= 0 && (cx + 1) * CH <= N && (cy + 1) * CH <= N) continue;
         want.push([d, cx, cy]);
       }
       want.sort((p, q) => p[0] - q[0]);
       const t0 = performance.now();
       for (const [, cx, cy] of want) {
         chunks.set(`${cx},${cy}`, build(cx, cy));
-        if (performance.now() - t0 > 5) break; // a few a frame, nearest first
+        if (performance.now() - t0 > 5) break; // a 5 ms budget a frame, nearest first
       }
       for (const key of [...chunks.keys()]) {
         const [cx, cy] = key.split(',').map(Number);
-        const dx = Math.max(cx * CH - x, 0, x - (cx + 1) * CH), dy = Math.max(cy * CH - y, 0, y - (cy + 1) * CH);
-        if (Math.hypot(dx, dy) > reach + CH * 1.5) drop(key);
+        if (away(cx, cy) > reach + CH * 1.5) drop(key);
       }
       for (const c of chunks.values()) for (const s of c.sails) s.rotation.z = -t * 0.6;
     },
@@ -378,7 +343,7 @@ export function buildLand(mats: Materials): Land {
         m.depthWrite = !fade;
       }
     },
-    setNight(n) { lit.emissive.set('#ffc46b').multiplyScalar(n * 0.9); },
+    setNight(n) { lit.emissive.copy(GLOW).multiplyScalar(n * 0.9); },
     dispose() {
       for (const key of [...chunks.keys()]) drop(key);
       seaGeo.dispose();

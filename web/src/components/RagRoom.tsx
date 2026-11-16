@@ -1,7 +1,5 @@
-// The library as the town's RAG: what is in it, a bench to try a query and see why each paper
-// came back, how retrieval runs (how many papers a search returns, how many full-text candidates
-// it scores, vectors or keyword coverage; folded to one line, as it is seldom changed), and the
-// shelves themselves.
+// The library as the town's RAG: what is in it, a bench to try a query and see why each paper came
+// back, how retrieval runs, and the shelves.
 
 import { useEffect, useState } from 'react';
 import { api, type RagOpts, type RagResult, type RagView } from '../api';
@@ -73,7 +71,7 @@ export function RagRoom(p: Props) {
                     <div>
                       <a href={h.url} target="_blank" rel="noreferrer"><b>{h.title}</b></a>
                       <span className="muted small">{h.year} · {h.authors}</span>
-                      {h.matched?.length > 0 && <span className="rag-terms">{h.matched.map(t => <em key={t}>{t}</em>)}</span>}
+                      {h.matched.length > 0 && <span className="rag-terms">{h.matched.map(t => <em key={t}>{t}</em>)}</span>}
                     </div>
                   </li>
                 ))}

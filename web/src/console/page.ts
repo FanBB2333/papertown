@@ -1,12 +1,9 @@
-// What the console shows, for the assistant in the sidebar. The console says which project and
-// panel are open; each panel says what it has set and what it has open (usePanelNote); what
-// you point at is read off the page itself. Parts of the page that stand for something carry a
-// data-ref ("job:nvidb-4860", "gpu:406:1", "file:code:src/train.py") and, when their text is
-// not a good name, a data-ref-label; pointing takes the nearest of those, or else the block
-// under the mouse and the heading over it.
+// What the console shows, for the assistant in the sidebar: the open project and panel, what each
+// panel notes (usePanelNote), and the data-ref parts of the page that pointing lands on.
 
 import { useEffect, useSyncExternalStore } from 'react';
 import type { Focus, PageCtx } from '../api';
+import { clip } from './util';
 
 type Note = Record<string, string | number | boolean | null | undefined>;
 
@@ -39,14 +36,12 @@ export function usePanelNote(mod: string, part: string, note: Note) {
   useEffect(() => () => { notes.get(mod)?.delete(part); changed(); }, [mod, part]);
 }
 
-const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const squash = (s: string) => s.replace(/[ \t ]+/g, ' ').replace(/\s*\n[\s\n]*/g, '\n').trim();
 const panel = () => document.querySelector<HTMLElement>('.p-console .cm-mod.on');
 const textOf = (el: Element) => (el as HTMLElement).innerText ?? el.textContent ?? '';
 const worded = (s: string) => /\p{L}/u.test(s);
 
 // a part's name: its first line, or as many first lines as it takes to say something in words
-// ("11", then "已取消")
 function nameOf(text: string) {
   const lines = text.split('\n').filter(Boolean);
   let n = 1;
@@ -70,10 +65,9 @@ function whereOf(el: Element): string | undefined {
   return undefined;
 }
 
-// what pointing lands on: the nearest part that stands for something, else the block it is in.
-// A bare number or sign says nothing on its own, so it takes the part around it that has words.
 const BLOCK = 'button, a, li, tr, th, td, figure, pre, p, h2, h3, h4, h5, label, [role=button], .card, .pnl';
 const EDGE = '.cm-mod, .jd, .p-console, .asst';
+// what pointing lands on: the nearest data-ref part, else the block it is in, widened until it has words
 export function pickable(target: Element) {
   let el = target.closest('[data-ref]') ?? target.closest(BLOCK) ?? target;
   for (let i = 0; i < 4 && !worded(textOf(el)) && el.parentElement && !el.parentElement.matches(EDGE); i++) el = el.parentElement;
@@ -104,14 +98,11 @@ export function snapshot(focus: Focus | null, sel: Selected | null = null): Page
     refs.push({ ref, label: labelOf(el) });
     if (refs.length >= 80) break;
   }
-  // code and the paper are files the assistant reads itself; elsewhere the page's text helps
   const text = p && !['code', 'paper'].includes(at.mod) ? clip(squash(p.innerText), 8000) : '';
   return { line: at.line, mod: at.mod, mod_name: at.name, state, focus, refs, text, ...(sel?.text ? { selection: sel.text, selection_at: sel.at } : {}) };
 }
 
-// text you select in the console (not in the sidebar), now and as you select it, with the part
-// of the page a short one is in ("11" in "已取消 11"); null once you clear it there. Moving into
-// the sidebar to write keeps it.
+// text selected in the console (not in the sidebar), with the part of the page a short one is in
 export function onSelect(fn: (sel: Selected | null) => void) {
   const on = () => {
     const s = getSelection();
@@ -136,7 +127,7 @@ export function flash(ref: string, tries = 24) {
   }
   el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   el.classList.remove('pt-flash');
-  void (el as HTMLElement).offsetWidth;
+  void (el as HTMLElement).offsetWidth; // reflow, so the animation starts over
   el.classList.add('pt-flash');
   setTimeout(() => el.classList.remove('pt-flash'), 2600);
 }

@@ -9,21 +9,17 @@ import './hand.css';
 import { paperAndPencil } from './hand';
 import { LANG, loadLang, localize } from './i18n';
 
-// the ink-and-wash palette as CSS variables (same source as the design pages), sprites
-// drawn by hand, and the paper textures the stylesheet layers on top
 handDrawn(true);
 const style = document.createElement('style');
 style.textContent = themeCSS(THEMES.sketch);
 document.head.appendChild(style);
 paperAndPencil((THEMES.sketch as { ui: { brand: string } }).ui.brand);
 
-// the shared art's names in the language in use: in English the art's own English names where
-// it has them, the dictionary for the rest
 function localizeArt() {
   if (LANG === 'en') for (const v of [...Object.values(DISTRICTS), ...Object.values(BUILDINGS)]) if (v.en) v.name = v.en;
   for (const t of [DISTRICTS, BUILDINGS, ITEMS, PROPS, WORKERS, FLOW_KINDS]) localize(t);
 }
 
-// the app's modules work some of their strings out as they load, so they load once the language is ready
+// app modules compute tr() strings at load, so they are imported only after loadLang()
 loadLang().then(() => { localizeArt(); return import('./Root'); })
   .then(({ Root }) => createRoot(document.getElementById('root')!).render(<Root />));

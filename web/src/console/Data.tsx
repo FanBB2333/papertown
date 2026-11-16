@@ -1,9 +1,5 @@
-// The data panel. What the experiments were set up with, in one line; the results, one small
-// chart per metric with ours picked out; what each nvidb run handed back, as cards, and one
-// measure across runs; the repository's result files, where files of the same name in
-// sibling folders (one per run or configuration) line up as one table, shaded by value and
-// sorted by any column; and every file opening as a table. The runs themselves, finished or
-// not, are listed in the experiments panel.
+// The data panel: the experiments' setup, a chart per result metric, what each nvidb run handed
+// back, and the repository's result files, with same-named files in sibling folders lined up as one table.
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -14,7 +10,7 @@ import { Bars, StateTag, Tip, fmtNum, stOf, useTip } from './charts';
 import { Icon } from './icons';
 import { JobDrawer } from './JobDrawer';
 import { usePanelNote } from './page';
-import { ago, base, bytes, ext, flat, headlines, useFetch } from './util';
+import { ago, base, bytes, ext, flat, headlines, toggled, useFetch } from './util';
 
 interface Props { lineId: string; tick: number; onOpenFile: (path: string) => void }
 
@@ -49,13 +45,12 @@ export function Data(p: Props) {
       {files.length > 0 && <Files lineId={p.lineId} files={files} onOpen={setFile} />}
 
       {job && <JobDrawer id={job} onClose={() => setJob(null)} onJob={setJob} />}
-      {file && <FileSheet lineId={p.lineId} path={file} onClose={() => setFile(null)} onCode={() => { const f = file; setFile(null); p.onOpenFile(f); }} />}
+      {file && <FileSheet lineId={p.lineId} path={file} onClose={() => setFile(null)} onCode={() => { setFile(null); p.onOpenFile(file); }} />}
     </div>
   );
 }
 
-// ---------- results: one small chart per metric, ours against the best baseline ----------
-
+// one small chart per metric, ours against the best baseline
 function Results({ r }: { r: NonNullable<LineData['results']> }) {
   return (
     <section className="cs">
@@ -76,15 +71,13 @@ function Results({ r }: { r: NonNullable<LineData['results']> }) {
         })}
       </div>
       {r.analysis && <p className="small res-note">{r.analysis}</p>}
-      {(r.concerns?.length ?? 0) > 0 && <ul className="concerns">{r.concerns!.map(c => <li key={c}>{c}</li>)}</ul>}
+      {!!r.concerns?.length && <ul className="concerns">{r.concerns.map(c => <li key={c}>{c}</li>)}</ul>}
     </section>
   );
 }
 
-// ---------- what each run handed back ----------
-
+// what each nvidb run handed back, and one measure compared across runs
 function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) => void }) {
-  // the measures more than one run reports, to line them up
   const shared = useMemo(() => {
     const n = new Map<string, number>();
     for (const r of runs) for (const [k, v] of flat(r.result)) if (typeof v === 'number' && !SETTING.test(k)) n.set(k, (n.get(k) ?? 0) + 1);
@@ -120,8 +113,6 @@ function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) =>
     </section>
   );
 }
-
-// ---------- the result files ----------
 
 type DFile = LineData['files'][number];
 interface Family { key: string; members: { path: string; tag: string }[] }
@@ -188,7 +179,7 @@ function Files({ lineId, files, onOpen }: { lineId: string; files: DFile[]; onOp
             const closed = shut.has(d);
             return (
               <div key={d} className="fb-dir">
-                <button className={`fb-dh${closed ? '' : ' open'}`} onClick={() => setShut(s => { const x = new Set(s); if (x.has(d)) x.delete(d); else x.add(d); return x; })}>
+                <button className={`fb-dh${closed ? '' : ' open'}`} onClick={() => setShut(s => toggled(s, d))}>
                   <Icon n="chevron" size={12} className="tr-chev" /><Icon n="folder" size={14} /><span>{d}</span><em>{fs.length}</em>
                 </button>
                 {!closed && fs.map(f => (
@@ -245,7 +236,6 @@ function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen:
     const rows = members.map(m => ({ ...m, vals: new Map(flat(docs.get(m.path)).filter((e): e is [string, number] => typeof e[1] === 'number')) }));
     const seen = new Map<string, Set<number>>();
     for (const r of rows) for (const [k, v] of r.vals) { if (!seen.has(k)) seen.set(k, new Set()); seen.get(k)!.add(v); }
-    // measures most rows have and that differ between them; the settings come last
     const keys = [...seen].filter(([k, vs]) => vs.size > 1 && rows.filter(r => r.vals.has(k)).length >= Math.max(2, rows.length / 2)).map(([k]) => k)
       .sort((a, b) => (Number(SETTING.test(a)) - Number(SETTING.test(b))) || (Number(SCORE.test(b)) - Number(SCORE.test(a))));
     return { rows, keys };
@@ -271,7 +261,7 @@ function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen:
       {focus && (
         <div className="cmp-chart">
           <span className="ide-t">{focus}<button className="lnk" onClick={() => setFocus(null)}>{tr('收起')}</button></span>
-          <Bars onPick={path => onOpen(path)} bars={table.rows.filter(r => r.vals.has(focus)).map(r => ({ id: r.path, label: r.tag, v: r.vals.get(focus)!, sub: focus }))
+          <Bars onPick={onOpen} bars={table.rows.filter(r => r.vals.has(focus)).map(r => ({ id: r.path, label: r.tag, v: r.vals.get(focus)!, sub: focus }))
             .sort((a, b) => b.v - a.v)} />
         </div>
       )}
@@ -311,10 +301,7 @@ function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen:
   );
 }
 
-// ---------- every run ----------
-
-// ---------- one file, as a table when it is one ----------
-
+// one CSV/TSV line's cells, with quoted fields
 function cells(line: string, sep: string) {
   const out: string[] = [];
   let cur = '', q = false;
@@ -394,7 +381,7 @@ function Sheet({ head, rows, more }: { head: string[]; rows: string[][]; more: n
   const isNum = head.map((_, c) => rows.length > 0 && rows.slice(0, 200).every(r => !r[c] || !Number.isNaN(Number(r[c]))) && rows.some(r => !!r[c]));
   const top = head.map((_, c) => (isNum[c] ? Math.max(...rows.map(r => Math.abs(Number(r[c]) || 0)), 1e-12) : 0));
   const needle = q.trim().toLowerCase();
-  let shown = needle ? rows.filter(r => r.some(x => x?.toLowerCase().includes(needle))) : rows;
+  let shown = needle ? rows.filter(r => r.some(x => x.toLowerCase().includes(needle))) : rows;
   if (sort) shown = [...shown].sort((a, b) => {
     const x = isNum[sort.k] ? Number(a[sort.k]) : a[sort.k], y = isNum[sort.k] ? Number(b[sort.k]) : b[sort.k];
     return (x < y ? -1 : x > y ? 1 : 0) * (sort.up ? 1 : -1);

@@ -1,14 +1,10 @@
-// The console's charts: one tooltip that follows the pointer, a job's state as colour and
-// sign, a timeline of jobs per GPU, bars for one measure across many rows, a thin meter, and a
-// card's last hour as a sparkline. Marks stay thin, the grid hairline; every value a tooltip
-// shows is also in a table nearby.
+// The console's charts: a pointer tooltip, job-state marks, a GPU timeline of jobs, bars for one
+// measure across rows, a thin meter, and a card's last hour as a sparkline.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { tr } from '../i18n';
-import { dur } from './util';
-
-// ---------- the tooltip ----------
+import { clip } from './util';
 
 export interface TipRow { v: string; k: string; key?: string }
 export interface TipData { x: number; y: number; title: string; rows: TipRow[]; foot?: string }
@@ -22,8 +18,7 @@ export function useTip() {
   };
 }
 
-// values lead, names follow; kept inside the window. It goes into the themed root rather than
-// the body, which carries none of the page's colours: in the body it would have no background.
+// Portalled into the themed root, not the body: the body carries none of the page's colours.
 export function Tip({ tip }: { tip: TipData | null }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -47,10 +42,8 @@ export function Tip({ tip }: { tip: TipData | null }) {
   );
 }
 
-// ---------- a job's state ----------
-
 export type St = 'running' | 'queued' | 'done' | 'failed' | 'cancelled';
-// colour for the mark, a sign and a word so the state never rests on colour alone (validated: all pairs, CVD-safe)
+// colour, sign and word per state (colours validated as CVD-safe)
 export const ST: Record<St, { c: string; sign: string; label: string; hollow?: boolean }> = {
   running: { c: '#d0743a', sign: '▶', label: tr('在跑') },
   done: { c: '#3a76b0', sign: '✓', label: tr('完成') },
@@ -74,8 +67,6 @@ export function Legend({ states }: { states: St[] }) {
   );
 }
 
-// ---------- time ----------
-
 const H = 3600e3, D = 24 * H;
 const STEPS = [H, 2 * H, 3 * H, 6 * H, 12 * H, D, 2 * D, 7 * D, 14 * D, 30 * D];
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -84,7 +75,7 @@ export const when = (t: number, withDay = true) => {
   return `${withDay ? `${d.getMonth() + 1}/${d.getDate()} ` : ''}${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-// round local times across the span, about n of them
+// about n round local times across the span
 function timeTicks(t0: number, t1: number, n: number) {
   const step = STEPS.find(s => (t1 - t0) / s <= n) ?? STEPS[STEPS.length - 1];
   const a = new Date(t0);
@@ -112,12 +103,11 @@ function useWidth<T extends HTMLElement>() {
   return [ref, w] as const;
 }
 
-// ---------- the timeline: each job a bar from its start to its end, one band per GPU ----------
-
-export interface GJob { id: string; name: string; st: St; row: string; start: number; end: number | null; tip: TipRow[]; mine?: boolean }
+export interface GJob { id: string; name: string; st: St; row: string; start: number; end: number | null; tip: TipRow[] }
 
 const LABEL = 144, TRACK = 18, GAP = 4, AXIS = 22;
 
+// each job a bar from start to end, one band per GPU; drag to zoom, double-click to reset
 export function Gantt({ jobs, domain, onZoom, onPick, now }: {
   jobs: GJob[]; domain: [number, number]; onZoom: (d: [number, number] | null) => void; onPick: (id: string) => void; now: number;
 }) {
@@ -129,7 +119,6 @@ export function Gantt({ jobs, domain, onZoom, onPick, now }: {
   const x = (t: number) => LABEL + ((t - d0) / (d1 - d0)) * plot;
   const tAt = (px: number) => d0 + ((px - LABEL) / plot) * (d1 - d0);
 
-  // bands per GPU, each packed into as few tracks as its overlapping jobs need
   const bands = useMemo(() => {
     const by = new Map<string, GJob[]>();
     for (const j of jobs) {
@@ -188,7 +177,7 @@ export function Gantt({ jobs, domain, onZoom, onPick, now }: {
             const w = Math.max(3, e - a);
             const s = ST[j.st];
             return (
-              <g key={j.id} className={`g-bar s-${j.st}${j.mine === false ? ' other' : ''}`} transform={`translate(${a} ${b.y + GAP + k * (TRACK + GAP)})`}
+              <g key={j.id} className={`g-bar s-${j.st}`} transform={`translate(${a} ${b.y + GAP + k * (TRACK + GAP)})`}
                 data-ref={`job:${j.id}`} data-ref-label={`${tr('任务')} ${j.name}`}
                 onPointerMove={ev => show(ev, { title: j.name, rows: j.tip, foot: tr('点开看详情') })} onPointerLeave={hide}
                 onClick={() => onPick(j.id)} tabIndex={0} onKeyDown={ev => { if (ev.key === 'Enter') onPick(j.id); }}>
@@ -209,7 +198,6 @@ export function Gantt({ jobs, domain, onZoom, onPick, now }: {
   );
 }
 
-const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(1, Math.floor(n) - 1))}…` : s);
 // "node · GPU 3": the card in ink, its machine quieter before it
 function rowLabel(row: string) {
   const i = row.lastIndexOf(' · ');
@@ -217,16 +205,10 @@ function rowLabel(row: string) {
   return <><tspan className="g-node">{clip(row.slice(0, i), 14)} </tspan><tspan className="g-gpu">{row.slice(i + 3)}</tspan></>;
 }
 
-// ---------- one measure across rows: bars from zero, or dots on a closer axis ----------
-
 export interface Bar { id: string; label: string; v: number; hi?: boolean; sub?: string }
 
-// Bars from zero, value at the tip. When the values sit close together far from zero, bars
-// would all look the same length, so they become dots on an axis that starts near the
-// smallest value; the axis says so.
-export function Bars({ bars, fmt = (v: number) => fmtNum(v), onPick }: {
-  bars: Bar[]; fmt?: (v: number) => string; onPick?: (id: string) => void;
-}) {
+// Bars from zero; values close together far from zero become dots on an axis that does not start at zero.
+export function Bars({ bars, onPick }: { bars: Bar[]; onPick?: (id: string) => void }) {
   const { tip, show, hide } = useTip();
   const vs = bars.map(b => b.v);
   const lo = Math.min(...vs), hi = Math.max(...vs);
@@ -235,13 +217,13 @@ export function Bars({ bars, fmt = (v: number) => fmtNum(v), onPick }: {
   const top = Math.max(...vs.map(Math.abs), 1e-12);
   return (
     <div className={`hbars${dots ? ' dots' : ''}`}>
-      {dots && <div className="hb hb-axis"><span /><span className="hb-ax"><em>{fmt(a)}</em><em>{fmt(z)}</em></span><span className="hb-v muted">{tr('横轴不从 0 开始')}</span></div>}
+      {dots && <div className="hb hb-axis"><span /><span className="hb-ax"><em>{fmtNum(a)}</em><em>{fmtNum(z)}</em></span><span className="hb-v muted">{tr('横轴不从 0 开始')}</span></div>}
       {bars.map((b, i) => (
         <button key={b.id} className={`hb${b.hi ? ' hi' : ''}${onPick ? ' pick' : ''}`} style={{ ['--i' as string]: Math.min(i, 14) }}
-          onClick={() => onPick?.(b.id)} onPointerMove={e => show(e, { title: b.label, rows: [{ v: fmt(b.v), k: b.sub ?? '' }] })} onPointerLeave={hide}>
+          onClick={() => onPick?.(b.id)} onPointerMove={e => show(e, { title: b.label, rows: [{ v: fmtNum(b.v), k: b.sub ?? '' }] })} onPointerLeave={hide}>
           <span className="hb-l" title={b.label}>{b.label}</span>
           <span className="hb-track">{dots ? <i className="hb-dot" style={{ ['--x' as string]: (b.v - a) / (z - a) }} /> : <i style={{ ['--v' as string]: Math.max(0, Math.abs(b.v) / top) }} />}</span>
-          <span className="hb-v">{fmt(b.v)}</span>
+          <span className="hb-v">{fmtNum(b.v)}</span>
         </button>
       ))}
       <Tip tip={tip} />
@@ -256,8 +238,6 @@ export function fmtNum(v: number) {
   return a >= 100 ? v.toFixed(1) : a >= 1 ? v.toFixed(2) : v.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
 }
 
-// ---------- a GPU's memory as one thin segmented bar ----------
-
 export function Meter({ parts, total, label }: { parts: { v: number; c: string; name: string }[]; total: number; label: string }) {
   const { tip, show, hide } = useTip();
   return (
@@ -268,11 +248,6 @@ export function Meter({ parts, total, label }: { parts: { v: number; c: string; 
   );
 }
 
-export const elapsed = (s: number | null | undefined) => (s == null ? '—' : dur(s));
-
-// ---------- a card's last hour: utilisation as a line, memory as the area under it ----------
-
-// both in percent of the card, so they share one axis; every card spans the same hour, so they line up
 export const SPARK = { util: '#c2663f', mem: '#6c5fb0' }; // validated as a pair, CVD-safe, on the panel
 
 export function Spark({ pts, total, now, label, span = 3600 }: {
@@ -286,7 +261,7 @@ export function Spark({ pts, total, now, label, span = 3600 }: {
   const x = (t: number) => Math.max(0, ((t - t0) / span) * w);
   const y = (pct: number) => h - 1 - (Math.max(0, Math.min(100, pct)) / 100) * (h - 3);
   const mem = (p: [number, number, number]) => (100 * p[2]) / Math.max(1, total);
-  // a gap of more than five minutes (the server was off) breaks the lines rather than bridging it
+  // a gap of more than five minutes breaks the line
   const segs: [number, number, number][][] = [];
   for (const p of ps) { const s = segs.at(-1); if (s && p[0] - s[s.length - 1][0] <= 300) s.push(p); else segs.push([p]); }
   const path = (s: [number, number, number][], v: (p: [number, number, number]) => number) => s.map((p, i) => `${i ? 'L' : 'M'}${x(p[0]).toFixed(1)} ${y(v(p)).toFixed(1)}`).join('');
@@ -322,7 +297,7 @@ export function Spark({ pts, total, now, label, span = 3600 }: {
   );
 }
 
-// a clock for the "how long ago" a live view shows, ticking while it is on screen
+// the current time, re-read every `every` ms while mounted
 export function useNow(every = 1000) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), every); return () => clearInterval(i); }, [every]);

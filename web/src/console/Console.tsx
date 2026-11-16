@@ -1,24 +1,14 @@
-// The console: everything the town does, as one screen of panels, for anyone who would rather
-// click than walk. Projects are folders along the top, in a path like Finder's; the rail drops
-// down to pick another project or paper and folds away again. The research stages and the
-// town's configuration run down the left, and the one picked fills the right: the survey to
-// read, the code and the paper to edit, the experiments and their data, the project's agents,
-// the skills, MCP servers and library. The town, 2D or 3D, is the same work walked through.
-// The assistant opens in a sidebar on the right and is told what you are looking at. When Paseo
-// starts offering a new model, a card asks whether the assistant and the leads should switch.
-//
-// On a phone the same console in one column: the project is the bar along the top (tap it for
-// the list, which rises from the bottom), the panels most looked at are tabs along the bottom
-// with the rest under 更多, and the assistant takes the whole screen.
-//
+// The console: the town's work as one screen of panels, projects in a path bar, the assistant in a
+// sidebar. On a phone it is one column: the project bar on top, the most-used panels as bottom tabs.
 //   #view=console&line=line_2&m=paper   — open a project's panel directly
 
+import { typing } from '../components/walk';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type Line, type Placement, type Report, type ShowTarget } from '../api';
 import { AgentDesk } from '../components/AgentRoom';
 import type { RoomActions } from '../components/Interior';
 import { McpRoom } from '../components/McpRoom';
-import { STATUS } from '../components/MillRoom';
+import { StatusTag } from '../components/MillRoom';
 import { RagRoom } from '../components/RagRoom';
 import { SkillRoom } from '../components/SkillRoom';
 import { tr, trx } from '../i18n';
@@ -54,18 +44,17 @@ const MODS: { id: ModId; name: string; sub: string; icon: IconName; town?: boole
 ];
 const IDS = MODS.map(m => m.id);
 const isMod = (s: unknown): s is ModId => IDS.includes(s as ModId);
-// a phone's tabs along the bottom: the panels you look at most away from your desk
 const PHONE_TABS: ModId[] = ['overview', 'survey', 'exp', 'paper'];
-// the panels that do their own layout edge to edge, with no heading over them
+// the panels that lay themselves out edge to edge
 const BLEED = new Set<ModId>(['code', 'paper', 'agents', 'skills', 'mcp', 'rag']);
 
-// a building of the town, and the panel here that does its work
+// the panel that does a building's work
 const BY_BUILDING: Record<string, ModId> = {
   mill: 'overview', hatchery: 'survey', customs: 'survey', genealogy: 'survey', depot: 'code', workshop: 'code', farm: 'exp',
   power: 'exp', power_sim: 'exp', coldstore: 'data', press: 'paper', qa: 'paper', market: 'agents', academy: 'skills', exchange: 'mcp', library: 'rag',
 };
 
-// `asked`: the projects with a question from their agents waiting for your answer
+// `asked`: the projects whose agents have a question waiting for you
 type Filter = 'all' | 'run' | 'you' | 'done' | 'local';
 const FILTERS: [Filter, string, (l: Line, asked: Set<string>) => boolean][] = [
   ['all', tr('全部'), () => true],
@@ -92,24 +81,24 @@ function remembered(): { line?: string; mod?: ModId; narrow?: boolean; side?: bo
 interface Props extends Omit<RoomActions, 'onOpen'> {
   active: boolean;
   lines: Line[];
-  ready: boolean; // the list of projects has loaded
+  ready: boolean;
   placements: Placement[];
   tick: number;
-  onRoom: (id: string, lineId?: string | null) => void; // a building's own room, over the console
-  at?: { seq?: number; mod?: string }; // where its address points: /console/<project's number>/<panel>
-  onPlace?: (seq: number, mod: string) => void; // where it is now, for its address
+  onRoom: (id: string, lineId?: string | null) => void;
+  at?: { seq?: number; mod?: string }; // the address: /console/<project's number>/<panel>
+  onPlace?: (seq: number, mod: string) => void;
 }
 
 export function Console(p: Props) {
   const first = useRef(remembered()).current;
-  const hp = new URLSearchParams(location.hash.slice(1));
-  // the project its address names (known once the list is in), else one from an older link, else the last one
+  const hp = new URLSearchParams(location.hash.slice(1)), hm = hp.get('m');
   const [want, setWant] = useState<string | null>(p.at?.seq ? null : hp.get('line') ?? first.line ?? null);
   const [seqWanted, setSeqWanted] = useState(p.at?.seq);
-  const [mod, setMod] = useState<ModId>(isMod(p.at?.mod) ? p.at!.mod as ModId : isMod(hp.get('m')) ? hp.get('m') as ModId : first.mod ?? 'overview');
+  const [mod, setMod] = useState<ModId>(isMod(p.at?.mod) ? p.at.mod : isMod(hm) ? hm : first.mod ?? 'overview');
   const [narrow, setNarrow] = useState(!!first.narrow);
-  const [side, setSide] = useState(!!first.side); // the assistant's sidebar
-  const opened = useRef(false); // you opened it, so its box takes the keys; one left open last time does not
+  const [side, setSide] = useState(!!first.side);
+  // the sidebar's box takes the keys only when you opened it, not when it was left open last time
+  const opened = useRef(false);
   const toggleSide = () => setSide(o => { opened.current ||= !o; return !o; });
   const [dir, setDir] = useState(1);
   const [rail, setRail] = useState(false);
@@ -117,8 +106,8 @@ export function Console(p: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   const [role, setRole] = useState<'lead' | 'coder' | 'writer'>('lead');
-  const [asks, setAsks] = useState<Report[]>([]); // questions from the projects' agents, waiting for you
-  const [reveal, setReveal] = useState<Reveal | null>(null); // a file to open in the code or paper panel
+  const [asks, setAsks] = useState<Report[]>([]);
+  const [reveal, setReveal] = useState<Reveal | null>(null);
   const [hist, setHist] = useState<{ back: [string, ModId][]; fwd: [string, ModId][] }>({ back: [], fwd: [] });
   const phone = useMedia(PHONE);
   const dirty = useRef({ code: 0, paper: 0 });
@@ -126,24 +115,22 @@ export function Console(p: Props) {
 
   const lines = useMemo(() => [...p.lines].sort((a, b) => b.seq - a.seq), [p.lines]);
   const asked = useMemo(() => new Set(asks.map(a => a.line_id)), [asks]);
-  // the project asked for, else the first that needs you, else the newest
   const cur = lines.find(l => l.id === want) ?? (seqWanted ? lines.find(l => l.seq === seqWanted) : undefined)
     ?? lines.find(l => needsYou(l, asked)) ?? lines.find(l => l.status === 'running') ?? lines[0] ?? null;
   const id = cur?.id ?? '';
   const full = useFetch(() => api.line(id), id, p.tick);
   const ws = useFetch(() => api.ws(id), id, p.tick);
   const line = full.data ?? null;
+  const here = MODS.find(m => m.id === mod)!;
 
   useEffect(() => {
-    if (!cur) return; // still loading: keep the project remembered last time
+    if (!cur) return;
     try { localStorage.setItem(KEY, JSON.stringify({ line: cur.id, mod, narrow, side })); } catch { /* private mode */ }
   }, [cur?.id, mod, narrow, side]); // eslint-disable-line react-hooks/exhaustive-deps
-  // a narrow window with the assistant open folds the drawer to its icons, to leave the panel room
   const squeezed = useMedia('(max-width: 1320px)') && side;
-  useEffect(() => setPlace(cur ? { id: cur.id, seq: cur.seq, title: cur.title } : null, mod, MODS.find(m => m.id === mod)!.name), [cur?.id, cur?.title, mod]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => setPlace(cur ? { id: cur.id, seq: cur.seq, title: cur.title } : null, mod, here.name), [cur?.id, cur?.title, mod]); // eslint-disable-line react-hooks/exhaustive-deps
   usePanelNote('agents', 'role', { 员工: mod === 'agents' ? ROLES[role][0] : null });
 
-  // what the projects' agents ask you, and what they report as key, wherever you are
   useEffect(() => {
     let alive = true;
     const load = () => api.reports().then(r => alive && setAsks(r.asks)).catch(() => {});
@@ -158,7 +145,7 @@ export function Console(p: Props) {
     return () => { alive = false; off(); };
   }, [p.lines]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the panels that keep their state while another is shown: their editors, open files and edits
+  // the panels that keep their state (editors, open files, edits) while another is shown
   const [kept, setKept] = useState<Set<ModId>>(new Set());
   useEffect(() => { setKept(new Set()); setReveal(null); }, [id]);
   useEffect(() => { if (mod === 'code' || mod === 'paper') setKept(k => (k.has(mod) ? k : new Set([...k, mod]))); }, [mod, id]);
@@ -193,8 +180,7 @@ export function Console(p: Props) {
     go({ line: next[0], mod: next[1] }, false);
   };
 
-  // what the assistant opens for you, or a job or file named in its reply that you click: a panel,
-  // a file at a line, a job's details, a part of the page lit up
+  // what the assistant opens for you: a panel, a file at a line, a job's details, a part of the page lit up
   const show = useCallback((t: ShowTarget) => {
     const job = t.job && /^\d+$/.test(t.job) ? `nvidb-${t.job}` : t.job;
     const [root, path, ln] = t.file ? (/^(code|paper):(.+?)(?::(\d+))?$/.exec(t.file) ?? []).slice(1) : [];
@@ -206,11 +192,10 @@ export function Console(p: Props) {
     if (ref) setTimeout(() => flash(ref), 200);
   }, [go]);
   useEffect(() => listen(e => { if (e.type === 'assistant_show') show(e.target ?? {}); }), [show]);
-  // its address changed (back, forward, a link): go where it points; and the address follows where it is
   const atLine = p.at?.seq ? lines.find(l => l.seq === p.at!.seq)?.id : undefined;
   useEffect(() => {
     if (!p.at || (!atLine && !isMod(p.at.mod))) return;
-    go({ line: atLine, mod: isMod(p.at.mod) ? p.at.mod as ModId : undefined }, false);
+    go({ line: atLine, mod: isMod(p.at.mod) ? p.at.mod : undefined }, false);
   }, [atLine, p.at?.mod]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!seqWanted || !lines.length) return;
@@ -227,7 +212,7 @@ export function Console(p: Props) {
     return () => removeEventListener('pt-show', on);
   }, [show]);
 
-  // a building asked for from inside a panel: its panel here when there is one, else its room
+  // a building opened from a panel: its panel here when there is one, else its room
   const typeOf = (bid: string) => p.placements.find(x => x.id === bid)?.type ?? bid;
   const openBuilding = useCallback((bid: string, lineId?: string | null) => {
     const m = BY_BUILDING[typeOf(bid)];
@@ -241,16 +226,14 @@ export function Console(p: Props) {
     openBuilding(el.getAttribute('data-open')!, el.getAttribute('data-line'));
   }
 
-  // keys: ⌘K finds a project, ⌘J opens and closes the assistant, 1–9 and 0 pick a panel, Esc folds the rail
+  // ⌘K finds a project, ⌘J toggles the assistant, 1–9 and 0 pick a panel, Esc folds the rail
   useEffect(() => {
     if (!p.active) return;
     const key = (e: KeyboardEvent) => {
-      const t = e.target instanceof HTMLElement ? e.target : null;
-      const typing = !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.getAttribute('role') === 'combobox' || !!t.closest('.cm-editor'));
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setRail(true); requestAnimationFrame(() => searchRef.current?.focus()); return; }
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'j') { e.preventDefault(); toggleSide(); return; }
       if (e.key === 'Escape' && rail) { e.stopImmediatePropagation(); setRail(false); return; }
-      if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.interior, .proto.chat-open, .settings')) return;
+      if (typing(e, '.cm-editor, :scope[role="combobox"]') || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.interior, .proto.chat-open, .settings')) return;
       const n = '1234567890'.indexOf(e.key);
       if (n >= 0 && IDS[n]) { e.preventDefault(); go({ mod: IDS[n] }); }
     };
@@ -258,15 +241,14 @@ export function Console(p: Props) {
     return () => removeEventListener('keydown', key, true);
   }, [p.active, rail, go]);
 
-  const actions: RoomActions = { ...p, onOpen: (bid, lineId) => openBuilding(bid, lineId) };
-  const here = MODS.find(m => m.id === mod)!;
+  const actions: RoomActions = { ...p, onOpen: openBuilding };
   const waiting = lines.filter(l => needsYou(l, asked)).length;
   const pick = (l: Line, m?: ModId) => { go({ line: l.id, mod: m }); setTimeout(() => setRail(false), 160); };
 
   if (!cur && !p.ready) return <main className="p-console"><p className="cm-loading muted">{tr('加载中…')}</p></main>;
   if (!cur) return (
     <main className="p-console">
-      <div className="cm-empty first">
+      <div className="cm-empty">
         <Icon n="folder" size={40} />
         <h3>{tr('还没有项目')}</h3>
         <p>{tr('放入一颗 idea，孵化场会先查重，再按工序做下去。也可以在 projects.json 里接入你自己的代码和论文仓库。')}</p>
@@ -321,7 +303,7 @@ export function Console(p: Props) {
         <div className="cm" key={id}>
           {!kept.has(mod) && (
             <section className={`cm-mod on${BLEED.has(mod) ? ' bleed' : ''}`} key={mod} style={{ ['--dir' as string]: dir }}>
-              {mod === 'overview' ? <Overview line={line} info={ws.data} tick={p.tick} placements={p.placements} go={m => go({ mod: m })}
+              {mod === 'overview' ? <Overview line={line} info={ws.data} tick={p.tick} typeOf={typeOf} go={m => go({ mod: m })}
                 onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)}
                 toast={p.toast} onLead={() => { setRole('lead'); go({ mod: 'agents' }); }} />
                 : mod === 'survey' ? <Survey line={line} tick={p.tick} onHatch={p.onHatch} onAdjust={p.onAdjust} />
@@ -364,9 +346,7 @@ export function Console(p: Props) {
   );
 }
 
-// ---------- the module drawer ----------
-
-// each research panel's mark: how its stages stand
+// a research panel's mark: how its stages stand
 function markOf(line: Line | null, m: ModId) {
   const st = (line?.stages ?? []).filter(s => STAGE_MOD[s.key] === m && s.key !== 'idea').map(s => s.status);
   if (m === 'data') return line?.stages.find(s => s.key === 'exp')?.status === 'done' ? 'done' : '';
@@ -410,16 +390,16 @@ function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
   );
 }
 
-// ---------- a phone's tabs ----------
-
-// along the bottom, the four panels looked at most; the fifth tab is 更多, every panel in a sheet,
-// and stands for the panel shown when it is one of those
+// a phone's tabs: the most-used panels, then 更多 with every panel in a sheet, standing for the
+// panel shown when it is not one of the tabs
 function PhoneTabs({ mod, line, code, onPick }: { mod: ModId; line: Line | null; code: number; onPick: (m: ModId) => void }) {
   const [more, setMore] = useState(false);
   const other = PHONE_TABS.includes(mod) ? null : MODS.find(m => m.id === mod)!;
   const pick = (m: ModId) => { setMore(false); onPick(m); };
-  const mark = (m: ModId) => (m === 'code' && code > 0 ? <em className="cd-n">{code}</em> : markOf(line, m) && <i className={`cd-dot k-${markOf(line, m)}`} />);
-  // what waits under 更多 shows on its tab
+  const mark = (m: ModId) => {
+    const k = markOf(line, m);
+    return m === 'code' && code > 0 ? <em className="cd-n">{code}</em> : k && <i className={`cd-dot k-${k}`} />;
+  };
   const behind = code > 0 || MODS.some(m => !PHONE_TABS.includes(m.id) && markOf(line, m.id) === 'wait');
   return (
     <>
@@ -461,8 +441,7 @@ function PhoneTabs({ mod, line, code, onPick }: { mod: ModId; line: Line | null;
   );
 }
 
-// ---------- the rail of folders ----------
-
+// the rail of project or paper folders that drops down from the path bar
 function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, asked, phone, onPick, onIdea, onClose }: {
   open: boolean; lines: Line[]; cur: Line; tab: 'projects' | 'papers'; setTab: (t: 'projects' | 'papers') => void; asked: Set<string>;
   filter: Filter; setFilter: (f: Filter) => void; q: string; setQ: (q: string) => void; phone: boolean;
@@ -477,17 +456,16 @@ function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, asked
       && (!t || `#${l.seq} ${l.title} ${l.idea} ${l.linked?.paper?.title ?? ''}`.toLowerCase().includes(t)));
   }, [lines, tab, test, q, asked]);
 
-  // opening: the current folder comes into view and takes the keys
   useEffect(() => {
     if (!open) return;
     const i = Math.max(0, shown.findIndex(l => l.id === cur.id));
     setHi(i);
     requestAnimationFrame(() => {
       const t = track.current, el = t?.children[i] as HTMLElement | undefined;
-      // on a phone the folders run down, not across; the sheet is still rising, so by where they lie, not where they show
+      // on a phone the rail scrolls vertically, measured by offsetTop because the sheet is still animating in
       if (phone) { if (t && el) t.scrollTop = Math.max(0, el.offsetTop + el.offsetHeight + 16 - t.clientHeight); }
       else revealX(t, el, true);
-      if (!(document.activeElement instanceof HTMLInputElement)) track.current?.focus({ preventScroll: true });
+      if (!(document.activeElement instanceof HTMLInputElement)) t?.focus({ preventScroll: true });
     });
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setHi(h => Math.min(h, Math.max(0, shown.length - 1))); }, [shown.length]);
@@ -549,7 +527,7 @@ function Folder({ l, i, on, hi, onPick }: { l: Line; i: number; on: boolean; hi:
     <button className={`fcard d-${l.status}${on ? ' on' : ''}${hi ? ' hi' : ''}`} style={{ ['--i' as string]: i }} onClick={onPick} title={l.idea}>
       <span className="fc-tab" />
       <span className="fc-body">
-        <span className="fc-top"><b>#{l.seq}</b><span className={`pst pst-${l.status}`}>{STATUS[l.status] ?? l.status}</span></span>
+        <span className="fc-top"><b>#{l.seq}</b><StatusTag status={l.status} /></span>
         <span className="fc-title">{l.title}</span>
         <span className="fc-stages" title={tr('{0}/{1} 站完成', done, l.stages.length)}>{l.stages.map(s => <i key={s.key} className={`k-${s.status}`} />)}</span>
         <span className="fc-foot muted small">{l.linked ? tr('本地项目 · {0}', l.linked.key) : l.current?.name ?? l.stage}</span>

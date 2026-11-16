@@ -1,10 +1,7 @@
-// Settings: a page of its own at /settings/<section>, over whatever was open, in Cloudflare's
-// components (Kumo) whichever look the rest of the app has. Sections down the left, each a stack
-// of cards: looks and motion, the progress page, the editor, the 2D map and the 3D walk (kept in
-// this browser, see settings.ts), the town's own model and the agents' runtimes (on the server),
-// who may sign in, the demo samples, and the keys.
+// The settings page at /settings/<section>, drawn with Kumo whichever look the app has: browser
+// settings (settings.ts) and the server's model, agents, access and demo samples.
 
-import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Slider, Switch, Table, Text } from '@cloudflare/kumo';
+import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Table, Text } from '@cloudflare/kumo';
 import { ArrowCounterClockwiseIcon, CodeIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -13,8 +10,8 @@ import { Logo } from '../art';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
 import { ICON_THEMES, THEMES, autoTheme, chooseLook } from '../console/edthemes';
-import { applyLlm } from './Chat';
-import { Card, Note, OptionControl, Pick, PROGRESS_OPTIONS, Row, set } from './controls';
+import { applyLlm, withProvider } from './Chat';
+import { Card, Note, OptionControl, Pick, PROGRESS_OPTIONS, Range, Row, set, Toggle } from './controls';
 import { AccentPicker, GlassSlider, GlassStage, LookPicker, ModePicker, WallPicker } from './looks';
 import { Showcase } from './Showcase';
 import { layer } from '../kumo';
@@ -48,17 +45,6 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
 const SECTIONS = GROUPS.flatMap(g => g[1]);
 
 const Warn = ({ children, bad }: { children: React.ReactNode; bad?: boolean }) => <Banner size="sm" variant={bad ? 'error' : 'alert'} description={children} />;
-const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => <Switch aria-label={label} checked={value} onCheckedChange={onChange} />;
-
-function Range({ label, value, min, max, step, fmt, onChange }: { label: string; value: number; min: number; max: number; step: number; fmt: (v: number) => string; onChange: (v: number) => void }) {
-  return (
-    <div className="st-range">
-      <Slider size="sm" value={value} min={min} max={max} step={step} getAriaLabel={() => label} onValueChange={v => onChange(v as number)} />
-      <output>{fmt(value)}</output>
-    </div>
-  );
-}
-
 function Look({ s }: { s: S }) {
   const mac = s.ui === 'macos', flat = s.ui !== 'paper';
   return (
@@ -233,10 +219,7 @@ function ModelForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm) => void }) {
   }
   return (
     <div className="st-form">
-      <Select label={tr('供应商')} hideLabel={false} value={draft.provider} items={Object.fromEntries(llm.providers.map(x => [x.id, x.name]))} onValueChange={id => {
-        const d = llm.providers.find(x => x.id === id);
-        setDraft(x => ({ ...x, provider: String(id), model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' }));
-      }} />
+      <Select label={tr('供应商')} hideLabel={false} value={draft.provider} items={Object.fromEntries(llm.providers.map(x => [x.id, x.name]))} onValueChange={id => setDraft(x => withProvider(llm, x, String(id)))} />
       <ModelBox label={tr('强模型（Lv.3 以上的员工、最终回答）')} value={draft.model_strong} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_strong: v }))} />
       <ModelBox label={tr('便宜模型（其余员工）')} value={draft.model_cheap} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_cheap: v }))} />
       {draft.provider === 'anthropic' && (
@@ -284,9 +267,9 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const pv = info.providers.find(p => p.id === v.provider), m = pv?.models.find(x => x.id === v.model);
-  const gone = !!d.provider && (!info.providers.some(p => p.id === d.provider) || (!!d.model && !info.providers.find(p => p.id === d.provider)?.models.some(x => x.id === d.model)));
+  const dp = info.providers.find(p => p.id === d.provider);
+  const gone = !!d.provider && (!dp || (!!d.model && !dp.models.some(x => x.id === d.model)));
   const changed = JSON.stringify(v) !== JSON.stringify(was);
-  // another provider or model keeps the thinking when it has it
   const to = (provider: string, model?: string) => {
     const p = info.providers.find(x => x.id === provider), mm = p?.models.find(x => x.id === model) ?? p?.models[0];
     setV(x => ({ provider, model: mm?.id ?? '', thinking: mm && mm.thinking.includes(x.thinking) ? x.thinking : mm?.default_thinking ?? '' }));
@@ -321,14 +304,14 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
 function Agents() {
   const [paseo, setPaseo] = useState<PaseoInfo | null | 'err'>(null);
   const [pi, setPi] = useState<Roster['available'] | null>(null);
-  const [n, setN] = useState(0); // the default pickers start over from a new reading
+  const [n, setN] = useState(0);
   const [reading, setReading] = useState(false);
   useEffect(() => {
     api.paseo().then(setPaseo).catch(() => setPaseo('err'));
     api.roster('coder').then(r => setPi(r.available)).catch(() => {});
   }, []);
   const again = () => { setReading(true); api.paseo(true).then(i => { setPaseo(i); setN(x => x + 1); }).catch(() => setPaseo('err')).finally(() => setReading(false)); };
-  const st = paseo && paseo !== 'err' ? paseo.status : null;
+  const info = paseo && paseo !== 'err' ? paseo : null, st = info?.status;
   return (
     <>
       <Card title="Paseo">
@@ -336,21 +319,21 @@ function Agents() {
           <Badge variant={st?.ok ? 'success' : paseo === null ? 'neutral' : 'warning'}>{paseo === null ? tr('检查中…') : st?.ok ? tr('已连接{0}', st.version ? ` · ${st.version}` : '') : tr('未连接')}</Badge>
         </Row>
         {st && !st.ok && <Warn>{st.note}</Warn>}
-        {st?.ok && (
+        {info?.status.ok && (
           <>
             <Row label={tr('网页端')} desc={tr('房间里「完整界面」嵌入的就是它')}>
-              <Note>{st.web ?? tr('没开：paseo daemon config set features.webUi.enabled true')}</Note>
+              <Note>{info.status.web ?? tr('没开：paseo daemon config set features.webUi.enabled true')}</Note>
             </Row>
             <Row label={tr('可用的供应商')} desc={tr('从 Paseo 读出来的，每隔一阵重读一次；有新模型时中控屏会问你要不要换')}>
               <span className="st-tags">
-                {paseo !== 'err' && paseo?.providers.map(p => <Badge key={p.id} variant="outline">{p.label} · {tr('{0} 个模型', p.models.length)}</Badge>)}
+                {info.providers.map(p => <Badge key={p.id} variant="outline">{p.label} · {tr('{0} 个模型', p.models.length)}</Badge>)}
                 <Button size="sm" loading={reading} onClick={again}>{reading ? tr('读取中…') : tr('重新读取')}</Button>
               </span>
             </Row>
-            {paseo && paseo !== 'err' && <div key={n}>
-              <DefaultModel role="assistant" name={tr('小助手')} info={paseo} onSaved={setPaseo} />
-              <DefaultModel role="lead" name={tr('项目负责人')} info={paseo} onSaved={setPaseo} />
-            </div>}
+            <div key={n}>
+              <DefaultModel role="assistant" name={tr('小助手')} info={info} onSaved={setPaseo} />
+              <DefaultModel role="lead" name={tr('项目负责人')} info={info} onSaved={setPaseo} />
+            </div>
           </>
         )}
       </Card>
@@ -495,7 +478,6 @@ export function SettingsPage({ section, hud, onClose }: { section?: string; hud:
   const show = (k: Section) => go(`/settings/${k}`, true);
   const changed = JSON.stringify(s) !== JSON.stringify(DEFAULTS);
   const mac = s.ui === 'macos';
-  // finding a section by what is in it, as System Settings' search box does
   const [q, setQ] = useState('');
   const find = useRef<HTMLInputElement>(null);
   const hit = (n: string, about: string) => (n + about).toLowerCase().includes(q.trim().toLowerCase());

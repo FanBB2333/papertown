@@ -1,8 +1,8 @@
-// The icons beside a file's or a folder's name, in the icon theme chosen (edthemes.ts): a dot of
-// the file kind's colour, the kind's short name in that colour (like Seti), a solid badge with
-// coloured folders (like the Material icon themes), or nothing at all.
+// The icons beside a file's or a folder's name, in the chosen icon theme (edthemes.ts): a coloured
+// dot, the kind's short name (like Seti), a solid badge with coloured folders, or nothing.
 
 import type { IconTheme } from './edthemes';
+import { base } from './util';
 
 interface Kind { c: string; t: string } // colour, short name
 
@@ -43,10 +43,8 @@ const FOLDER: Record<string, string> = {
   '.github': '#6b6b6b', '.papertown': '#c2663f', node_modules: '#8a8a8a', '.venv': '#8a8a8a', venv: '#8a8a8a',
 };
 
-const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const ext = (p: string) => { const b = base(p); const i = b.lastIndexOf('.'); return i > 0 ? b.slice(i + 1).toLowerCase() : ''; };
-export const kindOf = (path: string): Kind => NAME[base(path).toLowerCase()] ?? EXT[ext(path)] ?? { c: '#a3927b', t: '' };
-export const kindColor = (path: string) => kindOf(path).c;
+const kindOf = (path: string): Kind => NAME[base(path).toLowerCase()] ?? EXT[ext(path)] ?? { c: '#a3927b', t: '' };
 
 export function FileIcon({ path, theme }: { path: string; theme: IconTheme }) {
   if (theme === 'none') return null;

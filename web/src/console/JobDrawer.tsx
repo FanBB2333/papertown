@@ -1,8 +1,5 @@
-// One job in full, as a sheet over the right of the console. The header takes the colour of the
-// job's state, and what the state makes most worth reading comes first: why it failed, how far
-// it has got, what it waits for, or the numbers it gave back. Then where and how long it ran,
-// its note, its whole result grouped by key, its command, and the events nvidb logged for it.
-// Read only, like the rest of nvidb here.
+// One job in full, as a sheet over the right of the console: what its state makes most worth
+// reading first, then where and how long it ran, its result, command and events. Read only.
 
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -25,7 +22,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState('');
   const nvId = id.startsWith('nvidb-') ? Number(id.slice(6)) : null;
-  const cards = useGpus(); // the same live reading as the cluster: where a running job's processes are now
+  const cards = useGpus();
   const now = useNow(5000);
 
   useEffect(() => {
@@ -36,7 +33,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
     return () => { live = false; };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Esc closes the sheet before anything else; ←/→ walk the list it was opened from
+  // capture phase + stopImmediatePropagation: Esc closes the sheet before anything else sees it
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -60,10 +57,9 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
   const result = nv?.result ?? farm?.result;
   const cut = result && typeof result === 'object' && '_truncated' in result ? String((result as { _truncated: string })._truncated) : null;
   const rows = result && typeof result === 'object' && !cut ? flat(result) : [];
-  const top = headline(cut ? null : result, 4);
+  const top = headline(cut ? null : result);
   const keys = new Set(top.map(([k]) => k)), topNames = tails(top.map(([k]) => k));
 
-  // the same few facts for an nvidb job and a farm job
   const where = nv ? (nv.node ? `${nv.node}${nv.gpu_ids.length ? ` · GPU ${nv.gpu_ids.join(',')}` : ` · ${tr('不占卡')}`}` : nv.lane ?? (nv.pool ? tr('池 {0}', nv.pool) : tr('等分配')))
     : farm ? (farm.backend === 'sim' ? tr('模拟电厂') : farm.backend) : '';
   const started = nv?.started_at ?? farm?.started_at ?? null;
@@ -77,6 +73,9 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
   const error = nv?.last_error ?? '';
   const pct = st === 'running' ? (nv ? pctOf(nv.progress) : farm?.progress ?? null) : null;
   const loaded = !!(nv || farm);
+  const limitBar = limit != null && took != null ? <span className="jd-bar thin"><i style={{ width: `${Math.min(100, (100 * took) / limit)}%` }} /></span> : null;
+  const deps = nv?.depends_on?.length
+    ? <span className="jd-deps">{nv.depends_on.map(d => <button key={d} className="chip" onClick={() => onJob(`nvidb-${d}`)}>#{d}</button>)}</span> : null;
 
   return createPortal(
     <>
@@ -100,7 +99,6 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
           {err && <p className="warn-box small">{err}</p>}
           {!loaded && !err && <p className="muted">{tr('读取中…')}</p>}
 
-          {/* what this state makes most worth reading, first */}
           {loaded && st === 'failed' && (
             <section className="jd-call bad">
               <h4>{tr('为什么失败')}</h4>
@@ -113,21 +111,16 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
               <h4>{tr('进度')}{pct != null && <b>{Math.round(pct)}%</b>}</h4>
               {pct != null && <span className="jd-bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></span>}
               {nv?.progress && <p className="mono jd-line">{nv.progress}{nv.progress_at ? <em> · {ago(nv.progress_at)}</em> : null}</p>}
-              {limit != null && took != null && (
-                <p className="small jd-lim">
-                  <span className="jd-bar thin"><i style={{ width: `${Math.min(100, (100 * took) / limit)}%` }} /></span>
-                  {tr('已跑 {0} / 上限 {1}', dur(took), dur(limit))}
-                </p>
-              )}
+              {limitBar && <p className="small jd-lim">{limitBar}{tr('已跑 {0} / 上限 {1}', dur(took), dur(limit))}</p>}
             </section>
           )}
           {nv && st === 'queued' && (
             <section className={`jd-call ${nv.held ? 'warn' : 'wait'}`}>
               <h4>{nv.held ? tr('挂起：依赖没跑成，等人决定') : tr('在等什么')}</h4>
               <p className="jd-line">
-                {(nv.depends_on?.length ?? 0) > 0 ? tr('等这些任务先跑完：') : nv.lane ? tr('排在 {0} 这条队列里', nv.lane) : tr('等一张放得下它的卡')}
+                {deps ? tr('等这些任务先跑完：') : nv.lane ? tr('排在 {0} 这条队列里', nv.lane) : tr('等一张放得下它的卡')}
               </p>
-              {(nv.depends_on?.length ?? 0) > 0 && <span className="jd-deps">{nv.depends_on!.map(d => <button key={d} className="chip" onClick={() => onJob(`nvidb-${d}`)}>#{d}</button>)}</span>}
+              {deps}
               {nv.held_reason && <p className="small jd-line">{nv.held_reason}</p>}
             </section>
           )}
@@ -145,16 +138,14 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
               {st !== 'queued' && <span><em>{tr('结束')}</em><b>{ended ? when(Date.parse(ended)) : st === 'running' ? tr('还在跑') : '—'}</b></span>}
               {st === 'queued' && <span><em>{tr('提交')}</em><b>{nv?.created_at ? `${when(Date.parse(nv.created_at))} · ${ago(nv.created_at)}` : '—'}</b></span>}
               <span><em>{st === 'queued' ? tr('上限') : tr('用时')}</em><b>{st === 'queued' ? (limit ? dur(limit) : '—') : <>{dur(took)}{limit ? <i className="muted"> / {dur(limit)}</i> : null}</>}</b>
-                {limit != null && took != null && <span className="jd-bar thin"><i style={{ width: `${Math.min(100, (100 * took) / limit)}%` }} /></span>}</span>
+                {limitBar}</span>
               {nv && st !== 'queued' && <span><em>{tr('退出码')}</em><b className={exit ? 'bad-t' : ''}>{exit ?? '—'}{nv.attempt && nv.attempt > 1 ? ` · ${tr('第 {0} 次尝试', nv.attempt)}` : ''}</b></span>}
               {nv?.progress && st !== 'running' && <span className="wide"><em>{tr('状态行')}</em><b className="mono">{nv.progress}</b></span>}
               {procs.length > 0 && (
                 <span className="wide"><em>{tr('卡上的进程（实时）')}</em>
                   {procs.map(p => <b key={`${p.where}${p.pid}`} className="jd-proc">{p.where} · {p.user ?? '?'} · pid {p.pid ?? '?'} · {gb(p.mem_mb)}</b>)}</span>
               )}
-              {nv && st !== 'queued' && (nv.depends_on?.length ?? 0) > 0 && (
-                <span className="wide"><em>{tr('依赖')}</em><span className="jd-deps">{nv.depends_on!.map(d => <button key={d} className="chip" onClick={() => onJob(`nvidb-${d}`)}>#{d}</button>)}</span></span>
-              )}
+              {deps && st !== 'queued' && <span className="wide"><em>{tr('依赖')}</em>{deps}</span>}
             </section>
           )}
 
@@ -212,7 +203,6 @@ function ResultTable({ rows, keys }: { rows: [string, unknown][]; keys: Set<stri
   const groups = new Map<string, [string, unknown][]>();
   for (const r of rows) groups.set(group(r[0]), [...(groups.get(group(r[0])) ?? []), r]);
   const ordered = [...groups.entries()].sort(([a], [b]) => (a === '' ? -1 : b === '' ? 1 : 0));
-  // bars measure against the largest number in their own group, not against a byte count elsewhere
   const topOf = (rs: [string, unknown][]) => Math.max(...rs.map(([, v]) => (typeof v === 'number' ? Math.abs(v) : 0)), 1e-12);
   return (
     <table className="ctab jd-res">

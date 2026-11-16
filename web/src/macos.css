@@ -1,12 +1,5 @@
-/* The macOS look, after the Mac this runs on (macOS 27): a wallpaper under the window, a uniform
-   frosted toolbar across the top, an edge-to-edge sidebar with coloured icons, grouped boxes for
-   content, and Liquid Glass for what floats. It builds on the Cloudflare look (html.ui-cf stays on
-   under html.ui-mac), so the structure comes from cloudflare.css and this adds the materials.
-
-   Content stays on plain, near-opaque surfaces and the glass is for what sits above it. Cards take
-   a translucent fill with no blur, because what is behind them is a smooth wallpaper; only the
-   bars, menus and floating controls pay for a backdrop-filter. --g is the slider in the settings:
-   0 is clear, 1 is tinted, and every alpha below is worked out from it. */
+/* The macOS look: wallpapers and Liquid Glass on top of cloudflare.css (html.ui-cf stays on under
+   html.ui-mac). --g is the glass slider in the settings, 0 clear to 1 tinted; the alphas derive from it. */
 
 html.ui-mac {
   --g: .45;
@@ -20,8 +13,6 @@ html.ui-mac {
   --mac-panel2: light-dark(#f2f2f5, #333336);
   --mac-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
 
-  /* the glass: a tint over what is behind, blurred, with light caught on two opposite edges and a
-     darker line round it */
   --lg-tint: 255 255 255;
   --lg-a: calc(.2 + .66 * var(--g));
   --lg-bar-a: calc(.44 + .46 * var(--g));
@@ -38,7 +29,7 @@ html.ui-mac {
 }
 html.ui-mac[data-mode=dark] {
   --mac-accent: #0a84ff;
-  /* dark glass stays dark over a bright map: it starts more opaque than the light one */
+  /* dark glass stays dark over a bright map: it starts more opaque */
   --lg-tint: 34 34 38;
   --lg-a: calc(.44 + .5 * var(--g));
   --lg-bar-a: calc(.66 + .3 * var(--g));
@@ -62,7 +53,7 @@ html.ui-mac[data-accent=yellow][data-mode=dark] { --mac-accent: #ffc600; --mac-a
 html.ui-mac[data-accent=green][data-mode=dark] { --mac-accent: #62ba46; }
 html.ui-mac[data-accent=graphite][data-mode=dark] { --mac-accent: #98989d; }
 
-/* ---------- the wallpapers: only gradients, so any page that covers the app can repeat them ---------- */
+/* ---------- wallpapers ---------- */
 html.ui-mac {
   --wall-dawn:
   radial-gradient(70% 90% at 12% 8%, #a9c8ff 0, transparent 70%), radial-gradient(60% 80% at 92% 12%, #ffc9e4 0, transparent 68%),
@@ -122,7 +113,7 @@ html.ui-mac[data-wall=paper] { --wall: var(--wall-paper); }
 html.ui-mac[data-wall=graphite] { --wall: var(--wall-graphite); }
 
 /* ---------- the window ---------- */
-/* as specific as the plain colours index.html paints before this stylesheet arrives, and one more */
+/* one step more specific than the colours index.html paints before this stylesheet arrives */
 html.ui-mac[data-mode][data-wall] body.proto-page { background-color: var(--mac-win); background-image: var(--wall); background-attachment: fixed; }
 html.ui-mac :is(.theme-sketch, .pd-back) {
   --bg: var(--mac-win); --panel: var(--mac-panel); --panel2: var(--mac-panel2);
@@ -132,11 +123,10 @@ html.ui-mac :is(.theme-sketch, .pd-back) {
 }
 html.ui-mac[data-mode=dark] :is(.theme-sketch, .pd-back) { --brand: var(--mac-accent); }
 html.ui-mac .theme-sketch { -webkit-font-smoothing: antialiased; background: none; }
-/* the progress page scrolls under the toolbar; what the console places inside itself keeps its own top */
 html.ui-mac .theme-sketch .p-prog { top: 0; padding-top: var(--hud-h); background: none; }
 html.ui-mac .theme-sketch .p-console { background: none; }
 
-/* ---------- the toolbar: a uniform frosted band, with the views as one capsule of glass ---------- */
+/* ---------- the toolbar ---------- */
 html.ui-mac .theme-sketch.la .hud {
   gap: 14px; padding: 0 16px; background: var(--lg-bar); box-shadow: 0 .5px 0 var(--mac-sep);
   -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
@@ -155,10 +145,8 @@ html.ui-mac .theme-sketch.la .hud nav.seg::before {
 html.ui-mac .theme-sketch.la .hud nav.seg a { height: 100%; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--muted); }
 html.ui-mac .theme-sketch.la .hud nav.seg a.on { color: var(--ink); box-shadow: none; }
 
-/* the rest of the top bar: capsules on the band */
 html.ui-mac .theme-sketch.la .hud .btn { height: 34px; padding: 0 14px; background: light-dark(rgb(255 255 255 / .72), rgb(255 255 255 / .1)); }
 html.ui-mac .theme-sketch.la .hud .btn:hover { background: light-dark(#fff, rgb(255 255 255 / .16)); }
-html.ui-mac .theme-sketch.la .hud .seg :is(button, a):not(.on) { color: var(--muted); }
 html.ui-mac .hud-quiet { font-size: 12.5px; white-space: nowrap; }
 html.ui-mac .hud-quiet b { font-size: 13px; }
 
@@ -176,7 +164,7 @@ html.ui-mac .theme-sketch .btn.pri {
   color: var(--mac-accent-ink); background: var(--mac-accent) linear-gradient(rgb(255 255 255 / .14), rgb(255 255 255 / 0));
   box-shadow: 0 0 0 .5px color-mix(in srgb, var(--mac-accent) 78%, #000), inset 0 .5px 0 rgb(255 255 255 / .34), 0 1px 3px color-mix(in srgb, var(--mac-accent) 34%, transparent);
 }
-html.ui-mac .theme-sketch .btn.pri:hover { background-color: color-mix(in srgb, var(--mac-accent) 90%, #fff); filter: none; }
+html.ui-mac .theme-sketch .btn.pri:hover { background-color: color-mix(in srgb, var(--mac-accent) 90%, #fff); }
 html.ui-mac .theme-sketch .btn.on { color: var(--brand); background-color: color-mix(in srgb, var(--brand) 12%, var(--mac-panel)); }
 
 html.ui-mac .theme-sketch .seg { gap: 0; padding: 2px; border-radius: 999px; background: light-dark(rgb(0 0 0 / .06), rgb(255 255 255 / .08)); }
@@ -192,16 +180,14 @@ html.ui-mac .theme-sketch kbd { border: 0; border-radius: 5px; background: light
 html.ui-mac .theme-sketch ::selection { background: color-mix(in srgb, var(--mac-accent) 28%, transparent); }
 
 /* ---------- surfaces ---------- */
-/* cloudflare.css names these with `.tally > div` in the list, which makes that rule weigh more than
-   one class: .ui-cf here outweighs it, and everything further down that restyles one of these
-   surfaces starts the same way so that it wins by coming later */
+/* `.tally > div` makes cloudflare.css's list weigh more than one class: .ui-cf outweighs it, and the
+   surface rules below start the same way so they win by coming later */
 html.ui-mac.ui-cf .theme-sketch :is(.pnl, .pnl-s, .proj, .mon, .backend, :where(.tally > div), .io, .stn, .ptip) {
   border: 0 !important; border-radius: 14px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift);
 }
-html.ui-mac.ui-cf .theme-sketch .stn { background: var(--mac-panel); } /* the belt runs behind a station and must not show through it */
+html.ui-mac.ui-cf .theme-sketch .stn { background: var(--mac-panel); } /* opaque: the belt runs behind a station */
 html.ui-mac.ui-cf .theme-sketch :is(.proj, .mon):hover { border: 0 !important; box-shadow: var(--lg-rim), 0 0 0 1px color-mix(in srgb, var(--brand) 35%, transparent), var(--lg-lift); }
 html.ui-mac.ui-cf .theme-sketch :is(.proj, .mon).on { border: 0 !important; background: var(--lg-card); box-shadow: var(--lg-rim), 0 0 0 2px var(--brand), var(--lg-lift); }
-/* what floats over the town and the pages: real glass */
 html.ui-mac.ui-cf .theme-sketch :is(.running, .ptip, .toast, .t3-resume, .t3-card, .t3-mini, .t3-where) {
   border: 0 !important; border-radius: 16px; background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
   -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
@@ -221,7 +207,6 @@ html.ui-mac .theme-sketch .pt-hint {
 html.ui-mac .theme-sketch .pt-hint kbd { border: 0; background: light-dark(rgb(0 0 0 / .07), rgb(255 255 255 / .12)); }
 html.ui-mac .theme-sketch :is(.map-bg, .t3) { top: 0; }
 
-/* the app's own lists: a pop-up button, and a menu with the accent's highlight */
 html.ui-mac .sel:not(.dk-budget, .fb-sort) { border: 0; background: light-dark(#fff, rgb(255 255 255 / .1)); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), 0 .5px 1.5px rgb(0 0 0 / .1); }
 html.ui-mac .sel:not(.dk-budget, .fb-sort):focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 34%, transparent); }
 html.ui-mac .sel-pop {
@@ -229,15 +214,13 @@ html.ui-mac .sel-pop {
   -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
 }
 html.ui-mac .sel-o { min-height: 26px; border-radius: 7px; }
-html.ui-mac .sel-o.at, html.ui-mac .sel-o.at[aria-selected=true] { background: var(--mac-accent); color: var(--mac-accent-ink); }
+html.ui-mac .sel-o.at { background: var(--mac-accent); color: var(--mac-accent-ink); }
 html.ui-mac .sel-o.at em { color: inherit; opacity: .8; }
-/* these open inside the chat's capsule, which is glass already, so there is nothing more to blur */
 html.ui-mac.ui-cf .theme-sketch :is(.dk-menu, .cmd-menu, .llm-pop, .as-pop) { border: 0 !important; border-radius: 12px; background: var(--mac-panel); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop); }
 html.ui-mac .dk-mi { border-radius: 7px; }
 html.ui-mac .dk-mi:is(.on, :hover) { background: var(--mac-accent); color: var(--mac-accent-ink); }
 html.ui-mac .dk-mi:is(.on, :hover) :is(em, span, small, i) { color: inherit; }
 
-/* the chat at the bottom: a capsule of glass that opens up into a pane */
 html.ui-mac .theme-sketch .dk-shell {
   border-radius: 26px; background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
   -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lens,) var(--lg-filter);
@@ -269,10 +252,10 @@ html.ui-mac .pj-card::before { left: 7px; top: 18px; bottom: 18px; width: 3px; b
 html.ui-mac .pj-title h1 { font: 700 24px/1.25 var(--font); letter-spacing: -.01em; }
 html.ui-mac .pd { border: 0; border-radius: 20px; background: rgb(var(--lg-tint) / max(.86, var(--lg-a))); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop); -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter); }
 
-/* ---------- the landing: the glass on a bare wallpaper, as at a Mac's login ---------- */
+/* ---------- the landing ---------- */
 html.ui-mac .landing { background-color: var(--mac-win); background-image: var(--wall); }
 html.ui-mac .ld-hero h1 { font-weight: 700; letter-spacing: -.02em; }
-html.ui-mac :lang(zh) .ld-hi, html.ui-mac .ld-hi { font: 500 .56em/1.3 var(--font); letter-spacing: 0; color: var(--muted); }
+html.ui-mac .ld-hi { font: 500 .56em/1.3 var(--font); letter-spacing: 0; color: var(--muted); }
 html.ui-mac .ld-brand { font-size: 17px; font-weight: 600; }
 html.ui-mac .ld-brand b { font-weight: 600; }
 html.ui-mac .ld-town b { font-size: 14px; font-weight: 600; }
@@ -285,7 +268,7 @@ html.ui-mac .ld-card h2 { font-weight: 700; font-size: 22px; letter-spacing: -.0
 html.ui-mac .ld-go { font-size: 15px; font-weight: 500; }
 html.ui-mac .ld-pw { border-top: .5px solid var(--mac-sep); }
 
-/* ---------- the console: the path as a second row of the toolbar, then a sidebar edge to edge ---------- */
+/* ---------- the console ---------- */
 html.ui-mac .p-console { --side: transparent; --soft: var(--lg-lift); }
 html.ui-mac .fbar { background: rgb(var(--lg-tint) / calc(var(--lg-bar-a) * .62)); border-bottom: .5px solid var(--mac-sep); }
 html.ui-mac .fb-q { border-radius: 999px; background: light-dark(rgb(0 0 0 / .05), rgb(255 255 255 / .08)); }
@@ -314,7 +297,7 @@ html.ui-mac .theme-sketch .interior { background-color: var(--mac-win); backgrou
 html.ui-mac .theme-sketch .in-head { background: var(--lg-bar); box-shadow: 0 .5px 0 var(--mac-sep); border: 0; }
 html.ui-mac .theme-sketch .room-side { background: rgb(var(--lg-tint) / calc(var(--lg-bar-a) * .5)); box-shadow: inset -.5px 0 0 var(--mac-sep); }
 
-/* ---------- asking, and the pages agents write: a sidebar and a window of messages ---------- */
+/* ---------- asking, and the pages agents write ---------- */
 html.ui-mac .ak { background-color: var(--mac-win); background-image: var(--wall); }
 html.ui-mac .ak-side { background: rgb(var(--lg-tint) / calc(var(--lg-bar-a) * .55)); border-right: .5px solid var(--mac-sep); }
 html.ui-mac .ak-main { background: rgb(var(--lg-tint) / calc(var(--lg-card-a) * .72)); }
@@ -323,22 +306,21 @@ html.ui-mac .ak-new { border: 0; border-radius: 10px; background: light-dark(rgb
 html.ui-mac .ak-hist li.on .ak-hq, html.ui-mac .ak-projs a.on { background: var(--mac-accent); color: var(--mac-accent-ink); }
 html.ui-mac .ak-projs a.on .pc-seq { color: inherit; }
 html.ui-mac .ak-comp { border: 0; background: var(--lg-card); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), var(--lg-drop); }
-html.ui-mac .ak-comp:focus-within { border: 0; box-shadow: 0 0 0 .5px var(--mac-sep), 0 0 0 4px color-mix(in srgb, var(--brand) 26%, transparent), var(--lg-rim), var(--lg-drop); }
+html.ui-mac .ak-comp:focus-within { box-shadow: 0 0 0 .5px var(--mac-sep), 0 0 0 4px color-mix(in srgb, var(--brand) 26%, transparent), var(--lg-rim), var(--lg-drop); }
 html.ui-mac .ak-you { border: 0; border-radius: 18px; background: var(--mac-accent); }
 html.ui-mac .ak-you p { color: var(--mac-accent-ink); }
 html.ui-mac .ak-title b { font-weight: 600; font-size: 15px; }
 html.ui-mac .ak-src button { border: 0; background: var(--lg-card); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim); }
 
-/* the paper, on a sheet of its own so its small type stays easy to read */
 html.ui-mac .p-status { background: rgb(var(--lg-tint) / calc(var(--lg-card-a) * .62)); }
 
-/* ---------- reduced transparency: the system's setting, or the slider all the way ---------- */
+/* ---------- reduced transparency ---------- */
 @media (prefers-reduced-transparency: reduce) {
   html.ui-mac[data-mode] { --lg-a: 1; --lg-bar-a: 1; --lg-card-a: 1; --lg-tint: 245 245 247; --lg-filter: none; }
   html.ui-mac[data-mode=dark] { --lg-tint: 36 36 38; }
 }
 
-/* ---------- settings: a window of its own over the app, laid out like System Settings ---------- */
+/* ---------- settings, as System Settings ---------- */
 html.ui-mac {
   --color-kumo-brand: var(--mac-accent); --color-kumo-brand-hover: color-mix(in srgb, var(--mac-accent) 86%, #000);
   --color-kumo-canvas: var(--mac-win); --color-kumo-base: var(--mac-panel); --color-kumo-elevated: var(--mac-panel); --color-kumo-control: var(--mac-panel);
@@ -349,15 +331,15 @@ html.ui-mac {
 }
 html.ui-mac .kumo-layer { font-family: var(--mac-font); -webkit-font-smoothing: antialiased; }
 html.ui-mac .st-page { display: grid; place-items: center; padding: 26px; background: rgb(0 0 0 / .18); animation: none; }
-/* the blur is on a layer of its own: on the page itself it would stop the sidebar seeing past it */
+/* the blur is on a layer of its own: on .st-page it would stop the sidebar seeing past it */
 html.ui-mac .st-page::before { content: ''; position: absolute; inset: 0; z-index: -1; -webkit-backdrop-filter: blur(5px) saturate(130%); backdrop-filter: blur(5px) saturate(130%); }
 html.ui-mac .st-shell {
   --sidebar-width: 232px !important; --sidebar-bg: transparent; width: min(1060px, 100%); height: min(780px, 100%); overflow: hidden; border-radius: 14px;
   box-shadow: 0 0 0 .5px rgb(0 0 0 / .3), 0 30px 80px rgb(0 0 0 / .36); animation: win-in .34s var(--out) backwards;
 }
 @keyframes win-in { from { opacity: 0; transform: translateY(10px) scale(.975); } }
-/* each part rounds its own corners: WebKit doesn't always carry the window's rounded clip over to a
-   layer with a backdrop-filter, and a clip-path there would stop the sidebar seeing past the window */
+/* each part rounds its own corners: WebKit doesn't always carry a rounded clip to backdrop-filter layers,
+   and a clip-path would stop the sidebar seeing past the window */
 html.ui-mac .st-nav { border-radius: 14px 0 0 14px; border-right: .5px solid var(--mac-sep); background: var(--lg-bar); -webkit-backdrop-filter: blur(36px) saturate(180%); backdrop-filter: blur(36px) saturate(180%); }
 html.ui-mac .st-nav [data-sidebar=header] { height: 46px; padding: 0 16px; border: 0; }
 html.ui-mac .st-brand { display: none; }
@@ -382,7 +364,6 @@ html.ui-mac .st-where h1 { font-size: 15px; line-height: 22px; font-weight: 700;
 html.ui-mac .st-where > :nth-child(2) { display: none; }
 html.ui-mac .st-x { display: none; }
 html.ui-mac .st-body { max-width: none; gap: 20px; padding: 14px 20px 28px; }
-/* a group box: its title outside, a soft fill, hairlines between the rows */
 html.ui-mac .st-card { overflow: visible; border-radius: 0; background: none; box-shadow: none; }
 html.ui-mac .st-card > :first-child:not(:last-child) { margin: 0; padding: 0 2px 7px; background: none; font-size: 13px; font-weight: 600; color: var(--mac-label); }
 html.ui-mac .st-card > :last-child { gap: 0; overflow: visible; padding: 3px 12px; border-radius: 12px; background: light-dark(rgb(0 0 0 / .032), rgb(255 255 255 / .05)); box-shadow: none; }
@@ -393,11 +374,11 @@ html.ui-mac .st-l b { font-size: 13px; font-weight: 400; }
 html.ui-mac .st-l span { font-size: 11.5px; }
 html.ui-mac .lk { padding: 6px 0; }
 
-/* ---------- Kumo's controls, as a Mac's ---------- */
+/* ---------- Kumo's controls ---------- */
 html.ui-mac .kumo-layer :is([data-kumo-component=Button], button.group.select-none:not([data-kumo-component=Select])) { height: 28px; padding-inline: 13px; padding-bottom: 0; border-radius: 999px; font-size: 13px; font-weight: 500; box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), 0 .5px 1.5px rgb(0 0 0 / .08); transition: transform .4s var(--spring), background-color .15s, opacity .15s; }
 html.ui-mac .kumo-layer button.group.select-none:is(.size-9, .size-6\.5) { width: 28px; padding: 0; }
 html.ui-mac .kumo-layer button.group.select-none.shadow-none { box-shadow: none; }
-html.ui-mac .kumo-layer button[class*=emphasis-bg] { color: var(--mac-accent-ink) !important; } /* Kumo's own text is white, also important */
+html.ui-mac .kumo-layer button[class*=emphasis-bg] { color: var(--mac-accent-ink) !important; } /* Kumo's own text colour is !important too */
 html.ui-mac .kumo-layer button.group.select-none:active:not(:disabled, [data-kumo-component=Select]) { transform: scale(.96); transition-duration: .08s; }
 
 html.ui-mac .kumo-layer :has(> .kumo-tabs-list) { border-radius: 999px; box-shadow: none; }
@@ -420,7 +401,6 @@ html.ui-mac .kumo-layer [role=checkbox] > span { color: var(--mac-accent-ink); }
 html.ui-mac .kumo-layer [data-kumo-component=Radio][data-kumo-part=item] { box-shadow: 0 0 0 .5px light-dark(rgb(0 0 0 / .26), rgb(255 255 255 / .24)), 0 .5px 1px rgb(0 0 0 / .1); }
 html.ui-mac .kumo-layer [data-kumo-component=Radio][data-kumo-part=item][data-checked] { background: var(--mac-accent); box-shadow: none; }
 
-/* a thin track and a capsule to drag, with no value on it: the number is beside it where it matters */
 html.ui-mac .kumo-layer :has(> [data-base-ui-slider-control]) { height: 22px; padding: 0; border-radius: 0; background: none; box-shadow: none; }
 html.ui-mac .kumo-layer [data-base-ui-slider-control] { display: flex; align-items: center; }
 html.ui-mac .kumo-layer [data-base-ui-slider-control] > div { width: 100%; height: 5px; border-radius: 999px; background: light-dark(rgb(0 0 0 / .13), rgb(255 255 255 / .18)); }
@@ -431,11 +411,10 @@ html.ui-mac .kumo-layer [data-base-ui-slider-control] [data-index] > span { disp
 html.ui-mac .kumo-layer [role=group]:has([data-base-ui-slider-control]) > [aria-hidden=true] { display: none; }
 
 html.ui-mac .kumo-layer [data-kumo-component=Select][data-kumo-part=trigger] { height: 28px; padding-inline: 11px 8px; border-radius: 8px; font-size: 13px; background: light-dark(#fff, rgb(255 255 255 / .1)); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), 0 .5px 1.5px rgb(0 0 0 / .1); }
-html.ui-mac .kumo-layer input.kumo-input-placeholder, html.ui-mac .kumo-layer input[class*=kumo-input] { height: 28px; border-radius: 7px; font-size: 13px; background: light-dark(#fff, rgb(255 255 255 / .07)); box-shadow: 0 0 0 .5px var(--mac-sep); }
+html.ui-mac .kumo-layer input[class*=kumo-input] { height: 28px; border-radius: 7px; font-size: 13px; background: light-dark(#fff, rgb(255 255 255 / .07)); box-shadow: 0 0 0 .5px var(--mac-sep); }
 html.ui-mac .kumo-layer input.kumo-input-placeholder:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 34%, transparent); }
 html.ui-mac .kumo-layer :is(input, button, [role=switch], [role=tab]):focus-visible { outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 40%, transparent); }
 
-/* what opens over the page: menus and popovers in glass, a highlight the accent's colour */
 html.ui-mac .kumo-layer :is(:has(> [role=listbox]), [data-kumo-component=Popover][data-kumo-part=popup], .kumo-tooltip-popup) {
   border-radius: 12px; outline: 0; background: rgb(var(--lg-tint) / max(.7, var(--lg-a))); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
   -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
@@ -460,11 +439,10 @@ html.ui-mac .sc-menu li:hover { background: var(--mac-accent); color: var(--mac-
   html.ui-mac .st-body { padding: 12px 16px calc(28px + env(safe-area-inset-bottom)); }
 }
 
-/* a narrow window: the counts go first, then the words on the settings button */
 @media (max-width: 980px) { html.ui-mac .hud-quiet { display: none; } }
 @media (max-width: 860px) { html.ui-mac .theme-sketch.la .hud .hud-gear { width: 34px; padding: 0; gap: 0; font-size: 0; justify-content: center; } }
 
-/* a phone: what mobile.css and cloudflare.css say about the top bar, at the capsules' weight */
+/* a phone: mobile.css's and cloudflare.css's top bar again, at the weight of the rules above */
 @media (max-width: 720px) {
   html.ui-mac .theme-sketch.la .hud .w-only { background: var(--mac-panel); box-shadow: var(--lg-edge), var(--lg-drop); }
   html.ui-mac .theme-sketch.la .hud { gap: 8px; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); }
@@ -472,5 +450,4 @@ html.ui-mac .sc-menu li:hover { background: var(--mac-accent); color: var(--mac-
   html.ui-mac .theme-sketch.la .hud nav.seg::before { top: 2px; bottom: 2px; }
   html.ui-mac .theme-sketch.la .hud nav.seg a { padding: 0 9px; font-size: 13px; }
   html.ui-mac .theme-sketch.la .hud :is(.hud-gear, .demo-gh) { width: 32px; height: 32px; padding: 0; gap: 0; font-size: 0; }
-  html.ui-mac .theme-sketch.la .hud .chip { font-size: 11px; padding: 2px 7px; }
 }

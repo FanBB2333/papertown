@@ -1,14 +1,8 @@
-// The town in 3D, walked through your own eyes (town3d/engine.ts does the work). It
-// takes over from the map and hands back to it: on the way in the camera starts exactly
-// where the map was looking and flies down to where you stand; on the way out it flies
-// back up over you and the map appears underneath. The mouse is locked to the middle of
-// the screen as in a first-person game; while it is free, a prompt in the middle asks for
-// a click to take it again. F or a click takes you into a building's hall, where its
-// machines are built from the building's live data (fetched here), and from a machine
-// into the building's room. Loaded on demand, so the map does not carry three.js.
+// The town in 3D, walked in first person (town3d/engine.ts does the work), flying in from and
+// back out to the map's view. Loaded on demand, so the map does not carry three.js.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
+import { BUILDINGS } from '@design/sprites.js';
 import { placementName, renderMap } from '@design/world.js';
 import { api, type Placement } from '../api';
 import { leaveFull } from '../fullscreen';
@@ -16,10 +10,10 @@ import { useSettings } from '../settings';
 import { Engine, type Mode, type Target } from '../town3d/engine';
 import type { HallData } from '../town3d/halls';
 import '../town3d.css';
-import type { MapView } from './WorldMap';
+import { where, type MapView } from './WorldMap';
 import { tr } from '../i18n';
 
-export type Phase = 'enter' | 'live' | 'leave' | 'off';
+type Phase = 'enter' | 'live' | 'leave' | 'off';
 
 interface Props {
   placements: Placement[];
@@ -36,11 +30,6 @@ interface Props {
 
 const FADE = 450;
 const MINI_VB = '-800 -140 1600 940';
-
-function where(key: string) {
-  const d = DISTRICTS[key];
-  return d ? (d.dir.includes('↔') ? `${d.name} · ${d.dir}` : d.name) : '';
-}
 
 // what a building's hall is built from: its sheet and the projects, plus what its machines show
 async function hallData(pl: Placement): Promise<HallData> {
@@ -67,9 +56,9 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
   const [on, setOn] = useState(false);
   const [target, setTarget] = useState<Target | null>(null);
   const [locked, setLocked] = useState(false);
-  const [eyes, setEyes] = useState(false); // landed, walking through your own eyes
+  const [eyes, setEyes] = useState(false);
   const [help, setHelp] = useState(true);
-  const [inside, setInside] = useState<Placement | null>(null); // in a building's hall
+  const [inside, setInside] = useState<Placement | null>(null);
   const [veil, setVeil] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>({ fly: false, low: false, third: false, night: false });
   const helpTimer = useRef<number>();
@@ -100,9 +89,8 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
   useEffect(() => {
     eng.current?.setOptions({ sensitivity: st.sensitivity, invertY: st.invertY, fov: st.fov, hand: st.hand, bob: st.bob, quality: st.quality, calm: st.motion === 'calm', fullscreen: st.fullscreen3d });
   }, [st.sensitivity, st.invertY, st.fov, st.hand, st.bob, st.quality, st.motion, st.fullscreen3d]);
-  useEffect(() => { if (!st.fullscreen3d) leaveFull(); }, [st.fullscreen3d]); // turned off while walking: back to the window
+  useEffect(() => { if (!st.fullscreen3d) leaveFull(); }, [st.fullscreen3d]);
 
-  // in: show the map's own view in 3D, fade over the map, then fly down to your eyes
   useEffect(() => {
     const e = eng.current;
     if (!e) return;
@@ -128,7 +116,6 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
 
   useEffect(() => { eng.current?.setActive(active && phase === 'live'); }, [active, phase]);
 
-  // the minimap: the map itself, small and still, with you on it
   const mapKey = placements.map(p => `${p.id}:${p.type}:${p.x}:${p.y}:${p.accent}`).join('|');
   const mini = useMemo(
     () => renderMap({ placements, labels: 'none', anim: false, flows: false, decor: 'none', districts: false, dashes: false, vb: MINI_VB }),
