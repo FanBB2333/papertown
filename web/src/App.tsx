@@ -8,7 +8,7 @@
 // Each view has its own address (route.ts): /progress, /progress/6, /console/6/code, /town, /status.
 //   /town#open=farm   /town#open=depot&line=line_1   /town#chat   /town#3d   — open a state directly
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, subscribe, type Line, type Message, type ServerEvent, type TraceRow, type WorldState } from './api';
 import { Logo } from './art';
 import { DemoWelcome, RepoLink } from './components/Demo';
@@ -232,6 +232,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   }
 
   const root = useRef<HTMLDivElement>(null);
+  const tabs = useRef<HTMLElement>(null);
   // lock: take the mouse for looking round right away (this runs in the click on the switch,
   // which the browser requires); from a link there is no click, and the town asks for one
   const go3d = useCallback((lock = true) => {
@@ -297,6 +298,21 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     return () => { clearTimeout(t); removeEventListener('keydown', k); };
   }, []);
 
+  // where the open view is in the top bar, for the pill that slides under it in the macOS look
+  useLayoutEffect(() => {
+    const nav = tabs.current;
+    if (!nav) return;
+    const place = () => {
+      const on = nav.querySelector<HTMLElement>('a.on');
+      nav.style.setProperty('--tx', `${on?.offsetLeft ?? 0}px`);
+      nav.style.setProperty('--tw', `${on?.offsetWidth ?? 0}px`);
+    };
+    place();
+    const watch = new ResizeObserver(place);
+    watch.observe(nav);
+    return () => watch.disconnect();
+  }, [view]);
+
   const hud = world?.hud;
   const busy = asking || lines.some(l => l.status === 'hatching');
   const walking = !sheet && view === 'world' && !chatOpen && !settingsOpen;
@@ -331,7 +347,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
       <header className="hud">
         <a className="brand" href={href('/')} onClick={e => follow(e, '/')} title={tr('回到首页')}><Logo /><b>Papertown</b></a>
-        <nav className="seg" aria-label={tr('视图')}>
+        <nav className="seg" ref={tabs} aria-label={tr('视图')}>
           {TABS.map(([v, name, tip]) => (
             <a key={v} href={href(PATHS[v])} className={view === v ? 'on' : ''} aria-current={view === v ? 'page' : undefined} title={tip}
               onClick={e => follow(e, PATHS[v])}>{name}</a>

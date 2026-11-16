@@ -4,9 +4,9 @@
 // this browser, see settings.ts), the town's own model and the agents' runtimes (on the server),
 // who may sign in, the demo samples, and the keys.
 
-import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Radio, Select, Sidebar, Slider, Switch, Table, Text } from '@cloudflare/kumo';
-import { ArrowCounterClockwiseIcon, CodeIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Slider, Switch, Table, Text } from '@cloudflare/kumo';
+import { ArrowCounterClockwiseIcon, CodeIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, listen, type AuthState, type Hud, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { Logo } from '../art';
@@ -14,54 +14,39 @@ import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../set
 import { IconRow, Sample } from '../console/EdPicker';
 import { ICON_THEMES, THEMES, autoTheme, chooseLook } from '../console/edthemes';
 import { applyLlm } from './Chat';
-import { OptionControl, Pick, PROGRESS_OPTIONS, set } from './controls';
+import { Card, Note, OptionControl, Pick, PROGRESS_OPTIONS, Row, set } from './controls';
+import { AccentPicker, GlassSlider, GlassStage, LookPicker, ModePicker, WallPicker } from './looks';
+import { Showcase } from './Showcase';
 import { layer } from '../kumo';
 import '../settings.css';
 import { LANG, LANGS, setLang, tr } from '../i18n';
 import { go } from '../route';
 
-type Section = 'look' | 'progress' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'access' | 'demo' | 'keys';
-const GROUPS: [string, [Section, string, string, Phosphor][]][] = [
+// each section: its address, name, what is in it, icon, and the colour of its tile in the macOS look
+type Section = 'look' | 'showcase' | 'progress' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'access' | 'demo' | 'keys';
+const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
   [tr('界面'), [
-    ['look', tr('外观与动效'), tr('界面风格、明暗、语言和动画'), PaletteIcon],
-    ['progress', tr('进展页'), tr('块或行、排序、分组、密度'), RowsIcon],
-    ['editor', tr('编辑器'), tr('颜色主题和文件图标'), CodeIcon],
+    ['look', tr('外观与动效'), tr('界面风格、明暗、语言和动画'), PaletteIcon, '#5856d6'],
+    ['showcase', tr('风格展示'), tr('每种风格的材质、控件和配色'), SwatchesIcon, '#ff2d55'],
+    ['progress', tr('进展页'), tr('块或行、排序、分组、密度'), RowsIcon, '#007aff'],
+    ['editor', tr('编辑器'), tr('颜色主题和文件图标'), CodeIcon, '#af52de'],
   ]],
   [tr('小镇'), [
-    ['map', tr('平面地图'), tr('缩放、拖动、建筑名字'), MapTrifoldIcon],
-    ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质'), CubeIcon],
+    ['map', tr('平面地图'), tr('缩放、拖动、建筑名字'), MapTrifoldIcon, '#28a745'],
+    ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质'), CubeIcon, '#30b0c7'],
   ]],
   [tr('模型与员工'), [
-    ['model', tr('模型'), tr('小镇员工用的大模型'), CpuIcon],
-    ['agents', tr('员工 Agent'), tr('Paseo 和本机 pi'), RobotIcon],
+    ['model', tr('模型'), tr('小镇员工用的大模型'), CpuIcon, '#ff9500'],
+    ['agents', tr('员工 Agent'), tr('Paseo 和本机 pi'), RobotIcon, '#a2845e'],
   ]],
   [tr('系统'), [
-    ['access', tr('访问与登录'), tr('手机和其他设备的访问密码'), LockKeyIcon],
-    ['demo', tr('展示模式'), tr('样例项目和调研文章'), FlaskIcon],
-    ['keys', tr('快捷键'), tr('所有按键一览'), KeyboardIcon],
+    ['access', tr('访问与登录'), tr('手机和其他设备的访问密码'), LockKeyIcon, '#8e8e93'],
+    ['demo', tr('展示模式'), tr('样例项目和调研文章'), FlaskIcon, '#e6a700'],
+    ['keys', tr('快捷键'), tr('所有按键一览'), KeyboardIcon, '#636366'],
   ]],
 ];
 const SECTIONS = GROUPS.flatMap(g => g[1]);
 
-function Row({ label, desc, children }: { label: string; desc?: string; children?: React.ReactNode }) {
-  return (
-    <div className="st-row">
-      <div className="st-l"><b>{label}</b>{desc && <span>{desc}</span>}</div>
-      {children != null && <div className="st-c">{children}</div>}
-    </div>
-  );
-}
-
-function Card({ title, children }: { title?: string; children: React.ReactNode }) {
-  return (
-    <LayerCard className="st-card">
-      {title && <LayerCard.Secondary>{title}</LayerCard.Secondary>}
-      <LayerCard.Primary>{children}</LayerCard.Primary>
-    </LayerCard>
-  );
-}
-
-const Note = ({ children }: { children: React.ReactNode }) => <Text variant="secondary" size="sm">{children}</Text>;
 const Warn = ({ children, bad }: { children: React.ReactNode; bad?: boolean }) => <Banner size="sm" variant={bad ? 'error' : 'alert'} description={children} />;
 const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => <Switch aria-label={label} checked={value} onCheckedChange={onChange} />;
 
@@ -75,22 +60,35 @@ function Range({ label, value, min, max, step, fmt, onChange }: { label: string;
 }
 
 function Look({ s }: { s: S }) {
-  const cf = s.ui === 'cloudflare';
+  const mac = s.ui === 'macos', flat = s.ui !== 'paper';
   return (
     <>
-      <Card title={tr('界面风格')}>
-        <Radio.Group appearance="card" orientation="horizontal" value={s.ui} onValueChange={v => set('ui')(v as S['ui'])} className="st-looks">
-          <Radio.Legend className="sr-only">{tr('界面风格')}</Radio.Legend>
-          <Radio.Item value="cloudflare" label="Cloudflare" description={tr('Cloudflare 的组件样式：干净的白底、细线和系统字体，整个界面都用它')} />
-          <Radio.Item value="paper" label={tr('纸本')} description={tr('墨线、水彩和手写字，Papertown 原来的样子')} />
-        </Radio.Group>
-        {cf && <Row label={tr('明暗')} desc={tr('跟随系统时，电脑切到深色这里也跟着变')}>
-          <Pick label={tr('明暗')} value={s.mode} options={[['light', tr('浅色')], ['dark', tr('深色')], ['system', tr('跟随系统')]]} onChange={set('mode')} />
-        </Row>}
-        {!cf && <Row label={tr('纸纹')} desc={tr('盖在整个页面上的纸张纹理')}>
-          <Range label={tr('纸纹')} value={s.grain} min={0} max={1} step={0.05} fmt={v => v ? `${Math.round(v * 100)}%` : tr('关')} onChange={set('grain')} />
-        </Row>}
-      </Card>
+      <Card title={tr('界面风格')}><LookPicker s={s} /></Card>
+      {flat && (
+        <Card>
+          <Row label={tr('外观')} desc={tr('自动：电脑切到深色，这里也跟着变')}><ModePicker s={s} /></Row>
+          {mac && <div className="st-row st-glass">
+            <div className="st-l"><b>Liquid Glass</b><span>{tr('拖到左边更清透，拖到右边着色更多，字也更清楚')}</span></div>
+            <div className="st-c"><GlassStage /><GlassSlider value={s.glass} /></div>
+          </div>}
+        </Card>
+      )}
+      {mac && (
+        <Card title={tr('主题')}>
+          <Row label={tr('强调色')}><AccentPicker s={s} /></Row>
+          <Row label={tr('壁纸')}><WallPicker s={s} /></Row>
+          <Row label={tr('窗口背景跟随壁纸着色')} desc={tr('关掉后窗口是纯色，玻璃也更安静')}>
+            <Toggle label={tr('窗口背景跟随壁纸着色')} value={s.wallTint} onChange={set('wallTint')} />
+          </Row>
+        </Card>
+      )}
+      {s.ui === 'paper' && (
+        <Card>
+          <Row label={tr('纸纹')} desc={tr('盖在整个页面上的纸张纹理')}>
+            <Range label={tr('纸纹')} value={s.grain} min={0} max={1} step={0.05} fmt={v => v ? `${Math.round(v * 100)}%` : tr('关')} onChange={set('grain')} />
+          </Row>
+        </Card>
+      )}
       <Card title={tr('语言与动效')}>
         <Row label={tr('语言')} desc={tr('界面文字的语言，切换后页面会重新载入')}>
           <Pick label={tr('语言')} value={LANG} options={LANGS} onChange={setLang} />
@@ -496,27 +494,49 @@ export function SettingsPage({ section, hud, onClose }: { section?: string; hud:
   const [key, name, sub] = SECTIONS.find(x => x[0] === section) ?? SECTIONS[0];
   const show = (k: Section) => go(`/settings/${k}`, true);
   const changed = JSON.stringify(s) !== JSON.stringify(DEFAULTS);
-  // Esc leaves the page, unless a list or dialog on it is open: that takes the Esc itself. Read on
-  // the way down, before the list has shut
+  const mac = s.ui === 'macos';
+  // finding a section by what is in it, as System Settings' search box does
+  const [q, setQ] = useState('');
+  const find = useRef<HTMLInputElement>(null);
+  const hit = (n: string, about: string) => (n + about).toLowerCase().includes(q.trim().toLowerCase());
+  const found = GROUPS.map(([label, items]) => [label, items.filter(x => hit(x[1], x[2]))] as const).filter(g => g[1].length);
+  // Esc empties the search first, then leaves the page, unless a list or dialog on it is open: that
+  // takes the Esc itself. Read on the way down, before the list has shut
   useEffect(() => {
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && !layer.querySelector('[data-base-ui-portal] [data-open]')) onClose(); };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || layer.querySelector('[data-base-ui-portal] [data-open]')) return;
+      if (document.activeElement === find.current && find.current?.value) setQ('');
+      else onClose();
+    };
     addEventListener('keydown', esc, true);
     return () => removeEventListener('keydown', esc, true);
   }, [onClose]);
   return createPortal(
-    <div className="st-page" role="dialog" aria-modal="true" aria-label={tr('设置')}>
+    <div className="st-page" role="dialog" aria-modal="true" aria-label={tr('设置')} onClick={e => { if (mac && e.target === e.currentTarget) onClose(); }}>
       <Sidebar.Provider contained defaultOpen collapsible="none" mobileBreakpoint={0} className="st-shell">
         <Sidebar className="st-nav">
-          <Sidebar.Header><span className="st-brand"><Logo /><b>Papertown</b></span></Sidebar.Header>
+          <Sidebar.Header>
+            <span className="st-lights"><button type="button" onClick={onClose} aria-label={tr('关闭')} title={tr('关闭（Esc）')} /><i /><i /></span>
+            <span className="st-brand"><Logo /><b>Papertown</b></span>
+          </Sidebar.Header>
           <Sidebar.Content>
-            {GROUPS.map(([label, items]) => (
+            <label className="st-find">
+              <MagnifyingGlassIcon size={14} aria-hidden="true" />
+              <input ref={find} type="search" value={q} placeholder={tr('搜索')} aria-label={tr('搜索设置')} onChange={e => setQ(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && found[0]) { show(found[0][1][0][0]); setQ(''); } }} />
+            </label>
+            {found.map(([label, items]) => (
               <Sidebar.Group key={label}>
                 <Sidebar.GroupLabel>{label}</Sidebar.GroupLabel>
                 <Sidebar.Menu>
-                  {items.map(([k, n, , Ic]) => <Sidebar.MenuButton key={k} icon={Ic} active={k === key} onClick={() => show(k)}>{n}</Sidebar.MenuButton>)}
+                  {items.map(([k, n, , Ic, tile]) => (
+                    <Sidebar.MenuButton key={k} active={k === key} onClick={() => show(k)} style={{ ['--tile' as string]: tile }}
+                      icon={<Ic className="st-ic shrink-0 opacity-40 size-4" weight={mac ? 'fill' : 'regular'} />}>{n}</Sidebar.MenuButton>
+                  ))}
                 </Sidebar.Menu>
               </Sidebar.Group>
             ))}
+            {!found.length && <p className="st-none">{tr('没有找到')}</p>}
           </Sidebar.Content>
           <Sidebar.Footer>
             <Button variant="ghost" size="sm" icon={ArrowCounterClockwiseIcon} disabled={!changed} onClick={resetSettings} title={tr('这个浏览器里的设置都回到默认')}>{tr('恢复默认')}</Button>
@@ -525,13 +545,14 @@ export function SettingsPage({ section, hud, onClose }: { section?: string; hud:
         <main className="st-main">
           <header className="st-top">
             <div className="st-where"><Text variant="heading" size="lg" as="h1">{name}</Text><Text variant="secondary" size="sm">{sub}</Text></div>
-            <Button variant="ghost" shape="square" icon={XIcon} onClick={onClose} aria-label={tr('关闭')} title={tr('关闭（Esc）')} />
+            <Button className="st-x" variant="ghost" shape="square" icon={XIcon} onClick={onClose} aria-label={tr('关闭')} title={tr('关闭（Esc）')} />
           </header>
           <div className="st-phone-nav">
             <Select aria-label={tr('设置')} value={key} items={Object.fromEntries(SECTIONS.map(x => [x[0], x[1]]))} onValueChange={k => show(k as Section)} />
           </div>
           <section className="st-body" key={key}>
             {key === 'look' && <Look s={s} />}
+            {key === 'showcase' && <Showcase s={s} />}
             {key === 'progress' && <ProgressPage s={s} />}
             {key === 'editor' && <Editor s={s} />}
             {key === 'map' && <MapSection s={s} />}

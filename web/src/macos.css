@@ -1,0 +1,476 @@
+/* The macOS look, after the Mac this runs on (macOS 27): a wallpaper under the window, a uniform
+   frosted toolbar across the top, an edge-to-edge sidebar with coloured icons, grouped boxes for
+   content, and Liquid Glass for what floats. It builds on the Cloudflare look (html.ui-cf stays on
+   under html.ui-mac), so the structure comes from cloudflare.css and this adds the materials.
+
+   Content stays on plain, near-opaque surfaces and the glass is for what sits above it. Cards take
+   a translucent fill with no blur, because what is behind them is a smooth wallpaper; only the
+   bars, menus and floating controls pay for a backdrop-filter. --g is the slider in the settings:
+   0 is clear, 1 is tinted, and every alpha below is worked out from it. */
+
+html.ui-mac {
+  --g: .45;
+  --mac-accent: #007aff; --mac-accent-ink: #fff;
+  --mac-red: light-dark(#ff3b30, #ff453a); --mac-orange: light-dark(#ff9500, #ff9f0a); --mac-green: light-dark(#28cd41, #32d74b);
+  --mac-label: light-dark(rgb(0 0 0 / .86), rgb(255 255 255 / .9));
+  --mac-label2: light-dark(rgb(0 0 0 / .56), rgb(255 255 255 / .6));
+  --mac-sep: light-dark(rgb(0 0 0 / .1), rgb(255 255 255 / .12));
+  --mac-win: light-dark(#f5f5f7, #1c1c1e);
+  --mac-panel: light-dark(#fff, #2a2a2d);
+  --mac-panel2: light-dark(#f2f2f5, #333336);
+  --mac-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", "Segoe UI", "Microsoft YaHei", sans-serif;
+
+  /* the glass: a tint over what is behind, blurred, with light caught on two opposite edges and a
+     darker line round it */
+  --lg-tint: 255 255 255;
+  --lg-a: calc(.2 + .66 * var(--g));
+  --lg-bar-a: calc(.44 + .46 * var(--g));
+  --lg-card-a: calc(.54 + .4 * var(--g));
+  --lg-blur: calc(9px + 15px * var(--g));
+  --lg-filter: blur(var(--lg-blur)) saturate(180%);
+  --lg: rgb(var(--lg-tint) / var(--lg-a));
+  --lg-bar: rgb(var(--lg-tint) / var(--lg-bar-a));
+  --lg-card: rgb(var(--lg-tint) / var(--lg-card-a));
+  --lg-rim: inset 1px 1px .5px -.5px rgb(255 255 255 / .95), inset -1px -1px .5px -.5px rgb(255 255 255 / .6);
+  --lg-edge: 0 0 0 .5px rgb(0 0 0 / .12);
+  --lg-drop: 0 2px 6px rgb(0 0 0 / .07), 0 14px 34px rgb(0 0 0 / .12);
+  --lg-lift: 0 1px 2px rgb(0 0 0 / .05), 0 6px 18px rgb(30 40 70 / .07);
+}
+html.ui-mac[data-mode=dark] {
+  --mac-accent: #0a84ff;
+  /* dark glass stays dark over a bright map: it starts more opaque than the light one */
+  --lg-tint: 34 34 38;
+  --lg-a: calc(.44 + .5 * var(--g));
+  --lg-bar-a: calc(.66 + .3 * var(--g));
+  --lg-card-a: calc(.6 + .36 * var(--g));
+  --lg-filter: blur(var(--lg-blur)) saturate(170%) brightness(.62);
+  --lg-rim: inset 1px 1px .5px -.5px rgb(255 255 255 / .34), inset -1px -1px .5px -.5px rgb(255 255 255 / .16);
+  --lg-edge: 0 0 0 .5px rgb(0 0 0 / .55);
+  --lg-drop: 0 2px 8px rgb(0 0 0 / .3), 0 16px 40px rgb(0 0 0 / .42);
+  --lg-lift: 0 1px 2px rgb(0 0 0 / .3), 0 8px 22px rgb(0 0 0 / .24);
+}
+html.ui-mac[data-accent=purple] { --mac-accent: #953d96; }
+html.ui-mac[data-accent=pink] { --mac-accent: #e63e8d; }
+html.ui-mac[data-accent=red] { --mac-accent: #e0383e; }
+html.ui-mac[data-accent=orange] { --mac-accent: #ee7a14; }
+html.ui-mac[data-accent=yellow] { --mac-accent: #d99e00; --mac-accent-ink: #1d1d1f; } /* white on yellow can't be read */
+html.ui-mac[data-accent=green] { --mac-accent: #4fa835; }
+html.ui-mac[data-accent=graphite] { --mac-accent: #7d7d82; }
+html.ui-mac[data-accent=purple][data-mode=dark] { --mac-accent: #bf5ec0; }
+html.ui-mac[data-accent=red][data-mode=dark] { --mac-accent: #ff5257; }
+html.ui-mac[data-accent=yellow][data-mode=dark] { --mac-accent: #ffc600; --mac-accent-ink: #1d1d1f; }
+html.ui-mac[data-accent=green][data-mode=dark] { --mac-accent: #62ba46; }
+html.ui-mac[data-accent=graphite][data-mode=dark] { --mac-accent: #98989d; }
+
+/* ---------- the wallpapers: only gradients, so any page that covers the app can repeat them ---------- */
+html.ui-mac {
+  --wall-dawn:
+  radial-gradient(70% 90% at 12% 8%, #a9c8ff 0, transparent 70%), radial-gradient(60% 80% at 92% 12%, #ffc9e4 0, transparent 68%),
+  radial-gradient(70% 80% at 80% 100%, #ffd8b0 0, transparent 70%), radial-gradient(60% 70% at 8% 96%, #b7f0e6 0, transparent 70%),
+  linear-gradient(135deg, #dfe6ff, #fbe9f2);
+  --wall-lagoon:
+  radial-gradient(70% 90% at 10% 10%, #7fd6e8 0, transparent 70%), radial-gradient(60% 80% at 90% 8%, #9cc2ff 0, transparent 68%),
+  radial-gradient(70% 80% at 86% 100%, #b6f2d8 0, transparent 70%), radial-gradient(60% 70% at 6% 98%, #c4d7ff 0, transparent 70%),
+  linear-gradient(135deg, #cdeff4, #dbe7ff);
+  --wall-dusk:
+  radial-gradient(70% 90% at 14% 6%, #ffb892 0, transparent 70%), radial-gradient(60% 80% at 92% 14%, #ff9fbd 0, transparent 68%),
+  radial-gradient(70% 80% at 78% 100%, #bda4ff 0, transparent 70%), radial-gradient(60% 70% at 6% 96%, #ffd3a6 0, transparent 70%),
+  linear-gradient(135deg, #ffe0cf, #eadcff);
+  --wall-forest:
+  radial-gradient(70% 90% at 12% 8%, #a9e6bd 0, transparent 70%), radial-gradient(60% 80% at 92% 10%, #d7eea0 0, transparent 68%),
+  radial-gradient(70% 80% at 82% 100%, #8fdcc4 0, transparent 70%), radial-gradient(60% 70% at 6% 96%, #cfe9a8 0, transparent 70%),
+  linear-gradient(135deg, #dcf3e2, #e9f4cf);
+  --wall-paper:
+  radial-gradient(70% 90% at 12% 8%, #f6dcb4 0, transparent 70%), radial-gradient(60% 80% at 92% 12%, #f3cdb6 0, transparent 68%),
+  radial-gradient(70% 80% at 80% 100%, #d9e6c2 0, transparent 70%), radial-gradient(60% 70% at 8% 96%, #f5e6c2 0, transparent 70%),
+  linear-gradient(135deg, #f6eede, #f2e8da);
+  --wall-graphite:
+  radial-gradient(70% 90% at 12% 8%, #d2d5dc 0, transparent 70%), radial-gradient(60% 80% at 92% 12%, #e3e4e9 0, transparent 68%),
+  radial-gradient(70% 80% at 80% 100%, #c9ccd4 0, transparent 70%), linear-gradient(135deg, #e8e9ed, #dcdee3);
+}
+html.ui-mac[data-mode=dark] {
+  --wall-dawn:
+  radial-gradient(70% 90% at 12% 8%, #233a8c 0, transparent 70%), radial-gradient(60% 80% at 92% 12%, #5a2470 0, transparent 68%),
+  radial-gradient(70% 80% at 80% 100%, #6b2a4a 0, transparent 70%), radial-gradient(60% 70% at 8% 96%, #0f4a5a 0, transparent 70%),
+  linear-gradient(135deg, #10152e, #1c1230);
+  --wall-lagoon:
+  radial-gradient(70% 90% at 10% 10%, #0c5a70 0, transparent 70%), radial-gradient(60% 80% at 90% 8%, #123a86 0, transparent 68%),
+  radial-gradient(70% 80% at 86% 100%, #0d5a4c 0, transparent 70%), radial-gradient(60% 70% at 6% 98%, #16306e 0, transparent 70%),
+  linear-gradient(135deg, #07202a, #0c1a3a);
+  --wall-dusk:
+  radial-gradient(70% 90% at 14% 6%, #7a3324 0, transparent 70%), radial-gradient(60% 80% at 92% 14%, #7a2150 0, transparent 68%),
+  radial-gradient(70% 80% at 78% 100%, #3d2a8c 0, transparent 70%), radial-gradient(60% 70% at 6% 96%, #6a3a18 0, transparent 70%),
+  linear-gradient(135deg, #24121e, #1a1436);
+  --wall-forest:
+  radial-gradient(70% 90% at 12% 8%, #145a3a 0, transparent 70%), radial-gradient(60% 80% at 92% 10%, #3f5a14 0, transparent 68%),
+  radial-gradient(70% 80% at 82% 100%, #0f5a4c 0, transparent 70%), radial-gradient(60% 70% at 6% 96%, #2c4a12 0, transparent 70%),
+  linear-gradient(135deg, #0c1f18, #142212);
+  --wall-paper:
+  radial-gradient(70% 90% at 12% 8%, #5a3f1e 0, transparent 70%), radial-gradient(60% 80% at 92% 12%, #5e2f22 0, transparent 68%),
+  radial-gradient(70% 80% at 80% 100%, #33491f 0, transparent 70%), radial-gradient(60% 70% at 8% 96%, #4e3d1c 0, transparent 70%),
+  linear-gradient(135deg, #211a13, #231a15);
+  --wall-graphite:
+  radial-gradient(70% 90% at 12% 8%, #34363d 0, transparent 70%), radial-gradient(60% 80% at 92% 12%, #2b2c32 0, transparent 68%),
+  radial-gradient(70% 80% at 80% 100%, #383a42 0, transparent 70%), linear-gradient(135deg, #18191c, #202126);
+}
+html.ui-mac { --wall: linear-gradient(var(--mac-win), var(--mac-win)); }
+html.ui-mac[data-wall=dawn] { --wall: var(--wall-dawn); }
+html.ui-mac[data-wall=lagoon] { --wall: var(--wall-lagoon); }
+html.ui-mac[data-wall=dusk] { --wall: var(--wall-dusk); }
+html.ui-mac[data-wall=forest] { --wall: var(--wall-forest); }
+html.ui-mac[data-wall=paper] { --wall: var(--wall-paper); }
+html.ui-mac[data-wall=graphite] { --wall: var(--wall-graphite); }
+
+/* ---------- the window ---------- */
+/* as specific as the plain colours index.html paints before this stylesheet arrives, and one more */
+html.ui-mac[data-mode][data-wall] body.proto-page { background-color: var(--mac-win); background-image: var(--wall); background-attachment: fixed; }
+html.ui-mac :is(.theme-sketch, .pd-back) {
+  --bg: var(--mac-win); --panel: var(--mac-panel); --panel2: var(--mac-panel2);
+  --ink: var(--mac-label); --muted: var(--mac-label2); --line: var(--mac-sep);
+  --brand: var(--mac-accent); --brand-ink: var(--mac-accent-ink); --ok: var(--mac-green); --warn: var(--mac-orange); --bad: var(--mac-red);
+  --font: var(--mac-font); --head: var(--mac-font); --radius: 12px; --pborder: .5px solid var(--mac-sep); --pshadow: var(--lg-lift); --hud-h: 52px;
+}
+html.ui-mac[data-mode=dark] :is(.theme-sketch, .pd-back) { --brand: var(--mac-accent); }
+html.ui-mac .theme-sketch { -webkit-font-smoothing: antialiased; background: none; }
+/* the progress page scrolls under the toolbar; what the console places inside itself keeps its own top */
+html.ui-mac .theme-sketch .p-prog { top: 0; padding-top: var(--hud-h); background: none; }
+html.ui-mac .theme-sketch .p-console { background: none; }
+
+/* ---------- the toolbar: a uniform frosted band, with the views as one capsule of glass ---------- */
+html.ui-mac .theme-sketch.la .hud {
+  gap: 14px; padding: 0 16px; background: var(--lg-bar); box-shadow: 0 .5px 0 var(--mac-sep);
+  -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
+}
+html.ui-mac .theme-sketch .brand { font-size: 14px; letter-spacing: -.01em; }
+html.ui-mac .theme-sketch .brand .logo-ic { width: 24px; height: 24px; }
+html.ui-mac .theme-sketch.la .hud nav.seg {
+  position: relative; isolation: isolate; align-self: center; height: 34px; padding: 3px; gap: 0; border-radius: 999px;
+  background: light-dark(rgb(0 0 0 / .055), rgb(255 255 255 / .08));
+}
+html.ui-mac .theme-sketch.la .hud nav.seg::before {
+  content: ''; position: absolute; z-index: -1; left: 0; top: 3px; bottom: 3px; width: var(--tw, 0); transform: translateX(var(--tx, 0)); border-radius: 999px;
+  background: light-dark(#fff, rgb(255 255 255 / .17)); box-shadow: 0 .5px 1px rgb(0 0 0 / .14), 0 2px 6px rgb(0 0 0 / .08), var(--lg-rim);
+  transition: transform .5s var(--spring), width .4s var(--out);
+}
+html.ui-mac .theme-sketch.la .hud nav.seg a { height: 100%; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--muted); }
+html.ui-mac .theme-sketch.la .hud nav.seg a.on { color: var(--ink); box-shadow: none; }
+
+/* the rest of the top bar: capsules on the band */
+html.ui-mac .theme-sketch.la .hud .btn { height: 34px; padding: 0 14px; background: light-dark(rgb(255 255 255 / .72), rgb(255 255 255 / .1)); }
+html.ui-mac .theme-sketch.la .hud .btn:hover { background: light-dark(#fff, rgb(255 255 255 / .16)); }
+html.ui-mac .theme-sketch.la .hud .seg :is(button, a):not(.on) { color: var(--muted); }
+html.ui-mac .hud-quiet { font-size: 12.5px; white-space: nowrap; }
+html.ui-mac .hud-quiet b { font-size: 13px; }
+
+/* ---------- controls ---------- */
+html.ui-mac .theme-sketch .btn {
+  padding: 6px 14px; border: 0; border-radius: 999px; font: 500 13px/18px var(--font); color: var(--ink);
+  background: light-dark(rgb(255 255 255 / .86), rgb(255 255 255 / .1));
+  box-shadow: 0 0 0 .5px light-dark(rgb(0 0 0 / .13), rgb(255 255 255 / .09)), var(--lg-rim), 0 1px 2px rgb(0 0 0 / .05);
+  transition: background-color .2s, box-shadow .2s, transform .45s var(--spring);
+}
+html.ui-mac .theme-sketch .btn:hover { background-color: light-dark(#fff, rgb(255 255 255 / .16)); }
+html.ui-mac .theme-sketch .btn:active:not([disabled]) { transform: scale(.96); transition-duration: .08s; }
+html.ui-mac .theme-sketch .btn[disabled] { opacity: .45; }
+html.ui-mac .theme-sketch .btn.pri {
+  color: var(--mac-accent-ink); background: var(--mac-accent) linear-gradient(rgb(255 255 255 / .14), rgb(255 255 255 / 0));
+  box-shadow: 0 0 0 .5px color-mix(in srgb, var(--mac-accent) 78%, #000), inset 0 .5px 0 rgb(255 255 255 / .34), 0 1px 3px color-mix(in srgb, var(--mac-accent) 34%, transparent);
+}
+html.ui-mac .theme-sketch .btn.pri:hover { background-color: color-mix(in srgb, var(--mac-accent) 90%, #fff); filter: none; }
+html.ui-mac .theme-sketch .btn.on { color: var(--brand); background-color: color-mix(in srgb, var(--brand) 12%, var(--mac-panel)); }
+
+html.ui-mac .theme-sketch .seg { gap: 0; padding: 2px; border-radius: 999px; background: light-dark(rgb(0 0 0 / .06), rgb(255 255 255 / .08)); }
+html.ui-mac .theme-sketch .seg :is(button, a) { padding: 3px 12px; border-radius: 999px; font: 500 12.5px/20px var(--font); }
+html.ui-mac .theme-sketch .seg :is(button, a).on { background: light-dark(#fff, rgb(255 255 255 / .17)); box-shadow: 0 .5px 1px rgb(0 0 0 / .14), 0 2px 6px rgb(0 0 0 / .07); }
+
+html.ui-mac .theme-sketch .chip { background: light-dark(rgb(0 0 0 / .06), rgb(255 255 255 / .1)); }
+html.ui-mac .theme-sketch .chip.pri { background: var(--brand); color: var(--brand-ink); }
+html.ui-mac .theme-sketch .chip.ok { color: light-dark(#1a8f30, #4fe06b); background: color-mix(in srgb, var(--mac-green) 16%, transparent); }
+html.ui-mac .theme-sketch .chip.warn { color: light-dark(#b86a00, #ffb340); background: color-mix(in srgb, var(--mac-orange) 16%, transparent); }
+html.ui-mac .theme-sketch .chip.bad { color: light-dark(#d0271d, #ff7b72); background: color-mix(in srgb, var(--mac-red) 14%, transparent); }
+html.ui-mac .theme-sketch kbd { border: 0; border-radius: 5px; background: light-dark(rgb(0 0 0 / .07), rgb(255 255 255 / .12)); }
+html.ui-mac .theme-sketch ::selection { background: color-mix(in srgb, var(--mac-accent) 28%, transparent); }
+
+/* ---------- surfaces ---------- */
+/* cloudflare.css names these with `.tally > div` in the list, which makes that rule weigh more than
+   one class: .ui-cf here outweighs it, and everything further down that restyles one of these
+   surfaces starts the same way so that it wins by coming later */
+html.ui-mac.ui-cf .theme-sketch :is(.pnl, .pnl-s, .proj, .mon, .backend, :where(.tally > div), .io, .stn, .ptip) {
+  border: 0 !important; border-radius: 14px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift);
+}
+html.ui-mac.ui-cf .theme-sketch .stn { background: var(--mac-panel); } /* the belt runs behind a station and must not show through it */
+html.ui-mac.ui-cf .theme-sketch :is(.proj, .mon):hover { border: 0 !important; box-shadow: var(--lg-rim), 0 0 0 1px color-mix(in srgb, var(--brand) 35%, transparent), var(--lg-lift); }
+html.ui-mac.ui-cf .theme-sketch :is(.proj, .mon).on { border: 0 !important; background: var(--lg-card); box-shadow: var(--lg-rim), 0 0 0 2px var(--brand), var(--lg-lift); }
+/* what floats over the town and the pages: real glass */
+html.ui-mac.ui-cf .theme-sketch :is(.running, .ptip, .toast, .t3-resume, .t3-card, .t3-mini, .t3-where) {
+  border: 0 !important; border-radius: 16px; background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
+}
+html.ui-mac .theme-sketch .walk-hint {
+  padding: 5px 13px; border-radius: 999px; color: var(--ink); background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
+}
+html.ui-mac .theme-sketch .zoom-ctl button {
+  border: 0; border-radius: 50%; background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
+}
+html.ui-mac .theme-sketch .pt-hint {
+  color: var(--ink); background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
+}
+html.ui-mac .theme-sketch .pt-hint kbd { border: 0; background: light-dark(rgb(0 0 0 / .07), rgb(255 255 255 / .12)); }
+html.ui-mac .theme-sketch :is(.map-bg, .t3) { top: 0; }
+
+/* the app's own lists: a pop-up button, and a menu with the accent's highlight */
+html.ui-mac .sel:not(.dk-budget, .fb-sort) { border: 0; background: light-dark(#fff, rgb(255 255 255 / .1)); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), 0 .5px 1.5px rgb(0 0 0 / .1); }
+html.ui-mac .sel:not(.dk-budget, .fb-sort):focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 34%, transparent); }
+html.ui-mac .sel-pop {
+  border: 0; background: rgb(var(--lg-tint) / max(.72, var(--lg-a))); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+}
+html.ui-mac .sel-o { min-height: 26px; border-radius: 7px; }
+html.ui-mac .sel-o.at, html.ui-mac .sel-o.at[aria-selected=true] { background: var(--mac-accent); color: var(--mac-accent-ink); }
+html.ui-mac .sel-o.at em { color: inherit; opacity: .8; }
+/* these open inside the chat's capsule, which is glass already, so there is nothing more to blur */
+html.ui-mac.ui-cf .theme-sketch :is(.dk-menu, .cmd-menu, .llm-pop, .as-pop) { border: 0 !important; border-radius: 12px; background: var(--mac-panel); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop); }
+html.ui-mac .dk-mi { border-radius: 7px; }
+html.ui-mac .dk-mi:is(.on, :hover) { background: var(--mac-accent); color: var(--mac-accent-ink); }
+html.ui-mac .dk-mi:is(.on, :hover) :is(em, span, small, i) { color: inherit; }
+
+/* the chat at the bottom: a capsule of glass that opens up into a pane */
+html.ui-mac .theme-sketch .dk-shell {
+  border-radius: 26px; background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lens,) var(--lg-filter);
+}
+html.ui-mac .theme-sketch .dock:not(.open) .dk-shell:focus-within { background-image: none; box-shadow: var(--lg-edge), var(--lg-rim), 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent), var(--lg-drop); }
+html.ui-mac .theme-sketch .dock.open .dk-shell { background: rgb(var(--lg-tint) / max(.93, var(--lg-a))); backdrop-filter: var(--lg-filter); }
+html.ui-mac .dock :is(.msg.mine, .msg-u) { border-radius: 18px; background: var(--mac-accent); color: var(--mac-accent-ink); }
+html.ui-mac .dock .msg-u.held { color: var(--ink); background: color-mix(in srgb, var(--warn) 18%, var(--mac-panel)); }
+html.ui-mac .dock :is(.msg.bot, .msg-a) { border: 0; border-radius: 18px; background: light-dark(rgb(0 0 0 / .05), rgb(255 255 255 / .09)); }
+html.ui-mac .dock .msg.bot.err { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 45%, transparent); }
+html.ui-mac .dk-tabs button { font-weight: 500; }
+
+/* ---------- the progress page ---------- */
+html.ui-mac .pg-title h1 { font: 700 26px/1.2 var(--font); letter-spacing: -.012em; }
+html.ui-mac .pc {
+  padding: 15px 16px 12px 20px; border: 0; border-radius: 16px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift);
+  transition: box-shadow .25s, transform .45s var(--spring);
+}
+html.ui-mac .pc:hover { transform: translateY(-2px); box-shadow: var(--lg-rim), 0 2px 4px rgb(0 0 0 / .06), 0 14px 30px rgb(30 40 70 / .13); }
+html.ui-mac .pc::before { left: 7px; top: 16px; bottom: 16px; width: 3px; border-radius: 3px; }
+html.ui-mac .pc:not(.h-ok, .h-risk, .h-blocked)::before { display: none; }
+html.ui-mac .pc-seq { color: var(--muted); }
+html.ui-mac .pc-stages:not(.named) li:not(.s-done, .s-run, .s-wait), html.ui-mac .pc-stages.named li:not(.s-done, .s-run, .s-wait)::before, html.ui-mac .pc-bar { background: light-dark(rgb(0 0 0 / .08), rgb(255 255 255 / .12)); }
+html.ui-mac .pc-metrics > div { border-radius: 9px; background: light-dark(rgb(0 0 0 / .035), rgb(255 255 255 / .06)); }
+html.ui-mac .pg-rows { border: 0; border-radius: 16px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift); overflow: hidden; }
+html.ui-mac .pr-head { background: light-dark(rgb(0 0 0 / .03), rgb(255 255 255 / .05)); }
+html.ui-mac .psec { border: 0; border-radius: 16px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift); }
+html.ui-mac .pj-card::before { left: 7px; top: 18px; bottom: 18px; width: 3px; border-radius: 3px; }
+html.ui-mac .pj-title h1 { font: 700 24px/1.25 var(--font); letter-spacing: -.01em; }
+html.ui-mac .pd { border: 0; border-radius: 20px; background: rgb(var(--lg-tint) / max(.86, var(--lg-a))); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop); -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter); }
+
+/* ---------- the landing: the glass on a bare wallpaper, as at a Mac's login ---------- */
+html.ui-mac .landing { background-color: var(--mac-win); background-image: var(--wall); }
+html.ui-mac .ld-hero h1 { font-weight: 700; letter-spacing: -.02em; }
+html.ui-mac :lang(zh) .ld-hi, html.ui-mac .ld-hi { font: 500 .56em/1.3 var(--font); letter-spacing: 0; color: var(--muted); }
+html.ui-mac .ld-brand { font-size: 17px; font-weight: 600; }
+html.ui-mac .ld-brand b { font-weight: 600; }
+html.ui-mac .ld-town b { font-size: 14px; font-weight: 600; }
+html.ui-mac .ld-feats b { font-size: 15px; font-weight: 600; }
+html.ui-mac.ui-cf .landing .ld-card {
+  border: 0 !important; border-radius: 22px; padding: 28px; background: var(--lg); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter);
+}
+html.ui-mac .ld-card h2 { font-weight: 700; font-size: 22px; letter-spacing: -.01em; }
+html.ui-mac .ld-go { font-size: 15px; font-weight: 500; }
+html.ui-mac .ld-pw { border-top: .5px solid var(--mac-sep); }
+
+/* ---------- the console: the path as a second row of the toolbar, then a sidebar edge to edge ---------- */
+html.ui-mac .p-console { --side: transparent; --soft: var(--lg-lift); }
+html.ui-mac .fbar { background: rgb(var(--lg-tint) / calc(var(--lg-bar-a) * .62)); border-bottom: .5px solid var(--mac-sep); }
+html.ui-mac .fb-q { border-radius: 999px; background: light-dark(rgb(0 0 0 / .05), rgb(255 255 255 / .08)); }
+html.ui-mac .fb-q:focus-within { background: var(--mac-panel); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 32%, transparent); }
+html.ui-mac .crumb { border-radius: 999px; }
+html.ui-mac .crumb .ic { color: var(--muted); }
+html.ui-mac .crumb.cur b { font-weight: 600; }
+html.ui-mac .cdrawer { padding: 10px 8px; background: rgb(var(--lg-tint) / calc(var(--lg-bar-a) * .5)); border-right: .5px solid var(--mac-sep); }
+html.ui-mac .cdrawer h6 { margin: 12px 8px 3px; font-size: 11px; font-weight: 600; letter-spacing: 0; }
+html.ui-mac .cd-pill { left: 8px; right: 8px; border-radius: 8px; background: var(--mac-accent); box-shadow: inset 0 .5px 0 rgb(255 255 255 / .3), 0 1px 3px color-mix(in srgb, var(--mac-accent) 36%, transparent); }
+html.ui-mac .cd-pill::before { display: none; }
+html.ui-mac .cd-item { height: 32px; gap: 9px; padding: 0 9px; border-radius: 8px; font-size: 13px; color: var(--ink); }
+html.ui-mac .cd-item.on { color: var(--mac-accent-ink); }
+html.ui-mac .cd-item.on .ic { color: inherit; transform: none; }
+html.ui-mac .cd-item.on .cd-n { background: rgb(255 255 255 / .28); }
+html.ui-mac .cd-item[data-m=overview] { --ci: #007aff; } html.ui-mac .cd-item[data-m=survey] { --ci: #5856d6; } html.ui-mac .cd-item[data-m=code] { --ci: #af52de; }
+html.ui-mac .cd-item[data-m=exp] { --ci: #28a745; } html.ui-mac .cd-item[data-m=data] { --ci: #00a3b4; } html.ui-mac .cd-item[data-m=paper] { --ci: #ff9500; }
+html.ui-mac .cd-item[data-m=agents] { --ci: #ff2d55; } html.ui-mac .cd-item[data-m=skills] { --ci: #e6a700; } html.ui-mac .cd-item[data-m=mcp] { --ci: #30b0c7; }
+html.ui-mac .cd-item[data-m=rag] { --ci: #a2845e; } html.ui-mac .cd-item[data-m=rules] { --ci: #8e8e93; }
+html.ui-mac .cd-item:not(.on) .ic { color: var(--ci, var(--muted)); }
+html.ui-mac .theme-sketch :is(.cs, .tile) { border: 0; border-radius: 14px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift); }
+html.ui-mac .rail { background: rgb(var(--lg-tint) / max(.94, var(--lg-a))); border-bottom: .5px solid var(--mac-sep); -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter); }
+
+/* ---------- rooms ---------- */
+html.ui-mac .theme-sketch .interior { background-color: var(--mac-win); background-image: var(--wall); }
+html.ui-mac .theme-sketch .in-head { background: var(--lg-bar); box-shadow: 0 .5px 0 var(--mac-sep); border: 0; }
+html.ui-mac .theme-sketch .room-side { background: rgb(var(--lg-tint) / calc(var(--lg-bar-a) * .5)); box-shadow: inset -.5px 0 0 var(--mac-sep); }
+
+/* ---------- asking, and the pages agents write: a sidebar and a window of messages ---------- */
+html.ui-mac .ak { background-color: var(--mac-win); background-image: var(--wall); }
+html.ui-mac .ak-side { background: rgb(var(--lg-tint) / calc(var(--lg-bar-a) * .55)); border-right: .5px solid var(--mac-sep); }
+html.ui-mac .ak-main { background: rgb(var(--lg-tint) / calc(var(--lg-card-a) * .72)); }
+html.ui-mac .ak-foot { background: none; }
+html.ui-mac .ak-new { border: 0; border-radius: 10px; background: light-dark(rgb(255 255 255 / .7), rgb(255 255 255 / .1)); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim); }
+html.ui-mac .ak-hist li.on .ak-hq, html.ui-mac .ak-projs a.on { background: var(--mac-accent); color: var(--mac-accent-ink); }
+html.ui-mac .ak-projs a.on .pc-seq { color: inherit; }
+html.ui-mac .ak-comp { border: 0; background: var(--lg-card); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), var(--lg-drop); }
+html.ui-mac .ak-comp:focus-within { border: 0; box-shadow: 0 0 0 .5px var(--mac-sep), 0 0 0 4px color-mix(in srgb, var(--brand) 26%, transparent), var(--lg-rim), var(--lg-drop); }
+html.ui-mac .ak-you { border: 0; border-radius: 18px; background: var(--mac-accent); }
+html.ui-mac .ak-you p { color: var(--mac-accent-ink); }
+html.ui-mac .ak-title b { font-weight: 600; font-size: 15px; }
+html.ui-mac .ak-src button { border: 0; background: var(--lg-card); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim); }
+
+/* the paper, on a sheet of its own so its small type stays easy to read */
+html.ui-mac .p-status { background: rgb(var(--lg-tint) / calc(var(--lg-card-a) * .62)); }
+
+/* ---------- reduced transparency: the system's setting, or the slider all the way ---------- */
+@media (prefers-reduced-transparency: reduce) {
+  html.ui-mac[data-mode] { --lg-a: 1; --lg-bar-a: 1; --lg-card-a: 1; --lg-tint: 245 245 247; --lg-filter: none; }
+  html.ui-mac[data-mode=dark] { --lg-tint: 36 36 38; }
+}
+
+/* ---------- settings: a window of its own over the app, laid out like System Settings ---------- */
+html.ui-mac {
+  --color-kumo-brand: var(--mac-accent); --color-kumo-brand-hover: color-mix(in srgb, var(--mac-accent) 86%, #000);
+  --color-kumo-canvas: var(--mac-win); --color-kumo-base: var(--mac-panel); --color-kumo-elevated: var(--mac-panel); --color-kumo-control: var(--mac-panel);
+  --color-kumo-recessed: light-dark(rgb(0 0 0 / .05), rgb(255 255 255 / .08)); --color-kumo-tint: light-dark(rgb(0 0 0 / .05), rgb(255 255 255 / .09));
+  --color-kumo-line: var(--mac-sep); --color-kumo-hairline: var(--mac-sep); --color-kumo-interact: light-dark(rgb(0 0 0 / .22), rgb(255 255 255 / .26));
+  --color-kumo-focus: var(--mac-accent); --color-kumo-success: var(--mac-green); --color-kumo-warning: var(--mac-orange); --color-kumo-danger: var(--mac-red);
+  --text-color-kumo-default: var(--mac-label); --text-color-kumo-strong: var(--mac-label); --text-color-kumo-subtle: var(--mac-label2); --text-color-kumo-link: var(--mac-accent);
+}
+html.ui-mac .kumo-layer { font-family: var(--mac-font); -webkit-font-smoothing: antialiased; }
+html.ui-mac .st-page { display: grid; place-items: center; padding: 26px; background: rgb(0 0 0 / .18); animation: none; }
+/* the blur is on a layer of its own: on the page itself it would stop the sidebar seeing past it */
+html.ui-mac .st-page::before { content: ''; position: absolute; inset: 0; z-index: -1; -webkit-backdrop-filter: blur(5px) saturate(130%); backdrop-filter: blur(5px) saturate(130%); }
+html.ui-mac .st-shell {
+  --sidebar-width: 232px !important; --sidebar-bg: transparent; width: min(1060px, 100%); height: min(780px, 100%); overflow: hidden; border-radius: 14px;
+  box-shadow: 0 0 0 .5px rgb(0 0 0 / .3), 0 30px 80px rgb(0 0 0 / .36); animation: win-in .34s var(--out) backwards;
+}
+@keyframes win-in { from { opacity: 0; transform: translateY(10px) scale(.975); } }
+/* each part rounds its own corners: WebKit doesn't always carry the window's rounded clip over to a
+   layer with a backdrop-filter, and a clip-path there would stop the sidebar seeing past the window */
+html.ui-mac .st-nav { border-radius: 14px 0 0 14px; border-right: .5px solid var(--mac-sep); background: var(--lg-bar); -webkit-backdrop-filter: blur(36px) saturate(180%); backdrop-filter: blur(36px) saturate(180%); }
+html.ui-mac .st-nav [data-sidebar=header] { height: 46px; padding: 0 16px; border: 0; }
+html.ui-mac .st-brand { display: none; }
+html.ui-mac .st-lights { display: flex; gap: 8px; }
+html.ui-mac .st-lights > * { width: 12px; height: 12px; padding: 0; border-radius: 50%; background: light-dark(rgb(0 0 0 / .13), rgb(255 255 255 / .16)); }
+html.ui-mac .st-lights button { position: relative; background: #ff5f57; box-shadow: inset 0 0 0 .5px rgb(0 0 0 / .14); cursor: default; }
+html.ui-mac .st-lights button:hover::after { content: '×'; position: absolute; inset: 0; display: grid; place-items: center; font: 700 11px/1 var(--mac-font); color: rgb(90 0 0 / .8); }
+html.ui-mac .st-find { height: 28px; margin: 0 0 4px; border-radius: 999px; background: light-dark(rgb(0 0 0 / .05), rgb(255 255 255 / .08)); box-shadow: inset 0 0 0 .5px var(--mac-sep); }
+html.ui-mac .st-find:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 34%, transparent); }
+html.ui-mac .st-nav [data-sidebar=group-label] { font-size: 11px; font-weight: 600; }
+html.ui-mac .st-nav [data-sidebar=menu-button] { min-height: 30px; gap: 8px; padding: 0 6px; border-radius: 8px; background: none; font-size: 13px; font-weight: 400; }
+html.ui-mac .st-nav [data-sidebar=menu-button]:hover { background: light-dark(rgb(0 0 0 / .05), rgb(255 255 255 / .07)); }
+html.ui-mac .st-nav [data-sidebar=menu-button][data-active] { background: var(--mac-accent); color: var(--mac-accent-ink); box-shadow: inset 0 .5px 0 rgb(255 255 255 / .28); }
+html.ui-mac .st-nav [data-sidebar=menu-button] > div { gap: 8px; }
+html.ui-mac .st-ic {
+  width: 22px !important; height: 22px !important; padding: 3.5px; box-sizing: border-box; border-radius: 6px; opacity: 1 !important; color: #fff;
+  background: linear-gradient(rgb(255 255 255 / .22), rgb(255 255 255 / 0)), var(--tile); box-shadow: inset 0 .5px 0 rgb(255 255 255 / .42), 0 .5px 1.5px rgb(0 0 0 / .22);
+}
+html.ui-mac .st-main { border-radius: 0 14px 14px 0; background: var(--mac-panel); }
+html.ui-mac .st-top { border-radius: 0 14px 0 0; padding: 12px 20px 10px; background: color-mix(in srgb, var(--mac-panel) 82%, transparent); box-shadow: 0 .5px 0 var(--mac-sep); -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter); }
+html.ui-mac .st-where h1 { font-size: 15px; line-height: 22px; font-weight: 700; }
+html.ui-mac .st-where > :nth-child(2) { display: none; }
+html.ui-mac .st-x { display: none; }
+html.ui-mac .st-body { max-width: none; gap: 20px; padding: 14px 20px 28px; }
+/* a group box: its title outside, a soft fill, hairlines between the rows */
+html.ui-mac .st-card { overflow: visible; border-radius: 0; background: none; box-shadow: none; }
+html.ui-mac .st-card > :first-child:not(:last-child) { margin: 0; padding: 0 2px 7px; background: none; font-size: 13px; font-weight: 600; color: var(--mac-label); }
+html.ui-mac .st-card > :last-child { gap: 0; overflow: visible; padding: 3px 12px; border-radius: 12px; background: light-dark(rgb(0 0 0 / .032), rgb(255 255 255 / .05)); box-shadow: none; }
+html.ui-mac .st-row { min-height: 42px; gap: 20px; padding: 8px 0; border-bottom: .5px solid var(--mac-sep); }
+html.ui-mac .st-row:first-child { padding-top: 8px; }
+html.ui-mac .st-row:last-child { padding-bottom: 8px; border-bottom: 0; }
+html.ui-mac .st-l b { font-size: 13px; font-weight: 400; }
+html.ui-mac .st-l span { font-size: 11.5px; }
+html.ui-mac .lk { padding: 6px 0; }
+
+/* ---------- Kumo's controls, as a Mac's ---------- */
+html.ui-mac .kumo-layer :is([data-kumo-component=Button], button.group.select-none:not([data-kumo-component=Select])) { height: 28px; padding-inline: 13px; padding-bottom: 0; border-radius: 999px; font-size: 13px; font-weight: 500; box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), 0 .5px 1.5px rgb(0 0 0 / .08); transition: transform .4s var(--spring), background-color .15s, opacity .15s; }
+html.ui-mac .kumo-layer button.group.select-none:is(.size-9, .size-6\.5) { width: 28px; padding: 0; }
+html.ui-mac .kumo-layer button.group.select-none.shadow-none { box-shadow: none; }
+html.ui-mac .kumo-layer button[class*=emphasis-bg] { color: var(--mac-accent-ink) !important; } /* Kumo's own text is white, also important */
+html.ui-mac .kumo-layer button.group.select-none:active:not(:disabled, [data-kumo-component=Select]) { transform: scale(.96); transition-duration: .08s; }
+
+html.ui-mac .kumo-layer :has(> .kumo-tabs-list) { border-radius: 999px; box-shadow: none; }
+html.ui-mac .kumo-layer :has(> .kumo-tabs-list) > :first-child { height: 28px; border-radius: 999px; background: none; }
+html.ui-mac .kumo-layer .kumo-tabs-list { height: 28px; padding: 0 2px; border-radius: 999px; background: light-dark(rgb(0 0 0 / .06), rgb(255 255 255 / .08)); }
+html.ui-mac .kumo-layer .kumo-tabs-list [role=tab] { margin-block: 2px; padding: 0 12px; border-radius: 999px; font-size: 12.5px; font-weight: 500; }
+html.ui-mac .kumo-layer .kumo-tabs-list [role=presentation] { border-radius: 999px; background: light-dark(#fff, rgb(255 255 255 / .18)); box-shadow: 0 .5px 1px rgb(0 0 0 / .14), 0 2px 6px rgb(0 0 0 / .07); transition: width .35s var(--out), translate .45s var(--spring), transform .45s var(--spring); }
+
+html.ui-mac .kumo-layer [role=switch], html.ui-mac .kumo-layer [role=switch] > div { corner-shape: round; }
+html.ui-mac .kumo-layer [role=switch] { width: 38px; height: 20px; border-radius: 999px; background: light-dark(rgb(0 0 0 / .15), rgb(255 255 255 / .2)); box-shadow: none; transition: background-color .2s; }
+html.ui-mac .kumo-layer [role=switch][data-checked] { background: var(--mac-accent); }
+html.ui-mac .kumo-layer [role=switch] > div { top: 2px; bottom: 2px; left: 2px; width: 22px; border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .26), 0 0 0 .5px rgb(0 0 0 / .05); transition: left .3s var(--spring), width .2s; }
+html.ui-mac .kumo-layer [role=switch][data-checked] > div { left: 14px; }
+html.ui-mac .kumo-layer [role=switch]:active > div { width: 26px; }
+html.ui-mac .kumo-layer [role=switch][data-checked]:active > div { left: 10px; }
+
+html.ui-mac .kumo-layer [role=checkbox] { width: 16px; height: 16px; border-radius: 4px; background: light-dark(#fff, rgb(255 255 255 / .1)); box-shadow: 0 0 0 .5px light-dark(rgb(0 0 0 / .26), rgb(255 255 255 / .24)), 0 .5px 1px rgb(0 0 0 / .1); }
+html.ui-mac .kumo-layer [role=checkbox]:is([data-checked], [data-indeterminate]) { background: var(--mac-accent); box-shadow: inset 0 .5px 0 rgb(255 255 255 / .3); }
+html.ui-mac .kumo-layer [role=checkbox] > span { color: var(--mac-accent-ink); }
+html.ui-mac .kumo-layer [data-kumo-component=Radio][data-kumo-part=item] { box-shadow: 0 0 0 .5px light-dark(rgb(0 0 0 / .26), rgb(255 255 255 / .24)), 0 .5px 1px rgb(0 0 0 / .1); }
+html.ui-mac .kumo-layer [data-kumo-component=Radio][data-kumo-part=item][data-checked] { background: var(--mac-accent); box-shadow: none; }
+
+/* a thin track and a capsule to drag, with no value on it: the number is beside it where it matters */
+html.ui-mac .kumo-layer :has(> [data-base-ui-slider-control]) { height: 22px; padding: 0; border-radius: 0; background: none; box-shadow: none; }
+html.ui-mac .kumo-layer [data-base-ui-slider-control] { display: flex; align-items: center; }
+html.ui-mac .kumo-layer [data-base-ui-slider-control] > div { width: 100%; height: 5px; border-radius: 999px; background: light-dark(rgb(0 0 0 / .13), rgb(255 255 255 / .18)); }
+html.ui-mac .kumo-layer [data-base-ui-slider-indicator] { padding: 0 !important; height: 100%; border-radius: 999px; background: var(--mac-accent); box-shadow: none; }
+html.ui-mac .kumo-layer [data-base-ui-slider-control] [data-index] { width: 26px; height: 16px; border-radius: 999px; background: #fff; box-shadow: 0 0 0 .5px rgb(0 0 0 / .12), 0 1px 3px rgb(0 0 0 / .28); transition: scale .3s var(--spring); }
+html.ui-mac .kumo-layer [data-base-ui-slider-control] [data-index][data-dragging] { scale: 1.12; }
+html.ui-mac .kumo-layer [data-base-ui-slider-control] [data-index] > span { display: none; }
+html.ui-mac .kumo-layer [role=group]:has([data-base-ui-slider-control]) > [aria-hidden=true] { display: none; }
+
+html.ui-mac .kumo-layer [data-kumo-component=Select][data-kumo-part=trigger] { height: 28px; padding-inline: 11px 8px; border-radius: 8px; font-size: 13px; background: light-dark(#fff, rgb(255 255 255 / .1)); box-shadow: 0 0 0 .5px var(--mac-sep), var(--lg-rim), 0 .5px 1.5px rgb(0 0 0 / .1); }
+html.ui-mac .kumo-layer input.kumo-input-placeholder, html.ui-mac .kumo-layer input[class*=kumo-input] { height: 28px; border-radius: 7px; font-size: 13px; background: light-dark(#fff, rgb(255 255 255 / .07)); box-shadow: 0 0 0 .5px var(--mac-sep); }
+html.ui-mac .kumo-layer input.kumo-input-placeholder:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 34%, transparent); }
+html.ui-mac .kumo-layer :is(input, button, [role=switch], [role=tab]):focus-visible { outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mac-accent) 40%, transparent); }
+
+/* what opens over the page: menus and popovers in glass, a highlight the accent's colour */
+html.ui-mac .kumo-layer :is(:has(> [role=listbox]), [data-kumo-component=Popover][data-kumo-part=popup], .kumo-tooltip-popup) {
+  border-radius: 12px; outline: 0; background: rgb(var(--lg-tint) / max(.7, var(--lg-a))); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+}
+html.ui-mac .kumo-layer .kumo-tooltip-popup { border-radius: 8px; font-size: 12px; }
+html.ui-mac .kumo-layer [data-kumo-part=arrow] { display: none; }
+html.ui-mac .kumo-layer [data-kumo-component=Select][data-kumo-part=option] { margin-inline: 5px; padding: 4px 9px; border-radius: 7px; font-size: 13px; }
+html.ui-mac .kumo-layer [data-kumo-component=Select][data-kumo-part=option][data-highlighted] { background: var(--mac-accent); color: var(--mac-accent-ink); }
+html.ui-mac .kumo-layer [data-base-ui-portal] > .fixed.inset-0 { opacity: 1; background: rgb(0 0 0 / .22); }
+html.ui-mac .kumo-layer [data-base-ui-portal] [role=dialog][data-base-ui-focusable]:not([data-kumo-component=Popover]) {
+  border-radius: 18px; background: rgb(var(--lg-tint) / max(.82, var(--lg-a))); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop);
+  -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+}
+html.ui-mac .sc-menu li:hover { background: var(--mac-accent); color: var(--mac-accent-ink); }
+
+@media (max-width: 760px) {
+  html.ui-mac .st-page { padding: 0; }
+  html.ui-mac .st-shell { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
+  html.ui-mac :is(.st-nav, .st-main, .st-top) { border-radius: 0; }
+  html.ui-mac .st-x { display: inline-flex; }
+  html.ui-mac .st-phone-nav { padding-top: 10px; }
+  html.ui-mac .st-body { padding: 12px 16px calc(28px + env(safe-area-inset-bottom)); }
+}
+
+/* a narrow window: the counts go first, then the words on the settings button */
+@media (max-width: 980px) { html.ui-mac .hud-quiet { display: none; } }
+@media (max-width: 860px) { html.ui-mac .theme-sketch.la .hud .hud-gear { width: 34px; padding: 0; gap: 0; font-size: 0; justify-content: center; } }
+
+/* a phone: what mobile.css and cloudflare.css say about the top bar, at the capsules' weight */
+@media (max-width: 720px) {
+  html.ui-mac .theme-sketch.la .hud .w-only { background: var(--mac-panel); box-shadow: var(--lg-edge), var(--lg-drop); }
+  html.ui-mac .theme-sketch.la .hud { gap: 8px; padding: 0 max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); }
+  html.ui-mac .theme-sketch.la .hud nav.seg { height: 32px; padding: 2px; }
+  html.ui-mac .theme-sketch.la .hud nav.seg::before { top: 2px; bottom: 2px; }
+  html.ui-mac .theme-sketch.la .hud nav.seg a { padding: 0 9px; font-size: 13px; }
+  html.ui-mac .theme-sketch.la .hud :is(.hud-gear, .demo-gh) { width: 32px; height: 32px; padding: 0; gap: 0; font-size: 0; }
+  html.ui-mac .theme-sketch.la .hud .chip { font-size: 11px; padding: 2px 7px; }
+}

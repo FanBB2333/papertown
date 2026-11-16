@@ -12,6 +12,7 @@ import { Icon } from '../console/icons';
 import { tr } from '../i18n';
 import { Entry, fold, paseoTool, piTool, Text, Tool, Trail, UserMsg, usePaseoTalk, usePiTalk } from './AgentRoom';
 import { AGENT_STATUS, STATUS } from './MillRoom';
+import { useLens } from '../glass';
 import { Combo, Select } from './Select';
 import '../dock.css';
 
@@ -499,6 +500,7 @@ function useColumn(view: string) {
 // ---------- the box ----------
 
 export function Chat(p: Props) {
+  const lens = useLens<HTMLDivElement>(14, 30);
   const depts = useDepartments(p.tick);
   const col = useColumn(p.view);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -721,7 +723,7 @@ export function Chat(p: Props) {
       <button className="dk-fab" onClick={wake} aria-label={tr('对话')}>
         <Icon n="chat" size={22} />{depts.some(d => d.state === 'wait') && <i />}
       </button>
-      <div className="dk-shell">
+      <div className="dk-shell" ref={lens}>
         <div className="dk-grow" aria-hidden={!p.open}>
           <div className="dk-panel">
             {shown && (

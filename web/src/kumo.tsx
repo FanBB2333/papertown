@@ -6,6 +6,7 @@
 import { KumoPortalProvider } from '@cloudflare/kumo';
 import '@cloudflare/kumo/styles/standalone';
 import './cloudflare.css';
+import './macos.css';
 
 export const layer = document.createElement('div');
 layer.className = 'kumo-ui kumo-layer';

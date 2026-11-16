@@ -2,9 +2,29 @@
 // components (Kumo): a value from a few is a segmented control, from more a list, on or off a
 // switch. Each option of the progress page is written once here, and both places show it.
 
-import { Select, Switch, Tabs } from '@cloudflare/kumo';
+import { LayerCard, Select, Switch, Tabs, Text } from '@cloudflare/kumo';
 import { tr } from '../i18n';
 import { setSettings, type Settings as S } from '../settings';
+
+export function Row({ label, desc, children }: { label: string; desc?: string; children?: React.ReactNode }) {
+  return (
+    <div className="st-row">
+      <div className="st-l"><b>{label}</b>{desc && <span>{desc}</span>}</div>
+      {children != null && <div className="st-c">{children}</div>}
+    </div>
+  );
+}
+
+export function Card({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <LayerCard className="st-card">
+      {title && <LayerCard.Secondary>{title}</LayerCard.Secondary>}
+      <LayerCard.Primary>{children}</LayerCard.Primary>
+    </LayerCard>
+  );
+}
+
+export const Note = ({ children }: { children: React.ReactNode }) => <Text variant="secondary" size="sm">{children}</Text>;
 
 export function Pick<T extends string>({ value, options, onChange, label, small }: {
   value: T; options: [T, string][]; onChange: (v: T) => void; label: string; small?: boolean;

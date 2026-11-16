@@ -3,6 +3,9 @@
    rest of them under 更多; the assistant and the chat each take the whole screen, and the chat,
    closed, is a button in the corner. The header keeps the views and the settings, not their words. */
 
+/* the chat box reaches the right edge before a phone's layout starts: the zoom goes above it */
+@media (max-width: 860px) { .zoom-ctl { bottom: 86px; } }
+
 @media (max-width: 720px) {
   .theme-sketch.la { --hud-h: 52px; }
   .proto { --m-tabs: 0px; }
@@ -20,6 +23,11 @@
   .hud :is(.hud-gear, .demo-gh) { width: 34px; height: 34px; padding: 0; gap: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 0; }
   .hud-gear .gear { width: 17px; height: 17px; }
   .toasts { top: calc(var(--hud-h) + 58px); max-width: calc(100vw - 32px); }
+
+  /* the town: its switch leaves the crowded bar for the free corner, and the hint about the keys
+     has no keys to talk about */
+  .theme-sketch.la .hud .w-only { position: absolute; left: max(12px, env(safe-area-inset-left)); top: calc(100dvh - 60px - env(safe-area-inset-bottom)); }
+  .walk-hint { display: none; }
 
   /* ---------- the bar along the top: the project, the assistant ---------- */
   .fbar { height: 52px; gap: 8px; padding: 0 12px; }

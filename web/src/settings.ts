@@ -7,11 +7,17 @@ import type { Pane } from './api';
 
 export type PgSort = 'need' | 'recent' | 'progress' | 'number';
 export type PgGroup = 'none' | 'state' | 'stage';
+export type Accent = 'blue' | 'purple' | 'pink' | 'red' | 'orange' | 'yellow' | 'green' | 'graphite';
+export type Wall = 'dawn' | 'lagoon' | 'dusk' | 'forest' | 'paper' | 'graphite';
 
 export interface Settings {
   // look and motion
-  ui: 'cloudflare' | 'paper'; // the whole page: Cloudflare's components, or ink and paper
-  mode: 'light' | 'dark' | 'system'; // light or dark, with Cloudflare's look
+  ui: 'cloudflare' | 'macos' | 'paper'; // the whole page: Cloudflare's components, a Mac's glass, or ink and paper
+  mode: 'light' | 'dark' | 'system'; // light or dark, with the Cloudflare and macOS looks
+  accent: Accent; // the macOS look's colour for what is chosen and what to press
+  wall: Wall; // what the macOS look's glass sits on
+  wallTint: boolean; // the window takes the wallpaper's colour; off, it is plain
+  glass: number; // the macOS look's Liquid Glass, 0 clear .. 1 tinted
   motion: 'full' | 'calm'; // calm: shorter, gentler animations
   grain: number; // paper grain over the page, 0..1
   start: 'cards' | 'console' | '2d' | '3d'; // where going in from the landing leads: the projects' progress, the console, or the town in 2D or 3D
@@ -46,8 +52,11 @@ export interface Settings {
   pgCols: Pane[]; // a row's columns, in order
 }
 
+// the Mac app is a Mac's window, so there the look starts as one (index.html decides the same way)
+const inApp = /\bPapertown\//.test(navigator.userAgent);
+
 export const DEFAULTS: Settings = {
-  ui: 'cloudflare', mode: 'light', motion: 'full', grain: 0.5, start: 'cards',
+  ui: inApp ? 'macos' : 'cloudflare', mode: 'light', accent: 'blue', wall: 'dawn', wallTint: true, glass: 0.45, motion: 'full', grain: 0.5, start: 'cards',
   smoothMap: true, zoomSpeed: 1, mapLabels: 'key', walkHint: true,
   sensitivity: 1, invertY: false, fov: 68, hand: true, bob: true, quality: 'high', fullscreen3d: true, tags3d: true, minimap: true,
   edTheme: 'auto', edIcons: 'dots',
@@ -66,10 +75,25 @@ const subs = new Set<() => void>();
 // the look of the whole page, on <html>: index.html does the same before anything is painted
 const darkOS = matchMedia('(prefers-color-scheme: dark)');
 function applyLook() {
-  const cf = current.ui === 'cloudflare', h = document.documentElement;
-  h.classList.toggle('ui-cf', cf);
-  h.dataset.mode = cf && (current.mode === 'dark' || (current.mode === 'system' && darkOS.matches)) ? 'dark' : 'light';
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', !cf ? '#f4eee2' : h.dataset.mode === 'dark' ? '#171717' : '#ffffff');
+  // the macOS look is built on the Cloudflare one (macos.css): ui-cf stays on under it
+  const { ui, mode, accent, wall, wallTint, glass } = current, h = document.documentElement;
+  const flat = ui !== 'paper', mac = ui === 'macos';
+  const dark = flat && (mode === 'dark' || (mode === 'system' && darkOS.matches));
+  h.classList.toggle('ui-cf', flat);
+  h.classList.toggle('ui-mac', mac);
+  h.dataset.mode = dark ? 'dark' : 'light';
+  if (mac) {
+    h.dataset.accent = accent;
+    h.dataset.wall = wallTint ? wall : 'none';
+    h.style.setProperty('--g', String(glass));
+  } else {
+    delete h.dataset.accent;
+    delete h.dataset.wall;
+    h.style.removeProperty('--g');
+  }
+  const bar = !flat ? '#f4eee2' : mac ? (dark ? '#1c1c1e' : '#f5f5f7') : dark ? '#171717' : '#ffffff';
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', bar);
+  (window as Window & { webkit?: { messageHandlers?: { look?: { postMessage(m: unknown): void } } } }).webkit?.messageHandlers?.look?.postMessage({ ui, dark, bar });
 }
 applyLook();
 darkOS.addEventListener('change', () => { if (current.mode === 'system') setSettings({}); });

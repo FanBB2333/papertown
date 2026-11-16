@@ -156,7 +156,19 @@ function fitting() {
   const h = document.documentElement;
   return !h.classList.contains('ui-cf') ? 'paper' : h.dataset.mode === 'dark' ? 'dark' : 'light';
 }
-export const themeOf = (id: string) => THEMES.find(x => x.id === (id === 'auto' ? fitting() : id)) ?? THEMES[0];
+// on a Mac the window's own surfaces and accent go round the code, whose colours stay the theme's
+const onMac = (th: EdTheme): EdTheme => ({
+  ...th,
+  ui: {
+    ...th.ui, bg: 'light-dark(#fff, #1e1e20)', tabOn: 'light-dark(#fff, #1e1e20)', side: 'light-dark(#f6f6f8, #262629)', tabs: 'light-dark(#f6f6f8, #262629)',
+    border: 'var(--mac-sep)', input: 'var(--mac-panel)', accent: 'var(--mac-accent)', status: 'var(--mac-accent)', statusFg: 'var(--mac-accent-ink)',
+    rowOn: 'color-mix(in srgb, var(--mac-accent) 18%, transparent)', cursor: 'var(--mac-accent)',
+  },
+});
+export function themeOf(id: string) {
+  const th = THEMES.find(x => x.id === (id === 'auto' ? fitting() : id)) ?? THEMES[0];
+  return id === 'auto' && document.documentElement.classList.contains('ui-mac') ? onMac(th) : th;
+}
 export const autoTheme = (): EdTheme => ({ ...themeOf('auto'), id: 'auto', name: tr('跟随界面（默认）') });
 
 // the CSS variables a theme sets on the panel it colours
