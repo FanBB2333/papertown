@@ -58,9 +58,9 @@ struct Menus: Commands {
         }
         CommandGroup(before: .toolbar) {
             Group {
-                Button(t("中控屏")) { shell.page.send(["type": "view", "view": "console"]) }.keyboardShortcut("1")
-                Button(t("小镇")) { shell.page.send(["type": "view", "view": "world"]) }.keyboardShortcut("2")
-                Button(t("运行状态")) { shell.page.send(["type": "view", "view": "status"]) }.keyboardShortcut("3")
+                Button(t("进展")) { shell.page.send(["type": "view", "view": "cards"]) }.keyboardShortcut("1")
+                Button(t("中控屏")) { shell.page.send(["type": "view", "view": "console"]) }.keyboardShortcut("2")
+                Button(t("小镇地图")) { shell.page.send(["type": "view", "view": "world"]) }.keyboardShortcut("3")
                 Divider()
                 Button(t("重新载入")) { shell.reload() }.keyboardShortcut("r")
             }
