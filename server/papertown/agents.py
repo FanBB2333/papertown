@@ -220,7 +220,7 @@ class Agents:
         return {"pi": self.pi, "tmux": self.tmux, "ok": not missing,
                 "note": f"本机没有找到 {' 和 '.join(missing)}" if missing else "pi 会用它自己的模型设置和登录"}
 
-    def _command(self) -> list[str]:
+    def _pi_argv(self) -> list[str]:
         """pi is a node script: run it with the node next to it, so tmux needs no PATH setup."""
         real = Path(os.path.realpath(self.pi))
         node = Path(self.pi).parent / "node"
@@ -430,7 +430,7 @@ class Agents:
         cwd = Path(a["cwd"])
         sessions = self.s.data_dir / "agents" / agent_id
         sessions.mkdir(parents=True, exist_ok=True)
-        cmd = [*self._command(), "-e", str(BRIDGE), "--session-dir", str(sessions)]
+        cmd = [*self._pi_argv(), "-e", str(BRIDGE), "--session-dir", str(sessions)]
         if any(sessions.glob("*.jsonl")):
             cmd.append("--continue")
         if self.s.pi_model:
