@@ -63,11 +63,31 @@ export function Dock({ view, open, setOpen, away, target, setTarget, focusKey, o
   );
 }
 
-// in the console the window sits over the panel column, not the whole width
+// in the console the window sits over the panel column, not the whole width; on a project's canvas (progress/Canvas.tsx)
+// over the canvas, clear of the inspector beside it
 function useColumn(view: string) {
   const [col, setCol] = useState<{ x: number; w: number } | null>(null);
   useLayoutEffect(() => {
-    if (view !== 'console') { setCol(null); return; }
+    if (view === 'console') return;
+    const root = document.querySelector<HTMLElement>('.proto');
+    if (!root) { setCol(null); return; }
+    const ro = new ResizeObserver(measure);
+    let seen: Element | null = null;
+    function measure() {
+      const flow = root!.querySelector<HTMLElement>(':scope > .cv .cv-flow');
+      if (flow !== seen) { ro.disconnect(); seen = flow; if (flow) ro.observe(flow); }
+      if (!flow) { setCol(null); return; }
+      const b = flow.getBoundingClientRect(), o = root!.getBoundingClientRect();
+      const x = Math.round(b.left - o.left + b.width / 2), w = Math.round(b.width);
+      setCol(c => (c && c.x === x && c.w === w ? c : { x, w }));
+    }
+    const mo = new MutationObserver(measure);
+    mo.observe(root, { childList: true });
+    measure();
+    return () => { ro.disconnect(); mo.disconnect(); };
+  }, [view]);
+  useLayoutEffect(() => {
+    if (view !== 'console') return;
     const host = document.querySelector<HTMLElement>('.p-console');
     if (!host) return;
     function measure() {

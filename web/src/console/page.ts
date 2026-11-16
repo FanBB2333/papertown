@@ -38,8 +38,10 @@ export function usePanelNote(mod: string, part: string, note: Note) {
 
 const squash = (s: string) => s.replace(/[ \t ]+/g, ' ').replace(/\s*\n[\s\n]*/g, '\n').trim();
 // the part of the page the assistant reads and points into: the open console panel, or the 进展 page
-export const SCOPE = '.proto[data-mode=console] .p-console, .proto[data-mode=cards] :is(.p-prog, .ak)';
-const panel = () => document.querySelector<HTMLElement>('.proto[data-mode=console] .p-console .cm-mod.on, .proto[data-mode=cards] .ak, .proto[data-mode=cards] .p-prog');
+export const SCOPE = '.proto[data-mode=console] .p-console, .proto[data-mode=cards] :is(.p-prog, .ak, .cv)';
+// a project's canvas and the full-window pages lie over 进展, so they come first
+const panel = () => document.querySelector<HTMLElement>('.proto[data-mode=cards] .cv') ?? document.querySelector<HTMLElement>('.proto[data-mode=cards] .ak')
+  ?? document.querySelector<HTMLElement>('.proto[data-mode=console] .p-console .cm-mod.on, .proto[data-mode=cards] .p-prog');
 const textOf = (el: Element) => (el as HTMLElement).innerText ?? el.textContent ?? '';
 const worded = (s: string) => /\p{L}/u.test(s);
 
@@ -68,7 +70,7 @@ function whereOf(el: Element): string | undefined {
 }
 
 const BLOCK = 'button, a, li, tr, th, td, figure, pre, p, h2, h3, h4, h5, label, [role=button], .card, .pnl';
-const EDGE = '.cm-mod, .jd, .p-console, .p-prog, .ak, .asst';
+const EDGE = '.cm-mod, .jd, .p-console, .p-prog, .ak, .cv, .asst';
 // what pointing lands on: the nearest data-ref part, else the block it is in, widened until it has words
 export function pickable(target: Element) {
   let el = target.closest('[data-ref]') ?? target.closest(BLOCK) ?? target;
@@ -127,7 +129,7 @@ export function flash(ref: string, tries = 24) {
     if (tries > 0) setTimeout(() => flash(ref, tries - 1), 150);
     return;
   }
-  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  if (!el.closest('.react-flow')) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); // a canvas pans itself (Canvas.tsx)
   el.classList.remove('pt-flash');
   void (el as HTMLElement).offsetWidth; // reflow, so the animation starts over
   el.classList.add('pt-flash');

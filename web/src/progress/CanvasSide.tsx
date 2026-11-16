@@ -3,13 +3,14 @@
 // node the list of what it is wired to.
 
 import { useMemo, useState } from 'react';
-import { api, type CanvasEdge, type CanvasNode, type CanvasView, type NewNode, type TaskLog, type TaskStatus, type TaskTo } from '../api';
+import { api, type CanvasEdge, type CanvasNode, type CanvasView, type NewNode, type ProjectCard, type TaskLog, type TaskStatus, type TaskTo } from '../api';
 import { AGENT_STATUS } from '../components/MillRoom';
 import { Select } from '../components/Select';
 import { Icon } from '../console/icons';
 import { ago } from '../console/util';
 import { tr, trx } from '../i18n';
 import { follow, href } from '../route';
+import { INFO_MOD, InfoBody, infoKind, InfoState } from './CanvasInfo';
 import { CheckHistory, CheckResult, CheckSettings, ST, STAGE, status, type Act } from './Checks';
 import type { ConsoleTarget } from './Project';
 
@@ -38,6 +39,7 @@ export const neighbours = (n: CanvasNode, v: CanvasView) => v.edges.flatMap(e =>
 export function Mark({ n }: { n: CanvasNode }) {
   if (n.check) return <i className={`cg-shape k-${n.check.kind} s-${n.check.on ? status(n.check) : 'none'}`} />;
   if (n.kind === 'stage') return <i className={`cg-dot mini st-${n.status}`} />;
+  if (n.kind === 'info') return <i className="cv-idot" />;
   return <i className={n.kind === 'task' ? `cv-tdot t-${n.status}` : 'cv-ndot'} />;
 }
 
@@ -52,11 +54,11 @@ const about = (n: CanvasNode) => {
   const c = n.check;
   if (c) return [c.kind === 'hard' ? tr('硬检查') : tr('软检查'), c.prio, c.rule && trx(c.rule), c.kind === 'soft' && tr('每 {0} 小时复查', c.every ?? 24)].filter(Boolean).join(' · ');
   if (n.kind === 'task') return `${tr('派给 agent 的任务')} · ${n.id}`;
-  return n.kind === 'note' ? tr('备注') : tr('工序');
+  return n.kind === 'note' ? tr('备注') : n.kind === 'info' ? tr('资料卡 · 实时显示项目的这部分') : tr('工序');
 };
 
-export function Inspector({ n, v, line, wide, onWide, busy, act, onConsole, onPick, onCut, onNew, onFix, onDup, onDrop, onClose }: {
-  n: CanvasNode; v: CanvasView; line: { id: string; seq: number }; wide: boolean; onWide: () => void; busy: boolean; act: Act;
+export function Inspector({ n, v, r, line, wide, onWide, busy, act, onConsole, onPick, onCut, onNew, onFix, onDup, onDrop, onClose }: {
+  n: CanvasNode; v: CanvasView; r: ProjectCard; line: { id: string; seq: number }; wide: boolean; onWide: () => void; busy: boolean; act: Act;
   onConsole: (lineId: string, t?: ConsoleTarget) => void; onPick: (id: string) => void; onCut: (edgeId: string) => void;
   onNew: (k: Kind) => void; onFix: () => void; onDup: () => void; onDrop: () => void; onClose: () => void;
 }) {
@@ -65,7 +67,7 @@ export function Inspector({ n, v, line, wide, onWide, busy, act, onConsole, onPi
   const tabs: [string, string][] = n.check
     ? [['main', tr('结果')], ['hist', n.check.history.length ? tr('历史 {0}', n.check.history.length) : tr('历史')], ['set', tr('设置')]]
     : n.kind === 'task' ? [['main', tr('任务')], ['log', tr('记录 {0}', n.log?.length ?? 0)]]
-      : [['main', n.kind === 'note' ? tr('备注') : tr('工序')]];
+      : [['main', n.kind === 'note' ? tr('备注') : n.kind === 'info' ? tr('详情') : tr('工序')]];
   tabs.push(['links', near.length ? tr('连着 {0}', near.length) : tr('连线')]);
   return (
     <aside className={`cv-side${wide ? ' wide' : ''}`}>
@@ -74,7 +76,7 @@ export function Inspector({ n, v, line, wide, onWide, busy, act, onConsole, onPi
           <small><Mark n={n} />{about(n)}</small>
           <h3 title={label(n)}>{label(n)}</h3>
         </div>
-        <Pill n={n} />
+        {n.kind === 'info' ? <InfoState n={n} r={r} v={v} /> : <Pill n={n} />}
         <button className="ib" title={wide ? tr('收窄') : tr('展开')} aria-pressed={wide} onClick={onWide}><Icon n={wide ? 'right' : 'left'} size={15} /></button>
         <button className="ib" title={tr('收起（Esc）')} aria-label={tr('收起')} onClick={onClose}><Icon n="close" size={15} /></button>
       </header>
@@ -90,7 +92,8 @@ export function Inspector({ n, v, line, wide, onWide, busy, act, onConsole, onPi
           ) : n.kind === 'task' ? (
             tab === 'log' ? <TaskLogList log={n.log ?? []} />
               : <TaskDetail key={n.id} n={n} v={v} busy={busy} act={act} line={line} onAgents={() => onConsole(line.id, { mod: 'agents' })} />
-          ) : n.kind === 'note' ? <NoteDetail key={n.id} n={n} busy={busy} act={act} lineId={line.id} />
+          ) : n.kind === 'info' ? <InfoDetail n={n} v={v} r={r} line={line} onConsole={onConsole} onPick={onPick} />
+            : n.kind === 'note' ? <NoteDetail key={n.id} n={n} busy={busy} act={act} lineId={line.id} />
             : <StageDetail n={n} near={near.map(x => x.o)} onPick={onPick} />}
       </div>
       <footer className="cv-side-f">
@@ -100,6 +103,24 @@ export function Inspector({ n, v, line, wide, onWide, busy, act, onConsole, onPi
         </button>
       </footer>
     </aside>
+  );
+}
+
+// an info card in full, and the way to where its data lives
+function InfoDetail({ n, v, r, line, onConsole, onPick }: {
+  n: CanvasNode; v: CanvasView; r: ProjectCard; line: { id: string; seq: number }; onConsole: (lineId: string, t?: ConsoleTarget) => void; onPick: (id: string) => void;
+}) {
+  const k = infoKind(n), ask = `/progress/${line.seq}/ask`;
+  return (
+    <>
+      <div className="cv-info full"><InfoBody n={n} r={r} v={v} full onPick={onPick} /></div>
+      <div className="cv-row">
+        {n.ref === 'agent:lead'
+          ? <a className="btn" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={13} />{tr('打开对话')}</a>
+          : <button className="btn" onClick={() => onConsole(line.id, { mod: INFO_MOD[k] })}><Icon n="board" size={13} />{tr('在中控屏里打开')}</button>}
+      </div>
+      <p className="small muted">{tr('资料卡跟着项目自己更新，不用编辑。把任务连到它上面，agent 会知道这件事和项目的这部分有关。')}</p>
+    </>
   );
 }
 

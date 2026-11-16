@@ -28,9 +28,9 @@ export function useCanvas(lineId: string) {
 }
 
 // how a node is drawn small: its size on the canvas and the colour of its state
-export const SIZE: Record<CanvasNode['kind'], [number, number]> = { stage: [168, 58], hard: [176, 36], soft: [176, 36], task: [216, 78], note: [190, 76] };
+export const SIZE: Record<CanvasNode['kind'], [number, number]> = { stage: [196, 58], hard: [176, 36], soft: [176, 36], task: [216, 92], note: [190, 76], info: [250, 130] };
 export const tone = (n: CanvasNode) =>
-  n.kind === 'stage' ? `st-${n.status}` : n.kind === 'task' ? `t-${n.status}` : n.kind === 'note' ? 'note'
+  n.kind === 'stage' ? `st-${n.status}` : n.kind === 'task' ? `t-${n.status}` : n.kind === 'note' ? 'note' : n.kind === 'info' ? 'info'
     : n.check && !n.check.on ? 's-none' : `s-${n.check ? status(n.check) : 'none'}`;
 
 export function Summary({ v }: { v: CanvasView }) {

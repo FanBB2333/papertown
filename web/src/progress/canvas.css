@@ -1,9 +1,10 @@
-/* A project's canvas (Canvas.tsx, CanvasCard.tsx): a full-window graph of stages, checks, tasks and notes, the
-   detail of the open node beside it, and the small picture of it on the project's page. */
+/* A project's canvas (Canvas.tsx, CanvasSide.tsx, CanvasInfo.tsx, CanvasCard.tsx): a full-window graph of stages,
+   checks, tasks, notes and info cards, the open node's inspector beside it, and the small picture of it on the
+   project's page. It lies under the assistant's floating window (dock.css), which stays in reach over it. */
 
 .cv {
   --cv-wire: color-mix(in srgb, var(--muted) 55%, var(--line)); --cv-task: var(--brand);
-  position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font-family: var(--font);
+  position: fixed; inset: 0; z-index: 55; display: flex; flex-direction: column; background: var(--bg); color: var(--ink); font-family: var(--font);
   animation: cv-in .3s var(--out) both;
 }
 @keyframes cv-in { from { opacity: 0; transform: scale(.992); } }
@@ -123,10 +124,11 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 .cv-n:hover { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
 .cv-n.on { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent), 0 4px 14px rgb(0 0 0 / .08); }
 
-.cv-stage { display: flex; align-items: center; gap: 10px; width: 168px; height: 58px; padding: 0 14px 0 12px; border-radius: 16px; border-width: 1.5px; }
+.cv-stage { display: flex; align-items: center; gap: 10px; width: 196px; height: 58px; padding: 0 14px 0 12px; border-radius: 16px; border-width: 1.5px; }
 .cv-stage > div { display: flex; flex-direction: column; min-width: 0; }
 .cv-stage b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cv-stage small { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cv-stage small { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cv-stage small em { font-style: normal; }
 .cv-stage.st-todo { background: color-mix(in srgb, var(--panel) 60%, var(--bg)); border-style: dashed; }
 .cv-stage.st-todo b { font-weight: 500; color: var(--muted); }
 .cv-stage.st-done { border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
@@ -144,11 +146,15 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 .cv-check em.cg-due { padding: 0 5px; border-radius: 99px; font-weight: 500; color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent); }
 .cv-check.off { opacity: .5; } .cv-check.off span { text-decoration: line-through; }
 
-.cv-task { --c: var(--cv-task); display: flex; flex-direction: column; gap: 3px; width: 216px; min-height: 78px; padding: 8px 11px 9px; border-radius: 12px; border-left: 4px solid var(--c); }
+.cv-task { --c: var(--cv-task); display: flex; flex-direction: column; gap: 3px; width: 216px; min-height: 64px; padding: 8px 11px 9px; border-radius: 12px; border-left: 4px solid var(--c); }
 .cv-task header { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
 .cv-task header em { margin-left: auto; padding: 0 6px; border-radius: 99px; font-style: normal; color: color-mix(in srgb, var(--c) 85%, var(--ink)); background: color-mix(in srgb, var(--c) 13%, transparent); }
 .cv-task b { font-size: 13.5px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-.cv-task p { margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-task p { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-task p.two { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; overflow-wrap: anywhere; }
+.cv-task p.res { margin-top: 2px; padding: 2px 6px; border-radius: 6px; color: color-mix(in srgb, var(--c) 70%, var(--ink)); background: color-mix(in srgb, var(--c) 10%, transparent); }
+.cv-task small { margin-top: 1px; font-size: 10.5px; color: var(--muted); }
+.cv-task header .dot { flex: none; }
 .cv-task.t-draft { --c: var(--muted); border-style: dashed; border-left-style: solid; }
 .cv-task.t-done { --c: var(--ok); } .cv-task.t-blocked { --c: var(--bad); }
 .cv-task.t-sent header em::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: var(--c); animation: cv-blink 1.4s ease-in-out infinite; }
@@ -156,6 +162,50 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 
 .cv-note { width: 190px; min-height: 60px; padding: 9px 11px; border-radius: 3px 3px 14px 3px; border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); background: color-mix(in srgb, var(--warn) 13%, var(--panel)); }
 .cv-note p { margin: 0; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cv-idot { flex: none; display: inline-block; width: 10px; height: 10px; box-sizing: border-box; border-radius: 3px; border: 1.5px solid var(--muted); background: linear-gradient(var(--muted), var(--muted)) 0 0 / 100% 3px no-repeat; }
+
+/* an info card: the project live */
+.cv-info { display: flex; flex-direction: column; gap: 5px; width: 250px; padding: 9px 11px 10px; border-radius: 12px; background: color-mix(in srgb, var(--panel) 92%, var(--bg)); font-size: 12px; line-height: 1.45; }
+.cv-info.i-card { width: 300px; } .cv-info.i-agent { width: 210px; gap: 2px; padding: 8px 11px; }
+.cv-info > header { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.cv-info > header b { flex: 1; min-width: 0; font: 600 12.5px var(--font); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-info p { margin: 0; overflow-wrap: anywhere; }
+.cv-info .ci-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cv-info.full { width: auto; padding: 0; border: 0; background: none; box-shadow: none; gap: 8px; font-size: 13px; line-height: 1.55; }
+.ci-st { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cg-pill.h-ok { --c: var(--ok); } .cg-pill.h-risk { --c: var(--warn); } .cg-pill.h-blocked { --c: var(--bad); }
+.ci-name { font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-info.full .ci-name { white-space: normal; }
+.ci-commit { display: flex; align-items: center; gap: 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ci-path { font-family: var(--mono); font-size: 11.5px; }
+.ci-foot { font-size: 11px; }
+.ci-prog { --c: var(--brand); display: flex; flex-direction: column; gap: 3px; margin: 2px 0; }
+.ci-prog small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ci-list h6 { margin: 2px 0 1px; display: flex; align-items: center; gap: 5px; font: 600 11px var(--font); color: var(--muted); }
+.ci-list h6 em { padding: 0 5px; border-radius: 99px; font-style: normal; font-weight: 600; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.ci-list.warn h6 { color: color-mix(in srgb, var(--warn) 85%, var(--ink)); } .ci-list.bad h6 { color: var(--bad); }
+.ci-list ul { margin: 0; padding-left: 15px; }
+.ci-list li { overflow-wrap: anywhere; }
+.cv-info:not(.full) .ci-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ci-counts { display: flex; flex-wrap: wrap; gap: 3px 12px; color: var(--muted); }
+.ci-counts span { display: inline-flex; align-items: baseline; gap: 4px; }
+.ci-counts b { font: 600 15px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; }
+.ci-counts .run b { color: var(--brand); } .ci-counts .bad b { color: var(--bad); } .ci-counts .ok b { color: var(--ok); }
+.ci-run { --c: var(--brand); display: flex; flex-direction: column; gap: 3px; }
+.ci-run p { display: flex; align-items: baseline; gap: 8px; }
+.ci-run p span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.ci-run small { flex: none; max-width: 55%; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ci-run .cg-bar { height: 4px; }
+.ci-out { display: flex; align-items: center; gap: 7px; }
+.ci-out i { flex: none; width: 8px; height: 8px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--muted); }
+.ci-out.o-doing i { border-color: var(--brand); background: linear-gradient(90deg, var(--brand) 50%, transparent 50%); } .ci-out.o-done i { border-color: var(--ok); background: var(--ok); }
+.ci-out span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.ci-out small { flex: none; font-size: 11px; color: var(--muted); }
+.ci-metrics { display: flex; flex-direction: column; gap: 1px; margin-top: 3px; padding-top: 5px; border-top: 1px solid var(--line); }
+.ci-metrics p { display: flex; align-items: baseline; gap: 8px; }
+.ci-metrics span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.ci-metrics b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
+
 .cv-ghost { display: flex; align-items: center; justify-content: center; gap: 6px; width: 200px; height: 52px; border-radius: 12px; border: 1.5px dashed var(--brand); background: color-mix(in srgb, var(--brand) 7%, var(--panel)); color: var(--brand); font-size: 13px; }
 
 /* the lines: the flow between stages, a check hanging on something, a task's reach, a note's string */
@@ -170,6 +220,10 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 .cv .react-flow__edge.w-task.t-sent .react-flow__edge-path { animation: cv-march .8s linear infinite; }
 .cv .react-flow__edge.w-task.t-done .react-flow__edge-path { stroke: color-mix(in srgb, var(--ok) 70%, var(--line)); }
 .cv .react-flow__edge.w-task.t-blocked .react-flow__edge-path { stroke: color-mix(in srgb, var(--bad) 70%, var(--line)); }
+.cv .react-flow__edge.w-info .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 45%, var(--line)); stroke-width: 1.2; stroke-dasharray: 1 5; stroke-linecap: round; }
+.cv .react-flow__edge.w-assign .react-flow__edge-path { stroke: color-mix(in srgb, var(--brand) 45%, var(--line)); stroke-width: 1.2; stroke-dasharray: 3 5; }
+.cv .react-flow__edge.w-assign.t-sent .react-flow__edge-path { stroke: color-mix(in srgb, var(--brand) 75%, var(--line)); animation: cv-march .8s linear infinite; }
+.cv .react-flow__edge.w-assign { pointer-events: none; }
 .cv .react-flow__edge.w-note .react-flow__edge-path { stroke: color-mix(in srgb, var(--warn) 55%, var(--line)); stroke-dasharray: 2 4; stroke-linecap: round; }
 .cv .react-flow__edge.selected .react-flow__edge-path { stroke: var(--brand); stroke-width: 2.4; }
 @keyframes cv-march { to { stroke-dashoffset: -10; } }
@@ -326,6 +380,7 @@ p.cv-todo { display: block; margin: 0; }
 .cv-mini .mn:is(.s-fail, .t-blocked) rect { --c: var(--bad); fill: color-mix(in srgb, var(--bad) 30%, var(--panel)); }
 .cv-mini .mn:is(.st-run, .t-sent) rect { --c: var(--brand); }
 .cv-mini .mn.mn-task rect { fill: color-mix(in srgb, var(--c) 18%, var(--panel)); }
+.cv-mini .mn.info rect { --c: color-mix(in srgb, var(--muted) 55%, var(--line)); fill: color-mix(in srgb, var(--panel) 80%, var(--bg)); stroke-dasharray: 2 6; }
 .cv-mini .mn.note rect { --c: color-mix(in srgb, var(--warn) 50%, var(--line)); fill: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
 .cv-mini .mn.st-todo rect { stroke-dasharray: 10 8; }
 .cv-mini .mn.st-todo text { fill: var(--muted); font-weight: 500; }

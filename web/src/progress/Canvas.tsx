@@ -15,12 +15,15 @@ import {
   type Connection, type Edge, type EdgeProps, type InternalNode, type Node, type NodeProps, type OnConnectEnd,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { api, type CanvasNode, type CanvasView, type NewNode, type ProjectCard, type TaskStatus, type TaskTo } from '../api';
+import { api, type CanvasEdge, type CanvasNode, type CanvasView, type NewNode, type ProjectCard, type TaskStatus, type TaskTo } from '../api';
+import { flash, usePanelNote } from '../console/page';
+import { ago } from '../console/util';
 import { Icon, type IconName } from '../console/icons';
 import { tr, trx } from '../i18n';
 import { follow, href } from '../route';
 import { SIZE, Summary, tone, useCanvas } from './CanvasCard';
-import { clip, Inspector, KIND, label, Mark, needs, NewForm, TASK, WHO, type Draft, type Kind } from './CanvasSide';
+import { InfoBody, INFO_ICON, infoKind, InfoState } from './CanvasInfo';
+import { clip, Inspector, KIND, label, Mark, needs, neighbours, NewForm, TASK, WHO, type Draft, type Kind } from './CanvasSide';
 import { ST, STAGE, status, type Act } from './Checks';
 import type { ConsoleTarget } from './Project';
 
@@ -31,7 +34,19 @@ type Item = { icon: IconName; label: string; run: () => void; danger?: boolean; 
 interface Prefs { map: boolean; snap: boolean; hint: boolean }
 
 const NEW = '__new';
-const KIND_OF: Record<CanvasNode['kind'], string> = { stage: tr('工序'), hard: tr('硬检查'), soft: tr('软检查'), task: tr('任务节点'), note: tr('备注') };
+const KIND_OF: Record<CanvasNode['kind'], string> = { stage: tr('工序'), hard: tr('硬检查'), soft: tr('软检查'), task: tr('任务节点'), note: tr('备注'), info: tr('资料卡') };
+// what the assistant can point at and light up (console/page.ts): every node, by its id
+const refOf = (n: CanvasNode) => ({ 'data-ref': `node:${n.id}`, 'data-ref-label': `${KIND_OF[n.kind]}「${label(n)}」（${n.id}）` });
+// the lines drawn: the ones you made, and from each task to the card of the agent it is for (when that card is on the canvas)
+const virtual = (id: string) => id === NEW || id.startsWith('as:');
+function wires(v: CanvasView): CanvasEdge[] {
+  const ids = new Set(v.nodes.map(n => n.id)), joined = new Set(v.edges.flatMap(e => [`${e.source}>${e.target}`, `${e.target}>${e.source}`]));
+  const mine = v.nodes.flatMap(n => {
+    const to = `info:agent:${n.to}`;
+    return n.kind === 'task' && ids.has(to) && !joined.has(`${n.id}>${to}`) ? [{ id: `as:${n.id}`, source: n.id, target: to }] : [];
+  });
+  return [...v.edges, ...mine];
+}
 const hay = (n: CanvasNode) => [label(n), n.text, n.id, n.check?.id, n.check && trx(n.check.text), n.to && WHO[n.to]].filter(Boolean).join(' ').toLowerCase();
 const typing = (e: Event) => !!(e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable=true]');
 
@@ -49,7 +64,7 @@ function usePrefs() {
 
 // what the nodes and lines can do, from wherever they are drawn
 interface Ops {
-  busy: boolean; agents: CanvasView['agents'] | null; editing: string | null;
+  busy: boolean; agents: CanvasView['agents'] | null; editing: string | null; r: ProjectCard; v: CanvasView | null;
   edit: (edgeId: string | null) => void; relabel: (edgeId: string, text: string) => void; cut: (edgeId: string) => void;
   fix: (n: CanvasNode) => void; ask: (n: CanvasNode) => void; send: (n: CanvasNode) => void;
   beside: (n: CanvasNode, k: Kind) => void; dup: (n: CanvasNode) => void; drop: (n: CanvasNode) => void;
@@ -100,13 +115,21 @@ function Tools({ n, on }: { n: CanvasNode; on: boolean }) {
 }
 
 function StageNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
-  const st = n.status ?? 'todo';
+  const st = n.status ?? 'todo', v = useContext(OpsCtx)?.v;
+  const near = v ? neighbours(n, v).map(x => x.o) : [];
+  const checks = near.filter(o => o.check?.on), pass = checks.filter(o => status(o.check!) === 'pass').length, off = checks.some(o => ['fail', 'warn'].includes(status(o.check!)));
+  const tasks = near.filter(o => o.kind === 'task' && o.status !== 'done').length;
   return (
-    <div className={`cv-n cv-stage st-${st}${selected ? ' on' : ''}`}>
+    <div className={`cv-n cv-stage st-${st}${selected ? ' on' : ''}`} {...refOf(n)}>
       <span className="cg-dot" style={st === 'run' ? { ['--pct' as string]: `${n.pct ?? 0}%` } : undefined}>
         {st === 'done' ? <Icon n="check" size={13} /> : st === 'wait' ? <Icon n="bell" size={12} /> : null}
       </span>
-      <div><b>{n.title}</b><small>{st === 'run' ? `${STAGE.run} · ${n.pct ?? 0}%` : STAGE[st]}</small></div>
+      <div>
+        <b>{n.title}</b>
+        <small>{st === 'run' ? `${STAGE.run} · ${n.pct ?? 0}%` : STAGE[st]}
+          {checks.length > 0 && <em className={off ? 'warn-t' : ''}> · {tr('检查 {0}/{1}', pass, checks.length)}</em>}
+          {tasks > 0 && <em> · {tr('{0} 件任务', tasks)}</em>}</small>
+      </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
@@ -117,11 +140,11 @@ function CheckNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   if (!c) return null;
   const k = status(c), val = c.last?.value;
   return (
-    <div className={`cv-n cv-check k-${c.kind} s-${c.on ? k : 'none'}${selected ? ' on' : ''}${c.on ? '' : ' off'}`}
-      title={`${c.kind === 'hard' ? tr('硬检查') : tr('软检查')} · ${c.on ? ST[k] : tr('已关闭')}`}>
+    <div className={`cv-n cv-check k-${c.kind} s-${c.on ? k : 'none'}${selected ? ' on' : ''}${c.on ? '' : ' off'}`} {...refOf(n)}
+      title={`${c.kind === 'hard' ? tr('硬检查') : tr('软检查')} · ${c.on ? ST[k] : tr('已关闭')}${c.prio ? ` · ${c.prio}` : ''}`}>
       <i className={`cg-shape k-${c.kind} s-${c.on ? k : 'none'}`} />
       <span>{trx(c.title)}</span>
-      {c.on && c.kind === 'hard' && val != null && val > 0 && <em>{val}</em>}
+      {c.on && c.kind === 'hard' && val != null && val > 0 && <em>{val > (c.max ?? 0) ? `${val}/${c.max ?? 0}` : val}</em>}
       {c.on && c.due && <em className="cg-due">{tr('到期')}</em>}
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
@@ -129,19 +152,35 @@ function CheckNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
 }
 
 function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
-  const st = (n.status ?? 'draft') as TaskStatus;
+  const st = (n.status ?? 'draft') as TaskStatus, who = useContext(OpsCtx)?.agents?.[n.to ?? 'lead'];
+  const when = st === 'sent' ? n.sent_at : st === 'draft' ? null : n.done_at;
   return (
-    <div className={`cv-n cv-task t-${st}${selected ? ' on' : ''}`}>
-      <header><Icon n="person" size={12} /><span>{WHO[n.to ?? 'lead']}</span><em>{TASK[st]}</em></header>
+    <div className={`cv-n cv-task t-${st}${selected ? ' on' : ''}`} {...refOf(n)}>
+      <header><i className={`dot s-${who?.there ? who.status : 'stopped'}`} /><span>{WHO[n.to ?? 'lead']}</span><em>{TASK[st]}</em></header>
       <b>{n.title}</b>
-      {(n.result || n.text) && <p>{clip(n.result || n.text, 46)}</p>}
+      {n.text && <p className="two">{clip(n.text, 96)}</p>}
+      {n.result && <p className="res">{clip(n.result, 60)}</p>}
+      {when && <small>{st === 'sent' ? tr('{0}发出', ago(when)) : ago(when)}{(n.log?.length ?? 0) > 2 && ` · ${tr('{0} 条记录', n.log?.length ?? 0)}`}</small>}
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
 }
 
 function NoteNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
-  return <div className={`cv-n cv-note${selected ? ' on' : ''}`}><p>{clip(n.text, 120)}</p><Ports /><Tools n={n} on={selected && !dragging} /></div>;
+  return <div className={`cv-n cv-note${selected ? ' on' : ''}`} {...refOf(n)}><p>{clip(n.text, 120)}</p><Ports /><Tools n={n} on={selected && !dragging} /></div>;
+}
+
+// the project live: its progress card, an agent, its jobs, code, paper or outputs (CanvasInfo.tsx)
+function InfoNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
+  const o = useContext(OpsCtx);
+  if (!o?.v) return null;
+  return (
+    <div className={`cv-n cv-info i-${infoKind(n)}${selected ? ' on' : ''}`} {...refOf(n)}>
+      <header><Icon n={INFO_ICON[infoKind(n)] ?? 'doc'} size={13} /><b>{n.title}</b><InfoState n={n} r={o.r} v={o.v} /></header>
+      <InfoBody n={n} r={o.r} v={o.v} />
+      <Ports /><Tools n={n} on={selected && !dragging} />
+    </div>
+  );
 }
 
 // where a node being written will land
@@ -149,7 +188,7 @@ function GhostNode({ data: { n } }: NodeProps<FNode>) {
   return <div className="cv-n cv-ghost"><Icon n="plus" size={13} />{n.title}<Ports /></div>;
 }
 
-const nodeTypes = { stage: StageNode, hard: CheckNode, soft: CheckNode, task: TaskNode, note: NoteNode, ghost: GhostNode };
+const nodeTypes = { stage: StageNode, hard: CheckNode, soft: CheckNode, task: TaskNode, note: NoteNode, info: InfoNode, ghost: GhostNode };
 
 // ---------- lines: from rim to rim, wherever the two nodes are ----------
 
@@ -186,7 +225,7 @@ function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
     <>
       <BaseEdge id={id} path={path} interactionWidth={20} />
       {data?.arrow && <path className="cv-arrow" d="M1,0 L-8,-4.5 L-8,4.5 Z" transform={`translate(${end.x},${end.y}) rotate(${turn})`} />}
-      {o && id !== NEW && (o.editing === id || text || selected) && (
+      {o && !virtual(id) && (o.editing === id || text || selected) && (
         <EdgeLabelRenderer>
           {o.editing === id ? (
             <input className="cv-el edit nodrag nopan" style={at} autoFocus defaultValue={text} maxLength={40} placeholder={tr('这条线的意思')}
@@ -223,14 +262,18 @@ function toNodes(v: CanvasView, sel: string | null, draft: Draft | null, lit: Se
 function toEdges(v: CanvasView, draft: Draft | null, lit: Set<string> | null, focus: string | null, prev: FEdge[]): FEdge[] {
   const by = new Map(v.nodes.map(n => [n.id, n]));
   const chosen = new Set(prev.filter(e => e.selected).map(e => e.id)), seen = new Set<string>();
-  const out: FEdge[] = v.edges.flatMap(e => {
+  const out: FEdge[] = wires(v).flatMap((e): FEdge[] => {
     const a = by.get(e.source), b = by.get(e.target);
     if (!a || !b) return [];
+    if (virtual(e.id)) { // a task to its agent: drawn, not yours to cut
+      const on = !lit || (lit.has(a.id) && lit.has(b.id) && (!focus || a.id === focus || b.id === focus));
+      return [{ id: e.id, source: e.source, target: e.target, type: 'wire', className: `w-assign t-${a.status}${on ? '' : ' dim'}`, selectable: false, deletable: false, focusable: false, data: { bow: false, arrow: false, label: '' } }];
+    }
     const bow = seen.has(`${e.target}>${e.source}`);
     seen.add(`${e.source}>${e.target}`);
     const task = [a, b].find(x => x.kind === 'task'), check = [a, b].find(x => x.kind === 'hard' || x.kind === 'soft');
     const flow = a.kind === 'stage' && b.kind === 'stage';
-    const cls = a.kind === 'note' || b.kind === 'note' ? 'w-note' : task ? `w-task t-${task.status}` : flow ? `w-flow st-${a.status}` : check ? `w-check ${tone(check)}` : 'w-check';
+    const cls = a.kind === 'note' || b.kind === 'note' ? 'w-note' : a.kind === 'info' || b.kind === 'info' ? (task ? `w-task t-${task.status}` : 'w-info') : task ? `w-task t-${task.status}` : flow ? `w-flow st-${a.status}` : check ? `w-check ${tone(check)}` : 'w-check';
     const on = !lit || (lit.has(a.id) && lit.has(b.id) && (!focus || a.id === focus || b.id === focus));
     return [{ id: e.id, source: e.source, target: e.target, type: 'wire', className: on ? cls : `${cls} dim`, selected: chosen.has(e.id), data: { bow, arrow: flow, label: e.label ?? '' } }];
   });
@@ -335,7 +378,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     if (keep) return [new Set([...keep.map(n => n.id), ...(sel ? [sel] : [])]), null];
     if (!sel) return [null, null];
     const near = new Set([sel]);
-    for (const e of v.edges) { if (e.source === sel) near.add(e.target); if (e.target === sel) near.add(e.source); }
+    for (const e of wires(v)) { if (e.source === sel) near.add(e.target); if (e.target === sel) near.add(e.source); }
     return [near, sel];
   }, [v, q, filter, sel]);
 
@@ -397,9 +440,9 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     if (mine(n) && !confirm(tr('删掉「{0}」？', label(n)))) return;
     act(() => api.dropNode(line.id, n.id), mine(n) ? tr('删掉了') : tr('拿掉了，可以在「更多」里放回来')).then(() => setSel(s => (s === n.id ? null : s)));
   };
-  const cut = (edgeId: string) => { act(() => api.disconnect(line.id, edgeId)); };
+  const cut = (edgeId: string) => { if (!virtual(edgeId)) act(() => api.disconnect(line.id, edgeId)); };
   const ops: Ops = {
-    busy, agents: v?.agents ?? null, editing, edit: setEditing, cut,
+    busy, agents: v?.agents ?? null, r, v, editing, edit: setEditing, cut,
     relabel: (edgeId, text) => {
       setEditing(null);
       if ((v?.edges.find(e => e.id === edgeId)?.label ?? '') !== text.trim()) act(() => api.labelEdge(line.id, edgeId, text.trim()));
@@ -461,6 +504,25 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     null,
     { icon: 'target', label: tr('适应窗口'), run: () => fit(), key: 'F' },
   ];
+  // the assistant in its floating window: told what is open here, and able to bring a node up (show --ref node:<id>)
+  usePanelNote('canvas', 'board', {
+    [tr('选中的节点')]: cur ? `${cur.id}「${label(cur)}」` : null,
+    [tr('只看')]: filter === 'todo' ? tr('要处理') : filter === 'task' ? tr('任务节点') : null, [tr('在找')]: q.trim() || null,
+  });
+  const want = useRef<string | null>(null);
+  const bring = () => {
+    const id = want.current;
+    if (!id || !v?.nodes.some(n => n.id === id)) return;
+    want.current = null;
+    pick(id);
+    flash(`node:${id}`);
+  };
+  useEffect(() => {
+    const on = (e: Event) => { want.current = (e as CustomEvent<string>).detail; bring(); };
+    addEventListener('pt-canvas-show', on);
+    return () => removeEventListener('pt-canvas-show', on);
+  });
+  useEffect(bring, [v]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!ctx) return;
     const away = (e: Event) => { if (!(e.target as HTMLElement).closest?.('.cv-ctx')) setCtx(null); };
@@ -543,20 +605,20 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
             <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
               connectionMode={ConnectionMode.Loose} colorMode={dark ? 'dark' : 'light'} minZoom={0.15} maxZoom={1.8} zoomOnDoubleClick={false}
               snapToGrid={prefs.snap} snapGrid={[22, 22]} deleteKeyCode={['Backspace', 'Delete']} onBeforeDelete={async d => d.nodes.length === 0}
-              onEdgesDelete={gone => gone.forEach(e => cut(e.id))} onEdgeDoubleClick={(_, e) => { if (e.id !== NEW) setEditing(e.id); }}
+              onEdgesDelete={gone => gone.forEach(e => cut(e.id))} onEdgeDoubleClick={(_, e) => { if (!virtual(e.id)) setEditing(e.id); }}
               onNodeClick={(_, n) => { if (n.id !== NEW) pick(n.id); }} onPaneClick={() => { setSel(null); setEditing(null); }} onMoveStart={() => setCtx(null)}
               onNodeDragStart={() => { dragging.current = true; setCtx(null); }} onNodeDragStop={onDragStop}
               onConnect={onConnect} onConnectEnd={onConnectEnd}
               onPaneContextMenu={e => menuAt(e, paneItems(e.clientX, e.clientY))}
               onNodeContextMenu={(e, n) => { if (n.id !== NEW) menuAt(e, nodeItems(n.data.n)); }}
-              onEdgeContextMenu={(e, edge) => { if (edge.id !== NEW) menuAt(e, [
+              onEdgeContextMenu={(e, edge) => { if (!virtual(edge.id)) menuAt(e, [
                 { icon: 'compose', label: tr('在线上写几个字'), run: () => setEditing(edge.id) },
                 { icon: 'close', label: tr('断开这条线'), run: () => cut(edge.id), danger: true }]); }}>
               <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} />
               <Controls showInteractive={false} />
               {prefs.map && <MiniMap pannable zoomable nodeClassName={n => `mm-${n.type}`} />}
               {prefs.hint && (
-                <Panel position="bottom-center" className="cv-hint">
+                <Panel position="top-center" className="cv-hint">
                   <span>{tr('双击空白处新建 · 从节点边上的圆点拖出连线 · 右键看能做什么')}</span>
                   <button className="ib" title={tr('知道了')} aria-label={tr('知道了')} onClick={() => setPrefs({ hint: false })}><Icon n="close" size={12} /></button>
                 </Panel>
@@ -568,7 +630,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
 
         {v && draft && <NewForm key={`${draft.link}:${draft.seed?.title ?? ''}`} d={draft} v={v} busy={busy} onKind={kind => setDraft({ ...draft, kind })} onAdd={create} onCancel={() => setDraft(null)} />}
         {v && cur && !draft && (
-          <Inspector key={cur.id} n={cur} v={v} line={line} wide={wide} onWide={() => setWide(w => !w)} busy={busy} act={act} onConsole={onConsole}
+          <Inspector key={cur.id} n={cur} v={v} r={r} line={line} wide={wide} onWide={() => setWide(w => !w)} busy={busy} act={act} onConsole={onConsole}
             onPick={pick} onCut={cut} onNew={k => beside(cur, k)} onFix={() => ops.fix(cur)} onDup={() => ops.dup(cur)} onDrop={() => drop(cur)} onClose={() => setSel(null)} />
         )}
       </div>

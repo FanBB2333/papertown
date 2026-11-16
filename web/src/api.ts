@@ -139,13 +139,13 @@ export interface Check {
 export interface CheckEdit { on?: boolean; params?: Record<string, number>; title?: string; prompt?: string; every?: number }
 
 // a project's canvas (canvas.py): a free graph of stages, checks, tasks for agents and notes
-export type CanvasKind = 'stage' | 'hard' | 'soft' | 'task' | 'note';
+export type CanvasKind = 'stage' | 'hard' | 'soft' | 'task' | 'note' | 'info';
 export type TaskStatus = 'draft' | 'sent' | 'done' | 'blocked';
 export type TaskTo = 'lead' | 'coder' | 'writer';
 export interface TaskLog { ts: string; kind: 'made' | 'sent' | 'resent' | 'done' | 'blocked' | 'back' | 'marked' | 'reopened'; text: string; by: string }
 export interface CanvasNode {
   id: string; kind: CanvasKind; x: number; y: number; title?: string; text?: string;
-  ref?: string; status?: string; pct?: number; // a stage: its key, state and progress; a task: its state
+  ref?: string; status?: string; pct?: number; // a stage: its key, state and progress; a task: its state; an info card: what it shows
   check?: Check;
   to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string; log?: TaskLog[];
 }
@@ -154,7 +154,7 @@ export interface CanvasView {
   line_id: string; seq: number; title: string; nodes: CanvasNode[]; edges: CanvasEdge[]; gone: { id: string; title: string }[];
   summary: { hard: CheckCounts; soft: CheckCounts }; tasks: Record<TaskStatus, number>;
   trend: { ts: string; pass: number; fail: number; total: number }[]; rounds: number; ran: string | null;
-  lead: boolean; agents: Record<TaskTo, { there: boolean; status: string | null }>; added?: string;
+  lead: boolean; agents: Record<TaskTo, { there: boolean; status: string | null; model: string | null }>; added?: string;
 }
 export interface NewNode { kind: 'task' | 'hard' | 'soft' | 'note'; x: number; y: number; title?: string; text?: string; to?: TaskTo; prio?: string; link?: string | null; send?: boolean }
 export type Pane = 'summary' | 'attention' | 'milestone' | 'metrics' | 'running' | 'planned' | 'outputs' | 'code' | 'paper' | 'memory';
