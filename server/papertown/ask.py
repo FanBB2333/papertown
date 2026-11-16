@@ -423,11 +423,11 @@ class Asker:
 
     def _lead_message(self, rec: dict, hits: list[dict]) -> str:
         found = [f"[{h['n']}] {KINDS[h['kind']]} · {h['title']} {h['where']}" for h in hits[:6]]
-        return "\n".join(["<question>", f"用户在「进展」页问了这个项目一个问题（{rec['id']}），请你回答：", "", rec["q"], "",
+        return "\n".join(["<question>", f"用户在「进展」页这个项目的对话里点名要你回（{rec['id']}）：", "", rec["q"], "",
                           *(["Papertown 先检索了一遍，这些地方可能有关（自己核实，不要只靠它们）：", *found, ""] if found else []),
-                          f"读完项目后把回答写成一页 HTML，用 `pt reply {rec['id']} 回答.html` 交上来：用户在网页上看，先写结论，再从上往下紧凑地写依据"
-                          f"（怎么写见你说明里的「写给用户看的页面」）。一两句话就能答完的，用 `pt reply {rec['id']} \"你的回答\"`。"
-                          "只回答这个问题：不派活、不写汇报、不动卡片。", "</question>"])
+                          f"是问题，就读完项目后把回答写成一页 HTML，用 `pt reply {rec['id']} 回答.html` 交上来：用户在网页上看，先写结论，再从上往下紧凑地写依据"
+                          f"（怎么写见你说明里的「写给用户看的页面」）；一两句话就能答完的，用 `pt reply {rec['id']} \"你的回答\"`。"
+                          f"是要你办的事，就在工作边界内办或派出去，再用 `pt reply {rec['id']} \"…\"` 说一声做了什么。不要动卡片。", "</question>"])
 
     def reply(self, agent_id: str, qid: str, text: str, html: str | None = None) -> dict:
         """The lead's answer to a question it was given: a few words, or a page (with a line about it)."""

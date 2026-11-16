@@ -87,23 +87,28 @@ def departments(town: "Town") -> list[dict]:
     return out
 
 
-def status(town: "Town") -> dict:
+def fresh_papers(town: "Town", n: int = 6) -> list[dict]:
+    """The newest papers in the library, the ones closest to a project in progress first."""
     db = town.db
-    projects = [{k: s[k] for k in ("id", "seq", "title", "status", "pct", "spent", "budget", "verdict", "mill_id")}
-                | {"stage": NAMES.get(s["stage"], s["stage"]), "files": s["files"]} for s in town.pipeline.lines()]
-    ideas = [r["idea"] for r in db.q(f"select idea from lines where status in ({','.join('?' * len(ACTIVE))})", *ACTIVE)]
-    terms = [terms_of(i) for i in ideas]
+    terms = [terms_of(r["idea"]) for r in db.q(f"select idea from lines where status in ({','.join('?' * len(ACTIVE))})", *ACTIVE)]
     papers = []
     for p in db.q("select * from papers order by id desc limit 40"):
         rel = max((town.library.coverage(t, f"{p['title']} {p['abstract']}")[0] for t in terms), default=0.0)
         papers.append(town.library.card(p) | {"relevance": round(rel, 2), "source": p["source"], "added_at": p["added_at"]})
     papers.sort(key=lambda p: -p["relevance"])  # stable: ties stay newest first
+    return papers[:n]
+
+
+def status(town: "Town") -> dict:
+    db = town.db
+    projects = [{k: s[k] for k in ("id", "seq", "title", "status", "pct", "spent", "budget", "verdict", "mill_id")}
+                | {"stage": NAMES.get(s["stage"], s["stage"]), "files": s["files"]} for s in town.pipeline.lines()]
     counts = {r["kind"]: r["c"] for r in db.q("select kind, count(*) as c from trace where ts >= ? group by kind", week_ago())}
     top = max(counts.values(), default=1)
     calls = [{"kind": k, "name": name, "count": counts.get(k, 0), "pct": round(100 * counts.get(k, 0) / top)} for k, name in KINDS]
     news = [m["body"].get("text", "") for m in db.q("select body from messages where kind in ('report', 'team', 'paper') order by id desc limit 4")]
     return {
-        "projects": projects, "papers": papers[:6], "workers": town.market.events(6), "calls": calls,
+        "projects": projects, "papers": fresh_papers(town), "workers": town.market.events(6), "calls": calls,
         "bank": town.bank.summary(), "models": town.bank.by_model(), "plant": town.plant.status(),
         "skills": [s.summary() for s in town.skills.all()], "headline": news, "hud": hud(town),
         "library": {"total": town.library.count(), "arxiv": db.val("select count(*) from papers where source = 'arxiv'"),

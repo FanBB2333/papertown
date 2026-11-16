@@ -510,6 +510,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def status():
         return status_mod.status(town)
 
+    @app.get("/api/papers/fresh")
+    def fresh_papers():
+        return {"papers": status_mod.fresh_papers(town)}
+
     @app.get("/api/departments")
     def departments():
         return status_mod.departments(town)
