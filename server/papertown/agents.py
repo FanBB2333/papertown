@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .db import now
+from .db import now, read_json, write_json
 from .paseo import Paseo, PaseoError
 
 if TYPE_CHECKING:
@@ -96,7 +96,6 @@ LEAD_GUIDE = """# Papertown · 项目负责人
 - `pt rules`：你的工作边界。
 - `pt card`、`pt card set '<JSON>'`：项目在「进展」页上的卡片，用户按了更新才写（见下面）。
 - `pt recall "…"`：在项目里检索：卡片、汇报、实验、代码和论文，还有用户导入的以前的 agent 对话和记忆。
-- `pt reply <id> 回答.html` 或 `pt reply <id> "…"`：回用户在「进展」的对话里点名要你回的话（见下面）。
 - `pt publish 页面.html ["标题"] [--kind report|explain]`：发布一页 HTML 给用户看，放在「进展」里这个项目的「汇报与讲解」（见「写给用户看的页面」）。
 {linked}
 ## 怎么干活
@@ -105,14 +104,14 @@ LEAD_GUIDE = """# Papertown · 项目负责人
 - 派活时说清楚做什么、做到什么程度算完、做完用 `pt tell lead` 告诉你。员工卡住了先看它卡在哪，你能定的直接定；超出你工作边界的问用户。
 - 汇报只写用户该知道的：进展的结论、出了什么问题、要他决定什么，三五句话。没有新东西就不写，不要每次巡检都汇报。要用表格、图或对比才说得清的（一批实验的结果、方案之间的取舍），写成一页 HTML 用 `pt publish 页面.html --kind report` 发布，再用 `pt report` 说一句结论，提一下页面的标题。
 - 项目卡片只在收到 `<card>` 消息时写：那是用户在「进展」页上按了更新。照消息里的字段写，只写读到的事实，写完这一轮就结束；平时巡检不要动卡片。
-- 收到 `<question>` 消息，是用户在「进展」页这个项目的对话里点名要你回。是问题就读项目（需要时 `pt recall`），一般写成一页 HTML 用 `pt reply <id> 回答.html` 交（一两句话能答完的直接 `pt reply <id> "…"`）；是要你办的事，在工作边界内办或派出去，再用 `pt reply <id> "…"` 说一声。回完这一轮就结束。
+- 用户会在「进展」里这个项目的对话、或者中控屏里直接和你说话（不带标签的消息就是他说的）：是问题就读项目回答（需要时 `pt recall`），要用表格、图或对比才说得清的，写成一页 HTML 用 `pt publish 页面.html --kind explain` 发布，再在回复里说一句结论和页面的标题；是要你办的事，在工作边界内办或派出去，再告诉他做了什么。不要动卡片。
 - 小助手是用户的代理人，它发来的消息（开头是 `<msg from="小助手">`）就是用户的意思：照办，办完用 `pt report` 回一句。员工发来的消息开头是 `<msg from="…代码员工">` 这样。
 - 回复用中文，短。
 {pages}"""
 PAGE_GUIDE = """
 ## 写给用户看的页面
 
-用户在网页上看你写的 HTML：回答问题时就在那个问题下面，其余的在「进展」里这个项目的「汇报与讲解」，也能全屏拿来演示。
+用户在网页上看你写的 HTML：在「进展」里这个项目的「汇报与讲解」，也能全屏拿来演示。
 
 - 一个 `.html` 文件就是一整页：CSS 和 JS 都写在页面里，图用 HTML 和 CSS 画，复杂的用内联 SVG（或 canvas、data: URI 的图片）。页面在沙箱里显示：不能联网，不能加载外部的脚本、样式、字体和图片，也读不到 Papertown 的接口，所以要用的数据直接写进页面。
 - 页面是一篇从上往下读的文档，内容多了就往下滚动：不是幻灯片，不要垂直居中，不要做成一屏一屏，不要用 `100vh`。第一段直接写结论（不重复标题，标题在页面外面已经显示了），下面按小节往下排，最后一行小字写出处（文件路径、任务 id、提交）。只写读到的事实和数字。
@@ -310,6 +309,79 @@ class Agents:
         self._set(agent_id, runtime="paseo", ext_id=conv["id"], model=model_label(conv["provider"], conv.get("model")),
                   status=PASEO_STATUS.get(conv["status"], "idle"))
         self.watch()
+
+    def _chat(self, agent_id: str) -> dict:
+        a = self.get(agent_id)
+        if not a or a["role"] not in CHAT_ROLES:
+            raise AgentError("这个员工不能对话")
+        return a
+
+    def _own(self, agent_id: str) -> list[dict]:
+        """The agent's conversations in Paseo, by the label it created or imported them with."""
+        try:
+            convs = self.paseo.conversations()
+        except PaseoError:
+            return []
+        return [c for c in convs if (c.get("labels") or {}).get("papertown.agent") == agent_id]
+
+    def _titles(self, a: dict) -> Path:
+        return self._home(a["line_id"], a["role"]) / "conversations.json"
+
+    def title(self, agent_id: str, text: str) -> None:
+        """The first thing the user said in the agent's Paseo conversation, as its name among the others."""
+        a = self.get(agent_id)
+        if not a or a.get("runtime") != "paseo" or not a.get("ext_id"):
+            return
+        path, t = self._titles(a), " ".join(text.split())
+        with self._lock:
+            names = read_json(path, {})
+            if a["ext_id"] not in names:
+                names[a["ext_id"]] = t if len(t) <= 60 else t[:59] + "…"
+                write_json(path, names)
+
+    def conversations(self, agent_id: str) -> list[dict]:
+        """The agent's conversations in Paseo, the latest first; pi keeps its sessions to itself."""
+        a = self._chat(agent_id)
+        names = read_json(self._titles(a), {})
+        out = [{"id": c["id"], "title": names.get(c["id"]), "model": model_label(c["provider"], c.get("model")),
+                "at": c.get("last_user") or c.get("updated") or c.get("created"), "current": c["id"] == a.get("ext_id")}
+               for c in self._own(agent_id)]
+        return sorted(out, key=lambda x: x["at"] or "", reverse=True)
+
+    def _interrupt(self, a: dict) -> None:
+        if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "working":
+            try:
+                self.abort(a["id"])
+            except AgentError:
+                pass
+
+    def fresh(self, agent_id: str) -> dict:
+        """A new conversation. Paseo's is set aside (it stays in Paseo): the assistant then waits for a model to be
+        picked, the others start another at once on the same model, so a lead keeps supervising. pi starts a new session."""
+        a = self._chat(agent_id)
+        if a.get("runtime") == "paseo":
+            conv = next((c for c in self._own(agent_id) if c["id"] == a.get("ext_id")), None)
+            self._interrupt(a)
+            self.detach(agent_id)
+            if a["role"] != "assistant":
+                provider, _, model = (a.get("model") or "").partition("/")  # if it is gone from Paseo: the model it was on
+                if conv:
+                    provider, model = conv["provider"], conv.get("model")
+                return self._start_paseo(self.get(agent_id), provider or None, model or None, (conv or {}).get("thinking"))
+        elif a.get("runtime") == "pi" and self.alive(a):
+            self.say(agent_id, "/new")
+        return self.public(self.get(agent_id))
+
+    def resume(self, agent_id: str, ext_id: str) -> dict:
+        """Go back to one of the agent's earlier conversations; the one open now is set aside as a new one would."""
+        a = self._chat(agent_id)
+        conv = next((c for c in self._own(agent_id) if c["id"] == ext_id), None)
+        if not conv:
+            raise AgentError("Paseo 里没有这段对话了")
+        if a.get("ext_id") != ext_id:
+            self._interrupt(a)
+            self.attach(agent_id, conv)
+        return self.public(self.get(agent_id))
 
     def events(self, agent_id: str, after: int = 0, limit: int = 400) -> list[dict]:
         rows = self.db.q("select * from agent_events where agent_id = ? and id > ? order by id desc limit ?", agent_id, after, limit)
@@ -613,6 +685,8 @@ class Agents:
         if a.get("runtime") == "paseo":
             if not a.get("ext_id"):
                 raise AgentError("先在 Paseo 里启动它")
+            if origin == "web" and a["role"] != "assistant":  # the assistant names its own, before the page context goes on
+                self.title(agent_id, text)
             busy = a["status"] == "working"
             if busy and mode == "queue":  # Paseo has no queue of its own: the watcher sends it once the agent is idle
                 return self.record(agent_id, "user", {"text": text, "origin": origin, "delivered": False, "queued": True, "held": True})

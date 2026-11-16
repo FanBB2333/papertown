@@ -20,8 +20,6 @@ A project's lead also has:
     .papertown/pt reports                    the project's reports and questions
     .papertown/pt card                       its card on the 进展 page: the fields and the card as it is
     .papertown/pt card set '<json>'|file.json   write the card, when the user asked for it
-    .papertown/pt reply <question> "..."|file.md|page.html ["a line about it"]
-                                             your answer to a question the user put to you
 
 Any agent of a project has:
 
@@ -212,16 +210,6 @@ def main(a):
         if len(a) < 2:
             sys.exit('用法：pt recall "要找的"')
         print(call("/recall?q=" + quote(" ".join(a[1:])))["text"])
-    elif a[0] == "reply":
-        if len(a) < 3:
-            sys.exit('用法：pt reply <问题 id> "回答" | pt reply <问题 id> 文件.md | pt reply <问题 id> 回答.html ["一句话"]')
-        if a[2].lower().endswith((".html", ".htm")) and os.path.isfile(a[2]):
-            print(call("/reply", {"id": a[1], "html": read(a[2]), "text": " ".join(a[3:]).strip()})["text"])
-            return
-        text = " ".join(a[2:]).strip()
-        if len(a) == 3 and os.path.isfile(text):
-            text = read(text)
-        print(call("/reply", {"id": a[1], "text": text})["text"])
     elif a[0] == "publish":
         opts, rest = options(a[1:], many=(), flags=())
         if not rest or not os.path.isfile(rest[0]):

@@ -192,15 +192,32 @@ def test_paseo_agents_are_created_driven_and_followed(tmp_path):
 
 
 class FakeLink:
-    """Stands in for Paseo's SDK link: one conversation and its timeline."""
+    """Stands in for Paseo: one conversation of its own and its timeline, and the ones Papertown makes."""
 
     def __init__(self):
-        self.labels, self.permits = {}, []
+        self.labels, self.permits, self.made = {}, [], []
         self.conv = {"id": "conv-1", "title": "旧对话", "provider": "claude", "model": "claude-haiku-5-5", "cwd": None,
                      "status": "idle", "updated": "2026-10-29T00:00:00Z", "last_user": None}
+        self.convs = [self.conv]
 
     def conversations(self):
-        return [self.conv]
+        return self.convs
+
+    def status(self, fresh=False):
+        return {"ok": True, "note": ""}
+
+    def create(self, **kw):
+        self.made.append(kw)
+        ext = f"pa-{len(self.made)}"
+        self.convs.insert(0, {"id": ext, "provider": kw["provider"], "model": kw["model"], "thinking": kw["thinking"], "status": "running",
+                              "labels": kw["labels"], "updated": f"2026-11-0{len(self.made)}T00:00:00Z", "last_user": None})
+        return {"agentId": ext}
+
+    def send(self, agent_id, text):
+        pass
+
+    def interrupt(self, agent_id):
+        pass
 
     def label(self, agent_id, labels):
         self.labels[agent_id] = labels
@@ -213,7 +230,7 @@ class FakeLink:
         self.permits.append((agent_id, request_id, allow))
 
     def list(self, labels):
-        return [self.conv]
+        return self.convs
 
 
 def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
@@ -263,3 +280,31 @@ def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
 
         assert c.post(f"/api/agents/{a['id']}/permit", json={"request_id": "req-1", "allow": True}).json() == {"ok": True}
         assert link.permits == [("conv-1", "req-1", True)]
+
+
+def test_a_leads_conversations_are_listed_renewed_and_resumed(tmp_path):
+    app = create_app(make_settings(tmp_path))
+    with TestClient(app) as c:
+        town = app.state.town
+        link = FakeLink()
+        for name in ("conversations", "status", "create", "send", "interrupt", "list"):
+            setattr(town.agents.paseo, name, getattr(link, name))
+        lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
+        wait_for(town, lid, {"waiting"})
+        lead = c.post("/api/agents", json={"line_id": lid, "role": "lead"}).json()["id"]
+        c.post(f"/api/agents/{lead}/start", json={"runtime": "paseo", "provider": "claude", "model": "claude-opus-5-5", "thinking": "high"})
+        c.post(f"/api/agents/{lead}/brief")
+        for text in ("主表什么时候能好？", "再问一句"):
+            c.post(f"/api/agents/{lead}/say", json={"text": text})
+        convs = c.get(f"/api/agents/{lead}/conversations").json()["conversations"]
+        assert [(x["id"], x["title"], x["model"], x["current"]) for x in convs] == [("pa-1", "主表什么时候能好？", "claude/claude-opus-5-5", True)]
+
+        new = c.post(f"/api/agents/{lead}/conversations/new").json()
+        assert new["ext_id"] == "pa-2" and new["status"] == "working"
+        assert {k: link.made[-1][k] for k in ("provider", "model", "thinking")} == {"provider": "claude", "model": "claude-opus-5-5", "thinking": "high"}
+        convs = c.get(f"/api/agents/{lead}/conversations").json()["conversations"]
+        assert [(x["id"], x["title"], x["current"]) for x in convs] == [("pa-2", None, True), ("pa-1", "主表什么时候能好？", False)]
+
+        assert c.post(f"/api/agents/{lead}/conversations/pa-1").json()["ext_id"] == "pa-1"
+        assert c.post(f"/api/agents/{lead}/conversations/conv-1").status_code == 400
+        assert c.get("/api/agents/nobody/conversations").status_code == 404

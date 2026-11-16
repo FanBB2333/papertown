@@ -9,10 +9,9 @@ import secrets
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from .agents import PAGE_GUIDE, ROLES, AgentError, model_label
-from .db import now, read_json, write_json
+from .agents import PAGE_GUIDE, ROLES, AgentError
+from .db import now
 from .leads import LeadError, clip
-from .paseo import PaseoError
 from .workspace import WsError
 
 if TYPE_CHECKING:
@@ -20,7 +19,9 @@ if TYPE_CHECKING:
 
 ID = "assistant"
 MODS = {"overview": "概览", "survey": "调研", "code": "代码仓库", "exp": "实验", "data": "数据", "paper": "论文",
-        "agents": "员工", "skills": "Skills", "mcp": "MCP", "rag": "图书馆"}
+        "agents": "员工", "depts": "部门", "skills": "Skills", "mcp": "MCP", "rag": "图书馆", "rules": "工作边界", "trace": "调用轨迹"}
+# pages outside the console the user can be on; not panels to open
+PLACES = {"progress": "进展", "town": "小镇地图"}
 TEXT_MAX = 8000
 SELECTION_MAX = 2000
 REFS_MAX = 80
@@ -216,7 +217,7 @@ class Assistant:
         return {
             "at": now(),
             "line": {"id": str(ln.get("id") or ""), "seq": ln.get("seq"), "title": clip(ln.get("title"), 80)} if ln.get("id") else None,
-            "mod": mod, "mod_name": MODS.get(mod, clip(p.get("mod_name"), 20) or mod),
+            "mod": mod, "mod_name": MODS.get(mod) or PLACES.get(mod) or clip(p.get("mod_name"), 20) or mod,
             "state": {clip(k, 20): clip(v, 160) for k, v in (p.get("state") or {}).items() if v not in (None, "", False)},
             "focus": _part(p.get("focus")),
             "refs": [{"ref": clip(r.get("ref"), 80), "label": clip(r.get("label"), 80)} for r in (p.get("refs") or [])[:REFS_MAX]
@@ -325,6 +326,18 @@ class Assistant:
             out += ["接的 MCP server、接通了没有、它们给的工具：接口 `/api/mcp`"]
         elif mod == "rag":
             out += ["馆藏统计和检索设置：接口 `/api/rag`；试检索：`/api/rag/search?q=<检索词>`；馆藏：`/api/library?q=<关键词>`"]
+        elif mod == "depts":
+            out += ["各部门在做什么（项目、员工、实验）：接口 `/api/departments`"]
+        elif mod == "rules":
+            out += ["全局、项目、员工三层的工作边界：接口 `/api/bounds`"]
+        elif mod == "trace":
+            out += ["小镇最近的模型和工具调用：接口 `/api/trace`"]
+        elif mod == "progress":
+            out += ["每个项目的进展卡片（摘要、健康度、里程碑、在跑的任务、等你决定的事）：接口 `/api/cards`",
+                    "新出的相关论文：接口 `/api/papers/fresh`",
+                    f"项目负责人的汇报和它问你的事：接口 `/api/lines/{x}/lead`；它写的页面：`/api/lines/{x}/pages`"]
+        elif mod == "town":
+            out += ["小镇地图上的建筑和项目：接口 `/api/world`"]
         return [*out, "所有项目：接口 `/api/lines`；小镇的运行状态：`/api/status`"]
 
     def say(self, text: str, page: dict | None) -> dict:
@@ -334,8 +347,7 @@ class Assistant:
             raise AgentError("先启动小助手")
         p = self.set_page(page) if page else self.page
         self._close_asks(text)
-        if a.get("runtime") == "paseo" and a.get("ext_id"):
-            self._name(a["ext_id"], text)
+        self.town.agents.title(ID, text)
         head = [x for x in (self.header(p) if p else "", self.projects(text)) if x]
         return self.town.agents.say(ID, "\n\n".join([*head, text.strip()]))
 
@@ -522,7 +534,7 @@ class Assistant:
         if not ag or not ag.get("runtime"):
             raise ActError(f"{who}还没有启动，请用户先在「员工」面板里启动它")
         if name == "agent.brief":
-            return f"给{who}发项目简报", lambda: (t.agents.say(aid, t.agents.brief(aid)), "已发出")[1]
+            return f"给{who}发项目简报", lambda: (t.agents.say(aid, t.agents.brief(aid), origin=ID), "已发出")[1]
         return f"打断{who}手上的事", lambda: (t.agents.abort(aid), "已打断")[1]
 
     def view(self) -> dict:
@@ -532,56 +544,21 @@ class Assistant:
         return {"agent": self.town.agents.public(a), "asks": [e for e in rows if e["kind"] == "ask" and e["data"].get("open")][:1],
                 "acts": [e for e in rows if e["kind"] == "act"][:8][::-1], "actions": {k: {"what": v[0], "args": v[1]} for k, v in ACTIONS.items()}}
 
-    def _interrupt(self, a: dict) -> None:
-        if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "working":
-            try:
-                self.town.agents.abort(ID)
-            except AgentError:
-                pass
-
     def reset(self) -> dict:
-        """A new conversation: Paseo's is set aside (it stays in Paseo); pi starts a new session."""
-        a = self.row()
-        if a.get("runtime") == "paseo":
-            self._interrupt(a)
-            self.town.agents.detach(ID)
-        elif a.get("runtime") == "pi" and self.town.agents.alive(a):
-            self.town.agents.say(ID, "/new")
+        """A new conversation (agents.fresh): it then waits for you to pick a model and start it."""
+        self.row()
+        a = self.town.agents.fresh(ID)
         self._close_asks()
-        return self.town.agents.public(self.row())
-
-    def _names(self) -> dict[str, str]:
-        return read_json(self.dir / "conversations.json", {})
-
-    def _name(self, ext_id: str, text: str) -> None:
-        """The first thing asked in a conversation, as its name among the earlier ones."""
-        names = self._names()
-        if ext_id not in names:
-            names[ext_id] = clip(text, 60)
-            write_json(self.dir / "conversations.json", names)
-
-    def _mine(self) -> list[dict]:
-        try:
-            convs = self.town.agents.paseo.conversations()
-        except PaseoError:
-            return []
-        return [c for c in convs if (c.get("labels") or {}).get("papertown.role") == ID]
+        return a
 
     def history(self) -> list[dict]:
-        """Its conversations in Paseo, the latest first; pi keeps its sessions to itself."""
-        cur, names = self.row().get("ext_id"), self._names()
-        out = [{"id": c["id"], "title": names.get(c["id"]), "model": model_label(c["provider"], c.get("model")),
-                "at": c.get("last_user") or c.get("updated") or c.get("created"), "current": c["id"] == cur} for c in self._mine()]
-        return sorted(out, key=lambda x: x["at"] or "", reverse=True)
+        self.row()
+        return self.town.agents.conversations(ID)
 
     def resume(self, ext_id: str) -> dict:
-        """Go back to an earlier conversation; the one open now is set aside as a new one would."""
-        conv = next((c for c in self._mine() if c["id"] == ext_id), None)
-        if not conv:
-            raise AgentError("Paseo 里没有这段对话了")
-        a = self.row()
-        if a.get("ext_id") != ext_id:
-            self._interrupt(a)
+        """Go back to an earlier conversation; the asks of the one left behind are closed."""
+        leaving = self.row().get("ext_id") != ext_id
+        a = self.town.agents.resume(ID, ext_id)
+        if leaving:
             self._close_asks()
-            self.town.agents.attach(ID, conv)
-        return self.town.agents.public(self.row())
+        return a

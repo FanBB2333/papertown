@@ -57,7 +57,7 @@ def histories(tmp, code, paper):
     jl(codex / "rollout-d.jsonl", [{"type": "session_meta", "payload": {"id": "cx-4", "cwd": "/elsewhere"}}])
 
 
-def test_import_earlier_conversations_and_ask_the_project(tmp_path):
+def test_import_earlier_conversations_and_search_the_project(tmp_path):
     code, paper = tmp_path / "proj-code", tmp_path / "proj-paper"
     git_repo(code, {"README.md": "# Proj\n\nMerging layers.\n", "CLAUDE.md": "# 规则\n\n不要改 configs/。\n",
                     "train.py": "def schedule(step, warmup_steps=1000):\n    # linear warmup of the learning rate\n    return min(1, step / warmup_steps)\n",
@@ -93,16 +93,12 @@ def test_import_earlier_conversations_and_ask_the_project(tmp_path):
         code_hit = next(h for h in hits if h["kind"] == "code")
         assert code_hit["ref"]["file"] == "code:train.py:1" and "warmup" in code_hit["snippet"]
         assert c.get(f"/api/lines/{lid}/search", params={"q": "seed 重复"}).json()["hits"][0]["kind"] == "note"
-        q = c.post(f"/api/lines/{lid}/questions", json={"q": "warmup 设成多少？"}).json()
-        assert q["id"] == "q1" and q["by"] == "摘录" and "[1]" in q["answer"] and q["hits"] and "_text" not in q["hits"][0]
-        assert c.get(f"/api/lines/{lid}/questions").json()["questions"][0]["q"] == "warmup 设成多少？"
-        assert c.post(f"/api/lines/{lid}/questions", json={"q": "谁", "lead": True}).status_code == 400
 
         assert c.delete(f"/api/lines/{lid}/memory/{s1['id']}").json()["counts"]["sessions"] == 3
         assert (tmp_path / "claude" / "projects" / slug(code) / "s1.jsonl").exists()
 
 
-def test_cards_with_plans_outputs_runs_and_panes_and_the_lead_answers(tmp_path):
+def test_cards_with_plans_outputs_runs_and_panes_and_the_lead_publishes(tmp_path):
     app, _ = started(tmp_path)
     with TestClient(app) as c:
         town = app.state.town
@@ -126,25 +122,15 @@ def test_cards_with_plans_outputs_runs_and_panes_and_the_lead_answers(tmp_path):
         assert row["card"]["outputs"][0] == {"name": "主表", "due": "周五", "state": "doing"}
         assert set(row) >= {"running", "queued", "repos", "memory"} and set(row["repos"]) == {"code", "paper"}
 
-        q = c.post(f"/api/lines/{lid}/questions", json={"q": "主表什么时候能好？", "lead": True}).json()
-        assert q["status"] == "waiting" and q["answer"]
-        msg = [e for e in town.agents.events(lead["id"]) if e["kind"] == "user"][-1]["data"]["text"]
-        assert msg.startswith("<question>") and "pt reply q1" in msg and "主表什么时候能好？" in msg
         assert "进展卡片" in c.get(f"/api/bridge/{lead['id']}/recall", params={"q": "主表"}, headers=h).json()["text"]
-        assert c.post(f"/api/bridge/{lead['id']}/reply", json={"id": "q9", "text": "x"}, headers=h).status_code == 400
-        assert c.post(f"/api/bridge/{lead['id']}/reply", json={"id": "q1", "text": "周五，等第三个数据集跑完。"}, headers=h).status_code == 200
-        q = c.get(f"/api/lines/{lid}/questions").json()["questions"][-1]
-        assert q["status"] == "done" and q["lead"]["text"] == "周五，等第三个数据集跑完。"
 
-        c.post(f"/api/lines/{lid}/questions", json={"q": "baseline 比得怎么样？", "lead": True})
         page = "<!doctype html><html><head><title>主表对比</title></head><body><h1>对比</h1><a data-pt-file='src/a.py:3'>a</a></body></html>"
-        assert c.post(f"/api/bridge/{lead['id']}/reply", json={"id": "q2", "html": page}, headers=h).status_code == 200
-        q = c.get(f"/api/lines/{lid}/questions").json()["questions"][-1]
-        assert q["lead"]["page"] == "p1" and q["lead"]["title"] == "主表对比"
+        assert c.post(f"/api/bridge/{lead['id']}/publish", json={"html": page, "kind": "explain"}, headers=h).status_code == 200
         assert c.post(f"/api/bridge/{lead['id']}/publish", json={"html": "<h1>周报</h1><p>…</p>", "kind": "report"}, headers=h).status_code == 200
-        assert c.post(f"/api/bridge/{lead['id']}/publish", json={"html": "<p>x</p>", "kind": "nope"}, headers=h).status_code == 400
+        for kind in ("nope", "answer"):
+            assert c.post(f"/api/bridge/{lead['id']}/publish", json={"html": "<p>x</p>", "kind": kind}, headers=h).status_code == 400
         ps = c.get(f"/api/lines/{lid}/pages").json()["pages"]
-        assert [(p["id"], p["title"], p["kind"], p["question"]) for p in ps] == [("p1", "主表对比", "answer", "q2"), ("p2", "周报", "report", None)]
+        assert [(p["id"], p["title"], p["kind"]) for p in ps] == [("p1", "主表对比", "explain"), ("p2", "周报", "report")]
         v = c.get(f"/api/lines/{lid}/pages/p1/view")
         csp = v.headers["content-security-policy"]
         assert "sandbox allow-scripts" in csp and "default-src 'none'" in csp and "allow-same-origin" not in csp

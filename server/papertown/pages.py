@@ -1,4 +1,4 @@
-"""Pages the project's agents write for you in HTML (`pt publish`, `pt reply`), kept as written. They are
+"""Pages the project's agents write for you in HTML (`pt publish`), kept as written. They are
 shown in a sandbox: an origin of their own with no network (the Content-Security-Policy of /view), where
 only the town's font may load from Papertown.
 
@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from .town import Town
 
 KINDS = {"report": "汇报", "explain": "讲解", "answer": "回答"}
+WRITTEN = ("report", "explain")  # answer: a lead's answer to one of the questions there used to be, with its id in `question`
 MAX = 3_000_000  # characters: a page carries its pictures in it
 KEEP = 200
 
@@ -143,8 +144,7 @@ class Pages:
         except OSError as e:
             raise PageError("没有这个页面") from e
 
-    def publish(self, line_id: str, html: str, title: str = "", kind: str = "explain", by: str = "", agent: str = "",
-                question: str | None = None) -> dict:
+    def publish(self, line_id: str, html: str, title: str = "", kind: str = "explain", by: str = "", agent: str = "") -> dict:
         if self.town.db.val("select seq from lines where id = ?", line_id) is None:
             raise PageError("没有这个项目")
         html = html.strip()
@@ -152,16 +152,15 @@ class Pages:
             raise PageError("页面是空的")
         if len(html) > MAX:
             raise PageError(f"页面太大了：最多 {MAX // 1_000_000} MB，图换成 SVG 或压小一点")
-        if kind not in KINDS:
-            raise PageError(f"kind 只能是 {'、'.join(KINDS)}")
+        if kind not in WRITTEN:
+            raise PageError(f"kind 只能是 {'、'.join(WRITTEN)}")
         title = " ".join((title or title_of(html) or "没有标题的页面").split())[:120]
         d = self._dir(line_id)
         with self._lock:
             d.mkdir(parents=True, exist_ok=True)
             rows = self.all(line_id)
             n = max((p["n"] for p in rows), default=0) + 1
-            meta = {"id": f"p{n}", "n": n, "title": title, "kind": kind, "by": by, "agent": agent, "question": question,
-                    "at": now(), "size": len(html)}
+            meta = {"id": f"p{n}", "n": n, "title": title, "kind": kind, "by": by, "agent": agent, "at": now(), "size": len(html)}
             (d / f"{meta['id']}.html").write_text(html, encoding="utf-8")
             rows.append(meta)
             for old in rows[:-KEEP]:

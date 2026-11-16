@@ -1,9 +1,6 @@
-"""Questions about a project, answered from what it holds (card, reports, stages, jobs, code and
-paper files, imported memory). BM25 over pieces of all of it finds what is relevant; a model
-answers citing the pieces as [n], offline the best sentences in them are quoted, or the lead
-answers with `pt reply`, in a few words or as a page.
-
-    data/projects/<project>/questions.json
+"""Search in a project, over what it holds (card, reports, stages, jobs, code and paper files,
+imported memory): BM25 over pieces of all of it finds what is relevant, for the search box on the
+进展 page and for its agents' `pt recall`.
 """
 
 from __future__ import annotations
@@ -13,18 +10,13 @@ import json
 import math
 import re
 import threading
-import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .agents import AgentError
-from .db import now, read_json, write_json
 from .library import GLOSSARY, STOP, stem
 from .linked import plain
-from .pages import PageError, title_of
-from .llm import ProviderError, Turn
 from .workspace import _text, list_files
 
 if TYPE_CHECKING:
@@ -49,10 +41,6 @@ TRADE = {"实验": "experiment exp run", "训练": "train training", "结果": "
          "脚本": "script", "部署": "deploy", "推理": "inference", "提交": "commit submit", "摘要": "abstract", "方法": "method"}
 _TERMS = sorted({**GLOSSARY, **TRADE}, key=len, reverse=True)
 WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*|\d+(?:\.\d+)?|[㐀-鿿]+")
-KEEP = 60  # questions kept per project
-
-SYSTEM = """你在回答用户关于自己一个科研项目的问题。只根据下面给出的材料回答：材料里没有的，就直说不知道，并说可以去哪里看或去问谁。
-引用材料时在那句话末尾写上它的编号，如 [2]；不要编造编号。用中文，先给结论，再给依据，简洁。"""
 
 
 class AskError(Exception):
@@ -157,15 +145,6 @@ def snippet(text: str, hit: list[str], n: int = 260) -> str:
     start = max(0, at - n // 3)
     s = text[start:start + n].strip()
     return ("…" if start else "") + re.sub(r"[ \t]+", " ", s) + ("…" if start + n < len(text) else "")
-
-
-def best_sentences(text: str, hit: list[str], n: int = 2) -> str:
-    """The sentences (or lines) of a piece that hold most of the question's words, in order."""
-    parts = [p.strip() for p in re.split(r"(?<=[。！？.!?])\s+|\n+", text) if len(p.strip()) > 6]
-    if not parts:
-        return text[:200]
-    scored = sorted(range(len(parts)), key=lambda i: -sum(parts[i].lower().count(t) for t in hit))[:n]
-    return " … ".join(parts[i][:240] for i in sorted(scored))
 
 
 def _words(v, depth: int = 0) -> list[str]:
@@ -354,111 +333,6 @@ class Asker:
         return [{"n": i + 1, "kind": d.kind, "title": d.title, "where": d.where, "ref": d.ref, "score": round(sc, 3),
                  "snippet": snippet(d.text, hit), "terms": hit, "_text": d.text}
                 for i, (d, sc, hit) in enumerate(search(self.sources(line_id), q, k))]
-
-    def _path(self, line_id: str) -> Path:
-        return self.s.projects_dir / line_id / "questions.json"
-
-    def questions(self, line_id: str) -> list[dict]:
-        return read_json(self._path(line_id), [])
-
-    def _save(self, line_id: str, rows: list[dict]) -> None:
-        p = self._path(line_id)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        write_json(p, rows[-KEEP:])
-
-    def _put(self, line_id: str, rec: dict) -> dict:
-        with self._lock:
-            rows = [r for r in self.questions(line_id) if r["id"] != rec["id"]] + [rec]
-            rows.sort(key=lambda r: r["n"])
-            self._save(line_id, rows)
-        self.town.bus.publish("question", line_id=line_id, question=rec)
-        return rec
-
-    def ask(self, line_id: str, q: str, to_lead: bool = False) -> dict:
-        q = " ".join(q.split())[:1000]
-        hits = self.search(line_id, q, 8)
-        n = max((r["n"] for r in self.questions(line_id)), default=0) + 1
-        rec = {"id": f"q{n}", "n": n, "q": q, "at": now(), "hits": [{k: v for k, v in h.items() if k != "_text"} for h in hits],
-               "answer": None, "by": None, "status": "done", "lead": None}
-        if to_lead:
-            lead = self.town.cards._lead(line_id)
-            if not lead:
-                raise AskError("这个项目还没有负责人：先在卡片上给它配一个")
-            try:
-                self.town.agents.say(lead["id"], self._lead_message(rec, hits), "queue", origin="papertown")
-            except AgentError as e:
-                raise AskError(str(e)) from e
-            rec |= {"status": "waiting", "lead": {"id": lead["id"], "asked": now()}}
-        rec["answer"], rec["by"] = self._answer(line_id, q, hits)
-        self.town.trace("问答", f"#{self.town.db.val('select seq from lines where id = ?', line_id)} {q[:40]}",
-                        f"找到 {len(hits)} 处" + ("，也问了负责人" if to_lead else ""), 0, line_id=line_id)
-        return self._put(line_id, rec)
-
-    def _answer(self, line_id: str, q: str, hits: list[dict]) -> tuple[str | None, str | None]:
-        """The answer and who gave it: a model's name, or 摘录 (offline: the sentences found, as they are)."""
-        if not hits:
-            return None, None
-        if not self.s.offline:
-            model = self.s.model_strong
-            mats = "\n\n".join(f"[{h['n']}] {KINDS[h['kind']]} · {h['title']} {h['where']}\n{h['_text'][:2400]}" for h in hits)
-            try:
-                t0 = time.monotonic()
-                r = self.town.provider.complete(model=model, system=SYSTEM, turns=[Turn("user", text=f"问题：{q}\n\n材料：\n\n{mats}")], tools=[],
-                                                max_tokens=1500)
-                c = self.town.bank.charge(None, line_id, self.town.provider.name, model, r.usage)
-                self.town.trace("LLM", model, f"问答 · ${c:.4f}", int((time.monotonic() - t0) * 1000), line_id=line_id)
-                if t := r.text.strip():
-                    return t, model
-            except ProviderError as e:
-                self.town.trace("LLM", model, f"问答没答出来，改用摘录：{e}", 0, line_id=line_id)
-        lines, seen = [], set()
-        for h in hits:
-            t = best_sentences(h["_text"], h["terms"])
-            if t not in seen:
-                seen.add(t)
-                lines.append(f"- {t} [{h['n']}]")
-            if len(lines) == 4:
-                break
-        return "\n".join(lines), "摘录"
-
-    def _lead_message(self, rec: dict, hits: list[dict]) -> str:
-        found = [f"[{h['n']}] {KINDS[h['kind']]} · {h['title']} {h['where']}" for h in hits[:6]]
-        return "\n".join(["<question>", f"用户在「进展」页这个项目的对话里点名要你回（{rec['id']}）：", "", rec["q"], "",
-                          *(["Papertown 先检索了一遍，这些地方可能有关（自己核实，不要只靠它们）：", *found, ""] if found else []),
-                          f"是问题，就读完项目后把回答写成一页 HTML，用 `pt reply {rec['id']} 回答.html` 交上来：用户在网页上看，先写结论，再从上往下紧凑地写依据"
-                          f"（怎么写见你说明里的「写给用户看的页面」）；一两句话就能答完的，用 `pt reply {rec['id']} \"你的回答\"`。"
-                          f"是要你办的事，就在工作边界内办或派出去，再用 `pt reply {rec['id']} \"…\"` 说一声做了什么。不要动卡片。", "</question>"])
-
-    def reply(self, agent_id: str, qid: str, text: str, html: str | None = None) -> dict:
-        """The lead's answer to a question it was given: a few words, or a page (with a line about it)."""
-        a = self.town.agents.get(agent_id)
-        if not a or a["role"] != "lead":
-            raise AskError("只有项目负责人回答项目的问题")
-        rec = next((r for r in self.questions(a["line_id"]) if r["id"] == qid), None)
-        if not rec:
-            raise AskError(f"没有问题 {qid}")
-        text, html = text.strip(), (html or "").strip()
-        if not text and not html:
-            raise AskError("回答是空的")
-        by = a.get("model") or "项目负责人"
-        rec["lead"] = (rec.get("lead") or {}) | {"text": text[:12000], "at": now(), "by": by}
-        if html:
-            try:
-                page = self.town.pages.publish(a["line_id"], html, title=title_of(html) or f"回答：{rec['q'][:60]}", kind="answer", by=by,
-                                               agent=agent_id, question=qid)
-            except PageError as e:
-                raise AskError(str(e)) from e
-            rec["lead"] |= {"page": page["id"], "title": page["title"]}
-        rec["status"] = "done"
-        return self._put(a["line_id"], rec)
-
-    def remove(self, line_id: str, qid: str) -> dict:
-        with self._lock:
-            rows = self.questions(line_id)
-            if not any(r["id"] == qid for r in rows):
-                raise AskError(f"没有问题 {qid}")
-            self._save(line_id, [r for r in rows if r["id"] != qid])
-        return {"ok": True}
 
     def recall(self, line_id: str, q: str) -> str:
         """What `pt recall` prints: the pieces found, for an agent of the project."""

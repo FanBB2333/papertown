@@ -80,8 +80,8 @@ def test_the_assistant_reads_the_page_and_asks_before_it_acts(tmp_path):
         first = town.agents.get("assistant")["ext_id"]
         assert c.post("/api/assistant/new").json()["started"] is False
 
-        convs = [{"id": first, "provider": "pi", "model": "m1", "status": "idle", "labels": {"papertown.role": "assistant"}, "last_user": "2026-10-31T10:00:00Z"},
-                 {"id": "other", "provider": "codex", "model": "m2", "status": "idle", "labels": {"papertown.role": "coder"}, "last_user": "2026-10-31T11:00:00Z"}]
+        convs = [{"id": first, "provider": "pi", "model": "m1", "status": "idle", "labels": {"papertown.agent": "assistant", "papertown.role": "assistant"}, "last_user": "2026-10-31T10:00:00Z"},
+                 {"id": "other", "provider": "codex", "model": "m2", "status": "idle", "labels": {"papertown.agent": "coder-line_1", "papertown.role": "coder"}, "last_user": "2026-10-31T11:00:00Z"}]
         town.agents.paseo.conversations = lambda: convs
         h = c.get("/api/assistant/history").json()["conversations"]
         assert [x["id"] for x in h] == [first] and h[0]["title"] == "这个任务怎么了" and not h[0]["current"]

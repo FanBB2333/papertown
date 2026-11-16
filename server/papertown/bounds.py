@@ -231,7 +231,7 @@ class Bounds:
             pt = str(self.town.agents.pt(a)) if a.get("runtime") == "paseo" else None
             msg = "<bounds>\n用户改了你的工作边界，从现在起按这一份做（AGENTS.md 里也更新了）：\n\n" + self.text(a["role"], a["line_id"], pt) + "\n</bounds>"
             try:
-                self.town.agents.say(aid, msg, "queue")
+                self.town.agents.say(aid, msg, "queue", origin="papertown")
             except Exception:  # noqa: BLE001 - it hears about it from AGENTS.md when it starts again
                 pass
 

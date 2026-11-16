@@ -78,6 +78,9 @@ class Paseo:
             raise PaseoError("本机没有找到 Paseo 或 node")
         if not (LINK / "node_modules" / "@getpaseo" / "client").exists():
             raise PaseoError("还没装 Paseo 的 SDK：在 server/papertown/paseo_link 里运行 pnpm install")
+        st = self.status()  # cached; the SDK would wait out its whole timeout for a daemon that is not running
+        if not st["ok"]:
+            raise PaseoError(st["note"])
         env = {**os.environ, "ELECTRON_RUN_AS_NODE": "1"}
         if self.host:
             env["PASEO_WS"] = f"ws://{self.host}/ws"
@@ -169,6 +172,8 @@ class Paseo:
         r = self._cli(*args, *_pairs("--label", labels), *_pairs("--env", env), prompt, timeout=90) or {}
         if not r.get("agentId"):
             raise PaseoError("Paseo 没有返回 agent id")
+        with self._lock:  # the list of conversations now lacks this one
+            self._cache.pop("conversations", None)
         return r
 
     def send(self, agent_id: str, text: str) -> None:

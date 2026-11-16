@@ -100,17 +100,6 @@ class MemoryIn(BaseModel):
     keys: list[str] = Field(min_length=1, max_length=400)
 
 
-class QuestionIn(BaseModel):
-    q: str = Field(min_length=1, max_length=1000)
-    lead: bool = False
-
-
-class ReplyIn(BaseModel):
-    id: str
-    text: str = Field(default="", max_length=20000)
-    html: str | None = Field(default=None, max_length=PAGE_MAX)
-
-
 class PublishIn(BaseModel):
     html: str = Field(min_length=1, max_length=PAGE_MAX)
     title: str = Field(default="", max_length=200)
@@ -610,6 +599,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         agents(town.agents.open_desktop, agent_id)
         return {"ok": True}
 
+    # an agent's conversations in Paseo: the one open now, a new one, an earlier one
+    def found(agent_id: str) -> str:
+        if not town.agents.get(agent_id):
+            raise HTTPException(404, "没有这个员工")
+        return agent_id
+
+    @app.get("/api/agents/{agent_id}/conversations")
+    def agent_conversations(agent_id: str):
+        return {"conversations": agents(town.agents.conversations, found(agent_id))}
+
+    @app.post("/api/agents/{agent_id}/conversations/new")
+    def agent_conversation_new(agent_id: str):
+        if agent_id == ASSISTANT:  # it also closes its open asks
+            return assistant(town.assistant.reset)
+        return agents(town.agents.fresh, found(agent_id))
+
+    @app.post("/api/agents/{agent_id}/conversations/{ext_id}")
+    def agent_conversation_resume(agent_id: str, ext_id: str):
+        if agent_id == ASSISTANT:
+            return assistant(town.assistant.resume, ext_id)
+        return agents(town.agents.resume, found(agent_id), ext_id)
+
     @app.get("/api/llm")
     def llm():
         return town.llm()
@@ -653,7 +664,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/agents/{agent_id}/brief")
     def agent_brief(agent_id: str):
-        return agents(town.agents.say, agent_id, agents(town.agents.brief, agent_id))
+        return agents(town.agents.say, agent_id, agents(town.agents.brief, agent_id), None, "papertown")
 
     @app.post("/api/agents/{agent_id}/abort")
     def agent_abort(agent_id: str):
@@ -669,7 +680,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def bounds_save(body: BoundsIn):
         return mapped(BoundsError)(town.bounds.save, body.line_id, body.role, body.rules, body.off)
 
-    # the 进展 page: each project's card, lead, reports, questions, memory and pages
+    # the 进展 page: each project's card, lead, reports, memory, search and pages
     @app.get("/api/cards")
     def cards():
         return {"cards": town.cards.all(), "layout": town.cards.layout()}
@@ -717,18 +728,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/lines/{line_id}/search")
     def line_search(line_id: str, q: str, k: int = 8):
         return {"hits": [{x: v for x, v in h.items() if x != "_text"} for h in known(town.asker.search, line_id, q, min(max(k, 1), 30))]}
-
-    @app.get("/api/lines/{line_id}/questions")
-    def questions(line_id: str):
-        return {"questions": town.asker.questions(line_id), "lead": bool(town.cards._lead(line_id)), "offline": town.s.offline}
-
-    @app.post("/api/lines/{line_id}/questions")
-    def question_ask(line_id: str, body: QuestionIn):
-        return known(town.asker.ask, line_id, body.q, body.lead)
-
-    @app.delete("/api/lines/{line_id}/questions/{qid}")
-    def question_remove(line_id: str, qid: str):
-        return known(town.asker.remove, line_id, qid)
 
     @app.get("/api/lines/{line_id}/pages")
     def pages(line_id: str):
@@ -939,13 +938,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not a["line_id"]:
             raise HTTPException(400, "你没有自己的项目：检索要在一个项目里")
         return {"text": known(town.asker.recall, a["line_id"], q)}
-
-    @app.post("/api/bridge/{agent_id}/reply")
-    def bridge_reply(agent_id: str, body: ReplyIn, x_papertown_token: str | None = Header(default=None)):
-        bridged(agent_id, x_papertown_token)
-        r = known(town.asker.reply, agent_id, body.id, body.text, body.html)
-        page = f"，页面是「{r['lead']['title']}」" if r["lead"].get("page") else ""
-        return {"text": f"回答交上去了（{r['id']}{page}），用户在「进展」页的提问里会看到。"}
 
     @app.post("/api/bridge/{agent_id}/publish")
     def bridge_publish(agent_id: str, body: PublishIn, x_papertown_token: str | None = Header(default=None)):
