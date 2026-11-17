@@ -8,19 +8,24 @@
 // watching, the spec, the clamp, the way to the human gate) show for the node under the pointer or the open one, in
 // the view they belong to, or all at once when you ask (更多). Drag a node to move it, drag from the dot on its rim to wire it to another (or to empty
 // space, to make a new node wired to it), double-click empty space for a new one, double-click a line to write on
-// it, right-click anything for what can be done with it. The bar narrows the loop to what blocks or warns, to the
+// it, right-click anything for what can be done with it. A line that would pass through a node it does not join goes
+// round it (avoid.ts). The keyboard does what it does elsewhere: copy, cut,
+// paste and duplicate tasks and notes (text from outside pastes as a note), Delete, select all, arrows to nudge,
+// undo for what can be taken back (moves, lines, new and pasted nodes, nodes taken off). The bar narrows the loop to what blocks or warns, to the
 // hard side or the soft side, or lays out 前后对比; the open node's inspector is beside it (CanvasSide.tsx).
 // How much the nodes say follows the zoom: the flow carries the zoom (--z), by which canvas.css sizes type, and
 // one of three faces (data-lod): everything, no small print, or a name and a figure. A face changes at a threshold,
-// with a short fade, never part-way, so the loop reads whole wherever the zoom stops. Loaded on demand, with the
-// graph library.
+// with a short fade, never part-way, so the loop reads whole wherever the zoom stops. As on a map, the furthest out
+// is the whole loop filling the window: the zoom stops there, the loop cannot be dragged out of sight, and a view
+// that shows all of it keeps showing all of it as the window (or the inspector beside it) changes its size. Loaded
+// on demand, with the graph library.
 
-import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Popover } from '@cloudflare/kumo';
 import {
   Background, BackgroundVariant, BaseEdge, ConnectionMode, Controls, EdgeLabelRenderer, getBezierPath, MiniMap, Panel, Position,
-  ReactFlow, ReactFlowProvider, useEdgesState, useInternalNode, useNodesInitialized, useNodesState, useOnViewportChange, useReactFlow, ViewportPortal,
+  getViewportForBounds, ReactFlow, ReactFlowProvider, useEdgesState, useInternalNode, useNodesInitialized, useNodesState, useOnViewportChange, useReactFlow, ViewportPortal,
   type Connection, type Edge, type EdgeProps, type InternalNode, type OnConnectEnd,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -34,12 +39,19 @@ import { status, type Act } from './Checks';
 import { LoopReport } from './LoopReport';
 import { LoopSummary, SIZE, useCanvas, wanted } from './LoopCard';
 import { kindOf, mine, nodeTypes, OpsCtx, type FNode, type Ops } from './LoopNodes';
+import { around, crosses, halfway, rounded, type Box, type Pt } from './avoid';
 import { gateLook, needs, side } from './loop';
 import type { ConsoleTarget } from './Project';
 
 type FEdge = Edge<{ bow: boolean; arrow: boolean; tee: boolean; step: boolean; hidden: boolean; label: string; tag: string; tone: string }>;
 type Filter = 'all' | 'todo' | 'hard' | 'soft';
 type Item = { icon: IconName; label: string; run: () => void; danger?: boolean; off?: boolean; key?: string } | null;
+type Spots = Record<string, [number, number]>;
+// what was copied: tasks and notes, to paste as new ones, and the same as text for anywhere else
+interface Held { text: string; items: { kind: 'task' | 'note'; title?: string; text?: string; to?: TaskTo; dx: number; dy: number }[] }
+const MOD = navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl ';
+const copyable = (n: CanvasNode) => n.kind === 'task' || n.kind === 'note';
+const spots = (ns: CanvasNode[]): Spots => Object.fromEntries(ns.map(n => [n.id, [n.x, n.y]]));
 interface Prefs { map: boolean; snap: boolean; hint: boolean; legend: boolean; lines: boolean }
 // which of the quiet lines show: all of them, a node's own (under the pointer, or open), a view's
 interface Shown { all: boolean; hot: string | null; sel: string | null; filter: Filter }
@@ -81,7 +93,10 @@ function fixSeed(n: CanvasNode): Draft['seed'] {
   return { title: `${tr('纠偏：')}${trx(c.title)}`.slice(0, 58), text: lines.join('\n'), to };
 }
 
-// ---------- lines: from rim to rim, wherever the two nodes are ----------
+// ---------- lines: from rim to rim, wherever the two nodes are, and round the nodes in between ----------
+
+const BoxCtx = createContext<Box[]>([]); // where every node is, for the lines to keep off
+const boxOf = (n: InternalNode): Box => ({ id: n.id, x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, w: n.measured.width ?? 0, h: n.measured.height ?? 0 });
 
 const centre = (n: InternalNode) => ({ x: n.internals.positionAbsolute.x + (n.measured.width ?? 0) / 2, y: n.internals.positionAbsolute.y + (n.measured.height ?? 0) / 2 });
 function rim(n: InternalNode, to: { x: number; y: number }) {
@@ -94,10 +109,10 @@ const TURN: Record<Position, number> = { [Position.Left]: 0, [Position.Top]: 90,
 
 function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
   const a = useInternalNode(source), b = useInternalNode(target);
-  const o = useContext(OpsCtx);
+  const o = useContext(OpsCtx), boxes = useContext(BoxCtx);
   if (!a || !b) return null;
   const ca = centre(a), cb = centre(b);
-  let path: string, lx: number, ly: number, end: { x: number; y: number }, turn: number;
+  let path: string, lx: number, ly: number, end: { x: number; y: number }, turn: number, drawn: Pt[]; // drawn: the line as points, to see what it passes through
   if (data?.bow) { // a loop back, or the way back between two nodes already joined: an arc beside the straight line
     const len = Math.hypot(cb.x - ca.x, cb.y - ca.y) || 1, bend = Math.min(110, len * 0.3);
     const ctrl = { x: (ca.x + cb.x) / 2 + ((cb.y - ca.y) / len) * bend * 2, y: (ca.y + cb.y) / 2 - ((cb.x - ca.x) / len) * bend * 2 };
@@ -105,17 +120,38 @@ function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
     path = `M${p.x},${p.y} Q${ctrl.x},${ctrl.y} ${q.x},${q.y}`;
     lx = 0.25 * p.x + 0.5 * ctrl.x + 0.25 * q.x; ly = 0.25 * p.y + 0.5 * ctrl.y + 0.25 * q.y;
     end = q; turn = (Math.atan2(q.y - ctrl.y, q.x - ctrl.x) * 180) / Math.PI;
+    drawn = Array.from({ length: 13 }, (_, i) => { const t = i / 12, s = 1 - t; return { x: s * s * p.x + 2 * s * t * ctrl.x + t * t * q.x, y: s * s * p.y + 2 * s * t * ctrl.y + t * t * q.y }; });
   } else if (data?.step && cb.y - ca.y - ((a.measured.height ?? 0) + (b.measured.height ?? 0)) / 2 > 56 && Math.abs(cb.x - ca.x) > 160) {
     // the flow going down to the next row: out of the bottom, along the gap between the rows, into the top
     const p = { x: ca.x, y: ca.y + (a.measured.height ?? 0) / 2 + 3 }, q = { x: cb.x, y: cb.y - (b.measured.height ?? 0) / 2 - 3 };
     const mid = (p.y + q.y) / 2, r = 16, dir = Math.sign(q.x - p.x);
     path = `M${p.x},${p.y} L${p.x},${mid - r} Q${p.x},${mid} ${p.x + dir * r},${mid} L${q.x - dir * r},${mid} Q${q.x},${mid} ${q.x},${mid + r} L${q.x},${q.y}`;
     lx = (p.x + q.x) / 2; ly = mid; end = q; turn = TURN[Position.Top];
+    drawn = [p, { x: p.x, y: mid }, { x: q.x, y: mid }, q];
   } else {
     const p = rim(a, cb), q = rim(b, ca);
-    end = q; turn = TURN[q.side];
-    if (data?.arrow || data?.tee) [path, lx, ly] = getBezierPath({ sourceX: p.x, sourceY: p.y, sourcePosition: p.side, targetX: q.x, targetY: q.y, targetPosition: q.side });
-    else { path = `M${p.x},${p.y} L${q.x},${q.y}`; lx = (p.x + q.x) / 2; ly = (p.y + q.y) / 2; }
+    end = q; turn = TURN[q.side]; drawn = [p, q];
+    if (data?.arrow || data?.tee) {
+      [path, lx, ly] = getBezierPath({ sourceX: p.x, sourceY: p.y, sourcePosition: p.side, targetX: q.x, targetY: q.y, targetPosition: q.side });
+      const c = path.match(/-?\d+(\.\d+)?(e-?\d+)?/g)?.map(Number) ?? [];
+      if (c.length === 8) drawn = Array.from({ length: 15 }, (_, i) => {
+        const t = i / 14, s = 1 - t;
+        return { x: s * s * s * c[0] + 3 * s * s * t * c[2] + 3 * s * t * t * c[4] + t * t * t * c[6], y: s * s * s * c[1] + 3 * s * s * t * c[3] + 3 * s * t * t * c[5] + t * t * t * c[7] };
+      });
+    } else { path = `M${p.x},${p.y} L${q.x},${q.y}`; lx = (p.x + q.x) / 2; ly = (p.y + q.y) / 2; }
+  }
+  // through a node it does not join: round it instead, by the gaps between the nodes
+  const others = data?.hidden ? [] : boxes.filter(x => x.id !== source && x.id !== target);
+  if (others.length && crosses(drawn, others, 12)) {
+    const way = around(ca, cb, others);
+    if (way) {
+      const ba = boxOf(a), bb = boxOf(b), inA = (p: Pt) => p.x > ba.x - 4 && p.x < ba.x + ba.w + 4 && p.y > ba.y - 4 && p.y < ba.y + ba.h + 4, inB = (p: Pt) => p.x > bb.x - 4 && p.x < bb.x + bb.w + 4 && p.y > bb.y - 4 && p.y < bb.y + bb.h + 4;
+      const via = way.slice(1, -1);
+      while (via.length && inA(via[0])) via.shift();
+      while (via.length && inB(via[via.length - 1])) via.pop();
+      const p = rim(a, via[0] ?? cb), q = rim(b, via[via.length - 1] ?? ca), pts = [p, ...via, q], before = pts[pts.length - 2], h = halfway(pts);
+      path = rounded(pts); lx = h.x; ly = h.y; end = q; turn = (Math.atan2(q.y - before.y, q.x - before.x) * 180) / Math.PI;
+    }
   }
   const text = data?.label ?? '', at = { transform: `translate(-50%,-50%) translate(${lx}px,${ly}px)` };
   return (
@@ -147,7 +183,7 @@ const edgeTypes = { wire: Wire };
 function toNodes(v: CanvasView, sel: string | null, draft: Draft | null, lit: Set<string> | null, prev: FNode[], moved: Record<string, [number, number]>): FNode[] {
   const old = new Map(prev.map(p => [p.id, p]));
   const out: FNode[] = v.nodes.map(n => ({
-    ...(old.get(n.id) ?? {}), id: n.id, type: n.kind, position: { x: moved[n.id]?.[0] ?? n.x, y: moved[n.id]?.[1] ?? n.y }, data: { n }, selected: n.id === sel,
+    ...(old.get(n.id) ?? {}), id: n.id, type: n.kind, position: { x: moved[n.id]?.[0] ?? n.x, y: moved[n.id]?.[1] ?? n.y }, data: { n }, selected: sel ? n.id === sel : !!old.get(n.id)?.selected,
     className: lit && !lit.has(n.id) ? 'dim' : '',
   }));
   if (draft) {
@@ -375,10 +411,39 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     if (el.dataset.lod !== now) el.dataset.lod = now;
   };
   useOnViewportChange({ onChange: vp => scale(vp.zoom) });
-  const fit = (ms = 300) => rf.fitView({ padding: 0.08, maxZoom: 1, duration: ms });
+  // the whole loop: its lanes and whatever has been dragged beyond them
+  const frame = useMemo(() => {
+    if (!v?.nodes.length) return null;
+    const x0 = Math.min(...v.nodes.map(n => n.x)) - 70, x1 = Math.max(...v.nodes.map(n => n.x + SIZE[n.kind][0])) + 70;
+    const y0 = Math.min(...v.lanes.map(l => l.y0), ...v.nodes.map(n => n.y - 30)), y1 = Math.max(...v.lanes.map(l => l.y1), ...v.nodes.map(n => n.y + SIZE[n.kind][1] + 30));
+    return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+  }, [v]);
+  const frameKey = frame ? `${frame.x},${frame.y},${frame.width},${frame.height}` : '';
+  const [box, setBox] = useState({ w: 0, h: 0 });
   useEffect(() => {
-    if (ready && !fitted.current && nodes.length) { fitted.current = true; rf.fitView({ padding: 0.08, maxZoom: 1 }).then(() => scale(rf.getZoom())); }
-  }, [ready, nodes.length, rf]);
+    const el = wrap.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setBox(b => (b.w === el.clientWidth && b.h === el.clientHeight ? b : { w: el.clientWidth, h: el.clientHeight })));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // all of it in the window: where the loop opens, what 适应窗口 goes back to, and the furthest out the zoom goes
+  const whole = useMemo(() => (frame && box.w && box.h ? getViewportForBounds(frame, box.w, box.h, 0.02, 1.25, 0.03) : null), [frameKey, box.w, box.h]); // eslint-disable-line react-hooks/exhaustive-deps
+  const floor = Math.min(1, whole?.zoom ?? 0.12);
+  const extent = useMemo<[[number, number], [number, number]] | undefined>(() => frame
+    ? [[frame.x - frame.width * 0.35, frame.y - frame.height * 0.35], [frame.x + frame.width * 1.35, frame.y + frame.height * 1.35]] : undefined, [frameKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const auto = useRef(true); // showing all of it, until you zoom or pan yourself
+  const fit = (ms = 300) => {
+    if (!whole) return;
+    auto.current = true;
+    rf.setViewport(whole, { duration: ms });
+    if (!ms) scale(whole.zoom);
+  };
+  useEffect(() => {
+    if (!ready || !whole || !nodes.length) return;
+    if (!fitted.current) { fitted.current = true; fit(0); }
+    else if (auto.current || rf.getZoom() < floor - 0.002) fit(200);
+  }, [ready, whole, nodes.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const act: Act = async (fn, done) => {
     setBusy(true);
@@ -388,7 +453,130 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       if (done) toast(done);
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   };
-  const begin = (d: Draft) => { setSel(null); setReport(false); setDraft(d); };
+  // ---------- what the keyboard and the menus share ----------
+  // what can be taken back, newest last: each is how to put things as they were
+  const undos = useRef<{ what: string; run: () => Promise<unknown> }[]>([]);
+  const remember = (what: string, run: () => Promise<unknown>) => { undos.current = [...undos.current.slice(-39), { what, run }]; };
+  const undo = () => {
+    const u = undos.current.pop();
+    if (u) act(u.run, tr('撤销了：{0}', u.what)); else toast(tr('没有可以撤销的'));
+  };
+  // where nodes are: here at once, on the server after
+  const before = useRef<Spots>({}), saving = useRef<{ at: Spots; timer: number } | null>(null);
+  const put = (at: Spots) => {
+    Object.assign(moved.current, at);
+    setV(x => x && { ...x, nodes: x.nodes.map(n => (at[n.id] ? { ...n, x: at[n.id][0], y: at[n.id][1] } : n)) });
+  };
+  const store = (at: Spots) => api.moveNodes(line.id, at).catch(e => toast((e as Error).message))
+    .finally(() => { for (const k of Object.keys(at)) if (moved.current[k] === at[k]) delete moved.current[k]; });
+  const place = (at: Spots) => { put(at); return store(at); };
+  // the arrows: a step at a time, saved once the keys rest, taken back as one move
+  const nudge = (ns: CanvasNode[], dx: number, dy: number) => {
+    if (!saving.current) { const was = spots(ns); remember(tr('移动'), async () => { await place(was); }); }
+    const at: Spots = Object.fromEntries(ns.map(n => [n.id, [n.x + dx, n.y + dy]]));
+    put(at);
+    window.clearTimeout(saving.current?.timer);
+    const all = { ...saving.current?.at, ...at };
+    saving.current = { at: all, timer: window.setTimeout(() => { saving.current = null; store(all); }, 350) };
+  };
+  useEffect(() => () => { if (saving.current) { window.clearTimeout(saving.current.timer); api.moveNodes(line.id, saving.current.at).catch(() => {}); } }, [line.id]);
+  // the selection: the open node, or what is selected on the graph (a box drawn with Shift, ⌘-clicks, select all)
+  const picked = (): CanvasNode[] => {
+    const ids = new Set(nodes.filter(n => n.selected && n.id !== NEW).map(n => n.id));
+    if (sel) ids.add(sel);
+    return (v?.nodes ?? []).filter(n => ids.has(n.id));
+  };
+  const select = (ids: string[] | 'all' | null) => {
+    setSel(ids && ids !== 'all' && ids.length === 1 ? ids[0] : null);
+    setNodes(ns => ns.map(n => ({ ...n, selected: n.id !== NEW && (ids === 'all' || !!ids?.includes(n.id)) })));
+  };
+  // new nodes without the form: pasted, duplicated
+  const make = async (items: NewNode[], what: string, done: string) => {
+    if (!items.length) return;
+    setBusy(true);
+    try {
+      const ids: string[] = [];
+      let x: CanvasView | null = null;
+      for (const b of items) { x = await api.addNode(line.id, b); if (x.added) ids.push(x.added); }
+      if (x) setV(x);
+      setDraft(null);
+      setReport(false);
+      remember(what, async () => { let y: CanvasView | undefined; for (const id of ids) y = await api.dropNode(line.id, id); return y; });
+      setTimeout(() => select(ids), 60);
+      toast(done);
+    } catch (e) { toast((e as Error).message); reload(); } finally { setBusy(false); }
+  };
+  const held = useRef<Held | null>(null), pointer = useRef<{ x: number; y: number } | null>(null), landed = useRef({ x: 0, y: 0, n: 0 });
+  const copy = (ns: CanvasNode[], quiet = false) => {
+    if (!ns.length) return;
+    const own = ns.filter(copyable), x0 = Math.min(...own.map(n => n.x)), y0 = Math.min(...own.map(n => n.y));
+    const text = ns.map(n => (n.kind === 'note' ? n.text ?? '' : [label(n), n.text].filter(Boolean).join('\n'))).join('\n\n');
+    held.current = own.length ? { text, items: own.map(n => ({ kind: n.kind as 'task' | 'note', title: n.title, text: n.text, to: n.to, dx: n.x - x0, dy: n.y - y0 })) } : null;
+    navigator.clipboard?.writeText(text).catch(() => {});
+    if (!quiet) toast(own.length ? tr('复制了 {0} 个节点', own.length) : tr('复制了文字（只有任务和备注能粘贴成新节点）'));
+  };
+  // where a paste lands: under the pointer (or where the menu was opened), a step further each time it has not moved
+  const landing = (at?: { x: number; y: number }) => {
+    const s = at ?? pointer.current, p = s ? rf.screenToFlowPosition(s) : middle();
+    const same = Math.abs(p.x - landed.current.x) < 2 && Math.abs(p.y - landed.current.y) < 2;
+    landed.current = { x: p.x, y: p.y, n: same ? landed.current.n + 1 : 0 };
+    return { x: Math.round(p.x - 40 + landed.current.n * 28), y: Math.round(p.y - 20 + landed.current.n * 28) };
+  };
+  const paste = (at?: { x: number; y: number }) => {
+    const h = held.current;
+    if (!h) return false;
+    const o = landing(at);
+    make(h.items.map(i => ({ kind: i.kind, x: o.x + i.dx, y: o.y + i.dy, title: i.title, text: i.text, to: i.to })), tr('粘贴'), tr('粘贴了 {0} 个节点', h.items.length));
+    return true;
+  };
+  const pasteText = (text: string, at?: { x: number; y: number }) => {
+    const o = landing(at);
+    make([{ kind: 'note', x: o.x, y: o.y, text: text.trim().slice(0, 2000) }], tr('粘贴'), tr('粘贴成了一张备注'));
+  };
+  const pasteAny = async (at?: { x: number; y: number }) => { // from a menu, where there is no paste event to read
+    if (paste(at)) return;
+    try {
+      const t = await navigator.clipboard.readText();
+      if (t.trim()) pasteText(t, at); else toast(tr('剪贴板里没有可以粘贴的'));
+    } catch { toast(tr('读不到剪贴板，按 {0}V 粘贴', MOD)); }
+  };
+  const dup = (ns: CanvasNode[]) => {
+    const own = ns.filter(copyable);
+    if (!own.length) { toast(tr('只有任务和备注能复制成新节点')); return; }
+    const one = own.length === 1;
+    make(own.map(n => ({ kind: n.kind as 'task' | 'note', x: n.x + (one ? 36 : 44), y: n.y + (one ? SIZE[n.kind][1] + 28 : 44), title: n.title, text: n.text, to: n.to })),
+      tr('复制一份'), tr('复制了 {0} 个节点', own.length));
+  };
+  const snip = (ns: CanvasNode[]) => {
+    const own = ns.filter(copyable);
+    if (!own.length) { toast(tr('只有任务和备注能剪切')); return; }
+    copy(own, true);
+    remove(own, false, tr('剪切了 {0} 个节点，{1}V 粘贴', own.length, MOD));
+  };
+  // several nodes in a line
+  const align = (ns: CanvasNode[], how: 'left' | 'top' | 'row' | 'column') => {
+    if (ns.length < 2) return;
+    const by = how === 'left' || how === 'column' ? 'y' : 'x', sorted = [...ns].sort((a, b) => a[by] - b[by]);
+    const first = sorted[0], last = sorted[sorted.length - 1], k = sorted.length - 1;
+    const at: Spots = Object.fromEntries(sorted.map((n, i) => [n.id,
+      how === 'left' ? [Math.min(...ns.map(x => x.x)), n.y] : how === 'top' ? [n.x, Math.min(...ns.map(x => x.y))]
+        : how === 'row' ? [Math.round(first.x + ((last.x - first.x) * i) / k), n.y] : [n.x, Math.round(first.y + ((last.y - first.y) * i) / k)]]));
+    const was = spots(ns);
+    remember(tr('对齐'), async () => { await place(was); });
+    place(at);
+  };
+  const centre = (n: CanvasNode) => {
+    auto.current = false;
+    rf.setCenter(n.x + SIZE[n.kind][0] / 2, n.y + SIZE[n.kind][1] / 2, { zoom: Math.max(rf.getZoom(), 0.8), duration: 300 });
+  };
+  const zoomTo = (how: 'in' | 'out' | 'one') => {
+    auto.current = false;
+    if (how === 'one') rf.zoomTo(1, { duration: 200 }); else if (how === 'in') rf.zoomIn({ duration: 150 }); else rf.zoomOut({ duration: 150 });
+  };
+
+  const boxes = useMemo<Box[]>(() => nodes.filter(n => n.id !== NEW).map(n => ({ id: n.id, x: n.position.x, y: n.position.y,
+    w: n.measured?.width ?? SIZE[n.data.n.kind][0], h: n.measured?.height ?? SIZE[n.data.n.kind][1] })), [nodes]);
+  const begin = (d: Draft) => { select(null); setReport(false); setDraft(d); };
   const pick = (id: string) => {
     setDraft(null);
     setReport(false);
@@ -401,6 +589,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       const bottom = side && side.left <= box.left + 1 ? side.top : box.bottom; // on a phone the inspector lies over the canvas's lower part
       if (at.x < box.left + 40 || at.x > box.right - 40 || at.y < box.top + 40 || at.y > bottom - 40) {
         const zoom = Math.max(rf.getZoom(), 0.6);
+        auto.current = false;
         rf.setViewport({ x: box.width / 2 - cx * zoom, y: (bottom - box.top) / 2 - cy * zoom, zoom }, { duration: 300 });
       }
     }, 320);
@@ -422,21 +611,38 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       setV(x);
       setDraft(null);
       if (x.added) setSel(x.added);
+      const id = x.added;
+      if (id && !b.send) remember(tr('新建节点'), () => api.dropNode(line.id, id));
       toast(b.kind === 'task' && b.send ? tr('加上了，也发给它了') : tr('加上了'));
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
-  const drop = (n: CanvasNode) => {
-    if (mine(n) && !confirm(tr('删掉「{0}」？', label(n)))) return;
-    act(() => api.dropNode(line.id, n.id), mine(n) ? tr('删掉了') : tr('拿掉了，可以在「更多」里放回来')).then(() => setSel(s => (s === n.id ? null : s)));
+  // one node of your own to delete asks first; what Papertown put on the loop is only taken off, and can come back
+  const remove = (ns: CanvasNode[], ask = true, done?: string) => {
+    if (!ns.length) return;
+    const own = ns.filter(mine), rest = ns.filter(n => !mine(n));
+    if (ask && own.length && !confirm(own.length === 1 ? tr('删掉「{0}」？', label(own[0])) : tr('删掉这 {0} 个任务、备注或自己加的检查？', own.length))) return;
+    act(async () => { let x: CanvasView | undefined; for (const n of ns) x = await api.dropNode(line.id, n.id); return x; },
+      done ?? (rest.length ? tr('拿掉了，可以在「更多」里放回来') : tr('删掉了'))).then(() => setSel(s => (s && ns.some(n => n.id === s) ? null : s)));
+    if (rest.length) remember(tr('拿掉节点'), async () => { let x: CanvasView | undefined; for (const n of rest) x = await api.restoreNode(line.id, n.id); return x; });
   };
-  const cut = (edgeId: string) => { if (!virtual(edgeId)) act(() => api.disconnect(line.id, edgeId)); };
+  const drop = (n: CanvasNode) => remove([n]);
+  const cut = (edgeId: string) => {
+    const e = v?.edges.find(x => x.id === edgeId);
+    if (!e || virtual(edgeId)) return;
+    act(() => api.disconnect(line.id, edgeId));
+    if (!e.kind) remember(tr('断开连线'), async () => { // only a line of your own comes back as it was
+      const x = await api.connect(line.id, e.source, e.target), back = x.edges.find(y => y.source === e.source && y.target === e.target);
+      return e.label && back ? api.labelEdge(line.id, back.id, e.label) : x;
+    });
+  };
   const gate = (stage: string, what: 'open' | 'close' | 'rework') =>
     act(() => api.gateAct(line.id, stage, what), what === 'rework' ? tr('修补单发出去了') : undefined).then(() => { if (what !== 'rework') setTimeout(() => fit(), 80); });
   const ops: Ops = {
     busy, agents: v?.agents ?? null, r, v, editing, edit: setEditing, cut, gate,
     relabel: (edgeId, text) => {
       setEditing(null);
-      if ((v?.edges.find(e => e.id === edgeId)?.label ?? '') !== text.trim()) act(() => api.labelEdge(line.id, edgeId, text.trim()));
+      const was = v?.edges.find(e => e.id === edgeId)?.label ?? '';
+      if (was !== text.trim()) { act(() => api.labelEdge(line.id, edgeId, text.trim())); remember(tr('改线上的字'), () => api.labelEdge(line.id, edgeId, was)); }
     },
     fix: n => {
       if (n.kind === 'gate' && n.gate) gate(n.gate.stage, 'rework');
@@ -446,11 +652,19 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     ask: n => { if (n.check) act(() => api.askCheck(line.id, n.check!.id), tr('已经发给负责人，它判断完会出现在这里')); },
     send: n => { act(() => api.sendNode(line.id, n.id), tr('发给{0}了', WHO[n.to ?? 'lead'])); },
     beside: (n, k) => beside(n, k),
-    dup: n => begin({ kind: n.kind === 'note' ? 'note' : 'task', x: n.x + 36, y: n.y + SIZE[n.kind][1] + 28, link: null, seed: { title: n.title, text: n.text, to: n.to } }),
+    dup: n => dup([n]),
     drop,
   };
 
-  const onConnect = (c: Connection) => { if (c.source && c.target && c.target !== NEW) act(() => api.connect(line.id, c.source, c.target)); };
+  const onConnect = (c: Connection) => {
+    const { source, target } = c;
+    if (!source || !target || target === NEW) return;
+    act(async () => {
+      const had = new Set(v?.edges.map(e => e.id)), x = await api.connect(line.id, source, target), e = x.edges.find(y => !had.has(y.id));
+      if (e) remember(tr('连线'), () => api.disconnect(line.id, e.id));
+      return x;
+    });
+  };
   const onConnectEnd: OnConnectEnd = (e, s) => {
     if (s.toNode || !s.fromNode || s.fromNode.id === NEW) return;
     const pt = 'changedTouches' in e ? e.changedTouches[0] : e;
@@ -462,14 +676,15 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     const ghost = all.find(n => n.id === NEW);
     if (ghost) setDraft(d => d && { ...d, x: Math.round(ghost.position.x), y: Math.round(ghost.position.y) });
     if (!real.length) return;
-    const at = Object.fromEntries(real.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)] as [number, number]]));
-    Object.assign(moved.current, at);
-    setV(x => x && { ...x, nodes: x.nodes.map(n => (at[n.id] ? { ...n, x: at[n.id][0], y: at[n.id][1] } : n)) });
-    api.moveNodes(line.id, at).catch(e => toast((e as Error).message))
-      .finally(() => { for (const k of Object.keys(at)) if (moved.current[k] === at[k]) delete moved.current[k]; });
+    const at: Spots = Object.fromEntries(real.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)]]));
+    const was = Object.fromEntries(Object.entries(before.current).filter(([id]) => at[id]));
+    if (Object.keys(was).some(id => was[id][0] !== at[id][0] || was[id][1] !== at[id][1])) remember(tr('移动'), async () => { await place(was); });
+    place(at);
   };
   const tidy = () => {
     if (!confirm(tr('按回路规整：工序、卡口、巡检、软限制和硬边界放回各自的泳道，修补单放到卡口下面？你的任务、备注和画的线不动。'))) return;
+    const was = spots(v?.nodes ?? []);
+    remember(tr('按回路规整'), async () => { await place(was); });
     act(() => api.tidyCanvas(line.id)).then(() => setTimeout(() => fit(), 60));
   };
   const runAll = () => act(() => api.runChecks(line.id), tr('查完了'));
@@ -477,31 +692,80 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   // right-click: what can be done with the thing under the pointer
   const menuAt = (e: { clientX: number; clientY: number; preventDefault: () => void }, items: Item[]) => {
     e.preventDefault();
-    const rows = items.filter(Boolean).length;
-    setCtx({ x: Math.min(e.clientX, window.innerWidth - 232), y: Math.min(e.clientY, window.innerHeight - rows * 34 - 28), items });
+    const tall = Math.min(items.filter(Boolean).length * 33 + items.filter(x => !x).length * 9 + 14, window.innerHeight - 24);
+    setCtx({ x: Math.min(e.clientX, window.innerWidth - 262), y: Math.max(12, Math.min(e.clientY, window.innerHeight - tall - 12)), items });
   };
-  const nodeItems = (n: CanvasNode): Item[] => [
-    { icon: 'eye', label: tr('看详情'), run: () => pick(n.id) },
-    ...(n.gate?.state === 'block' ? [{ icon: 'refresh', label: tr('派修补单'), run: () => gate(n.gate!.stage, 'rework') } as Item] : []),
-    ...(n.gate && n.gate.checks.length > 1 ? [{ icon: 'split', label: n.gate.open ? tr('收回卡口组') : tr('展开为 {0} 个独立节点', n.gate.checks.length), run: () => gate(n.gate!.stage, n.gate!.open ? 'close' : 'open') } as Item] : []),
-    ...(n.check?.kind === 'soft' && ['fail', 'warn'].includes(status(n.check)) ? [{ icon: 'wand', label: tr('派人纠偏'), run: () => ops.fix(n) } as Item] : []),
-    ...(n.check?.on && n.check.kind === 'soft' ? [{ icon: 'send', label: tr('让负责人现在查'), run: () => ops.ask(n), off: !v?.lead } as Item] : []),
-    ...(n.kind === 'task' ? [{ icon: 'send', label: n.status === 'draft' ? tr('发给{0}', WHO[n.to ?? 'lead']) : tr('再发一次'), run: () => ops.send(n), off: !v?.agents[n.to ?? 'lead'].there } as Item] : []),
+  const setTask = (n: CanvasNode, to: 'draft' | 'done') => act(() => api.setNode(line.id, n.id, { status: to }));
+  const toggle = (n: CanvasNode) => { if (n.check) act(() => api.setCheck(line.id, n.check!.id, { on: !n.check!.on }), n.check.on ? tr('关掉了') : tr('打开了')); };
+  const several = (ns: CanvasNode[]): Item[] => [
+    { icon: 'copy', label: tr('复制 {0} 个节点', ns.length), run: () => copy(ns), key: `${MOD}C` },
+    { icon: 'split', label: tr('剪切'), run: () => snip(ns), key: `${MOD}X`, off: !ns.some(copyable) },
+    { icon: 'stack', label: tr('复制一份'), run: () => dup(ns), key: `${MOD}D`, off: !ns.some(copyable) },
     null,
-    { icon: 'plus', label: tr('在它旁边派任务'), run: () => beside(n, 'task') },
-    { icon: 'plus', label: tr('在它旁边加备注'), run: () => beside(n, 'note') },
-    ...(n.kind === 'task' || n.kind === 'note' ? [{ icon: 'copy', label: tr('复制一个'), run: () => ops.dup(n) } as Item] : []),
+    { icon: 'rows', label: tr('左对齐'), run: () => align(ns, 'left') },
+    { icon: 'rows', label: tr('顶部对齐'), run: () => align(ns, 'top') },
+    { icon: 'cards', label: tr('横向等距'), run: () => align(ns, 'row'), off: ns.length < 3 },
+    { icon: 'cards', label: tr('纵向等距'), run: () => align(ns, 'column'), off: ns.length < 3 },
     null,
-    { icon: 'close', label: mine(n) ? tr('删掉') : tr('从回路上拿掉'), run: () => drop(n), danger: true },
+    { icon: 'close', label: tr('删掉这 {0} 个', ns.length), run: () => remove(ns), danger: true, key: '⌫' },
   ];
+  const nodeItems = (n: CanvasNode): Item[] => {
+    const g = n.gate, c = n.check, soft = c?.kind === 'soft', st = n.status;
+    const acts: Item[] = [
+      ...(g?.state === 'block' ? [{ icon: 'refresh', label: g.ticket ? tr('打回一轮') : tr('派修补单'), run: () => gate(g.stage, 'rework') } as Item] : []),
+      ...(g?.escalated ? [{ icon: 'plus', label: tr('再给两轮'), run: () => act(() => api.gateAct(line.id, g.stage, 'more'), tr('再打回两轮')) } as Item] : []),
+      ...(g?.state === 'block' && !g.waived ? [{ icon: 'play', label: tr('先放行'), run: () => act(() => api.gateAct(line.id, g.stage, 'waive'), tr('先放行了')) } as Item] : []),
+      ...(g && g.checks.length > 1 ? [{ icon: 'split', label: g.open ? tr('收回卡口组') : tr('展开为 {0} 个独立节点', g.checks.length), run: () => gate(g.stage, g.open ? 'close' : 'open') } as Item] : []),
+      ...(g || n.kind === 'hard' ? [{ icon: 'refresh', label: tr('跑一遍代码硬检查'), run: runAll } as Item] : []),
+      ...(soft && c.on && ['fail', 'warn'].includes(status(c)) ? [{ icon: 'wand', label: tr('派人纠偏'), run: () => ops.fix(n) } as Item] : []),
+      ...(soft && c.on ? [{ icon: 'send', label: tr('让负责人现在查'), run: () => ops.ask(n), off: !v?.lead } as Item] : []),
+      ...(c ? [{ icon: c.on ? 'stop' : 'play', label: c.on ? tr('关掉这项检查') : tr('打开这项检查'), run: () => toggle(n) } as Item] : []),
+      ...(n.kind === 'task' ? [{ icon: 'send', label: st === 'draft' ? tr('发给{0}', WHO[n.to ?? 'lead']) : tr('再发一次'), run: () => ops.send(n), off: !v?.agents[n.to ?? 'lead'].there } as Item] : []),
+      ...(n.kind === 'task' && st === 'sent' ? [{ icon: 'check', label: tr('标成完成'), run: () => setTask(n, 'done') } as Item] : []),
+      ...(n.kind === 'task' && (st === 'done' || st === 'blocked') ? [{ icon: 'refresh', label: tr('重新打开'), run: () => setTask(n, 'draft') } as Item] : []),
+    ];
+    return [
+      { icon: 'eye', label: tr('看详情'), run: () => pick(n.id) },
+      { icon: 'target', label: tr('移到画面中间'), run: () => centre(n) },
+      ...(acts.length ? [null, ...acts] : []),
+      null,
+      { icon: 'plus', label: tr('在它旁边派任务'), run: () => beside(n, 'task') },
+      { icon: 'plus', label: tr('在它旁边加备注'), run: () => beside(n, 'note') },
+      ...(n.kind === 'stage' ? [{ icon: 'plus', label: tr('加一项盯着它的软巡检'), run: () => beside(n, 'soft') } as Item, { icon: 'plus', label: tr('给它的卡口加一条硬规则'), run: () => beside(n, 'hard') } as Item] : []),
+      null,
+      { icon: 'copy', label: copyable(n) ? tr('复制') : tr('复制名称和内容'), run: () => copy([n]), key: `${MOD}C` },
+      ...(copyable(n) ? [{ icon: 'split', label: tr('剪切'), run: () => snip([n]), key: `${MOD}X` } as Item, { icon: 'stack', label: tr('复制一份'), run: () => dup([n]), key: `${MOD}D` } as Item] : []),
+      null,
+      { icon: 'close', label: mine(n) ? tr('删掉') : tr('从回路上拿掉'), run: () => drop(n), danger: true, key: '⌫' },
+    ];
+  };
   const paneItems = (x: number, y: number): Item[] => [
     { icon: 'plus', label: tr('在这里派任务'), run: () => here(x, y, 'task'), key: 'N' },
+    { icon: 'plus', label: tr('在这里加备注'), run: () => here(x, y, 'note'), key: '⇧N' },
     { icon: 'plus', label: tr('在这里加软巡检'), run: () => here(x, y, 'soft') },
     { icon: 'plus', label: tr('在这里加硬规则'), run: () => here(x, y, 'hard') },
-    { icon: 'plus', label: tr('在这里加备注'), run: () => here(x, y, 'note') },
+    null,
+    { icon: 'doc', label: held.current ? tr('粘贴 {0} 个节点', held.current.items.length) : tr('粘贴'), run: () => pasteAny({ x, y }), key: `${MOD}V` },
+    { icon: 'board', label: tr('全选'), run: () => select('all'), key: `${MOD}A` },
+    { icon: 'left', label: undos.current.length ? tr('撤销：{0}', undos.current[undos.current.length - 1].what) : tr('撤销'), run: undo, key: `${MOD}Z`, off: !undos.current.length },
     null,
     { icon: 'target', label: tr('适应窗口'), run: () => fit(), key: 'F' },
+    { icon: 'lens', label: tr('缩放到 100%'), run: () => zoomTo('one'), key: '0' },
+    { icon: 'wand', label: tr('按回路规整'), run: tidy },
+    { icon: prefs.lines ? 'check' : 'eye', label: prefs.lines ? tr('收起次要的连线') : tr('显示全部连线'), run: () => setPrefs({ lines: !prefs.lines }) },
+    null,
+    { icon: 'refresh', label: tr('立即全检'), run: runAll },
   ];
+  const edgeItems = (id: string): Item[] => {
+    const e = v?.edges.find(x => x.id === id), a = v?.nodes.find(n => n.id === e?.source), b = v?.nodes.find(n => n.id === e?.target);
+    return [
+      { icon: 'compose', label: e?.label ? tr('改线上的字') : tr('在线上写几个字'), run: () => setEditing(id) },
+      ...(a ? [{ icon: 'eye', label: tr('看「{0}」', label(a)), run: () => pick(a.id) } as Item] : []),
+      ...(b ? [{ icon: 'eye', label: tr('看「{0}」', label(b)), run: () => pick(b.id) } as Item] : []),
+      null,
+      { icon: 'close', label: tr('断开这条线'), run: () => cut(id), danger: true, key: '⌫' },
+    ];
+  };
   // the assistant in its floating window: told what is open here, and able to bring a node up (show --ref node:<id>)
   usePanelNote('canvas', 'board', {
     [tr('选中的节点')]: cur ? `${cur.id}「${label(cur)}」` : null,
@@ -531,14 +795,40 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   }, [ctx]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); document.getElementById('cv-find')?.focus(); return; }
-      if (typing(e) || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === 'Escape') { if (ctx) setCtx(null); else if (draft) setDraft(null); else if (report) setReport(false); else setSel(null); }
-      else if (e.key.toLowerCase() === 'n') { e.preventDefault(); add('task'); }
-      else if (e.key.toLowerCase() === 'f') fit();
+      const mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
+      if (mod && k === 'f') { e.preventDefault(); document.getElementById('cv-find')?.focus(); return; }
+      if (typing(e) || e.altKey) return;
+      const ns = picked();
+      if (mod) { // copy leaves text you have selected on the page (in the inspector, say) to the browser
+        if (k === 'c' && ns.length && !window.getSelection()?.toString()) { e.preventDefault(); copy(ns); }
+        else if (k === 'x' && ns.length) { e.preventDefault(); snip(ns); }
+        else if (k === 'd' && ns.length) { e.preventDefault(); dup(ns); }
+        else if (k === 'a') { e.preventDefault(); setDraft(null); select('all'); }
+        else if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+        return;
+      }
+      if (e.key === 'Escape') { if (ctx) setCtx(null); else if (draft) setDraft(null); else if (report) setReport(false); else select(null); }
+      else if (k === 'n') { e.preventDefault(); add(e.shiftKey ? 'note' : 'task'); }
+      else if (k === 'f') fit();
+      else if (k === '0') zoomTo('one');
+      else if (k === '=' || k === '+') zoomTo('in');
+      else if (k === '-') zoomTo('out');
+      else if (e.key.startsWith('Arrow') && ns.length && !draft) {
+        e.preventDefault();
+        const d = e.shiftKey ? 50 : 10;
+        nudge(ns, e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0);
+      }
+    };
+    // ⌘V: what was copied here comes back as nodes; text from anywhere else lands as a note
+    const onPaste = (e: ClipboardEvent) => {
+      if (typing(e)) return;
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      if (held.current && (!text || text === held.current.text)) { e.preventDefault(); paste(); }
+      else if (text.trim()) { e.preventDefault(); pasteText(text); }
     };
     window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
+    window.addEventListener('paste', onPaste);
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('paste', onPaste); };
   });
 
   const views: [Filter | 'report', string, number?][] = [['all', tr('全部回路')], ['todo', tr('阻断与预警'), todo], ['hard', tr('硬卡口')], ['soft', tr('软巡检')], ['report', tr('前后对比')]];
@@ -608,7 +898,10 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                   <li>{tr('双击空白处，或右键：新建节点')}</li>
                   <li>{tr('从节点边上的圆点拖出：连线；拖到空白处：新建并连上')}</li>
                   <li>{tr('双击一条线：在线上写字；选中后按 Delete：断开')}</li>
-                  <li>{tr('按住 Shift 拖动：框选多个节点一起移动')}</li>
+                  <li>{tr('按住 Shift 拖动：框选多个节点一起移动；右键对齐')}</li>
+                  <li>{tr('{0}C 复制、{0}X 剪切、{0}V 粘贴、{0}D 复制一份（任务和备注）；别处复制的文字粘贴成备注', MOD)}</li>
+                  <li>{tr('Delete 删掉；{0}A 全选；方向键挪一小步（按住 Shift 挪一大步）；{0}Z 撤销', MOD)}</li>
+                  <li>{tr('N 新任务、⇧N 新备注；F 适应窗口、0 回到 100%、+ − 缩放')}</li>
                   <li>{tr('按 / 叫出小助手，让它改回路、解释卡口为什么没放行')}</li>
                 </ul>
               </>
@@ -618,21 +911,33 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       </header>
 
       <div className="cv-body">
-        <div className={`cv-flow${lit ? ' has-dim' : ''}`} ref={wrap} onDoubleClick={e => { if ((e.target as HTMLElement).classList.contains('react-flow__pane')) here(e.clientX, e.clientY, 'task'); }}>
-          <OpsCtx.Provider value={ops}>
+        <div className={`cv-flow${lit ? ' has-dim' : ''}`} ref={wrap} onMouseMove={e => { pointer.current = { x: e.clientX, y: e.clientY }; }} onMouseLeave={() => { pointer.current = null; }} onDoubleClick={e => { if ((e.target as HTMLElement).classList.contains('react-flow__pane')) here(e.clientX, e.clientY, 'task'); }}>
+          <OpsCtx.Provider value={ops}><BoxCtx.Provider value={boxes}>
             <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-              connectionMode={ConnectionMode.Loose} colorMode={dark ? 'dark' : 'light'} minZoom={0.12} maxZoom={1.8} zoomOnDoubleClick={false}
-              snapToGrid={prefs.snap} snapGrid={[22, 22]} deleteKeyCode={['Backspace', 'Delete']} onBeforeDelete={async d => d.nodes.length === 0}
+              connectionMode={ConnectionMode.Loose} colorMode={dark ? 'dark' : 'light'} minZoom={floor * 0.98} maxZoom={1.8} translateExtent={extent} zoomOnDoubleClick={false}
+              snapToGrid={prefs.snap} snapGrid={[22, 22]} deleteKeyCode={['Backspace', 'Delete']} multiSelectionKeyCode={['Meta', 'Control', 'Shift']} disableKeyboardA11y
+              onBeforeDelete={async d => { // Delete on nodes goes through remove (it asks, and only takes the loop's own nodes off); lines go as they are
+                const ns = d.nodes.filter(n => n.id !== NEW).map(n => n.data.n);
+                if (ns.length) remove(ns);
+                return !ns.length;
+              }}
               onEdgesDelete={gone => gone.forEach(e => cut(e.id))} onEdgeDoubleClick={(_, e) => { if (!virtual(e.id)) setEditing(e.id); }}
-              onNodeClick={(_, n) => { if (n.id !== NEW) pick(n.id); }} onPaneClick={() => { setSel(null); setEditing(null); }} onMoveStart={() => setCtx(null)}
-              onNodeDragStart={() => { dragging.current = true; setCtx(null); }} onNodeDragStop={onDragStop}
+              onNodeClick={(e, n) => { if (n.id === NEW) return; if (e.metaKey || e.ctrlKey || e.shiftKey) setSel(null); else pick(n.id); }}
+              onSelectionStart={() => setSel(null)} onPaneClick={() => { setSel(null); setEditing(null); }} onMoveStart={e => { setCtx(null); if (e) auto.current = false; }}
+              onNodeDragStart={(_, _n, all) => { dragging.current = true; setCtx(null); before.current = Object.fromEntries(all.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)]])); }}
+              onNodeDragStop={onDragStop}
+              onSelectionDragStart={(_, all) => { dragging.current = true; before.current = Object.fromEntries(all.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)]])); }}
+              onSelectionDragStop={(e, all) => onDragStop(e, all[0], all)}
+              onSelectionContextMenu={(e, all) => menuAt(e, several(all.filter(n => n.id !== NEW).map(n => n.data.n)))}
               onNodeMouseEnter={(_, n) => setHot(n.id)} onNodeMouseLeave={() => setHot(null)}
               onConnect={onConnect} onConnectEnd={onConnectEnd}
               onPaneContextMenu={e => menuAt(e, paneItems(e.clientX, e.clientY))}
-              onNodeContextMenu={(e, n) => { if (n.id !== NEW) menuAt(e, nodeItems(n.data.n)); }}
-              onEdgeContextMenu={(e, edge) => { if (!virtual(edge.id)) menuAt(e, [
-                { icon: 'compose', label: tr('在线上写几个字'), run: () => setEditing(edge.id) },
-                { icon: 'close', label: tr('断开这条线'), run: () => cut(edge.id), danger: true }]); }}>
+              onNodeContextMenu={(e, n) => {
+                if (n.id === NEW) return;
+                const ns = picked();
+                menuAt(e, ns.length > 1 && ns.some(x => x.id === n.id) ? several(ns) : nodeItems(n.data.n));
+              }}
+              onEdgeContextMenu={(e, edge) => { if (!virtual(edge.id)) menuAt(e, edgeItems(edge.id)); }}>
               <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} />
               {v && <Lanes v={v} />}
               <Controls showInteractive={false} />
@@ -645,7 +950,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                 </Panel>
               )}
             </ReactFlow>
-          </OpsCtx.Provider>
+          </BoxCtx.Provider></OpsCtx.Provider>
           {v && report && <LoopReport v={v} onPick={pick} onClose={() => setReport(false)} toast={toast} />}
           {!v && <p className="cv-wait muted">{tr('加载中…')}</p>}
         </div>
@@ -653,7 +958,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
         {v && draft && <NewForm key={`${draft.link}:${draft.seed?.title ?? ''}`} d={draft} v={v} busy={busy} onKind={kind => setDraft({ ...draft, kind })} onAdd={create} onCancel={() => setDraft(null)} />}
         {v && cur && !draft && (
           <Inspector key={cur.id} n={cur} v={v} r={r} line={line} wide={wide} onWide={() => setWide(w => !w)} busy={busy} act={act} onConsole={onConsole}
-            onPick={pick} onCut={cut} onNew={k => beside(cur, k)} onFix={() => ops.fix(cur)} onDup={() => ops.dup(cur)} onDrop={() => drop(cur)} onClose={() => setSel(null)} />
+            onPick={pick} onCut={cut} onNew={k => beside(cur, k)} onFix={() => ops.fix(cur)} onDup={() => ops.dup(cur)} onDrop={() => drop(cur)} onClose={() => select(null)} />
         )}
       </div>
 

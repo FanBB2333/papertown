@@ -46,7 +46,7 @@
 /* menus: 新建 and 更多 in the bar (a popover), and what a right-click offers */
 .cv-pop { z-index: 90; }
 .cv .cv-menu { display: flex; flex-direction: column; min-width: 216px; max-width: 320px; padding: 4px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); box-shadow: 0 10px 34px rgb(0 0 0 / .18); font: 13px var(--font); color: var(--ink); }
-.cv-ctx { position: fixed; z-index: 85; animation: cv-pop-in .12s var(--out) both; }
+.cv-ctx { position: fixed; z-index: 85; min-width: 232px; max-height: calc(100vh - 24px); overflow-y: auto; animation: cv-pop-in .12s var(--out) both; }
 @keyframes cv-pop-in { from { opacity: 0; transform: scale(.97); } }
 .cv-mi { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 4px 9px; box-sizing: border-box; border: 0; border-radius: 7px; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
 .cv-mi > span { flex: 1; min-width: 0; }
