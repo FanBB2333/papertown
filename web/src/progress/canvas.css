@@ -193,24 +193,27 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 .cv-ghost { display: flex; align-items: center; justify-content: center; gap: 6px; width: 200px; height: 52px; border-radius: 12px; border: 1.5px dashed var(--brand); background: color-mix(in srgb, var(--brand) 7%, var(--panel)); color: var(--brand); font-size: 13px; }
 
 /* the lines: the flow between stages, a check hanging on something, a task's reach, a note's string */
-.cv .react-flow__edge-path { stroke-width: 1.4; }
-.cv .react-flow__edge.w-task .react-flow__edge-path { stroke: color-mix(in srgb, var(--brand) 70%, var(--line)); stroke-width: 1.6; stroke-dasharray: 6 4; }
+.cv .react-flow__edge-path { stroke-width: calc(1.4px * var(--k, 1)); }
+.cv .react-flow__edge.w-task .react-flow__edge-path { stroke: color-mix(in srgb, var(--brand) 70%, var(--line)); stroke-width: calc(1.6px * var(--k, 1)); stroke-dasharray: calc(6px * var(--k, 1)) calc(4px * var(--k, 1)); --p: calc(10px * var(--k, 1)); }
 .cv .react-flow__edge.w-task.t-sent .react-flow__edge-path { animation: cv-march .8s linear infinite; }
 .cv .react-flow__edge.w-task.t-done .react-flow__edge-path { stroke: color-mix(in srgb, var(--ok) 70%, var(--line)); }
 .cv .react-flow__edge.w-task.t-blocked .react-flow__edge-path { stroke: color-mix(in srgb, var(--bad) 70%, var(--line)); }
-.cv .react-flow__edge.w-info .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 45%, var(--line)); stroke-width: 1.2; stroke-dasharray: 1 5; stroke-linecap: round; }
-.cv .react-flow__edge.w-assign .react-flow__edge-path { stroke: color-mix(in srgb, var(--brand) 45%, var(--line)); stroke-width: 1.2; stroke-dasharray: 3 5; }
+.cv .react-flow__edge.w-info .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 45%, var(--line)); stroke-width: calc(1.2px * var(--k, 1)); stroke-dasharray: calc(1px * var(--k, 1)) calc(5px * var(--k, 1)); --p: calc(6px * var(--k, 1)); stroke-linecap: round; }
+.cv .react-flow__edge.w-assign .react-flow__edge-path { stroke: color-mix(in srgb, var(--brand) 45%, var(--line)); stroke-width: calc(1.2px * var(--k, 1)); stroke-dasharray: calc(3px * var(--k, 1)) calc(5px * var(--k, 1)); --p: calc(8px * var(--k, 1)); }
 .cv .react-flow__edge.w-assign.t-sent .react-flow__edge-path { stroke: color-mix(in srgb, var(--brand) 75%, var(--line)); animation: cv-march .8s linear infinite; }
 .cv .react-flow__edge.w-assign { pointer-events: none; }
-.cv .react-flow__edge.w-note .react-flow__edge-path { stroke: color-mix(in srgb, var(--warn) 55%, var(--line)); stroke-dasharray: 2 4; stroke-linecap: round; }
-.cv .react-flow__edge.selected .react-flow__edge-path { stroke: var(--brand); stroke-width: 2.4; }
-@keyframes cv-march { to { stroke-dashoffset: -10; } }
+.cv .react-flow__edge.w-note .react-flow__edge-path { stroke: color-mix(in srgb, var(--warn) 55%, var(--line)); stroke-dasharray: calc(2px * var(--k, 1)) calc(4px * var(--k, 1)); --p: calc(6px * var(--k, 1)); stroke-linecap: round; }
+.cv .react-flow__edge.selected .react-flow__edge-path { stroke: var(--brand); stroke-width: calc(2.4px * var(--k, 1)); }
+@keyframes cv-march { to { stroke-dashoffset: calc(-1 * var(--p, 10px)); } } /* one whole dash, so the march does not jump */
 .cv-hint { display: flex; align-items: center; gap: 4px; margin: 10px; padding: 3px 4px 3px 12px; border: 1px solid var(--line); border-radius: 99px; background: color-mix(in srgb, var(--panel) 90%, transparent); backdrop-filter: blur(6px); font-size: 12px; color: var(--muted); white-space: nowrap; }
 
 /* what is not searched for, kept by the filter or wired to the open node steps back */
 .cv .react-flow__node { transition: opacity .2s; }
 .cv .react-flow__node.dim { opacity: .4; }
 .cv .react-flow__edge.dim { opacity: .2; }
+/* the quiet lines (a sentinel watching, the spec, the clamp, the way to the human gate) wait until they are asked for */
+.cv .react-flow__edge { transition: opacity .18s; }
+.cv .react-flow__edge.quiet, .cv .react-flow__edge.quiet * { opacity: 0; pointer-events: none; }
 .cv .react-flow__node.dim:hover { opacity: .8; }
 
 /* above the selected node: the few things it can do at once */
@@ -434,7 +437,7 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .cv-clamp { display: flex; flex-direction: column; width: 270px; min-height: 92px; border-radius: 9px; border: 2px solid var(--lp-clamp); overflow: hidden; }
 .cv-clamp > header { display: flex; align-items: center; gap: 7px; padding: 5px 12px; font: 600 10.5px var(--lp-mono); color: var(--panel); background: var(--lp-clamp); }
 .cv-clamp > header i { width: 7px; height: 7px; background: var(--panel); }
-.cv-clamp > div { display: flex; flex-direction: column; gap: 2px; padding: 7px 12px 9px; min-width: 0; }
+.cv-clamp > div:not(.cv-far) { display: flex; flex-direction: column; gap: 2px; padding: 7px 12px 9px; min-width: 0; }
 .cv-clamp b { font-size: 13.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* the human gate: an amber hexagon */
@@ -460,31 +463,31 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .cv-task.esc { box-shadow: 0 0 0 2px color-mix(in srgb, var(--lp-amber) 55%, transparent); }
 
 /* the lines on the loop */
-.cv .react-flow__edge.w-flow .react-flow__edge-path { stroke: color-mix(in srgb, var(--ink) 40%, var(--line)); stroke-width: 2.4; }
+.cv .react-flow__edge.w-flow .react-flow__edge-path { stroke: color-mix(in srgb, var(--ink) 40%, var(--line)); stroke-width: calc(2.4px * var(--k, 1)); }
 .cv .react-flow__edge.w-flow.ok .react-flow__edge-path { stroke: var(--lp-pass); }
 .cv .react-flow__edge.w-flow.warn .react-flow__edge-path { stroke: var(--lp-amber); }
-.cv .react-flow__edge.w-flow.lock .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 60%, var(--line)); stroke-dasharray: 7 6; }
+.cv .react-flow__edge.w-flow.lock .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 60%, var(--line)); stroke-dasharray: calc(7px * var(--k, 1)) calc(6px * var(--k, 1)); --p: calc(13px * var(--k, 1)); }
 .cv-arrow { fill: color-mix(in srgb, var(--ink) 40%, var(--line)); }
 .cv-tee { stroke: var(--lp-clamp); stroke-width: 3; stroke-linecap: round; }
 .w-flow.ok .cv-arrow { fill: var(--lp-pass); } .w-flow.warn .cv-arrow { fill: var(--lp-amber); } .w-flow.lock .cv-arrow { fill: color-mix(in srgb, var(--muted) 60%, var(--line)); }
-.cv .react-flow__edge.w-watch .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 60%, var(--line)); stroke-width: 1.6; stroke-dasharray: 3 4; }
+.cv .react-flow__edge.w-watch .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 60%, var(--line)); stroke-width: calc(1.6px * var(--k, 1)); stroke-dasharray: calc(3px * var(--k, 1)) calc(4px * var(--k, 1)); --p: calc(7px * var(--k, 1)); }
 .cv .react-flow__edge.w-watch.v-pass .react-flow__edge-path { stroke: var(--lp-pass); } .w-watch.v-pass .cv-arrow { fill: var(--lp-pass); }
 .cv .react-flow__edge.w-watch.v-warn .react-flow__edge-path { stroke: var(--lp-amber); } .w-watch.v-warn .cv-arrow { fill: var(--lp-amber); }
 .cv .react-flow__edge.w-watch.v-fail .react-flow__edge-path { stroke: var(--lp-hard); } .w-watch.v-fail .cv-arrow { fill: var(--lp-hard); }
-.cv .react-flow__edge.w-spec .react-flow__edge-path { stroke: var(--lp-spec); stroke-width: 1.6; stroke-dasharray: 5 4; } .w-spec .cv-arrow { fill: var(--lp-spec); }
-.cv .react-flow__edge.w-clamp .react-flow__edge-path { stroke: var(--lp-clamp); stroke-width: 2; }
-.cv .react-flow__edge.w-esc .react-flow__edge-path { stroke: color-mix(in srgb, var(--lp-amber) 40%, var(--line)); stroke-width: 1.4; stroke-dasharray: 4 5; }
+.cv .react-flow__edge.w-spec .react-flow__edge-path { stroke: var(--lp-spec); stroke-width: calc(1.6px * var(--k, 1)); stroke-dasharray: calc(5px * var(--k, 1)) calc(4px * var(--k, 1)); --p: calc(9px * var(--k, 1)); } .w-spec .cv-arrow { fill: var(--lp-spec); }
+.cv .react-flow__edge.w-clamp .react-flow__edge-path { stroke: var(--lp-clamp); stroke-width: calc(2px * var(--k, 1)); }
+.cv .react-flow__edge.w-esc .react-flow__edge-path { stroke: color-mix(in srgb, var(--lp-amber) 40%, var(--line)); stroke-width: calc(1.4px * var(--k, 1)); stroke-dasharray: calc(4px * var(--k, 1)) calc(5px * var(--k, 1)); --p: calc(9px * var(--k, 1)); }
 .w-esc .cv-arrow { fill: color-mix(in srgb, var(--lp-amber) 40%, var(--line)); }
-.cv .react-flow__edge.w-esc.on .react-flow__edge-path { stroke: var(--lp-amber); stroke-width: 1.8; } .w-esc.on .cv-arrow { fill: var(--lp-amber); }
-.cv .react-flow__edge.w-member .react-flow__edge-path { stroke: color-mix(in srgb, var(--lp-hard) 35%, var(--line)); stroke-width: 1.2; stroke-dasharray: 1 4; stroke-linecap: round; }
-.cv .react-flow__edge.w-hard .react-flow__edge-path { stroke: var(--lp-hard); stroke-width: 2.6; stroke-dasharray: 8 5; animation: cv-march .7s linear infinite; }
+.cv .react-flow__edge.w-esc.on .react-flow__edge-path { stroke: var(--lp-amber); stroke-width: calc(1.8px * var(--k, 1)); } .w-esc.on .cv-arrow { fill: var(--lp-amber); }
+.cv .react-flow__edge.w-member .react-flow__edge-path { stroke: color-mix(in srgb, var(--lp-hard) 35%, var(--line)); stroke-width: calc(1.2px * var(--k, 1)); stroke-dasharray: calc(1px * var(--k, 1)) calc(4px * var(--k, 1)); --p: calc(5px * var(--k, 1)); stroke-linecap: round; }
+.cv .react-flow__edge.w-hard .react-flow__edge-path { stroke: var(--lp-hard); stroke-width: calc(2.6px * var(--k, 1)); stroke-dasharray: calc(8px * var(--k, 1)) calc(5px * var(--k, 1)); --p: calc(13px * var(--k, 1)); animation: cv-march .7s linear infinite; }
 .w-hard .cv-arrow { fill: var(--lp-hard); }
-.cv .react-flow__edge.w-soft .react-flow__edge-path { stroke: var(--lp-amber); stroke-width: 2.6; stroke-dasharray: 1 6; stroke-linecap: round; animation: cv-march 1s linear infinite; }
+.cv .react-flow__edge.w-soft .react-flow__edge-path { stroke: var(--lp-amber); stroke-width: calc(2.6px * var(--k, 1)); stroke-dasharray: calc(1px * var(--k, 1)) calc(6px * var(--k, 1)); --p: calc(7px * var(--k, 1)); stroke-linecap: round; animation: cv-march 1s linear infinite; }
 .w-soft .cv-arrow { fill: var(--lp-amber); }
-.cv .react-flow__edge:is(.w-hard, .w-soft).old .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 45%, var(--line)); stroke-width: 1.3; animation: none; }
+.cv .react-flow__edge:is(.w-hard, .w-soft).old .react-flow__edge-path { stroke: color-mix(in srgb, var(--muted) 45%, var(--line)); stroke-width: calc(1.3px * var(--k, 1)); animation: none; }
 :is(.w-hard, .w-soft).old .cv-arrow { fill: color-mix(in srgb, var(--muted) 45%, var(--line)); }
 .cv .react-flow__edge.w-link .react-flow__edge-path { stroke: var(--cv-wire); }
-.cv .react-flow__edge.selected .react-flow__edge-path { stroke: var(--brand); stroke-width: 2.6; }
+.cv .react-flow__edge.selected .react-flow__edge-path { stroke: var(--brand); stroke-width: calc(2.6px * var(--k, 1)); }
 .cv-el.tag { --c: var(--muted); padding: 1px 4px; border-color: color-mix(in srgb, var(--c) 45%, var(--line)); background: color-mix(in srgb, var(--c) 10%, var(--panel)); color: color-mix(in srgb, var(--c) 85%, var(--ink)); font-weight: 600; }
 .cv-el.tag span { display: inline-flex; align-items: center; gap: 4px; }
 .cv-el.tag.t-lock, .cv-el.tag.t-hard { --c: var(--lp-hard); } .cv-el.tag.t-soft { --c: var(--lp-amber); }
@@ -495,12 +498,13 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
   background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(6px); font-size: 11.5px; color: var(--muted); }
 .cv-legend header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1px; }
 .cv-legend header b { color: var(--ink); font-weight: 600; font-size: 12px; }
-.cv-legend p { display: flex; align-items: center; gap: 7px; margin: 0; }
-.lg { flex: none; display: inline-block; width: 26px; height: 0; border-top: 2.5px dashed var(--c); }
-.lg.l-hard { --c: var(--lp-hard); } .lg.l-soft { --c: var(--lp-amber); border-top-style: dotted; border-top-width: 3px; }
-.lg.l-lock { --c: color-mix(in srgb, var(--muted) 70%, var(--line)); border-top-width: 2px; } .lg.l-spec { --c: var(--lp-spec); border-top-width: 1.5px; }
-.lg.l-clamp { --c: var(--lp-clamp); border-top-style: solid; border-top-width: 2px; margin-left: 8px; position: relative; }
-.lg.l-clamp::after { content: ''; position: absolute; right: 0; top: -6px; width: 2.5px; height: 10px; background: var(--c); }
+.cv-legend p { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0; }
+.cv-legend p span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cv-legend p.more { margin-top: 3px; padding-top: 6px; border-top: 1px solid var(--line); line-height: 1.45; }
+.cv-legend :is(.cv-dia, .cv-ring2) { --c: var(--muted); }
+.lg { --c: var(--muted); flex: none; display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.lg.c-pass { --c: var(--lp-pass); } .lg.c-warn { --c: var(--lp-amber); } .lg.c-bad { --c: var(--lp-hard); }
+.lg.c-wait { background: transparent; border: 1.5px dashed var(--c); box-sizing: border-box; }
 
 /* ---------- the inspector, for the loop's nodes ---------- */
 .gp-card { --c: var(--muted); display: flex; flex-direction: column; gap: 6px; padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--c) 30%, var(--line)); border-radius: 11px; background: color-mix(in srgb, var(--c) 6%, var(--panel)); font-size: 12.5px; line-height: 1.5; }
@@ -637,6 +641,78 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
   color: color-mix(in srgb, var(--c) 85%, var(--ink)); background: color-mix(in srgb, var(--c) 13%, transparent); }
 .lp-pill:is(.ok, .v-pass) { --c: var(--lp-pass); } .lp-pill:is(.warn, .v-warn) { --c: var(--lp-amber); } .lp-pill:is(.bad, .v-fail) { --c: var(--lp-hard); }
 
+/* ---------- how much a node says follows the zoom ----------
+   Canvas.tsx puts the zoom on the flow as --z, and which of three whole faces the nodes show as data-lod. Type is a
+   continuous function of the zoom: --k is what it is multiplied by so it keeps its size on screen as the loop is
+   zoomed out (--km for a node's own lines and --ks for its small print, which must still fit in it). What a node
+   says is never in between: near, everything (--t: 1); mid, no small print (--t: 0); far, only .cv-far, a name and a
+   figure over the rest (--f: 1). Going from one to the next is a short fade in time, so wherever the zoom stops, a
+   node shows one face, whole. */
+.cv-flow { --z: 1; --k: clamp(1, 0.85 / var(--z), 2.6); --km: min(var(--k), 1.75); --ks: min(var(--k), 1.42); --t: 1; --f: 0; }
+.cv-flow[data-lod=mid] { --t: 0; }
+.cv-flow[data-lod=far] { --t: 0; --f: 1; }
+.cv-flow .cv-n { position: relative; transition: border-color .15s, box-shadow .15s, border-width .2s ease-out, padding .2s ease-out; }
+.cv-flow .cv-n *, .cv-lane span, .cv-flow .cv-el { transition: font-size .2s ease-out, line-height .2s ease-out, opacity .2s ease-out, width .2s ease-out, height .2s ease-out, padding .2s ease-out; }
+.cv .react-flow__edge-path { transition: stroke-width .2s ease-out; }
+.cv-arrow, .cv-tee { scale: var(--k, 1); transition: scale .2s ease-out; }
+.cv-lane { border-width: calc(1px * var(--k)); }
+.cv-lane span { font-size: calc(13px * min(var(--k), 2)); }
+.cv-flow .cv-el { font-size: calc(11.5px * var(--k)); padding: calc(1px * var(--k)) calc(3px * var(--k)); }
+/* the frame keeps its weight */
+.cv-flow .cv-n:not(.cv-gate, .cv-human) { border-width: calc(1px * var(--k)); }
+.cv-flow .cv-st { border-width: calc(1.5px * var(--k)); border-left-width: calc(5px * var(--k)); }
+.cv-flow .cv-sen { border-width: calc(2px * var(--k)); }
+.cv-flow .cv-sen::before { border-width: calc(1.5px * var(--t)); transition: border-width .2s ease-out; }
+.cv-flow .cv-spec { --c: var(--lp-spec); border-width: calc(1.5px * var(--k)); }
+.cv-flow .cv-clamp { --c: var(--lp-clamp); border-width: calc(2px * var(--k)); }
+.cv-flow .cv-note { --c: var(--warn); }
+.cv-flow .cv-task { border-left-width: calc(4px * var(--k)); }
+.cv-flow .cv-task:is(.l-hard, .l-soft) { border-left-width: calc(6px * var(--k)); }
+.cv-flow .cv-gate::before, .cv-flow .cv-human::before { inset: calc(2px * var(--k)); }
+/* what is left stays in the middle of the node as the small print goes */
+.cv-flow :is(.cv-gate, .cv-sen, .cv-spec, .cv-task) { justify-content: center; }
+.cv-flow .cv-clamp > div:not(.cv-far) { flex: 1; justify-content: center; }
+/* the small print goes first */
+.cv-flow .cv-st-b { padding-top: calc(8px * var(--t)); }
+.cv-flow .cv-st-b small { font-size: calc(10px * var(--ks) * var(--t)); opacity: var(--t); }
+.cv-flow .cv-st-b p { font-size: calc(11.5px * var(--ks) * var(--t)); opacity: var(--t); }
+.cv-flow :is(.cv-gate, .cv-sen, .cv-spec, .cv-human, .cv-task) > header > span, .cv-flow .cv-clamp > header > span { font-size: calc(10.5px * var(--ks) * var(--t)); opacity: var(--t); }
+.cv-flow .cv-gate small { font-size: calc(10.5px * var(--ks) * var(--t)); opacity: var(--t); }
+.cv-flow .cv-sen q { font-size: calc(11.5px * var(--ks) * var(--t)); opacity: var(--t); }
+.cv-flow :is(.cv-spec, .cv-clamp, .cv-human) small { font-size: calc(11px * var(--ks) * var(--t)); opacity: var(--t); }
+.cv-flow .cv-task p, .cv-flow .cv-task.l-hard p:not(.two):not(.res) { font-size: calc(11.5px * var(--ks) * var(--t)); opacity: var(--t); }
+.cv-flow .cv-task p.res { margin-top: calc(2px * var(--t)); padding: calc(2px * var(--t)) calc(6px * var(--t)); }
+.cv-flow .cv-task small { font-size: calc(10.5px * var(--ks) * var(--t)); opacity: var(--t); }
+.cv-flow .cv-ring small { font-size: calc(8.5px * var(--ks) * var(--t)); }
+.cv-flow .cv-info > :not(header, .cv-far, .react-flow__handle) { opacity: var(--t); }
+/* the name, the state and the figure grow into the room that leaves */
+.cv-flow .cv-st-b b { font-size: calc(15px * var(--km)); line-height: 1.15; }
+.cv-flow .cv-ring b { font-size: calc(11px * min(var(--km), 1.5)); }
+.cv-flow .cv-n.cv-gate { padding-top: calc(4px + 6px * var(--t)); padding-bottom: calc(4px + 6px * var(--t)); }
+.cv-flow .cv-gate-t b { font-size: calc(13.5px * var(--km)); line-height: 1.15; }
+.cv-flow .cv-gw.small .cv-gate-t b { font-size: calc(12.5px * var(--km)); }
+.cv-flow .cv-num { font-size: calc(13px * var(--km)); }
+.cv-flow .cv-chip, .cv-flow .cv-task > header em { font-size: calc(10.5px * var(--km)); line-height: calc(17px * var(--km)); }
+.cv-flow .cv-matrix i { width: calc(13px * min(var(--km), 1.35)); height: calc(13px * min(var(--km), 1.35)); }
+.cv-flow .cv-sen-t b { font-size: calc(14px * var(--km)); line-height: 1.15; }
+.cv-flow .cv-dots i { width: calc(8px * min(var(--km), 1.5)); height: calc(8px * min(var(--km), 1.5)); }
+.cv-flow :is(.cv-spec > b, .cv-clamp > div:not(.cv-far) > b) { font-size: calc(13.5px * var(--km)); line-height: 1.2; }
+.cv-flow .cv-human > b { font-size: calc(14px * var(--km)); line-height: 1.2; }
+.cv-flow .cv-task > b { font-size: calc(13.5px * var(--km)); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cv-flow .cv-note p { font-size: calc(12.5px * var(--km)); }
+.cv-flow .cv-ghost { font-size: calc(13px * var(--km)); }
+/* from far away: a name and one figure, over everything else in the node, tinted with its state */
+.cv-far { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; padding: 2px 10px; overflow: hidden; border-radius: inherit;
+  text-align: center; pointer-events: none; opacity: var(--f, 0); background: color-mix(in srgb, var(--c, var(--muted)) 13%, var(--panel)); }
+.cv-far b { font-size: calc(13.5px * var(--k)); font-weight: 650; line-height: 1.12; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.cv-far:has(em) b { -webkit-line-clamp: 1; }
+.cv-far em { font: 700 calc(10.5px * var(--k)) / 1.2 var(--lp-mono); font-style: normal; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--c, var(--muted)) 85%, var(--ink)); }
+.cv-flow .cv-n > :not(.cv-far, .react-flow__handle) { opacity: calc(1 - var(--f)); }
+.cv-flow .cv-n > .cv-who { opacity: var(--t); }
+.cv-gate > .cv-far { inset: calc(2px * var(--k));
+  clip-path: polygon(calc(var(--cut) - 1px) 0, calc(100% - var(--cut) + 1px) 0, 100% calc(var(--cut) - 1px), 100% calc(100% - var(--cut) + 1px), calc(100% - var(--cut) + 1px) 100%, calc(var(--cut) - 1px) 100%, 0 calc(100% - var(--cut) + 1px), 0 calc(var(--cut) - 1px)); }
+.cv-human > .cv-far { inset: calc(2px * var(--k)); padding: 2px 30px; clip-path: polygon(25px 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 25px 100%, 0 50%); }
+
 /* narrower: the bar keeps what it must */
 @media (max-width: 1240px) { .cv-top > .cg-sum { display: none; } }
 @media (max-width: 980px) { .cv-back b, .cv-find kbd { display: none; } .cv-find { flex-basis: 150px; } }
@@ -660,6 +736,7 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
   .cv, .cv-side { animation: none; }
   .st-wait > .cg-dot, .cv-task.t-sent header em::before, .cv .react-flow__edge.w-task.t-sent .react-flow__edge-path { animation: none; }
   .cv-sen::before, .cv-gw.g-block, .cv .react-flow__edge:is(.w-hard, .w-soft) .react-flow__edge-path, .cv-st.st-wait .cv-ring { animation: none; }
+  .cv-flow .cv-n, .cv-flow .cv-n *, .cv-flow .cv-sen::before, .cv-lane span, .cv-flow .cv-el, .cv .react-flow__edge-path, .cv-arrow, .cv-tee { transition: none; }
 }
 
 .cg-set { display: flex; flex-direction: column; gap: 10px; }

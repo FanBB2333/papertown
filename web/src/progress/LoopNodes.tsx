@@ -3,7 +3,9 @@
 // one square each, before → after); opened, each check is a small octagon of its own. A soft sentinel is a capsule
 // with a breathing ring and the lead's last word. The soft spec is a violet dashed letter, the hard clamp a dark-
 // headed bar, the human gate an amber hexagon. A task is a ticket with a thick left edge: crimson when a gate sent
-// it back, amber when a sentinel did.
+// it back, amber when a sentinel did. How much a node says follows the zoom (Canvas.tsx sets it on the flow, canvas.css
+// reads it): everything up close; further out the small print fades and the name, state and figure grow; from far
+// away <Far> fades in over the rest: a name and one figure in large type, the state as its colour.
 
 import { createContext, useContext } from 'react';
 import { Handle, NodeToolbar, Position, type Node, type NodeProps } from '@xyflow/react';
@@ -35,6 +37,9 @@ export const kindOf = (n: CanvasNode) => (n.kind === 'task' && n.loop === 'hard'
 // what the assistant can point at and light up (console/page.ts): every node, by its id
 const refOf = (n: CanvasNode) => ({ 'data-ref': `node:${n.id}`, 'data-ref-label': `${kindOf(n)}「${label(n)}」（${n.id}）` });
 const STAGES = ['idea', 'hatch', 'team', 'method', 'exp', 'write', 'review', 'ship'];
+
+// what a node says from far away, in place of everything else in it
+const Far = ({ t, x }: { t?: string; x?: React.ReactNode }) => <div className="cv-far"><b>{t}</b>{x ? <em>{x}</em> : null}</div>;
 
 const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
 const Ports = () => <>{SIDES.map(p => <Handle key={p} id={p} type="source" position={p} />)}</>;
@@ -79,6 +84,7 @@ function StageNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
       </div>
       {n.role && <em className="cv-who" title={who?.there ? '' : tr('还没启动')}><i className={`dot s-${who?.there ? who.status : 'stopped'}`} />{ROLE[n.role as TaskTo]}</em>}
       {st === 'run' && <span className="cv-st-bar"><i style={{ width: `${pct}%` }} /></span>}
+      <Far t={n.title} x={n.locked ? tr('锁住') : st === 'run' ? `${pct}%` : st === 'wait' ? tr('等你') : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
@@ -103,6 +109,7 @@ function GateNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
         {!one && <span className="cv-matrix">{cs.map(c => <i key={c.id} className={`m-${level(c)}`} title={`${trx(c.title)} · ${c.on ? (level(c) === 'pass' ? tr('放行') : level(c) === 'none' ? tr('还没查') : LEVEL[level(c)]) : tr('已关闭')}`} />)}</span>}
         <small>{g.before > g.now ? tr('R1:{0}处 → R{1}:{2}处', g.before, o.v.rounds, g.now) : g.now ? tr('还有 {0} 处', g.now) : look === 'none' ? tr('还没有可查的') : tr('全部放行')}
           {g.ticket && g.round > 0 && !g.waived && look === 'block' && <> · {tr('第 {0} 轮', g.round)}</>}</small>
+        <Far t={one ? trx(one.title) : tr('{0}卡口', g.name)} x={one ? (val != null ? `${val}/${one.max ?? 0}` : '') : g.total ? `${g.pass}/${g.total}` : ''} />
       </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
@@ -122,6 +129,7 @@ function HardNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
         <p className="cv-gate-t"><b>{trx(c.title)}</b><span className="cv-num">{val != null ? `${val} / ≤${c.max ?? 0}` : '—'}</span></p>
         <small>{first != null && val != null && first !== val ? tr('R1:{0} → 现在:{1}', first, val) : c.last?.findings[0]?.file ? `${c.last.findings[0].file}:${c.last.findings[0].line}` : trx(c.rule)}
           {first && val === 0 ? ` · ${tr('清零')}` : ''}</small>
+        <Far t={trx(c.title)} x={val != null ? `${val}/${c.max ?? 0}` : ''} />
       </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
@@ -131,18 +139,22 @@ function HardNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
 // ---------- the soft layer ----------
 
 function SoftNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
+  const v = useContext(OpsCtx)?.v;
   const c = n.check;
   if (!c) return null;
   const k = c.on ? status(c) : 'none', last = c.last;
+  // its line to the stage it watches is drawn only when asked for, so the capsule says which
+  const to = v?.edges.find(e => e.kind === 'watch' && e.source === n.id)?.target, stage = to ? v?.nodes.find(x => x.id === to) : null;
   return (
     <div className={`cv-n cv-sen v-${k}${c.on ? '' : ' off'}${selected ? ' on' : ''}`} {...refOf(n)}>
       <header>
-        <i className="cv-ring2" /><span>SOFT · {tr('每 {0}h', c.every ?? 24)} · {tr('负责人')}</span>
+        <i className="cv-ring2" /><span>SOFT · {stage ? tr('盯着{0}', stage.title ?? '') : tr('一直会问')} · {tr('每 {0}h', c.every ?? 24)}</span>
         {c.due && <em className="cv-chip due">{tr('到期')}</em>}
         <em className="cv-chip">{c.on ? VERDICT[k] : tr('已关闭')}</em>
       </header>
       <p className="cv-sen-t"><b>{trx(c.title)}</b><span className="cv-dots">{c.history.slice(-4).map((h, i) => <i key={i} className={`s-${h.status}`} />)}</span></p>
       <q>{last?.note ? clip(last.note, 46) : clip(trx(c.text), 46)}</q>
+      <Far t={trx(c.title)} x={c.on && ['pass', 'warn', 'fail'].includes(k) ? VERDICT[k] : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
@@ -155,6 +167,7 @@ function SpecNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
       <header><i className="cv-spdot" /><span>SOFT SPEC · Prompt / AGENTS.md</span></header>
       <b>{rules.length ? clip(rules[0].text, 30) : tr('项目简报与写给 agent 的要求')}</b>
       <small>{rules.length ? tr('{0} 条要求 · 概率引导，下游验证', rules.length) : tr('工作边界里还没写要求 · 概率引导')}</small>
+      <Far t={tr('软限制')} x={rules.length ? tr('{0} 条', rules.length) : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
@@ -167,6 +180,7 @@ function ClampNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
     <div className={`cv-n cv-clamp${selected ? ' on' : ''}`} {...refOf(n)}>
       <header><i /><span>HARD CLAMP · {tr('代码硬边界')}</span></header>
       <div><b>{what}</b><small>{tr('bounds.never / ask · {0} 条 · 服务端直接拦截', rules.length)}</small></div>
+      <Far t={tr('硬边界')} x={rules.length ? tr('{0} 条', rules.length) : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
@@ -182,6 +196,7 @@ function HumanNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
         <header><Icon n="person" size={13} /><span>HUMAN GATE · {tr('人类拍板节点')}</span></header>
         <b>{items.length ? tr('{0} 件等你拍板', items.length) : tr('没有等你拍板的事')}</b>
         <small>{items.length ? clip(items[0].text, 40) : tr('超轮次的卡口、偏离的巡检、agent 的提问会来这里')}</small>
+        <Far t={tr('人类拍板')} x={items.length ? tr('{0} 件', items.length) : ''} />
       </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
@@ -206,13 +221,14 @@ function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
         : n.text && <p className="two">{clip(n.text, 96)}</p>}
       {n.result && <p className="res">{clip(n.result, 60)}</p>}
       {when && <small>{st === 'sent' ? tr('{0}发出', ago(when)) : ago(when)}{(n.log?.length ?? 0) > 2 && ` · ${tr('{0} 条记录', n.log?.length ?? 0)}`}</small>}
+      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated ? tr('等你拍板') : TASK[st]} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
 }
 
 function NoteNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
-  return <div className={`cv-n cv-note${selected ? ' on' : ''}`} {...refOf(n)}><p>{clip(n.text, 120)}</p><Ports /><Tools n={n} on={selected && !dragging} /></div>;
+  return <div className={`cv-n cv-note${selected ? ' on' : ''}`} {...refOf(n)}><p>{clip(n.text, 120)}</p><Far t={clip(n.text, 24)} /><Ports /><Tools n={n} on={selected && !dragging} /></div>;
 }
 
 // the project live: its progress card, an agent, its jobs, code, paper or outputs (CanvasInfo.tsx)
@@ -223,6 +239,7 @@ function InfoNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
     <div className={`cv-n cv-info i-${infoKind(n)}${selected ? ' on' : ''}`} {...refOf(n)}>
       <header><Icon n={INFO_ICON[infoKind(n)] ?? 'doc'} size={13} /><b>{n.title}</b><InfoState n={n} r={o.r} v={o.v} /></header>
       <InfoBody n={n} r={o.r} v={o.v} />
+      <Far t={n.title} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );

@@ -4,18 +4,23 @@
 // sent back, corrections a sentinel asked for, your tasks and notes, the human gate). The lanes are where things
 // start and where 按回路规整 puts them back; nothing holds a node in one. Lines say what they do: the flow (grey
 // and locked past a gate that blocks), a sentinel watching, the spec injected, the clamp, a gate's rework loop, a
-// sentinel's correction. Drag a node to move it, drag from the dot on its rim to wire it to another (or to empty
+// sentinel's correction. Only the flow and what is under way are always drawn; the quieter lines (a sentinel
+// watching, the spec, the clamp, the way to the human gate) show for the node under the pointer or the open one, in
+// the view they belong to, or all at once when you ask (更多). Drag a node to move it, drag from the dot on its rim to wire it to another (or to empty
 // space, to make a new node wired to it), double-click empty space for a new one, double-click a line to write on
 // it, right-click anything for what can be done with it. The bar narrows the loop to what blocks or warns, to the
 // hard side or the soft side, or lays out 前后对比; the open node's inspector is beside it (CanvasSide.tsx).
-// Loaded on demand, with the graph library.
+// How much the nodes say follows the zoom: the flow carries the zoom (--z), by which canvas.css sizes type, and
+// one of three faces (data-lod): everything, no small print, or a name and a figure. A face changes at a threshold,
+// with a short fade, never part-way, so the loop reads whole wherever the zoom stops. Loaded on demand, with the
+// graph library.
 
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Popover } from '@cloudflare/kumo';
 import {
   Background, BackgroundVariant, BaseEdge, ConnectionMode, Controls, EdgeLabelRenderer, getBezierPath, MiniMap, Panel, Position,
-  ReactFlow, ReactFlowProvider, useEdgesState, useInternalNode, useNodesInitialized, useNodesState, useReactFlow, ViewportPortal,
+  ReactFlow, ReactFlowProvider, useEdgesState, useInternalNode, useNodesInitialized, useNodesState, useOnViewportChange, useReactFlow, ViewportPortal,
   type Connection, type Edge, type EdgeProps, type InternalNode, type OnConnectEnd,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -32,10 +37,12 @@ import { kindOf, mine, nodeTypes, OpsCtx, type FNode, type Ops } from './LoopNod
 import { gateLook, needs, side } from './loop';
 import type { ConsoleTarget } from './Project';
 
-type FEdge = Edge<{ bow: boolean; arrow: boolean; tee: boolean; label: string; tag: string; tone: string }>;
+type FEdge = Edge<{ bow: boolean; arrow: boolean; tee: boolean; step: boolean; hidden: boolean; label: string; tag: string; tone: string }>;
 type Filter = 'all' | 'todo' | 'hard' | 'soft';
 type Item = { icon: IconName; label: string; run: () => void; danger?: boolean; off?: boolean; key?: string } | null;
-interface Prefs { map: boolean; snap: boolean; hint: boolean; legend: boolean }
+interface Prefs { map: boolean; snap: boolean; hint: boolean; legend: boolean; lines: boolean }
+// which of the quiet lines show: all of them, a node's own (under the pointer, or open), a view's
+interface Shown { all: boolean; hot: string | null; sel: string | null; filter: Filter }
 
 const NEW = '__new';
 // the lines drawn: the ones on the loop, and from each task to the card of the agent it is for (when that card is on)
@@ -52,7 +59,7 @@ const hay = (n: CanvasNode) => [label(n), n.text, n.id, n.check?.id, n.check && 
 const typing = (e: Event) => !!(e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable=true]');
 
 function usePrefs() {
-  const base: Prefs = { map: false, snap: false, hint: true, legend: true };
+  const base: Prefs = { map: false, snap: false, hint: true, legend: true, lines: false };
   const [p, setP] = useState<Prefs>(() => {
     try { return { ...base, ...JSON.parse(localStorage.getItem('pt-canvas') ?? '{}') }; } catch { return base; }
   });
@@ -98,6 +105,12 @@ function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
     path = `M${p.x},${p.y} Q${ctrl.x},${ctrl.y} ${q.x},${q.y}`;
     lx = 0.25 * p.x + 0.5 * ctrl.x + 0.25 * q.x; ly = 0.25 * p.y + 0.5 * ctrl.y + 0.25 * q.y;
     end = q; turn = (Math.atan2(q.y - ctrl.y, q.x - ctrl.x) * 180) / Math.PI;
+  } else if (data?.step && cb.y - ca.y - ((a.measured.height ?? 0) + (b.measured.height ?? 0)) / 2 > 56 && Math.abs(cb.x - ca.x) > 160) {
+    // the flow going down to the next row: out of the bottom, along the gap between the rows, into the top
+    const p = { x: ca.x, y: ca.y + (a.measured.height ?? 0) / 2 + 3 }, q = { x: cb.x, y: cb.y - (b.measured.height ?? 0) / 2 - 3 };
+    const mid = (p.y + q.y) / 2, r = 16, dir = Math.sign(q.x - p.x);
+    path = `M${p.x},${p.y} L${p.x},${mid - r} Q${p.x},${mid} ${p.x + dir * r},${mid} L${q.x - dir * r},${mid} Q${q.x},${mid} ${q.x},${mid + r} L${q.x},${q.y}`;
+    lx = (p.x + q.x) / 2; ly = mid; end = q; turn = TURN[Position.Top];
   } else {
     const p = rim(a, cb), q = rim(b, ca);
     end = q; turn = TURN[q.side];
@@ -108,9 +121,9 @@ function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
   return (
     <>
       <BaseEdge id={id} path={path} interactionWidth={20} />
-      {data?.arrow && <path className="cv-arrow" d="M1,0 L-8,-4.5 L-8,4.5 Z" transform={`translate(${end.x},${end.y}) rotate(${turn})`} />}
-      {data?.tee && <path className="cv-tee" d="M0,-7 L0,7" transform={`translate(${end.x},${end.y}) rotate(${turn})`} />}
-      {o && !virtual(id) && (o.editing === id || text || data?.tag || selected) && (
+      {data?.arrow && <g transform={`translate(${end.x},${end.y}) rotate(${turn})`}><path className="cv-arrow" d="M1,0 L-8,-4.5 L-8,4.5 Z" /></g>}
+      {data?.tee && <g transform={`translate(${end.x},${end.y}) rotate(${turn})`}><path className="cv-tee" d="M0,-7 L0,7" /></g>}
+      {o && !virtual(id) && !data?.hidden && (o.editing === id || text || data?.tag || selected) && (
         <EdgeLabelRenderer>
           {o.editing === id ? (
             <input className="cv-el edit nodrag nopan" style={at} autoFocus defaultValue={text} maxLength={40} placeholder={tr('这条线的意思')}
@@ -145,23 +158,29 @@ function toNodes(v: CanvasView, sel: string | null, draft: Draft | null, lit: Se
 }
 
 // how a line is drawn: by what it does, and how the things at its ends stand
-function look(e: CanvasEdge, a: CanvasNode, b: CanvasNode): { cls: string; arrow: boolean; tee: boolean; bow: boolean; tag: string; tone: string } {
+function look(e: CanvasEdge, a: CanvasNode, b: CanvasNode): { cls: string; arrow: boolean; tee: boolean; bow: boolean; step: boolean; quiet: boolean; tag: string; tone: string } {
   const task = [a, b].find(x => x.kind === 'task');
-  const none = { arrow: false, tee: false, bow: false, tag: '', tone: '' };
+  const none = { arrow: false, tee: false, bow: false, step: false, quiet: false, tag: '', tone: '' };
   switch (e.kind) {
     case 'flow': {
       const g = a.gate, lock = !!g && g.state === 'block' && !g.waived;
       const ok = a.kind === 'stage' ? a.status === 'done' : !!g && gateLook(g) === 'pass';
-      return { ...none, cls: `w-flow${lock ? ' lock' : ok ? ' ok' : g && gateLook(g) === 'warn' ? ' warn' : ''}`, arrow: true, tag: lock ? tr('锁死') : '', tone: lock ? 'lock' : '' };
+      return { ...none, cls: `w-flow${lock ? ' lock' : ok ? ' ok' : g && gateLook(g) === 'warn' ? ' warn' : ''}`, arrow: true, step: true, tag: lock ? tr('锁死') : '', tone: lock ? 'lock' : '' };
     }
-    case 'watch': return { ...none, cls: `w-watch v-${a.check ? (a.check.on ? status(a.check) : 'none') : 'none'}`, arrow: true };
-    case 'spec': return { ...none, cls: 'w-spec', arrow: true };
-    case 'clamp': return { ...none, cls: 'w-clamp', tee: true };
-    case 'escalate': return { ...none, cls: `w-esc${b.items?.length || a.items?.length ? ' on' : ''}`, arrow: true };
+    case 'watch': { // a sentinel that is content keeps its line to itself
+      const k = a.check?.on ? status(a.check) : 'none';
+      return { ...none, cls: `w-watch v-${k}`, arrow: true, quiet: !['warn', 'fail'].includes(k) };
+    }
+    case 'spec': return { ...none, cls: 'w-spec', arrow: true, quiet: true };
+    case 'clamp': return { ...none, cls: 'w-clamp', tee: true, quiet: true };
+    case 'escalate': {
+      const on = !!(b.items?.length || a.items?.length);
+      return { ...none, cls: `w-esc${on ? ' on' : ''}`, arrow: true, quiet: !on };
+    }
     case 'member': return { ...none, cls: 'w-member' };
     case 'hard_loop': {
       const t = task ?? a, head = a.kind === 'gate';
-      const tag = head ? (t.converged ? tr('✓ {0} 轮收敛', t.round || 1) : tr('阻断打回 · 内循环第 {0} 轮', t.round || 1)) : '';
+      const tag = head ? (t.converged ? tr('✓ {0} 轮收敛', t.round || 1) : tr('没过，打回重改 · 第 {0} 轮', t.round || 1)) : '';
       return { ...none, cls: `w-hard${t.converged ? ' old' : t.status === 'sent' ? ' run' : ''}`, arrow: true, bow: true, tag, tone: t.converged ? 'old' : 'hard' };
     }
     case 'soft_loop': {
@@ -175,10 +194,12 @@ function look(e: CanvasEdge, a: CanvasNode, b: CanvasNode): { cls: string; arrow
   }
 }
 
-function toEdges(v: CanvasView, draft: Draft | null, lit: Set<string> | null, focus: string | null, prev: FEdge[]): FEdge[] {
+const VIEW_LINES: Record<Filter, string[]> = { all: [], todo: [], hard: ['clamp'], soft: ['watch', 'spec'] };
+
+function toEdges(v: CanvasView, draft: Draft | null, lit: Set<string> | null, focus: string | null, shown: Shown, prev: FEdge[]): FEdge[] {
   const by = new Map(v.nodes.map(n => [n.id, n]));
   const chosen = new Set(prev.filter(e => e.selected).map(e => e.id)), seen = new Set<string>();
-  const blank = { bow: false, arrow: false, tee: false, label: '', tag: '', tone: '' };
+  const blank = { bow: false, arrow: false, tee: false, step: false, hidden: false, label: '', tag: '', tone: '' };
   const out: FEdge[] = wires(v).flatMap((e): FEdge[] => {
     const a = by.get(e.source), b = by.get(e.target);
     if (!a || !b) return [];
@@ -189,8 +210,10 @@ function toEdges(v: CanvasView, draft: Draft | null, lit: Set<string> | null, fo
     const twin = seen.has(`${e.target}>${e.source}`);
     seen.add(`${e.source}>${e.target}`);
     const l = look(e, a, b);
-    return [{ id: e.id, source: e.source, target: e.target, type: 'wire', className: on ? l.cls : `${l.cls} dim`, selected: chosen.has(e.id),
-      data: { bow: l.bow || twin, arrow: l.arrow, tee: l.tee, label: e.label ?? '', tag: l.tag, tone: l.tone } }];
+    const mine = [a.id, b.id].some(id => id === shown.hot || id === shown.sel);
+    const hidden = l.quiet && !shown.all && !mine && !VIEW_LINES[shown.filter].includes(e.kind ?? '');
+    return [{ id: e.id, source: e.source, target: e.target, type: 'wire', className: `${l.cls}${on ? '' : ' dim'}${hidden ? ' quiet' : ''}`, selected: !hidden && chosen.has(e.id),
+      data: { bow: l.bow || twin, arrow: l.arrow, tee: l.tee, step: l.step, hidden, label: e.label ?? '', tag: l.tag, tone: l.tone } }];
   });
   if (draft?.link && by.has(draft.link)) out.push({ id: NEW, source: draft.link, target: NEW, type: 'wire', className: 'w-task t-draft', selectable: false, data: blank });
   return out;
@@ -213,16 +236,14 @@ function Lanes({ v }: { v: CanvasView }) {
   );
 }
 
+// two shapes and four colours; a colour means the same on a node and on a line
 function Legend({ onClose }: { onClose: () => void }) {
   return (
     <Panel position="bottom-left" className="cv-legend">
-      <header><b>{tr('回路图例')}</b><button className="ib" title={tr('收起')} aria-label={tr('收起')} onClick={onClose}><Icon n="close" size={12} /></button></header>
-      <p><i className="cv-dia g-block" />{tr('切角八边形 = 硬卡口：代码门禁，阻断时锁住下游')}</p>
-      <p><i className="cv-ring2" />{tr('双环胶囊 = 软巡检：负责人语义审视，触发纠偏')}</p>
-      <p><i className="lg l-hard" />{tr('硬打回自愈内环')}</p>
-      <p><i className="lg l-soft" />{tr('软纠偏反馈弧')}</p>
-      <p><i className="lg l-lock" />{tr('被阻断的下游')}</p>
-      <p><i className="lg l-spec" />{tr('软限制注入')}<i className="lg l-clamp" />{tr('硬边界钳制')}</p>
+      <header><b>{tr('图例')}</b><button className="ib" title={tr('收起')} aria-label={tr('收起')} onClick={onClose}><Icon n="close" size={12} /></button></header>
+      <p><span><i className="cv-dia" />{tr('卡口：用代码查')}</span><span><i className="cv-ring2" />{tr('巡检：负责人判断')}</span></p>
+      <p><span><i className="lg c-pass" />{tr('通过')}</span><span><i className="lg c-warn" />{tr('要留意')}</span><span><i className="lg c-bad" />{tr('没过，打回重改')}</span><span><i className="lg c-wait" />{tr('还没查，或在等前面')}</span></p>
+      <p className="more">{tr('节点和线用同一套颜色。其余的线平时收着，鼠标移到节点上或点开它就能看到。')}</p>
     </Panel>
   );
 }
@@ -304,6 +325,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [ctx, setCtx] = useState<{ x: number; y: number; items: Item[] } | null>(null);
+  const [hot, setHot] = useState<string | null>(null);
   const [prefs, setPrefs] = usePrefs();
   const [nodes, setNodes, onNodesChange] = useNodesState<FNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FEdge>([]);
@@ -333,11 +355,29 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   useEffect(() => {
     if (!v || dragging.current) return;
     setNodes(prev => toNodes(v, sel, draft, lit, prev, moved.current));
-    setEdges(prev => toEdges(v, draft, lit, focus, prev));
-  }, [v, sel, draft, lit, focus, setNodes, setEdges]);
+  }, [v, sel, draft, lit, setNodes]);
+  useEffect(() => {
+    if (!v || dragging.current) return;
+    setEdges(prev => toEdges(v, draft, lit, focus, { all: prefs.lines, hot, sel, filter }, prev));
+  }, [v, sel, draft, lit, focus, hot, filter, prefs.lines, setEdges]);
+  // how far out the loop is seen from: canvas.css sizes type by the zoom and picks what the nodes say by the face.
+  // Each face is left a little past where it is entered, so a zoom resting on a threshold does not flicker.
+  const face = useRef<'near' | 'mid' | 'far'>('near');
+  const scale = (zoom: number) => {
+    const el = wrap.current;
+    if (!el) return;
+    el.style.setProperty('--z', zoom.toFixed(3));
+    const was = face.current;
+    const now = was === 'near' ? (zoom < 0.45 ? 'far' : zoom < 0.7 ? 'mid' : 'near')
+      : was === 'mid' ? (zoom < 0.45 ? 'far' : zoom > 0.75 ? 'near' : 'mid')
+        : zoom > 0.75 ? 'near' : zoom > 0.5 ? 'mid' : 'far';
+    face.current = now;
+    if (el.dataset.lod !== now) el.dataset.lod = now;
+  };
+  useOnViewportChange({ onChange: vp => scale(vp.zoom) });
   const fit = (ms = 300) => rf.fitView({ padding: 0.08, maxZoom: 1, duration: ms });
   useEffect(() => {
-    if (ready && !fitted.current && nodes.length) { fitted.current = true; rf.fitView({ padding: 0.08, maxZoom: 1 }); }
+    if (ready && !fitted.current && nodes.length) { fitted.current = true; rf.fitView({ padding: 0.08, maxZoom: 1 }).then(() => scale(rf.getZoom())); }
   }, [ready, nodes.length, rf]);
 
   const act: Act = async (fn, done) => {
@@ -540,6 +580,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                 <Row close={close} it={{ icon: 'wand', label: tr('按回路规整'), run: tidy, off: busy || !v }} />
                 <Row close={close} it={{ icon: 'doc', label: tr('前后对比'), run: () => setReport(true), off: !v }} />
                 <hr />
+                <label className="cv-mi"><input type="checkbox" checked={prefs.lines} onChange={e => setPrefs({ lines: e.target.checked })} /><span>{tr('显示全部连线')}</span></label>
                 <label className="cv-mi"><input type="checkbox" checked={prefs.legend} onChange={e => setPrefs({ legend: e.target.checked })} /><span>{tr('图例')}</span></label>
                 <label className="cv-mi"><input type="checkbox" checked={prefs.map} onChange={e => setPrefs({ map: e.target.checked })} /><span>{tr('小地图')}</span></label>
                 <label className="cv-mi"><input type="checkbox" checked={prefs.snap} onChange={e => setPrefs({ snap: e.target.checked })} /><span>{tr('拖动时对齐网格')}</span></label>
@@ -585,6 +626,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
               onEdgesDelete={gone => gone.forEach(e => cut(e.id))} onEdgeDoubleClick={(_, e) => { if (!virtual(e.id)) setEditing(e.id); }}
               onNodeClick={(_, n) => { if (n.id !== NEW) pick(n.id); }} onPaneClick={() => { setSel(null); setEditing(null); }} onMoveStart={() => setCtx(null)}
               onNodeDragStart={() => { dragging.current = true; setCtx(null); }} onNodeDragStop={onDragStop}
+              onNodeMouseEnter={(_, n) => setHot(n.id)} onNodeMouseLeave={() => setHot(null)}
               onConnect={onConnect} onConnectEnd={onConnectEnd}
               onPaneContextMenu={e => menuAt(e, paneItems(e.clientX, e.clientY))}
               onNodeContextMenu={(e, n) => { if (n.id !== NEW) menuAt(e, nodeItems(n.data.n)); }}

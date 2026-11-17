@@ -3188,5 +3188,17 @@
  "研究回路上必须满足的硬检查": "Hard checks the research loop must pass",
  "回路上没有给它的任务": "No tasks for it on the loop",
  "放在回路上虚线框的位置": "Goes where the dashed box is on the loop",
- "这个项目的{0}还没有启动，任务会先留在回路上。": "This project's {0} has not started; the task stays on the loop for now."
+ "这个项目的{0}还没有启动，任务会先留在回路上。": "This project's {0} has not started; the task stays on the loop for now.",
+ "没过，打回重改 · 第 {0} 轮": "Failed, sent back to fix · round {0}",
+ "显示全部连线": "Show all lines",
+ "盯着{0}": "watches {0}",
+ "一直会问": "always asks",
+ "卡口：用代码查": "Gate: checked by code",
+ "巡检：负责人判断": "Sentinel: judged by the lead",
+ "要留意": "Needs a look",
+ "没过，打回重改": "Failed: sent back to fix",
+ "还没查，或在等前面": "Not checked, or waiting on what comes before",
+ "节点和线用同一套颜色。其余的线平时收着，鼠标移到节点上或点开它就能看到。": "Nodes and lines share these colours. Other lines stay out of the way: point at a node or open it to see them.",
+ "锁住": "Locked",
+ "{0} 件": "{0}"
 }

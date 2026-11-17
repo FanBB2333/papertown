@@ -165,6 +165,7 @@ function useLinks(box: React.RefObject<HTMLDivElement | null>, links: Link[]) {
 
 function Track({ v, r }: { v: CanvasView; r: ProjectCard }) {
   const box = useRef<HTMLDivElement>(null);
+  const [hot, setHot] = useState<string | null>(null);
   const spine = useMemo(() => boxes(v), [v]);
   const where = useMemo(() => new Map(spine.flatMap(b => b.nodes.map(n => [n.id, b.id] as const))), [spine]);
   const sentinels = v.nodes.filter(n => n.kind === 'soft' && n.check?.on);
@@ -174,7 +175,8 @@ function Track({ v, r }: { v: CanvasView; r: ProjectCard }) {
   const links: Link[] = [];
   for (const s of sentinels) {
     const t = watch(s.id);
-    if (t && where.has(t)) links.push({ from: s.id, to: where.get(t)!, cls: `w-watch v-${status(s.check!)}` });
+    const k = status(s.check!);
+    if (t && where.has(t) && (hot === s.id || k === 'warn' || k === 'fail')) links.push({ from: s.id, to: where.get(t)!, cls: `w-watch v-${k}` });
   }
   for (const t of loops) {
     if (t.loop === 'hard' && t.stage) {
@@ -201,7 +203,8 @@ function Track({ v, r }: { v: CanvasView; r: ProjectCard }) {
         {sentinels.map(s => {
           const c = s.check!, k = status(c);
           return (
-            <button key={s.id} className={`lp-sen v-${k}`} data-box={s.id} onClick={() => openAt(v.seq, s.id)} title={c.last?.note || trx(c.text)}>
+            <button key={s.id} className={`lp-sen v-${k}`} data-box={s.id} onClick={() => openAt(v.seq, s.id)} title={c.last?.note || trx(c.text)}
+              onMouseEnter={() => setHot(s.id)} onMouseLeave={() => setHot(null)} onFocus={() => setHot(s.id)} onBlur={() => setHot(null)}>
               <i className="cv-ring2" />{trx(c.title)}<em>{VERDICT[k]}{k === 'pass' ? ' ✓' : k === 'warn' || k === 'fail' ? ' !' : ''}</em>
             </button>
           );
