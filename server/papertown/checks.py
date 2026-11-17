@@ -8,7 +8,13 @@ Soft checks are questions the lead answers by reading the project: a model's jud
 is due it goes out with the lead's <checkin>, and the lead records pass, warn or fail with its reason
 (`pt check <id> pass|warn|fail "…"`); one that is not a pass becomes a report.
 
-    data/projects/<project>/checks.json   checks turned off, thresholds, the soft questions, added pattern checks
+On the project's research loop (canvas.py) the hard checks of a stage are its gate: a check that blocks (P0 by
+default) and fails holds the next stage and sends the stage's agent a rework ticket, round after round, up to the
+stage's limit; one that only warns (P1 by default) is reported. Each check's first count against its count now is
+the before → after the reports show.
+
+    data/projects/<project>/checks.json   checks turned off, thresholds, the soft questions, added pattern checks,
+                                          which checks block, and each stage's rework (sent at once or not, how many rounds)
 """
 
 from __future__ import annotations
@@ -29,6 +35,9 @@ if TYPE_CHECKING:
     from .town import Town
 
 STATUS = {"pass": "通过", "warn": "有问题", "fail": "没过", "none": "没有可查的", "wait": "等负责人判断"}
+GATE = {"block": "阻断", "warn": "告警"}  # what a hard check that fails does at its stage's gate
+ROUNDS = 5  # rework rounds a gate runs before it is yours to decide
+BAD = ("fail", "warn")
 VERDICTS = ("pass", "warn", "fail")
 FINDINGS_MAX = 60
 HISTORY_MAX = 30
@@ -561,7 +570,20 @@ class Checks:
         d = read_json(self._path(line_id), {})
         return {"off": list(d.get("off") or []), "params": dict(d.get("params") or {}),
                 "soft": d.get("soft") if isinstance(d.get("soft"), list) else [dict(x, every=SOFT_EVERY) for x in SOFT],
-                "rules": list(d.get("rules") or []), "asked": dict(d.get("asked") or {})}
+                "rules": list(d.get("rules") or []), "asked": dict(d.get("asked") or {}),
+                "gates": {k: v for k, v in dict(d.get("gates") or {}).items() if v in GATE}, "loops": dict(d.get("loops") or {})}
+
+    @staticmethod
+    def gate(h: "Hard | dict", cfg: dict) -> str:
+        """Whether a hard check blocks its stage's gate or only warns: P0 blocks unless the user said otherwise."""
+        hid, prio = (h.id, h.prio) if isinstance(h, Hard) else (h["id"], h.get("prio"))
+        return cfg["gates"].get(hid) or ("block" if prio == "P0" else "warn")
+
+    @staticmethod
+    def loop_of(stage: str, cfg: dict) -> dict:
+        """A stage's rework: whether its ticket goes out at once, and how many rounds before it comes to you."""
+        d = cfg["loops"].get(stage) or {}
+        return {"auto": bool(d.get("auto", False)), "rounds": int(d.get("rounds") or ROUNDS)}
 
     def _save(self, line_id: str, d: dict) -> None:
         p = self._path(line_id)
@@ -625,6 +647,7 @@ class Checks:
                 changed |= self.record(line_id, h.id, h.judge(value, p["max"]), value, data, "Papertown", ts, last.get(h.id))
         if changed:
             self.town.bus.publish("checks", line_id=line_id)
+            self.town.canvas.loop(line_id)
         return changed
 
     def verdict(self, agent_id: str, check_id: str, status: str, reason: str) -> dict:
@@ -700,10 +723,44 @@ class Checks:
         self.town.bus.publish("checks", line_id=line_id)
         return {"ok": True}
 
+    def ask_all(self, line_id: str) -> dict:
+        """The user wants every soft check answered again now: one <check> message to the lead with all of them."""
+        cfg = self.config(line_id)
+        items = [s for s in cfg["soft"] if s["id"] not in cfg["off"]]
+        if not items:
+            raise CheckError("没有开着的软检查")
+        lead = self.town.leads.agent(line_id, "lead")
+        if not lead:
+            raise CheckError("先配一位项目负责人：软检查要它来判断")
+        body = "\n".join(['<check id="all">', "用户请你现在把这些软检查都复审一遍：", *self.ask_text(items), "</check>"])
+        self.town.agents.say(lead["id"], body, "queue", origin="papertown")
+        self.asked(line_id, [s["id"] for s in items])
+        self.town.bus.publish("checks", line_id=line_id)
+        return {"ok": True, "n": len(items)}
+
     # edits
 
+    def set_loop(self, line_id: str, stage: str, auto: bool | None = None, rounds: int | None = None) -> dict:
+        """A stage's rework: sent at once or left for you to send, and how many rounds before it comes to you."""
+        self._line(line_id)
+        if stage not in INDEX:
+            raise CheckError(f"没有这道工序：{stage}")
+        with self._lock:
+            cfg = self.config(line_id)
+            d = self.loop_of(stage, cfg)
+            if auto is not None:
+                d["auto"] = bool(auto)
+            if rounds is not None:
+                d["rounds"] = max(1, min(20, int(rounds)))
+            cfg["loops"][stage] = d
+            self._save(line_id, cfg)
+        self.town.canvas.loop(line_id)
+        self.town.bus.publish("checks", line_id=line_id)
+        return self.view(line_id)
+
     def set(self, line_id: str, check_id: str, on: bool | None = None, params: dict | None = None,
-            title: str | None = None, prompt: str | None = None, every: float | None = None, stage: str | None = None) -> dict:
+            title: str | None = None, prompt: str | None = None, every: float | None = None, stage: str | None = None,
+            gate: str | None = None) -> dict:
         self._line(line_id)
         with self._lock:
             cfg = self.config(line_id)
@@ -713,6 +770,10 @@ class Checks:
                 raise CheckError("没有这项检查")
             if on is not None:
                 cfg["off"] = [i for i in cfg["off"] if i != check_id] + ([] if on else [check_id])
+            if gate is not None:
+                if check_id not in hard or gate not in GATE:
+                    raise CheckError("只有硬检查能设成阻断（block）或告警（warn）")
+                cfg["gates"][check_id] = gate
             if params and check_id in hard:
                 h = hard[check_id]
                 allowed = {k for k, *_ in h.params} | {"max"}
@@ -739,6 +800,7 @@ class Checks:
             self._save(line_id, cfg)
         self._sig.pop(line_id, None)
         self.run(line_id)
+        self.town.canvas.loop(line_id)
         self.town.bus.publish("checks", line_id=line_id)
         return self.view(line_id)
 
@@ -794,6 +856,7 @@ class Checks:
             cfg["off"] = [i for i in cfg["off"] if i != check_id]
             self._save(line_id, cfg)
         self.db.x("delete from checks where line_id = ? and check_id = ?", line_id, check_id)
+        self.town.canvas.loop(line_id)
         self.town.bus.publish("checks", line_id=line_id)
         return self.view(line_id)
 
@@ -810,22 +873,30 @@ class Checks:
         for r in self.db.q("select check_id, ts, status, value from checks where line_id = ? order by id desc limit 2000", line_id):
             if len(hist.setdefault(r["check_id"], [])) < HISTORY_MAX:
                 hist[r["check_id"]].append({"ts": r["ts"], "status": r["status"], "value": r["value"]})
+        first = {r["check_id"]: r for r in self.db.q(
+            "select check_id, ts, status, value from checks where id in (select min(id) from checks where line_id = ? and value is not null group by check_id)", line_id)}
         out = []
         for h in self.hard(line_id, cfg):
             p = self.params(h, cfg)
+            f = first.get(h.id)
             out.append({"id": h.id, "kind": "hard", "stage": h.stage, "title": h.title, "prio": h.prio, "rule": h.rule, "text": h.text,
                         "unit": h.unit, "max": p["max"], "params": [{"key": k, "value": p[k], "label": what} for k, _, what in h.params],
                         "custom": h.custom, "on": h.id not in cfg["off"], "last": self._last(last.get(h.id)),
+                        "gate": self.gate(h, cfg), "first": {"value": f["value"], "status": f["status"], "ts": f["ts"]} if f else None,
                         "history": hist.get(h.id, [])[::-1]})
         for s in cfg["soft"]:
             out.append({"id": s["id"], "kind": "soft", "stage": s.get("stage") or "", "title": s["title"], "prio": "", "rule": s.get("rule") or "",
                         "text": s["prompt"], "every": s.get("every") or SOFT_EVERY, "custom": s["id"].startswith("ask-"),
                         "on": s["id"] not in cfg["off"], "last": self._last(last.get(s["id"])), "asked": cfg["asked"].get(s["id"]),
                         "due": s["id"] in due, "history": hist.get(s["id"], [])[::-1]})
-        hard_rows = self.db.q("select check_id, ts, status from checks where line_id = ? and json_extract(data, '$.kind') = 'hard' order by id", line_id)
+        hard_rows = self.db.q("select check_id, ts, status, value from checks where line_id = ? and json_extract(data, '$.kind') = 'hard' order by id", line_id)
+        trend = self._trend(hard_rows, {c["id"] for c in out if c["kind"] == "hard" and c["on"]})
         return {"line_id": line_id, "seq": ln["seq"],
-                "stages": [{"key": s["key"], "name": s["name"], "status": s["status"], "pct": s["pct"]} for s in snap.get("stages") or []],
-                "checks": out, "summary": self.summary(line_id, out), "trend": self._trend(hard_rows, {c["id"] for c in out if c["kind"] == "hard" and c["on"]}),
+                "stages": [{"key": s["key"], "name": s["name"], "status": s["status"], "pct": s["pct"], "note": s.get("note") or ""}
+                           for s in snap.get("stages") or []],
+                "checks": out, "summary": self.summary(line_id, out), "trend": trend[-TREND_MAX:],
+                "found": {"first": trend[0]["found"] if trend else None, "now": trend[-1]["found"] if trend else None},
+                "loops": {k: self.loop_of(k, cfg) for k in INDEX},
                 "rounds": len({r["ts"] for r in hard_rows}), "lead": bool(lead),
                 "paper": bool(self.town.workspace.find(line_id, "paper")),
                 "ran": max((r["seen"] for r in last.values() if r["seen"] and (r["data"] or {}).get("kind") == "hard"), default=None)}
@@ -855,19 +926,20 @@ class Checks:
 
     @staticmethod
     def _trend(rows: list[dict], on: set[str]) -> list[dict]:
-        """How many hard checks passed after each round that changed something."""
-        state: dict[str, str] = {}
+        """After each round that changed something: how many hard checks passed, and how many places the ones that
+        did not still found (the count that goes down as the loop converges). Every round, oldest first."""
+        state: dict[str, tuple[str, float | None]] = {}
         out: list[dict] = []
         for r in rows:
-            state[r["check_id"]] = r["status"]
+            state[r["check_id"]] = (r["status"], r.get("value"))
             vals = [v for k, v in state.items() if k in on]
-            point = {"ts": r["ts"], "pass": sum(1 for v in vals if v == "pass"), "fail": sum(1 for v in vals if v in ("fail", "warn")),
-                     "total": sum(1 for v in vals if v != "none")}
+            point = {"ts": r["ts"], "pass": sum(1 for s, _ in vals if s == "pass"), "fail": sum(1 for s, _ in vals if s in BAD),
+                     "total": sum(1 for s, _ in vals if s != "none"), "found": int(sum(n or 0 for s, n in vals if s in BAD))}
             if out and out[-1]["ts"] == r["ts"]:
                 out[-1] = point
             else:
                 out.append(point)
-        return out[-TREND_MAX:]
+        return out
 
     def brief(self, line_id: str) -> str:
         """The checks in one line, for the lead's view of the project."""

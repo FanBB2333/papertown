@@ -121,6 +121,16 @@ class CheckSetIn(BaseModel):
     prompt: str | None = Field(default=None, max_length=2000)
     every: float | None = None
     stage: str | None = None
+    gate: str | None = None
+
+
+class LoopSetIn(BaseModel):
+    auto: bool | None = None
+    rounds: int | None = Field(default=None, ge=1, le=20)
+
+
+class GateIn(BaseModel):
+    what: str
 
 
 class CheckAddIn(BaseModel):
@@ -836,7 +846,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.put("/api/lines/{line_id}/checks/{check_id}")
     def line_check_set(line_id: str, check_id: str, body: CheckSetIn):
-        return checks(town.checks.set, line_id, check_id, body.on, body.params, body.title, body.prompt, body.every, body.stage)
+        return checks(town.checks.set, line_id, check_id, body.on, body.params, body.title, body.prompt, body.every, body.stage, body.gate)
+
+    @app.put("/api/lines/{line_id}/loops/{stage}")
+    def line_loop_set(line_id: str, stage: str, body: LoopSetIn):
+        return checks(town.checks.set_loop, line_id, stage, body.auto, body.rounds)
+
+    @app.post("/api/lines/{line_id}/checks/ask")
+    def line_checks_ask_all(line_id: str):
+        return checks(town.checks.ask_all, line_id)
 
     @app.delete("/api/lines/{line_id}/checks/{check_id}")
     def line_check_remove(line_id: str, check_id: str):
@@ -898,6 +916,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/lines/{line_id}/canvas/tidy")
     def canvas_tidy(line_id: str):
         return canvas(town.canvas.tidy, line_id)
+
+    @app.post("/api/lines/{line_id}/canvas/gates/{stage}")
+    def canvas_gate(line_id: str, stage: str, body: GateIn):
+        return canvas(town.canvas.gate, line_id, stage, body.what)
+
+    @app.get("/api/lines/{line_id}/canvas/report")
+    def canvas_report(line_id: str):
+        return canvas(town.canvas.report, line_id)
+
+    @app.post("/api/lines/{line_id}/canvas/report")
+    def canvas_publish(line_id: str):
+        try:
+            return canvas(town.canvas.publish, line_id)
+        except PageError as e:
+            raise HTTPException(400, str(e)) from e
 
     @app.get("/api/lines/{line_id}/lead")
     def lead(line_id: str):

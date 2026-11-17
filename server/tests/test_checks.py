@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from papertown.api import create_app
@@ -102,7 +104,7 @@ def test_hard_checks_read_the_paper_and_soft_ones_go_to_the_lead(tmp_path):
         assert c.get("/api/cards").json()["cards"][0]["checks"]["soft"]["warn"] == 1
 
 
-def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
+def test_the_research_loop_gates_its_stages_and_sends_rework_back(tmp_path):
     from .test_farm_agents import FakeLink
 
     app = create_app(make_settings(tmp_path))
@@ -114,24 +116,37 @@ def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
         wait_for(town, lid, {"waiting"})
 
-        # the first layout: every stage and check a node, checks wired to their stage, and the way back from review
+        # the first layout: the spine of stages and their gates, the sentinels watching stages above, the spec, the clamp
+        # and the human gate; a gate stands for its stage's hard checks, which have no nodes of their own
         v = c.get(f"/api/lines/{lid}/canvas").json()
         ids = {n["id"]: n for n in v["nodes"]}
-        assert {"stage:idea", "stage:ship", "check:words", "check:design"} <= ids.keys() and ids["check:design"]["kind"] == "soft"
-        pairs = {(e["source"], e["target"]) for e in v["edges"]}
-        assert {("stage:exp", "check:design"), ("stage:review", "stage:write"), ("stage:hatch", "stage:team")} <= pairs
+        assert {"stage:idea", "stage:ship", "gate:hatch", "gate:exp", "gate:write", "gate:review", "gate:ship", "check:design",
+                "spec", "clamp", "human"} <= ids.keys() and "check:words" not in ids and "gate:method" not in ids
+        assert ids["check:design"]["kind"] == "soft" and [x["key"] for x in v["lanes"]] == ["soft", "spine", "loop"]
+        g = ids["gate:write"]["gate"]
+        assert g["name"] == "写作排版" and {"words", "hyphens", "semicolons"} <= set(g["checks"]) and g["locks"] == "质检"
+        kinds = {(e["source"], e["target"]): e.get("kind") for e in v["edges"]}
+        assert kinds[("stage:write", "gate:write")] == kinds[("gate:write", "stage:review")] == kinds[("gate:exp", "stage:write")] == "flow"
+        assert kinds[("check:design", "stage:exp")] == "watch" and kinds[("spec", "stage:method")] == "spec"
+        assert kinds[("clamp", "stage:exp")] == "clamp" and kinds[("stage:review", "human")] == "escalate"
+        assert ids["stage:write"]["role"] == "writer" and ids["stage:review"]["locked"] is None
 
-        # nodes move, connect and come off; a built-in check taken off is turned off and can be put back
-        assert c.post(f"/api/lines/{lid}/canvas/move", json={"at": {"check:design": [40, 400]}}).json() == {"ok": True}
+        # a gate opens into a node per check and closes again; a check taken off is turned off and can be put back
+        v = c.post(f"/api/lines/{lid}/canvas/gates/ship", json={"what": "open"}).json()
+        assert ("gate:ship", "check:pdf", "member") in {(e["source"], e["target"], e.get("kind")) for e in v["edges"]}
         v = c.delete(f"/api/lines/{lid}/canvas/nodes/check:pdf").json()
         assert "check:pdf" not in {n["id"] for n in v["nodes"]} and v["gone"] == [{"id": "check:pdf", "title": "PDF 最新"}]
         assert not next(x for x in c.get(f"/api/lines/{lid}/checks").json()["checks"] if x["id"] == "pdf")["on"]
         v = c.post(f"/api/lines/{lid}/canvas/nodes/check:pdf/restore").json()
         assert next(n for n in v["nodes"] if n["id"] == "check:pdf")["check"]["on"] and not v["gone"]
+        v = c.post(f"/api/lines/{lid}/canvas/gates/ship", json={"what": "close"}).json()
+        assert "check:pdf" not in {n["id"] for n in v["nodes"]} and "gate:ship" in {n["id"] for n in v["nodes"]}
         v = c.delete(f"/api/lines/{lid}/canvas/nodes/stage:idea").json()
         assert "stage:idea" not in {n["id"] for n in v["nodes"]} and not any("stage:idea" in (e["source"], e["target"]) for e in v["edges"])
+        v = c.post(f"/api/lines/{lid}/canvas/nodes/info:runs/restore").json()
+        assert v["added"] == "info:runs" and "info:runs" not in {x["id"] for x in v["spare"]}
 
-        # a soft check of the user's own, drawn from a node: wired to nothing but that node, so due whatever the stage
+        # a soft check of the user's own, drawn from a sentinel: wired to nothing but that node, so due whatever the stage
         v = c.post(f"/api/lines/{lid}/canvas/nodes", json={"kind": "soft", "x": 10, "y": 20, "title": "要有消融", "text": "每个模块都有消融吗？",
                                                            "link": "check:design"}).json()
         new = next(n for n in v["nodes"] if n["id"] == v["added"])
@@ -141,16 +156,21 @@ def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
         assert {s["id"] for s in town.checks.due(lid)} == {"ask-1"}
         town.db.x("update stages set status = 'run' where line_id = ? and key = 'exp'", lid)
         assert {s["id"] for s in town.checks.due(lid)} == {"ask-1", "direction", "design"}
-        edge = next(e["id"] for e in v["edges"] if e["target"] == "check:direction")
+        edge = next(e["id"] for e in v["edges"] if "check:direction" in (e["source"], e["target"]))
         c.delete(f"/api/lines/{lid}/canvas/edges/{edge}")
         c.post(f"/api/lines/{lid}/canvas/edges", json={"source": "check:direction", "target": "stage:ship"})
         assert {s["id"] for s in town.checks.due(lid)} == {"ask-1", "design"}
 
-        # a task: kept as a draft until its agent is there, then sent with what it is wired to, and closed by the agent
+        # a correction drawn from a sentinel: kept as a draft until its agent is there, then sent with what it is wired
+        # to, closed by the agent
         v = c.post(f"/api/lines/{lid}/canvas/nodes", json={"kind": "task", "x": 0, "y": 300, "title": "补消融实验", "text": "三个模块各去掉一次",
                                                            "to": "lead", "link": "check:design", "send": False}).json()
         tid = v["added"]
-        assert next(n for n in v["nodes"] if n["id"] == tid)["status"] == "draft" and v["tasks"]["draft"] == 1
+        node = next(n for n in v["nodes"] if n["id"] == tid)
+        assert (node["status"], node["loop"], node["from"]) == ("draft", "soft", "design")
+        assert [n["id"] for n in v["nodes"] if n["kind"] == "task" and n["loop"] != "hard"] == [tid], [(n["id"], n["loop"], n["stage"]) for n in v["nodes"] if n["kind"] == "task"]
+        kinds = {(e["source"], e["target"]): e.get("kind") for e in v["edges"]}
+        assert kinds[("check:design", tid)] == kinds[(tid, "stage:exp")] == "soft_loop"
         assert c.post(f"/api/lines/{lid}/canvas/nodes/{tid}/send").status_code == 400  # no lead yet
         lead = c.post("/api/agents", json={"line_id": lid, "role": "lead"}).json()["id"]
         c.post(f"/api/agents/{lead}/start", json={"runtime": "paseo", "provider": "claude", "model": "claude-opus-5-5", "thinking": "high"})
@@ -161,7 +181,7 @@ def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
         assert next(n for n in v["nodes"] if n["id"] == tid)["status"] == "sent"
         assert said[-1][0] == lead
         sent = said[-1][1]
-        assert f'<task id="{tid}">' in sent and "补消融实验" in sent and "软检查 design「实验设计」" in sent and f"pt task {tid} done" in sent
+        assert f'<task id="{tid}">' in sent and "软巡检发现了偏差" in sent and "软检查 design「实验设计」" in sent and f"pt task {tid} done" in sent
         assert v["agents"]["lead"]["there"] and not v["agents"]["coder"]["there"]
 
         # a line can say what it means, and the agent reads that too
@@ -176,17 +196,80 @@ def test_the_canvas_is_a_free_graph_and_its_tasks_go_to_agents(tmp_path):
         assert "完成" in r["text"]
         node = next(n for n in c.get(f"/api/lines/{lid}/canvas").json()["nodes"] if n["id"] == tid)
         assert node["status"] == "done" and node["result"].startswith("三个消融")
-        assert town.leads.reports(lid, 5)[-1]["data"]["text"].startswith("画布上的任务「补消融实验」完成")
+        assert town.leads.reports(lid, 5)[-1]["data"]["text"].startswith("研究回路上的任务「补消融实验」完成")
         assert town.leads._facts(lid)[f"task:{tid}"][0] == "done"
-
-        # sent back with what is wrong: under way again, and the node keeps the whole story
         v = c.post(f"/api/lines/{lid}/canvas/nodes/{tid}/back", json={"text": "还差重排模块的消融"}).json()
         node = next(n for n in v["nodes"] if n["id"] == tid)
         assert node["status"] == "sent" and "还差重排模块的消融" in said[-1][1] and "你上次回的是：三个消融" in said[-1][1]
         assert [x["kind"] for x in node["log"]] == ["made", "sent", "resent", "done", "back"] and node["log"][-1]["text"] == "还差重排模块的消融"
 
-        # tidying puts stages and checks back where they started; the task stays where the user left it
+        # a blocking rule that fails once writing has started: the gate locks review and writes a rework ticket for
+        # the writer; done while it still fails, the next round; past the rounds, the human gate
+        paper = town.s.press_dir / lid
+        paper.mkdir(parents=True, exist_ok=True)
+        (paper / "main.tex").write_text("\\begin{document}\nThe zebra runs.\n\\end{document}\n", encoding="utf-8")
+        assert c.post(f"/api/lines/{lid}/checks", json={"kind": "hard", "stage": "write", "title": "不写斑马", "text": "zebra", "prio": "P0"}).status_code == 200
+        v = c.get(f"/api/lines/{lid}/canvas").json()
+        g = next(n for n in v["nodes"] if n["id"] == "gate:write")["gate"]
+        assert g["state"] == "block" and not g["ticket"] and not g["reached"]  # writing has not started: nothing sent back yet
+        town.db.x("update stages set status = 'run' where line_id = ? and key = 'write'", lid)
+        assert town.canvas.loop(lid)
+        v = c.get(f"/api/lines/{lid}/canvas").json()
+        ids = {n["id"]: n for n in v["nodes"]}
+        g = ids["gate:write"]["gate"]
+        t = ids[g["ticket"]]
+        assert (t["loop"], t["stage"], t["round"], t["status"], t["to"]) == ("hard", "write", 1, "draft", "writer") and "rule-1「不写斑马」" in t["text"] and "main.tex:2" in t["text"]
+        assert ids["stage:review"]["locked"] == {"gate": "write", "title": "写作排版"} and town.canvas.locks(lid)
+        assert "「写作排版」的硬卡口阻断，「质检」要等它放行（不写斑马）" in town.leads.status(lid)
+        kinds = {(e["source"], e["target"]): e.get("kind") for e in v["edges"]}
+        assert kinds[("gate:write", t["id"])] == kinds[(t["id"], "stage:write")] == "hard_loop"
+        assert c.post(f"/api/lines/{lid}/canvas/gates/write", json={"what": "rework"}).status_code == 400  # no writer yet
+        writer = c.post("/api/agents", json={"line_id": lid, "role": "writer"}).json()["id"]
+        c.post(f"/api/agents/{writer}/start", json={"runtime": "paseo", "provider": "claude", "model": "claude-opus-5-5", "thinking": "high"})
+        c.post(f"/api/lines/{lid}/canvas/gates/write", json={"what": "rework"})
+        assert said[-1][0] == writer and "第 1 轮修补单" in said[-1][1] and "pt checks run" in said[-1][1]
+        town.canvas.close(writer, t["id"], "done", "改好了")
+        t = next(n for n in c.get(f"/api/lines/{lid}/canvas").json()["nodes"] if n["id"] == t["id"])
+        assert (t["round"], t["status"]) == (2, "draft") and len(t["trail"]) == 2  # still failing: round two, waiting for you
+        c.put(f"/api/lines/{lid}/loops/write", json={"auto": True, "rounds": 2})
+        t = next(n for n in c.get(f"/api/lines/{lid}/canvas").json()["nodes"] if n["id"] == t["id"])
+        assert t["status"] == "sent" and "第 2 轮修补单" in said[-1][1]  # sent at once now
+        town.canvas.close(writer, t["id"], "done", "又改了")
+        v = c.get(f"/api/lines/{lid}/canvas").json()
+        t = next(n for n in v["nodes"] if n["id"] == t["id"])
+        human = next(n for n in v["nodes"] if n["id"] == "human")
+        assert t["escalated"] and t["status"] == "blocked" and any(x["kind"] == "escalated" and x["id"] == t["id"] for x in human["items"])
+        c.post(f"/api/lines/{lid}/canvas/gates/write", json={"what": "more"})
+        t = next(n for n in c.get(f"/api/lines/{lid}/canvas").json()["nodes"] if n["id"] == t["id"])
+        assert (t["round"], t["status"], t["escalated"]) == (3, "sent", False)
+        v = c.post(f"/api/lines/{lid}/canvas/gates/write", json={"what": "waive"}).json()
+        ids = {n["id"]: n for n in v["nodes"]}
+        assert ids["gate:write"]["gate"]["waived"] and ids["stage:review"]["locked"] is None and ids[t["id"]]["status"] == "done"
+        c.delete(f"/api/lines/{lid}/checks/rule-1")
+        v = c.get(f"/api/lines/{lid}/canvas").json()
+        ids = {n["id"]: n for n in v["nodes"]}
+        assert ids[t["id"]]["converged"] and not ids["gate:write"]["gate"]["waived"]
+
+        # the report: each gate's rules from the first round to now, and the sentinels' word
+        r = c.get(f"/api/lines/{lid}/canvas/report").json()
+        assert "## 硬限制质控" in r["markdown"] and "| 写作排版 | 禁用词（lastcheck 1.1） |" in r["markdown"] and "<table>" in r["html"]
+        page = c.post(f"/api/lines/{lid}/canvas/report").json()
+        assert page["kind"] == "report" and page["title"].startswith("研究回路汇报")
+        assert "- gate:write · 硬卡口 · 写作排版 · " in c.get(f"/api/lines/{lid}/canvas/outline").json()["text"]
+
+        # 按回路规整 puts the spine back in its lanes; the user's task stays where it was
+        c.post(f"/api/lines/{lid}/canvas/move", json={"at": {"stage:exp": [5, 5], tid: [40, 1300]}})
         v = c.post(f"/api/lines/{lid}/canvas/tidy").json()
         at = {n["id"]: (n["x"], n["y"]) for n in v["nodes"]}
-        assert at["stage:exp"] == (3 * 480, 600) and at["stage:method"] == (3 * 480, 0) and at[tid] == (0, 300)
-        assert at["info:runs"] == (3 * 480 - 290, 600 - 196)
+        assert at["stage:exp"] == (1490, 380) and at["stage:method"] == (1196, 380) and at["gate:write"] == (588, 640) and at[tid] == (40, 1300)
+
+        # a canvas from before the loop: its own layout, the tasks moved to the loop lane, a line to a hard check now to the gate
+        (town.s.projects_dir / lid / "canvas.json").write_text(json.dumps({
+            "nodes": [{"id": "stage:exp", "kind": "stage", "ref": "exp", "x": 0, "y": 0}, {"id": "check:words", "kind": "hard", "ref": "words", "x": 0, "y": 0},
+                      {"id": "info:card", "kind": "info", "ref": "card", "x": 0, "y": 0},
+                      {"id": "t9", "kind": "task", "title": "旧任务", "text": "", "to": "lead", "status": "draft", "x": 7, "y": 7}],
+            "edges": [{"id": "e1", "source": "t9", "target": "check:words", "label": "改这个"}], "gone": ["info:card"], "next": 10}))
+        v = c.get(f"/api/lines/{lid}/canvas").json()
+        ids = {n["id"]: n for n in v["nodes"]}
+        assert "gate:write" in ids and "info:card" not in ids and (ids["t9"]["x"], ids["t9"]["y"]) == (0, 980) and not v["gone"]
+        assert next(e for e in v["edges"] if {e["source"], e["target"]} == {"t9", "gate:write"})["label"] == "改这个"

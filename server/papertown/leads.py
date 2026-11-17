@@ -259,6 +259,9 @@ class Leads:
             out += ["", "等用户回答的问题："]
             out += [f"- 问题 {q['id']}（{q['data'].get('who')}，{_ago(q['ts'])}）：{clip(q['data']['question'], 160)}" for q in asks]
         out += ["", "检查：" + self.town.checks.brief(line_id)]
+        locks = self.town.canvas.locks(line_id)
+        if locks:
+            out += ["硬卡口：" + "；".join(locks)]
         reps = [r for r in self.reports(line_id, 12) if r["kind"] == "report"][-3:]
         if reps:
             out += ["", "最近的汇报："]
@@ -386,7 +389,7 @@ class Leads:
             mins = int((time.time() - self._last[lid]) / 60)
             out.append(f"已经 {mins} 分钟没有新动静了。看看员工是不是闲着、有没有该催的、有没有该告诉用户的。")
         if due:
-            out += [*([""] if changes else []), "到期的软检查（研究画布上要你判断的问题）：", *self.town.checks.ask_text(due)]
+            out += [*([""] if changes else []), "到期的软巡检（研究回路上要你判断的问题）：", *self.town.checks.ask_text(due)]
         out += ["", "现在的情况：", self.status(lid), "</checkin>"]
         self._last[lid] = time.time()
         if due:

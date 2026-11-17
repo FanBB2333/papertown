@@ -23,7 +23,7 @@ ID = "assistant"
 MODS = {"overview": "概览", "survey": "调研", "code": "代码仓库", "exp": "实验", "data": "数据", "paper": "论文",
         "agents": "员工", "depts": "部门", "skills": "Skills", "mcp": "MCP", "rag": "图书馆", "rules": "工作边界", "trace": "调用轨迹"}
 # pages outside the console the user can be on; not panels to open
-PLACES = {"progress": "进展", "town": "小镇地图", "canvas": "研究画布"}
+PLACES = {"progress": "进展", "town": "小镇地图", "canvas": "研究回路"}
 TEXT_MAX = 8000
 SELECTION_MAX = 2000
 REFS_MAX = 80
@@ -46,14 +46,16 @@ ACTIONS: dict[str, tuple[str, str]] = {
                      "name enabled [scope] [line] [role]"),
     "mcp.toggle": ("启用或停用接线局里的一个 MCP server", "name enabled"),
     "mcp.restart": ("重连接线局里的一个 MCP server", "name"),
-    "canvas.add": ("在项目的研究画布上加一个节点：kind 写 task（派给 agent 的任务：title 名字、text 要做的事、to 写 lead / coder / writer，send=true 加上就发给它）、"
+    "canvas.add": ("在项目的研究回路上加一个节点：kind 写 task（派给 agent 的任务：title 名字、text 要做的事、to 写 lead / coder / writer，send=true 加上就发给它）、"
                    "soft（软检查：title 名字，text 是问负责人的问题）、hard（硬检查：title 名字，text 是论文里不许出现的正则，prio 写 P0 或 P1）"
                    "或 note（备注：text）；near 写一个节点的编号，新节点放在它旁边并连上", "line kind [title] [text] [to] [prio] [near] [send]"),
-    "canvas.edit": ("改研究画布上的一个节点：任务的 title、text、to；备注的 text；软检查的问题（text）；检查开不开（on=true/false）、最多允许几处（max）；"
-                    "x、y 是把它挪到画布上的哪里", "line node [title] [text] [to] [on] [max] [x] [y]"),
-    "canvas.link": ("把研究画布上的两个节点连起来，label 是写在线上的字（已经连着的只改字）；cut=true 是断开它们", "line a b [label] [cut]"),
-    "canvas.send": ("把研究画布上的一个任务发给它的 agent（改过的任务是再发一次）", "line node"),
-    "canvas.remove": ("删掉研究画布上的任务、备注或自己加的检查；工序、内置的检查和资料卡是从画布上拿掉，用户能放回来", "line node"),
+    "canvas.edit": ("改研究回路上的一个节点：任务的 title、text、to；备注的 text；软巡检的问题（text）；检查开不开（on=true/false）、最多允许几处（max）、"
+                    "硬检查没过时阻断还是只告警（gate=block|warn）；硬卡口（gate:<工序>）的修补单是否自动发出（auto=true/false）、最多打回几轮（rounds）、"
+                    "是否展开成每条规则一个节点（open=true/false）；x、y 是把它挪到回路上的哪里",
+                    "line node [title] [text] [to] [on] [max] [gate] [auto] [rounds] [open] [x] [y]"),
+    "canvas.link": ("把研究回路上的两个节点连起来，label 是写在线上的字（已经连着的只改字）；cut=true 是断开它们", "line a b [label] [cut]"),
+    "canvas.send": ("把研究回路上的一个任务发给它的 agent（改过的任务是再发一次）", "line node"),
+    "canvas.remove": ("删掉研究回路上的任务、备注或自己加的检查；工序、硬卡口、内置的检查、软限制、硬边界和人类拍板节点是从回路上拿掉，用户能放回来", "line node"),
 }
 DIRECT = ("tell", "answer", "canvas.add", "canvas.edit", "canvas.link", "canvas.send")
 MENTIONED_MAX = 3
@@ -114,11 +116,12 @@ GUIDE = """# Papertown · 小助手
 - 办事用 {do}（发消息和转达回答也可以用上面的写法）。直接做的会马上执行并告诉你结果；要他允许的，侧边栏会弹出一张卡片写着你要做什么、为什么，他点了才执行，结果会作为一条 `<event>…</event>` 消息发给你。提完这种请求就结束这一轮，告诉他你请求了什么、在等他点。
 - 只用这个办法改小镇里的东西，不要直接调用会改东西的接口。要改代码或论文，告诉那个项目的负责人（tell）。
 
-## 研究画布
+## 研究回路
 
-- 每个项目有一张研究画布（「进展」里项目页上打开，`/progress/<编号>/canvas`）：一张自由的图，节点是工序、硬检查（Papertown 用代码查，必须满足）、软检查（负责人判断的问题）、用户派给 agent 的任务、备注，和实时显示项目的资料卡（进展、三位 agent、实验任务、代码、论文、预期产出），节点之间用线连着，线上可以写字。用户在画布上叫你时，`<page>` 里写着「研究画布」和他选中的节点。
-- 画布现在的样子用 {get} 读 `/api/lines/<项目>/canvas/outline`：每个节点的编号、种类、名字和状态，以及所有连线。节点编号就是动作里的 node、near、a、b：工序是 `stage:exp`，检查是 `check:words`，资料卡是 `info:runs`，任务和备注是 `t3`、`n4` 这样的。
-- 用户让你在画布上加、改、连、删东西，用 {do}：`canvas.add` 加节点（给 agent 派任务就是加一个 task 节点，send=true 直接发出去；它连着哪些节点，agent 就会一起收到那些节点的内容，所以用 near 连到相关的检查或工序上）、`canvas.edit` 改节点或挪位置、`canvas.link` 连线和写线上的字、`canvas.send` 发任务、`canvas.remove` 删节点。改完他的画布会立刻更新；说一句你改了什么、新节点的编号。
+- 每个项目有一张研究回路（「进展」里项目页上打开，`/progress/<编号>/loop`）：一张自由的图，分三条泳道。上面是软层：软限制规范（工作边界里写给 agent 的要求）、硬边界夹（绑定了动作、Papertown 会拦下或先问用户的边界）和软巡检（负责人判断的问题，每个盯着一道工序）。中间是主干：工序按顺序连着，工序后面是它的硬卡口（这道工序的硬检查合成一个节点，可以展开成每条规则一个节点）；阻断级的规则没过，卡口就锁住下一道工序，并给这道工序的员工写一张修补单打回去，一轮一轮直到清零，超过轮数就交给人类拍板节点。下面是回路：修补单、软巡检派出的纠偏任务、用户派的任务和备注，以及人类拍板节点（超轮次的卡口、卡住的任务、判为偏离的软巡检、agent 问用户的问题）。用户在回路上叫你时，`<page>` 里写着「研究回路」和他选中的节点。
+- 回路现在的样子用 {get} 读 `/api/lines/<项目>/canvas/outline`：每个节点的编号、种类、名字和状态，以及所有连线和线的种类。节点编号就是动作里的 node、near、a、b：工序是 `stage:exp`，硬卡口是 `gate:write`，检查是 `check:words`，软限制、硬边界、人类拍板是 `spec`、`clamp`、`human`，任务和备注是 `t3`、`n4` 这样的。前后对比的汇报在 `/api/lines/<项目>/canvas/report`（markdown 和 html）。
+- 用户问「为什么写作卡口还没放行」这类问题，读 outline 和 `/api/lines/<项目>/checks` 回答：哪几条规则阻断、还有几处、在哪个文件哪一行、修补单到了第几轮。
+- 用户让你在回路上加、改、连、删东西，用 {do}：`canvas.add` 加节点（给 agent 派任务就是加一个 task 节点，send=true 直接发出去；它连着哪些节点，agent 就会一起收到那些节点的内容，所以用 near 连到相关的检查或工序上）、`canvas.edit` 改节点或挪位置、`canvas.link` 连线和写线上的字、`canvas.send` 发任务、`canvas.remove` 删节点。改完他的研究回路会立刻更新；说一句你改了什么、新节点的编号。
 - 一次要加好几个节点时一个一个加，位置用 near 挂在相关节点旁边；想让他看某个节点，用 show 把 ref 写成 `node:<编号>`（加上 line）。
 
 ## 回复
@@ -354,11 +357,12 @@ class Assistant:
                     "新出的相关论文：接口 `/api/papers/fresh`",
                     f"项目负责人的汇报和它问你的事：接口 `/api/lines/{x}/lead`；它写的页面：`/api/lines/{x}/pages`"]
         elif mod == "canvas":
-            out += [f"画布上的每个节点（编号、种类、名字、状态）和所有连线，用文字写的：接口 `/api/lines/{x}/canvas/outline`；完整的数据：`/api/lines/{x}/canvas`",
+            out += [f"研究回路上的每个节点（编号、种类、名字、状态）和所有连线，用文字写的：接口 `/api/lines/{x}/canvas/outline`；完整的数据：`/api/lines/{x}/canvas`；"
+                    f"前后对比的汇报：`/api/lines/{x}/canvas/report`",
                     f"检查的结果、没过的位置和设置：接口 `/api/lines/{x}/checks`",
                     f"资料卡显示的：进展卡片在 `/api/cards`，三位 agent 在 `/api/agents?role=lead|coder|writer`，实验任务在 `/api/jobs?line_id={x}`，"
                     f"代码和论文在 `/api/lines/{x}/ws`",
-                    "改画布用 canvas.add、canvas.edit、canvas.link、canvas.send、canvas.remove 这几个动作（见 actions）；"
+                    "改回路用 canvas.add、canvas.edit、canvas.link、canvas.send、canvas.remove 这几个动作（见 actions）；"
                     "页面上能亮的 ref 是 `node:<节点编号>`"]
         elif mod == "town":
             out += ["小镇地图上的建筑和项目：接口 `/api/world`"]
@@ -416,7 +420,7 @@ class Assistant:
         if t.get("ref", "").startswith("node:"):  # a node on a project's canvas: the page goes there and opens it
             lid = t.get("line") or (self.page.get("line") or {}).get("id")
             if not lid:
-                raise ActError("亮画布上的节点要写 line（哪个项目）")
+                raise ActError("亮研究回路上的节点要写 line（哪个项目）")
             try:
                 t |= {"line": lid, "ref": "node:" + self.town.canvas.find(lid, t["ref"][5:])["id"]}
             except CanvasError as e:
@@ -542,7 +546,7 @@ class Assistant:
         ln = self._line(a["line"])
         lid, tag = ln["id"], f"#{ln['seq']}「{clip(ln['title'], 30)}」"
         if name.startswith("canvas."):
-            return self._canvas(name, a, lid, f"{tag} 的研究画布")
+            return self._canvas(name, a, lid, f"{tag} 的研究回路")
         if name == "job.submit":
             jname, cmd = clip(a["name"], 60), str(a["command"]).strip()
             return (f"在 {tag} 提交实验农场任务「{jname}」：{clip(cmd, 160)}",
@@ -627,16 +631,24 @@ class Assistant:
             return f"把{where}上的任务「{n['label']}」发给它的 agent", safely(lambda: (cv.send(lid, n["id"]), "发出去了")[1])
         if name == "canvas.remove":
             return f"从{where}上去掉「{n['label']}」", safely(lambda: (cv.remove(lid, n["id"]), "去掉了")[1])
-        changes = [k for k in ("title", "text", "to", "on", "max", "x", "y") if given(k)]
+        changes = [k for k in ("title", "text", "to", "on", "max", "gate", "auto", "rounds", "open", "x", "y") if given(k)]
         if not changes:
-            raise ActError("canvas.edit 要写改什么：title、text、to、on、max、x、y")
+            raise ActError("canvas.edit 要写改什么：title、text、to、on、max、gate、auto、rounds、open、x、y")
+        if given("gate") and str(a["gate"]) not in ("block", "warn"):
+            raise ActError("gate 写 block（阻断）或 warn（告警）")
 
         def edit() -> str:
-            if n["kind"] in ("hard", "soft"):
-                if given("on") or given("max") or given("title") or given("text"):
+            if n["kind"] == "gate":
+                if given("auto") or given("rounds"):
+                    self.town.checks.set_loop(lid, n["ref"], _bool(a["auto"]) if given("auto") else None, int(a["rounds"]) if given("rounds") else None)
+                if given("open"):
+                    cv.gate(lid, n["ref"], "open" if _bool(a["open"]) else "close")
+            elif n["kind"] in ("hard", "soft"):
+                if given("on") or given("max") or given("title") or given("text") or given("gate"):
                     self.town.checks.set(lid, n["ref"], on=_bool(a["on"]) if given("on") else None,
                                          params={"max": float(a["max"])} if given("max") else None,
-                                         title=clip(a["title"], 20) if given("title") else None, prompt=str(a["text"]) if given("text") else None)
+                                         title=clip(a["title"], 20) if given("title") else None, prompt=str(a["text"]) if given("text") else None,
+                                         gate=str(a["gate"]) if given("gate") else None)
             elif given("title") or given("text") or given("to"):
                 cv.set(lid, n["id"], str(a["title"]) if given("title") else None, str(a["text"]) if given("text") else None,
                        _role(a["to"], ("lead", "coder", "writer")) if given("to") else None)
