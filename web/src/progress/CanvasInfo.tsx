@@ -91,7 +91,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     return (
       <>
         {a.there && a.model && <p className="muted">{a.model}</p>}
-        <p>{bits.length ? bits.join(' · ') : <span className="muted">{tr('画布上没有给它的任务')}</span>}</p>
+        <p>{bits.length ? bits.join(' · ') : <span className="muted">{tr('回路上没有给它的任务')}</span>}</p>
         {full && mine.length > 0 && (
           <ul className="cv-links">
             {mine.map(t => (

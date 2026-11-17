@@ -48,6 +48,10 @@ export function CheckResult({ c, lead, busy, act, lineId, onConsole, onFix }: {
   return (
     <>
       <p className="cg-what">{trx(c.text)}</p>
+      {c.kind === 'hard' && (
+        <p className="small muted">{c.gate === 'block' ? tr('阻断级：没过时锁住下一道工序，并打回修补单') : tr('告警级：没过时只提醒，不锁工序')}
+          {c.first?.value != null && last?.value != null && ` · ${tr('R1 {0} → 现在 {1}', c.first.value, last.value)}`}</p>
+      )}
       {c.kind === 'hard' ? (
         last && last.value != null ? (
           <div className={`cg-meter s-${c.on ? k : 'none'}`}>
@@ -67,7 +71,8 @@ export function CheckResult({ c, lead, busy, act, lineId, onConsole, onFix }: {
       )}
       {c.on && (
         <div className="cv-row">
-          {bad && <button className="btn pri" onClick={onFix} title={tr('建一个连着这项检查的任务，把没过的地方写进去，你看过再发')}><Icon n="wand" size={13} />{tr('派人修')}</button>}
+          {bad && <button className="btn pri" onClick={onFix} title={c.kind === 'soft' ? tr('建一个纠偏任务，连回它盯着的工序，你看过再发') : tr('把这道卡口没过的规则写成修补单，发给这道工序的员工')}>
+            <Icon n={c.kind === 'soft' ? 'wand' : 'refresh'} size={13} />{c.kind === 'soft' ? tr('派人纠偏') : tr('派修补单')}</button>}
           {c.kind === 'soft'
             ? <button className={`btn${bad ? '' : ' pri'}`} disabled={busy || !lead} title={lead ? '' : tr('先配一位项目负责人')}
               onClick={() => act(() => api.askCheck(lineId, c.id), tr('已经发给负责人，它判断完会出现在这里'))}><Icon n="send" size={13} />{tr('让负责人现在查')}</button>
@@ -171,6 +176,12 @@ export function CheckSettings({ c, busy, act, lineId }: { c: Check; busy: boolea
         <input type="checkbox" checked={c.on} disabled={busy} onChange={e => act(() => api.setCheck(lineId, c.id, { on: e.target.checked }))} />
         <span>{tr('启用这项检查')}</span>
       </label>
+      {c.kind === 'hard' && (
+        <label className="field">{tr('没过时')}
+          <Select value={c.gate ?? 'warn'} disabled={busy} onChange={g => act(() => api.setCheck(lineId, c.id, { gate: g }), tr('保存了'))}
+            options={[{ value: 'block' as const, label: tr('阻断：锁住下一道工序并打回') }, { value: 'warn' as const, label: tr('告警：只提醒') }]} />
+        </label>
+      )}
       {c.kind === 'hard' ? (
         <div className="cg-nums">
           <label className="field">{tr('最多允许几处')}

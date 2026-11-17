@@ -274,8 +274,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     const away = (t: ShowTarget) => {
       const { view: v, lines: ls, up } = here.current;
       const l = t.line ? ls.find(x => x.id === t.line || `#${x.seq}` === t.line || String(x.seq) === t.line) : undefined;
-      if (t.ref?.startsWith('node:') && l) { // a node on a project's canvas: go there, and the canvas opens it
-        const to = `/progress/${l.seq}/canvas`, there = location.pathname.endsWith(to);
+      if (t.ref?.startsWith('node:') && l) { // a node on a project's research loop: go there, and the loop opens it
+        const to = `/progress/${l.seq}/loop`, there = location.pathname.endsWith(to) || location.pathname.endsWith(`/progress/${l.seq}/canvas`);
         if (!there) go(to);
         setTimeout(() => dispatchEvent(new CustomEvent('pt-canvas-show', { detail: t.ref!.slice(5) })), there ? 0 : 900);
         return;
@@ -295,7 +295,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     const l = route.view === 'cards' && route.seq ? lines.find(x => x.seq === route.seq) : undefined;
     const canvas = route.view === 'cards' && route.sub === 'canvas' && !!l;
     setPlace(l ? { id: l.id, seq: l.seq, title: l.title } : null, canvas ? 'canvas' : view === 'cards' ? 'progress' : 'town',
-      canvas ? tr('研究画布') : view === 'cards' ? tr('进展') : tr('小镇地图'));
+      canvas ? tr('研究回路') : view === 'cards' ? tr('进展') : tr('小镇地图'));
   }, [view, route, lines]);
 
   // commands from the macOS app's menus (macos/)

@@ -10,7 +10,7 @@ import { ago } from '../console/util';
 import { tr } from '../i18n';
 import { follow, href, PATHS } from '../route';
 import { askPath, ChatBox } from './Ask';
-import { CanvasCard } from './CanvasCard';
+import { LoopCard } from './LoopCard';
 import { PagesBox } from './Pages';
 import { MemorySection, MemoryViewer } from './Memory';
 import { Meter, noCardText, OUT_STATE, repoLine, runText, UpdateButton, useCardActs, Who } from './parts';
@@ -67,7 +67,7 @@ export function Project({ r, defs, toast, onChange, onConsole, decide }: {
           <div className="btns">{wait.btns}</div>
         </section>
       )}
-      <CanvasCard r={r} />
+      <LoopCard r={r} toast={toast} />
 
       <div className="pj-grid">
         <div className="pj-main">

@@ -135,25 +135,44 @@ export interface Check {
   unit?: string; max?: number; params?: { key: string; value: number; label: string }[]; every?: number;
   custom: boolean; on: boolean; last: CheckResult | null; history: { ts: string; status: CheckStatus; value: number | null }[];
   asked?: string | null; due?: boolean;
+  gate?: GateLevel; first?: { value: number | null; status: CheckStatus; ts: string } | null; // a hard check: what it does at its gate, its first count
 }
-export interface CheckEdit { on?: boolean; params?: Record<string, number>; title?: string; prompt?: string; every?: number }
+export type GateLevel = 'block' | 'warn';
+export interface CheckEdit { on?: boolean; params?: Record<string, number>; title?: string; prompt?: string; every?: number; gate?: GateLevel }
 
-// a project's canvas (canvas.py): a free graph of stages, checks, tasks for agents and notes
-export type CanvasKind = 'stage' | 'hard' | 'soft' | 'task' | 'note' | 'info';
+// a project's research loop (canvas.py): a free graph in three lanes. Stages and their hard gates along the spine,
+// the soft spec, the hard clamp and the sentinels (soft checks) above, rework tickets, corrections, tasks, notes and
+// the human gate below
+export type CanvasKind = 'stage' | 'gate' | 'hard' | 'soft' | 'spec' | 'clamp' | 'human' | 'task' | 'note' | 'info';
 export type TaskStatus = 'draft' | 'sent' | 'done' | 'blocked';
 export type TaskTo = 'lead' | 'coder' | 'writer';
-export interface TaskLog { ts: string; kind: 'made' | 'sent' | 'resent' | 'done' | 'blocked' | 'back' | 'marked' | 'reopened'; text: string; by: string }
+export interface TaskLog { ts: string; kind: 'made' | 'sent' | 'resent' | 'done' | 'blocked' | 'back' | 'marked' | 'reopened' | 'round' | 'escalated' | 'converged'; text: string; by: string }
+export type GateState = 'pass' | 'warn' | 'block' | 'none' | 'off';
+export interface Gate {
+  stage: string; name: string; state: GateState; checks: string[]; pass: number; total: number; blocking: { id: string; title: string }[];
+  before: number; now: number; policy: { auto: boolean; rounds: number }; ticket: string | null; ticket_status: TaskStatus | null; round: number;
+  escalated: boolean; open: boolean; waived: boolean; reached: boolean; next: string | null; locks: string | null;
+}
+export interface BoundRule { id: string; kind: 'must' | 'never' | 'ask'; text: string; from: string; action: string | null }
+export interface HumanItem { kind: 'escalated' | 'blocked' | 'fail' | 'ask' | 'line'; id: string; text: string; gate?: string }
 export interface CanvasNode {
   id: string; kind: CanvasKind; x: number; y: number; title?: string; text?: string;
   ref?: string; status?: string; pct?: number; // a stage: its key, state and progress; a task: its state; an info card: what it shows
-  check?: Check;
+  note?: string; role?: TaskTo | null; locked?: { gate: string; title: string } | null; // a stage: its note, who works there, the gate holding it
+  check?: Check; gate?: Gate;
+  rules?: BoundRule[]; budget?: { budget: number; spent: number }; items?: HumanItem[];
   to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string; log?: TaskLog[];
+  // a task on the loop: a rework ticket (the stage whose gate sent it back, its round, the counts so far) or a correction (the sentinel it came from)
+  loop?: 'hard' | 'soft' | null; stage?: string | null; round?: number; trail?: number[]; from?: string | null; escalated?: boolean; converged?: boolean;
 }
-export interface CanvasEdge { id: string; source: string; target: string; label?: string }
+export type EdgeKind = 'flow' | 'watch' | 'spec' | 'clamp' | 'hard_loop' | 'soft_loop' | 'escalate' | 'member';
+export interface CanvasEdge { id: string; source: string; target: string; label?: string; kind?: EdgeKind }
 export interface CanvasView {
   line_id: string; seq: number; title: string; nodes: CanvasNode[]; edges: CanvasEdge[]; gone: { id: string; title: string }[];
+  spare: { id: string; title: string }[]; lanes: { key: 'soft' | 'spine' | 'loop'; title: string; y0: number; y1: number }[]; checks: Check[];
   summary: { hard: CheckCounts; soft: CheckCounts }; tasks: Record<TaskStatus, number>;
-  trend: { ts: string; pass: number; fail: number; total: number }[]; rounds: number; ran: string | null;
+  trend: { ts: string; pass: number; fail: number; total: number; found: number }[]; found: { first: number | null; now: number | null };
+  rounds: number; ran: string | null;
   lead: boolean; agents: Record<TaskTo, { there: boolean; status: string | null; model: string | null }>; added?: string;
 }
 export interface NewNode { kind: 'task' | 'hard' | 'soft' | 'note'; x: number; y: number; title?: string; text?: string; to?: TaskTo; prio?: string; link?: string | null; send?: boolean }
@@ -463,6 +482,12 @@ export const api = {
   connect: (lineId: string, source: string, target: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/edges`, { source, target }, kept),
   disconnect: (lineId: string, id: string) => call<CanvasView>('DELETE', `/api/lines/${lineId}/canvas/edges/${encodeURIComponent(id)}`, undefined, kept),
   tidyCanvas: (lineId: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/tidy`, undefined, kept),
+  gateAct: (lineId: string, stage: string, what: 'open' | 'close' | 'rework' | 'more' | 'waive') =>
+    call<CanvasView>('POST', `/api/lines/${lineId}/canvas/gates/${stage}`, { what }, kept),
+  setLoop: (lineId: string, stage: string, b: { auto?: boolean; rounds?: number }) => call<unknown>('PUT', `/api/lines/${lineId}/loops/${stage}`, b, kept),
+  askAll: (lineId: string) => call<{ ok: boolean; n: number }>('POST', `/api/lines/${lineId}/checks/ask`),
+  loopReport: (lineId: string) => call<{ markdown: string; html: string; title: string }>('GET', `/api/lines/${lineId}/canvas/report`),
+  publishReport: (lineId: string) => call<{ id: string; title: string }>('POST', `/api/lines/${lineId}/canvas/report`),
   convs: (id: string) => call<{ conversations: AssistantConv[] }>('GET', `/api/agents/${id}/conversations`),
   newConv: (id: string) => call<Agent>('POST', `/api/agents/${id}/conversations/new`),
   resumeConv: (id: string, ext: string) => call<Agent>('POST', `/api/agents/${id}/conversations/${encodeURIComponent(ext)}`),

@@ -61,7 +61,7 @@ export function parse(p: string): Route {
   const [, a, b, c, d] = p.split('/');
   if (!a) return { view: 'landing' };
   const seq = b && /^\d+$/.test(b) ? Number(b) : undefined;
-  if (a === 'progress') return { view: 'cards', seq, sub: seq != null && (c === 'ask' || c === 'pages' || c === 'canvas') ? c : undefined, page: c === 'pages' ? d || undefined : undefined };
+  if (a === 'progress') return { view: 'cards', seq, sub: seq != null && (c === 'ask' || c === 'pages') ? c : seq != null && (c === 'loop' || c === 'canvas') ? 'canvas' : undefined, page: c === 'pages' ? d || undefined : undefined };
   if (a === 'console') return { view: 'console', seq, mod: c || undefined };
   if (a === 'town') return { view: 'world' };
   if (a === 'settings') return { view: 'settings', mod: b || undefined };
