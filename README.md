@@ -286,7 +286,7 @@ cd server/papertown/paseo_link && pnpm install          # SDK，装一次
 
 本机 Paseo 里已有的对话也能接过来：在没有员工的项目房间里点「导入 Paseo 里已有的对话」，选一段，它就成了这个项目的员工。工作目录保持对话原来的目录，Papertown 给它打上 `papertown.*` 标签，一段对话只能导入给一个项目。
 
-这些 agent 用 `.papertown/pt` 读项目简报、把实验提交到实验农场（`pt brief`、`pt submit <名字> -- <命令>`、`pt jobs`），也用它和项目负责人打交道：`pt tell lead "…"` 告诉负责人做完了什么或卡在哪，`pt ask "问题" [--choice 选项]…` 问你（你的回答作为 `<answer>` 消息发回来），`pt rules` 看自己的工作边界，`pt checks [run]` 看项目的硬检查（写作员工改论文后用它确认都通过了），`pt tasks` 看你在研究回路上派给它的任务、`pt task <编号> done|blocked "…"` 回一件任务。导入的对话不在项目目录里，可以点房间侧栏的「发送项目简报」把用法发给它。Papertown 每隔几秒同步一次它们的状态。Paseo 用它自己的登录和设置，Papertown 不碰任何 key。
+这些 agent 用 `.papertown/pt` 读项目简报、把实验提交到实验农场（`pt brief`、`pt submit <名字> -- <命令>`、`pt jobs`），也用它和项目负责人打交道：`pt tell lead "…"` 告诉负责人做完了什么或卡在哪，`pt ask "问题" [--choice 选项]…` 问你（你的回答作为 `<answer>` 消息发回来），`pt rules` 看自己的工作边界，`pt checks [run]` 看项目的硬检查（写作员工改论文后用它确认都通过了），`pt tasks` 看你在研究回路上派给它的任务、`pt task <编号> done|blocked "…"` 回一件任务。导入的对话不在项目目录里，可以点房间侧栏的「发送项目简报」把用法发给它。Papertown 每隔几秒同步一次它们的状态；守护进程没在运行时，Paseo 上的员工、负责人和小助手都显示「连不上」（空心的橙色圆点），小助手的输入框也先停用，守护进程起来以后页面自己接上。Paseo 用它自己的登录和设置，Papertown 不碰任何 key。
 
 ### pi · 后台终端
 
