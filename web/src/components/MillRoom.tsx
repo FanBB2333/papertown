@@ -22,7 +22,7 @@ export function StatusTag({ status }: { status: string }) {
   return <span className={`pst pst-${status}`}>{STATUS[status] ?? status}</span>;
 }
 export const AGENT_STATUS: Record<string, string> = {
-  stopped: tr('未启动'), starting: tr('启动中'), idle: tr('待命'), working: tr('工作中'), error: tr('出错'), watching: tr('值守'),
+  stopped: tr('未启动'), starting: tr('启动中'), idle: tr('待命'), working: tr('工作中'), error: tr('出错'), watching: tr('值守'), offline: tr('连不上'),
 };
 
 const REAL = tr('工序按顺序走：方法设计在造纸厂，代码和实验在仓库与实验农场，写作在印刷厂，最后经质检所出厂。');

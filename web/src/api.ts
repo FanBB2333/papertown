@@ -63,7 +63,7 @@ export interface Sheet {
 }
 
 export type AgentRole = 'coder' | 'writer' | 'monitor' | 'assistant' | 'lead';
-export type AgentStatus = 'stopped' | 'starting' | 'idle' | 'working' | 'error' | 'watching';
+export type AgentStatus = 'stopped' | 'starting' | 'idle' | 'working' | 'error' | 'watching' | 'offline'; // offline: in Paseo, while Paseo cannot be reached
 
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act'; data: any }
 
@@ -81,6 +81,7 @@ export interface Agent {
   id: string; line_id: string | null; role: AgentRole; status: AgentStatus; tmux: string | null; cwd: string | null;
   model: string | null; cost: number; attach: string | null; name: string; last: AgentEvent | null; updated_at: string;
   runtime: 'pi' | 'paseo'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
+  down?: string | null; // why it cannot be reached now (its status is then offline)
 }
 
 export interface PaseoModel { id: string; name: string; thinking: string[]; default_thinking: string | null }

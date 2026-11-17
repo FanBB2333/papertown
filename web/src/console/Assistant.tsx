@@ -140,6 +140,9 @@ interface Side {
   unpoint: () => void;
   // set by the conversation on screen: sends a message from the box, keeping the log at its end
   submit: React.MutableRefObject<((text: string) => void) | null>;
+  // why it cannot be reached now (Paseo is not running, say), as the conversation on screen finds it; empty when it can
+  down: string;
+  setDown: (why: string) => void;
 }
 
 export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea, onAdjust }: {
@@ -154,6 +157,7 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea,
   const [pointing, setPointing] = useState<((f: Focus) => void) | null>(null);
   const [history, setHistory] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [down, setDown] = useState('');
   const submit = useRef<((text: string) => void) | null>(null);
   const focusRef = useRef<Focus | null>(null), selRef = useRef<Selected | null>(null);
   const last = useRef<{ focus: Focus | null; sel: Selected | null }>({ focus: null, sel: null });
@@ -239,7 +243,7 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea,
   const a = view?.agent;
   const side: Side | null = view && {
     view, head, send, toast, focus, setFocus, sel, setSel, submit,
-    pointing: !!pointing, point, unpoint: () => setPointing(null),
+    pointing: !!pointing, point, unpoint: () => setPointing(null), down, setDown,
   };
   return (
     <div className="asst">
@@ -274,8 +278,11 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea,
 function PaseoSide({ agent, side }: { agent: Agent; side: Side }) {
   const t = usePaseoTalk(agent, s => parse(s).text);
   const rows = useMemo(() => paseoRows(t.items, t.sent), [t.items, t.sent]);
+  // the conversation cannot be read, or Paseo is known to be down: it shows as unreachable until a read gets through
+  const why = t.err || t.agent.down || '', { setDown } = side;
+  useEffect(() => { setDown(why); return () => setDown(''); }, [why, setDown]);
   return (
-    <Talk side={side} agent={t.agent} rows={rows} loading={t.items === null && !t.err} err={t.err} perms={t.asks} onSent={t.wrote}
+    <Talk side={side} agent={why ? { ...t.agent, status: 'offline' } : t.agent} rows={rows} loading={t.items === null && !why} err={why} perms={t.asks} onSent={t.wrote}
       onPermit={(id, allow) => { t.answered(id); api.permit(ID, id, allow).catch(e => side.toast((e as Error).message)); }} />
   );
 }
@@ -332,7 +339,13 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
           stick.current = near;
           setStuck(near);
         }}>
-          {err && <div className="note err">{err}</div>}
+          {err && (
+            <div className="as-off" role="status">
+              <b>{tr('连不上 Paseo，小助手现在收不到消息')}</b>
+              <p>{err}</p>
+              <p className="muted">{tr('Paseo 启动后这里会自己接上。写新 idea 照常可用。')}</p>
+            </div>
+          )}
           {loading && <p className="as-wait">{tr('加载中…')}</p>}
           {rows.map((r, i) => r.k === 'you' ? <YouMsg key={r.key} r={r} />
             : r.k === 'it' ? <ReplyMsg key={r.key} r={r} last={i === replied}
@@ -340,7 +353,7 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
               : r.k === 'tools' ? <Trail key={r.key} tools={r.tools}>{r.detail && <div className="trail-list">{r.detail.map(t => <Tool key={t.ev.id} {...t} />)}</div>}</Trail>
                 : r.k === 'ev' ? <div key={r.key} className="as-ev"><Icon n="bell" size={13} /><div><Text text={r.text} link={LINK} /></div></div>
                   : <div key={r.key} className={`note${r.err ? ' err' : ''}`}>{r.text}</div>)}
-          {!loading && asked < 0 && <Hello mod={place.mod} onAsk={submit} />}
+          {!loading && !err && asked < 0 && <Hello mod={place.mod} onAsk={submit} />}
           {perms.map(q => (
             <div key={q.id} className="as-card as-perm">
               <span className="as-k">{tr('它想')}{q.name === 'Bash' ? tr('运行命令') : tr('用 {0}', q.name)}</span>
@@ -429,8 +442,9 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
   const place = usePlace();
   const { focus, sel } = side;
   const asking = target.kind === 'assistant', started = !!agent.started;
-  const working = asking && started && agent.status === 'working', typed = !!text.trim();
-  const hints = !asking || typed ? null : sel ? ASK_SEL : focus ? ASK_AT : null;
+  const off = asking && started && !!side.down; // it cannot be reached: nothing to send it
+  const working = asking && started && !off && agent.status === 'working', typed = !!text.trim();
+  const hints = !asking || typed || off ? null : sel ? ASK_SEL : focus ? ASK_AT : null;
   const lines = sel ? sel.text.split('\n').length : 0;
   const pointable = !!document.querySelector(SCOPE);
 
@@ -452,7 +466,7 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
     const s = t.trim();
     if (!s || sending) return;
     if (asking) {
-      if (!side.submit.current) return;
+      if (!side.submit.current || off) return;
       setText('');
       side.submit.current(s);
       return;
@@ -467,6 +481,7 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
   const placeholder = target.kind === 'idea' ? tr('写一颗新 idea，孵化员会去图书馆和 arXiv 查重…')
     : target.kind === 'adjust' ? tr('改写你的 idea，孵化员会重新查重…')
       : !started ? tr('先在上面启动小助手；写新 idea 不用等它')
+        : off ? tr('连不上 Paseo，等它启动后再问（写新 idea 照常可用）')
         : !working ? tr('问这一页的事，或者请它帮你办') : agent.runtime === 'pi' ? tr('它在忙，发出的消息会排在它手上的事之后') : tr('它在忙，发出的消息会插进它手上的事');
   return (
     <div className="as-foot">
@@ -511,7 +526,7 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
           )}
           {working && !typed
             ? <button className="as-send stop" title={tr('打断它手上的事')} onClick={() => api.abort(ID).catch(e => side.toast((e as Error).message))}><Icon n="stop" size={14} /></button>
-            : <button className="as-send" disabled={!typed || sending || (asking && !started)} title={tr('发送（Enter）')} onClick={() => go(text)}><Icon n="send" size={16} /></button>}
+            : <button className="as-send" disabled={!typed || sending || (asking && (!started || off))} title={tr('发送（Enter）')} onClick={() => go(text)}><Icon n="send" size={16} /></button>}
         </div>
       </div>
     </div>

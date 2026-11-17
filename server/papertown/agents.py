@@ -212,6 +212,7 @@ class Agents:
         self._lock = threading.Lock()
         self._seq = 0
         self._watching = False
+        self._paseo_up: bool | None = None  # whether the Paseo daemon answered when the watcher last looked
 
     def available(self) -> dict:
         missing = [n for n, p in (("pi", self.pi), ("tmux", self.tmux)) if not p]
@@ -229,10 +230,24 @@ class Agents:
     def get(self, agent_id: str) -> dict | None:
         return self.db.one("select * from agents where id = ?", agent_id)
 
+    def down(self, a: dict | None) -> str:
+        """Why a Paseo agent cannot be reached now (its daemon is not running, or Paseo is not installed); empty when it can,
+        or when the agent is not in Paseo."""
+        if not a or a.get("runtime") != "paseo":
+            return ""
+        st = self.paseo.status()
+        return "" if st["ok"] else st["note"] or "连不上 Paseo"
+
+    def shown(self, a: dict) -> str:
+        """The status to show: what was last heard from the agent, or "offline" while Paseo cannot be reached (the
+        stored status is kept, and comes back once Paseo does)."""
+        return "offline" if self.down(a) else a["status"]
+
     def public(self, a: dict | None) -> dict | None:
         if not a:
             return None
         out = {k: v for k, v in a.items() if k != "token"}
+        out["status"], out["down"] = self.shown(a), self.down(a) or None
         out["runtime"] = rt = a.get("runtime") or "pi"
         out["started"] = bool(a.get("runtime"))
         out["attach"] = _attach(a["tmux"]) if rt == "pi" and a.get("tmux") else None
@@ -635,6 +650,14 @@ class Agents:
             time.sleep(6)
             rows = {a["ext_id"]: a for a in self.db.q("select * from agents where runtime = 'paseo' and ext_id is not null")}
             if not rows:
+                continue
+            up = self.paseo.status()["ok"]
+            if up != self._paseo_up:  # the daemon stopped or came back: every Paseo agent shows it at once
+                if self._paseo_up is not None:
+                    for a in rows.values():
+                        self._publish(a["id"])
+                self._paseo_up = up
+            if not up:
                 continue
             try:
                 live = {x["id"]: x for x in self.paseo.list({"papertown": "1"})}

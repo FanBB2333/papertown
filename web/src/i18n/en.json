@@ -3245,5 +3245,9 @@
  "按住 Shift 拖动：框选多个节点一起移动；右键对齐": "Shift-drag: select several nodes to move together; right-click to align",
  "{0}C 复制、{0}X 剪切、{0}V 粘贴、{0}D 复制一份（任务和备注）；别处复制的文字粘贴成备注": "{0}C copy, {0}X cut, {0}V paste, {0}D duplicate (tasks and notes); text copied elsewhere pastes as a note",
  "Delete 删掉；{0}A 全选；方向键挪一小步（按住 Shift 挪一大步）；{0}Z 撤销": "Delete removes; {0}A selects all; arrows nudge (Shift for a bigger step); {0}Z undoes",
- "N 新任务、⇧N 新备注；F 适应窗口、0 回到 100%、+ − 缩放": "N new task, ⇧N new note; F fit, 0 back to 100%, + − zoom"
+ "N 新任务、⇧N 新备注；F 适应窗口、0 回到 100%、+ − 缩放": "N new task, ⇧N new note; F fit, 0 back to 100%, + − zoom",
+ "连不上": "Unreachable",
+ "连不上 Paseo，小助手现在收不到消息": "Can't reach Paseo, so the assistant can't get messages right now",
+ "Paseo 启动后这里会自己接上。写新 idea 照常可用。": "This reconnects by itself once Paseo starts. Writing a new idea works as usual.",
+ "连不上 Paseo，等它启动后再问（写新 idea 照常可用）": "Can't reach Paseo: ask once it's running (writing a new idea works as usual)"
 }

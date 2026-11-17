@@ -241,7 +241,7 @@ def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
         own = tmp_path / "their-repo"
         own.mkdir()
         link.conv["cwd"] = str(own)
-        for name in ("conversations", "label", "timeline", "permit", "list"):
+        for name in ("conversations", "label", "timeline", "permit", "list", "status"):
             setattr(town.agents.paseo, name, getattr(link, name))
         first = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
         second = c.post("/api/ideas", json={"text": "用小模型给论文图表自动写说明文字"}).json()["id"]
@@ -277,6 +277,11 @@ def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
         t = c.get(f"/api/agents/{a['id']}/timeline").json()
         assert [i["kind"] for i in t["items"]] == ["user", "tool"] and t["paseo"]["permissions"][0]["id"] == "req-1"
         assert t["agent"]["status"] == "working"
+        # while the daemon is down it shows as unreachable, keeping what it was doing for when Paseo is back
+        town.agents.paseo.status = lambda fresh=False: {"ok": False, "note": "Paseo 守护进程没有运行：paseo daemon start"}
+        shown = c.get(f"/api/agents/{a['id']}").json()["agent"]
+        assert shown["status"] == "offline" and "paseo daemon start" in shown["down"] and town.agents.get(a["id"])["status"] == "working"
+        town.agents.paseo.status = link.status
 
         assert c.post(f"/api/agents/{a['id']}/permit", json={"request_id": "req-1", "allow": True}).json() == {"ok": True}
         assert link.permits == [("conv-1", "req-1", True)]

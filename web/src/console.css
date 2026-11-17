@@ -1282,6 +1282,10 @@ td.heat.best { font-weight: 700; }
 .as-busy { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); animation: fade .3s var(--out) .15s both; }
 .as-busy .thinking { padding: 0; }
 
+.as-off { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.6;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 8%, var(--panel)); animation: rise-in .4s var(--out) both; }
+.as-off p { margin: 0; }
+.as-off .muted { font-size: 12.5px; color: var(--muted); }
 .as-hello { display: flex; flex-direction: column; gap: 10px; animation: rise-in .4s var(--out) both; }
 .as-hello p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--muted); }
 .as-asks { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }

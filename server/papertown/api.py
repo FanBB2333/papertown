@@ -1216,7 +1216,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/skim")
     def skim_status(fresh: bool = False):
         st = town.skim.status(fresh)
-        agents = {a["id"]: a for a in town.db.q("select id, line_id, role, status, runtime, model from agents where role in ('coder', 'writer')")}
+        agents = {a["id"]: a | {"status": town.agents.shown(a)} for a in town.db.q("select id, line_id, role, status, runtime, model from agents where role in ('coder', 'writer')")}
         lines = [{"id": ln["id"], "seq": ln["seq"], "title": ln["title"], "status": ln["status"],
                   "agents": [agents[f"{r}-{ln['id']}"] for r in ("coder", "writer") if f"{r}-{ln['id']}" in agents]}
                  for ln in town.db.q("select id, seq, title, status from lines where status != 'dropped' order by seq desc")]

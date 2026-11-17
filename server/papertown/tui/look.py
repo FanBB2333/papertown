@@ -49,7 +49,7 @@ STAGE = {"done": "完成", "run": "进行中", "wait": "等你决定", "todo": "
 JOB = {"running": "在跑", "done": "完成", "failed": "失败", "queued": "排队", "cancelled": "已取消"}
 BACKEND = {"local": "本地执行器", "sim": "模拟电厂", "nvidb": "nvidb"}
 DEPT = {"busy": "在忙", "wait": "等你", "idle": "空闲"}
-AGENT = {"stopped": "未启动", "starting": "启动中", "idle": "待命", "working": "工作中", "error": "出错", "watching": "值守"}
+AGENT = {"stopped": "未启动", "starting": "启动中", "idle": "待命", "working": "工作中", "error": "出错", "watching": "值守", "offline": "连不上"}
 WORKER = {"active": "在岗", "frozen": "冻结"}
 
 

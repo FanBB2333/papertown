@@ -77,6 +77,7 @@
 .crew { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
 .crew-a { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
 .crew-a.s-idle { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+.crew-a.s-offline { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); }
 .crew-a.s-working { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 40%, transparent); }
 .mon-note { margin: 6px 0 4px; font-size: 12.5px; line-height: 1.5; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
@@ -91,6 +92,7 @@
 .dot.s-idle { background: var(--ok); }
 .dot.s-working, .dot.s-starting { background: var(--brand); box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 50%, transparent); animation: ping 1.6s ease-out infinite; }
 .dot.s-error { background: var(--bad); }
+.dot.s-offline { background: none; box-shadow: inset 0 0 0 2px var(--warn); }
 @keyframes ping { to { box-shadow: 0 0 0 7px transparent; } }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 15%, transparent); flex: none; }
 .pulse.on { background: var(--ok); animation: ping 1.6s ease-out infinite; }

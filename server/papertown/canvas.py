@@ -474,7 +474,7 @@ class Canvas:
                 "spare": [{"id": f"info:{k}", "title": t} for k, t in INFO.items() if f"info:{k}" not in ids],
                 "lanes": LANES, "checks": cv["checks"], "summary": cv["summary"], "tasks": {k: sum(1 for t in on if t["status"] == k) for k in TASK},
                 "trend": cv["trend"], "found": cv["found"], "rounds": cv["rounds"], "ran": cv["ran"], "lead": cv["lead"],
-                "agents": {r: {"there": bool(a), "status": a["status"] if a else None, "model": a.get("model") if a else None}
+                "agents": {r: {"there": bool(a), "status": self.town.agents.shown(a) if a else None, "model": a.get("model") if a else None}
                            for r in TO for a in [self.town.leads.agent(line_id, r)]}}
 
     @staticmethod

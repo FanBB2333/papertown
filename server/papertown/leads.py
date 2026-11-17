@@ -27,7 +27,7 @@ STAGE = {"todo": "没开始", "run": "进行中", "wait": "等你", "done": "完
 JOB = {"queued": "排队", "running": "在跑", "done": "完成", "failed": "失败", "cancelled": "已取消"}
 CHECK = {"pass": "通过", "warn": "有问题", "fail": "没过"}
 TASK = {"sent": "已经发出", "done": "完成", "blocked": "卡住了"}
-WORKER = {"working": "在干活", "idle": "空闲", "starting": "启动中", "error": "出错", "stopped": "没在运行"}
+WORKER = {"working": "在干活", "idle": "空闲", "starting": "启动中", "error": "出错", "stopped": "没在运行", "offline": "连不上（Paseo 没在运行）"}
 YES = ("可以", "允许", "同意", "好", "行", "yes", "ok", "y")
 DEFAULTS = {"supervise": True, "every": 60}  # every: minutes of quiet before a check-in comes anyway
 QUIET_MAX = 3  # check-ins in a row with nothing new, then quiet until something happens
@@ -248,7 +248,7 @@ class Leads:
                 continue
             last = self.town.agents.public(a).get("last")
             said = f"，最后一条（{_ago(last['ts'])}）：「{clip((last['data'] or {}).get('text'), 100)}」" if last else ""
-            out.append(f"- {NAMES[role]}：{a['runtime']}{' · ' + a['model'] if a.get('model') else ''}，{WORKER.get(a['status'], a['status'])}{said}")
+            out.append(f"- {NAMES[role]}：{a['runtime']}{' · ' + a['model'] if a.get('model') else ''}，{WORKER.get(st := self.town.agents.shown(a), st)}{said}")
         jobs = self._jobs(line_id)
         if jobs:
             out += ["", "最近的实验任务："]
