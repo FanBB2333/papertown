@@ -539,11 +539,11 @@ class Projects(Place):
     @work(group="pj-ask")
     async def action_search(self) -> None:
         if ide := self.ide():
-            q = await self.app.push_screen_wait(Prompt("筛选文件", "路径里带这些字的文件；空着回车就是不筛", ide.ftree.filter))
+            q = await self.app.push_screen_wait(Prompt("筛选文件", "路径里带这些字的文件，空着回车就是不筛", ide.ftree.filter))
             ide.set_filter(q or "")
             ide.ftree.focus()
             return
-        q = await self.app.push_screen_wait(Prompt("搜索项目", "按编号、标题或 idea 里的字找；空着回车就是不筛", self.search))
+        q = await self.app.push_screen_wait(Prompt("搜索项目", "按编号、标题或 idea 里的字找，空着回车就是不筛", self.search))
         self.search = q or ""
         self.paint_list()
 

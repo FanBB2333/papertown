@@ -142,7 +142,7 @@ export function GpuStrip() {
   if (!g.ok) return <div className="gstrip off"><b>{tr('显卡')}</b><span className="muted small">{g.note}</span></div>;
   const s = g.summary!;
   return (
-    <div className="gstrip" title={tr('来自 nvidb 的 GPU 队列；在「明细」里看每张卡')}>
+    <div className="gstrip" title={tr('来自 nvidb 的 GPU 队列，在「明细」里看每张卡')}>
       <b>{tr('显卡')}</b>
       <span className="small">{s.gpus} {tr('张 ·')} <em className="k-idle">{s.idle} {tr('空闲')}</em> {tr('· 可排')} {gb(s.free_mb)}</span>
       <span className="gs-cells">

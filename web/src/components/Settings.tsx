@@ -81,7 +81,7 @@ function Look({ s }: { s: S }) {
         <Row label={tr('动画')} desc={tr('柔和：动画更短更轻，适合投影或容易晕的时候')}>
           <Pick label={tr('动画')} value={s.motion} options={[['full', tr('完整')], ['calm', tr('柔和')]]} onChange={set('motion')} />
         </Row>
-        <Row label={tr('打开页面时')} desc={tr('下次打开页面先看到哪种视图：中控屏是不用走动的面板，小镇可以平面或 3D')}>
+        <Row label={tr('打开页面时')} desc={tr('下次打开页面先看到哪种视图：中控屏是一眼看全的面板，小镇可以平面或 3D')}>
           <Pick label={tr('打开页面时')} value={s.start} options={[['cards', tr('进展')], ['console', tr('小镇 · 中控屏')], ['2d', tr('小镇 · 平面')], ['3d', tr('小镇 · 3D 漫游')]]} onChange={set('start')} />
         </Row>
       </Card>
@@ -93,7 +93,7 @@ function ProgressPage({ s }: { s: S }) {
   return (
     <>
       <Card title={tr('项目怎么排')}>
-        <Row label={tr('视图')} desc={tr('块：每个项目一张卡片；行：每个项目一行，能顺着一列往下比。进展页上也能直接换')}>
+        <Row label={tr('视图')} desc={tr('块是每个项目一张卡片，行是每个项目一行，能顺着一列往下比。进展页上也能直接换')}>
           <Pick label={tr('视图')} value={s.pgView} options={[['blocks', tr('块')], ['rows', tr('行')]]} onChange={set('pgView')} />
         </Row>
         {PROGRESS_OPTIONS.slice(0, 2).map(o => <Row key={o.key} label={o.label} desc={o.desc}><OptionControl o={o} s={s} /></Row>)}
@@ -111,7 +111,7 @@ function Editor({ s }: { s: S }) {
   return (
     <>
       <Card title={tr('颜色主题')}>
-        <Note>{tr('代码和论文编辑器的配色，连同文件列表、标签页和状态栏；在编辑器里按 ⌘K ⌘T 可以边看边换')}</Note>
+        <Note>{tr('代码和论文编辑器的配色，连同文件列表、标签页和状态栏。在编辑器里按 ⌘K ⌘T 可以边看边换')}</Note>
         <div className="st-themes" role="radiogroup" aria-label={tr('颜色主题')}>
           {[autoTheme(), ...THEMES].map(th => (
             <button key={th.id} role="radio" aria-checked={th.id === s.edTheme} className={`st-theme${th.id === s.edTheme ? ' on' : ''}`} onClick={() => chooseLook({ theme: th.id })}>
@@ -145,7 +145,7 @@ function MapSection({ s }: { s: S }) {
       <Row label={tr('滚轮缩放速度')}>
         <Range label={tr('滚轮缩放速度')} value={s.zoomSpeed} min={0.5} max={2} step={0.1} fmt={v => `${v.toFixed(1)}×`} onChange={set('zoomSpeed')} />
       </Row>
-      <Row label={tr('建筑名字')} desc={tr('主要：四座核心建筑和几处地标；全部：每栋都标')}>
+      <Row label={tr('建筑名字')} desc={tr('「主要」只标四座核心建筑和几处地标，「全部」每栋都标')}>
         <Pick label={tr('建筑名字')} value={s.mapLabels} options={[['key', tr('主要')], ['all', tr('全部')]]} onChange={set('mapLabels')} />
       </Row>
       <Row label={tr('走动提示')} desc={tr('地图底部的按键提示')}>
@@ -165,7 +165,7 @@ function Walk({ s }: { s: S }) {
         <Row label={tr('上下反转')} desc={tr('鼠标往前推是低头')}>
           <Toggle label={tr('上下反转')} value={s.invertY} onChange={set('invertY')} />
         </Row>
-        <Row label={tr('全屏漫游')} desc={tr('进入 3D 时自动全屏；开着面板时 Esc 先关面板，没有面板时退出全屏；再点画面继续时回到全屏')}>
+        <Row label={tr('全屏漫游')} desc={tr('进入 3D 时自动全屏。开着面板时 Esc 先关面板，没有面板时退出全屏，再点画面继续时回到全屏')}>
           <Toggle label={tr('全屏漫游')} value={s.fullscreen3d} onChange={set('fullscreen3d')} />
         </Row>
       </Card>
@@ -337,7 +337,7 @@ function Agents() {
             <Row label={tr('网页端')} desc={tr('房间里「完整界面」嵌入的就是它')}>
               <Note>{info.status.web ?? tr('没开：paseo daemon config set features.webUi.enabled true')}</Note>
             </Row>
-            <Row label={tr('可用的供应商')} desc={tr('从 Paseo 读出来的，每隔一阵重读一次；有新模型时中控屏会问你要不要换')}>
+            <Row label={tr('可用的供应商')} desc={tr('从 Paseo 读出来的，每隔一阵重读一次。有新模型时中控屏会问你要不要换')}>
               <span className="st-tags">
                 {info.providers.map(p => <Badge key={p.id} variant="outline">{p.label} · {tr('{0} 个模型', p.models.length)}</Badge>)}
                 <Button size="sm" loading={reading} onClick={again}>{reading ? tr('读取中…') : tr('重新读取')}</Button>
@@ -356,7 +356,7 @@ function Agents() {
         </Row>
         {pi && !pi.ok && <Warn>{pi.note}</Warn>}
       </Card>
-      <Note>{tr('雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。小助手和项目负责人的默认模型只管以后启动的，已经在跑的不受影响。')}</Note>
+      <Note>{tr('雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。小助手和项目负责人的默认模型只管以后启动的，已经在跑的保持原样。')}</Note>
     </>
   );
 }
@@ -418,7 +418,7 @@ function Access() {
   return (
     <>
       <Card>
-        <Row label={tr('这台设备')} desc={a.local ? tr('运行 Papertown 的电脑：不用密码就能进') : tr('用访问密码登录的设备')}>
+        <Row label={tr('这台设备')} desc={a.local ? tr('运行 Papertown 的电脑：直接就能进') : tr('用访问密码登录的设备')}>
           {!a.local && <Button onClick={() => run(api.logout).then(() => go('/'))}>{tr('退出登录')}</Button>}
         </Row>
         <Row label={tr('访问密码')} desc={a.password ? tr('手机和其他电脑在首页用它登录') : tr('还没有设置：除了这台电脑，别的设备都进不来')}>
@@ -464,9 +464,9 @@ function Access() {
 
 const KEYS: [string, string][] = [
   [tr('W A S D / 方向键'), tr('走动（3D 里 ←/→ 转身）')], ['Shift', tr('3D 里跑')],
-  [tr('空格'), tr('3D 里跳；连按两下起飞或落地，飞行时按住上升')], ['Ctrl / C', tr('3D 里下蹲，蹲着走到边上不会掉下去；飞行时下降')],
-  ['F', tr('进门口或准星对着的建筑；在建筑里打开准星对着的设备')],
-  [tr('鼠标'), tr('3D 里转视角；平面上拖动地图、滚轮缩放')], [tr('点击'), tr('平面上进建筑；3D 里和 F 一样')],
+  [tr('空格'), tr('3D 里跳，连按两下起飞或落地，飞行时按住上升')], ['Ctrl / C', tr('3D 里下蹲，蹲着走到边上不会掉下去。飞行时下降')],
+  ['F', tr('进门口或准星对着的建筑，在建筑里打开准星对着的设备')],
+  [tr('鼠标'), tr('3D 里转视角，平面上拖动地图、滚轮缩放')], [tr('点击'), tr('平面上进建筑，3D 里和 F 一样')],
   ['V', tr('3D 里切换第一 / 第三人称')], ['T', tr('3D 里切换白天 / 夜晚')],
   ['M', tr('3D 里回到平面')], ['Esc', tr('放开鼠标（全屏时同时退出全屏）/ 关闭对话 / 回到小镇 / 关闭设置')], [',', tr('打开设置')],
   ['/', tr('在底部的对话框里开始写')], ['@', tr('对话框里换收件人：部门或员工')],

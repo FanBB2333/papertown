@@ -144,7 +144,7 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
         <div className="pnl">
           <h4>{line.stages.findIndex(s => s.key === cur.key) + 1}. {cur.name} · {STAGE_WORD[cur.status]}</h4>
           <dl className="kv">
-            <dt>{tr('员工')}</dt><dd>{cur.workers.length ? cur.workers.map(w => <span key={w.id} className="w"><Ava role={w.role} level={w.level} code={w.id} />{w.title} Lv.{w.level}</span>) : <span className="muted">{tr('不需要 agent')}</span>}</dd>
+            <dt>{tr('员工')}</dt><dd>{cur.workers.length ? cur.workers.map(w => <span key={w.id} className="w"><Ava role={w.role} level={w.level} code={w.id} />{w.title} Lv.{w.level}</span>) : <span className="muted">{tr('Papertown 直接处理')}</span>}</dd>
             <dt>{tr('预算')}</dt><dd>{line.linked ? <span className="muted">{tr('本地项目，不走流水线，不记预算')}</span> : <><div className="bar"><i style={{ width: `${Math.min(100, 100 * line.spent / line.budget)}%` }} /></div>${line.spent.toFixed(4)} / ${line.budget.toFixed(2)}</>}</dd>
             <dt>Skills</dt><dd>{chips(STAGE_SKILLS[cur.key] ?? [])}</dd>
             <dt>{tr('工具')}</dt><dd>{(STAGE_TOOLS[cur.key] ?? []).map(s => <span key={s} className="chip">{s}</span>)}</dd>

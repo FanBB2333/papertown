@@ -30,8 +30,8 @@ function Material() {
         </div>
       </div>
       <p className="sc-note"><Note>{bends
-        ? tr('玻璃的边缘会折射后面的内容，这个效果在 Chrome 和 Edge 里才有；Safari 和 Mac App 里是模糊和高光。')
-        : tr('这个浏览器不支持折射，这里是模糊和高光；Chrome 和 Edge 里玻璃的边缘还会折射后面的内容。')}</Note></p>
+        ? tr('玻璃的边缘会折射后面的内容，这个效果在 Chrome 和 Edge 里才有，Safari 和 Mac App 里是模糊和高光。')
+        : tr('这个浏览器不支持折射，这里是模糊和高光。Chrome 和 Edge 里玻璃的边缘还会折射后面的内容。')}</Note></p>
     </>
   );
 }

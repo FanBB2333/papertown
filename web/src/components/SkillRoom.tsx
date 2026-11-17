@@ -129,7 +129,7 @@ export function SkillRoom(p: Props) {
           ))}
         </div>
         <h2 className="cr-title">{sel.scope === 'global' ? tr('全局配置') : sel.scope === 'project' ? tr('项目 #{0} 的配置', line?.seq) : tr('#{0} {1}这段对话的配置', line?.seq, agent ? ROLE_NAME[agent.role] : '')}</h2>
-        <p className="muted">{SCOPE_HINT[sel.scope]}{tr('。在这一层没设置的 skill 沿用上一层；改动立刻生效，相关员工的 skill 目录会同步更新。')}</p>
+        <p className="muted">{SCOPE_HINT[sel.scope]}{tr('。在这一层没设置的 skill 沿用上一层。改动立刻生效，相关员工的 skill 目录会同步更新。')}</p>
 
         <div className="sk-env pnl-s">
           <div>
@@ -140,7 +140,7 @@ export function SkillRoom(p: Props) {
           </div>
           <Select value={envHere === null ? '__inherit' : envHere === '' ? '__none' : envHere} disabled={busy === 'core.env'} label={tr('起始环境')}
             onChange={v => set('core.env', v === '__inherit' ? null : v === '__none' ? '' : v)}
-            options={[{ value: '__inherit', label: sel.scope === 'global' ? tr('用 skim 激活的环境') : tr('沿用上一层') }, { value: '__none', label: tr('不用环境') },
+            options={[{ value: '__inherit', label: sel.scope === 'global' ? tr('用 skim 激活的环境') : tr('沿用上一层') }, { value: '__none', label: tr('空环境') },
               ...st.envs.map(e => ({ value: e.name, label: e.name, hint: tr('{0} 个 skill', e.skills.length) + (e.active ? tr(' · 激活中') : '') }))]} />
         </div>
 

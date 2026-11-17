@@ -525,7 +525,7 @@ class Assistant:
         if name == "job.cancel":
             job = str(a["job"]).strip()
             if job.startswith("nvidb-") or job.isdigit():
-                raise ActError("nvidb 的任务 Papertown 只读，不能在这里取消；要取消请用户自己在终端里用 nvidb job cancel")
+                raise ActError("nvidb 的任务 Papertown 只读，不能在这里取消。要取消请用户自己在终端里用 nvidb job cancel")
             j = t.farm.get(job)
             if not j:
                 raise ActError(f"实验农场里没有任务 {job}")

@@ -64,7 +64,7 @@ function dur(s: number | null) {
 function NvidbJob({ n }: { n: NonNullable<Job['nvidb']> }) {
   return (
     <>
-      <p className="muted small">{tr('nvidb 队列里的任务，在这里只读；要取消、改预留或看事件，用')} <code>nvidb job show {n.id}</code>{tr('。')}</p>
+      <p className="muted small">{tr('nvidb 队列里的任务，在这里只读。要取消、改预留或看事件，用')} <code>nvidb job show {n.id}</code>{tr('。')}</p>
       <dl className="kv">
         <dt>{tr('在哪')}</dt><dd>{n.node ? `${n.node} · GPU ${n.gpu_ids.join(', ') || '—'}` : n.lane ? tr('排在 {0}', n.lane) : tr('还没分配')}</dd>
         <dt>{tr('预留显存')}</dt><dd>{n.vram_mb ? gb(n.vram_mb) : tr('不占显存')}</dd>

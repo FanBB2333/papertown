@@ -41,7 +41,7 @@ const greeting = (h = new Date().getHours()) =>
   h < 5 ? tr('夜深了') : h < 11 ? tr('早上好') : h < 13 ? tr('中午好') : h < 18 ? tr('下午好') : tr('晚上好');
 const FEATURES: [Parameters<typeof Icon>[0]['n'], string, string][] = [
   ['cards', tr('进展'), tr('每个项目一张卡片：在跑的实验、预期产出、代码和论文仓库，负责人按你说的更新。')],
-  ['chat', tr('对话'), tr('问一个项目任何事，或者交代它的负责人去办；负责人的汇报和要你决定的事也在这里。')],
+  ['chat', tr('对话'), tr('问一个项目任何事，或者交代它的负责人去办。负责人的汇报和要你决定的事也在这里。')],
   ['board', tr('小镇'), tr('每个项目的细节：代码、实验、论文和员工在中控屏的面板里管和改，也可以在小镇里走动。')],
 ];
 
@@ -217,7 +217,7 @@ function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: strin
     <>
       <h2>{auth.local ? tr('欢迎回来') : tr('已登录')}</h2>
       <p className="muted">
-        {auth.local ? tr('这是运行 Papertown 的电脑，不用密码。') : tr('这台设备用访问密码登录了。')}
+        {auth.local ? tr('这是运行 Papertown 的电脑，直接就能进。') : tr('这台设备用访问密码登录了。')}
       </p>
       <button className="btn pri ld-go" onClick={enter}>{tr('进入')}<Icon n="right" size={16} /></button>
       {auth.local ? <Password auth={auth} reload={reload} /> : (

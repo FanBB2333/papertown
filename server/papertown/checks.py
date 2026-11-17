@@ -387,7 +387,7 @@ def check_parens(x: Inputs, _: dict) -> Found:
 def check_semicolons(x: Inputs, _: dict) -> Found:
     if not x.paper:
         return _no_paper(x)
-    out = [_hit(p, m, "拆成两句；只有严格并列、对称的结构才用分号") for p in x.paper.paras for m in re.finditer(";", p.text)]
+    out = [_hit(p, m, "拆成两句，只有严格并列、对称的结构才用分号") for p in x.paper.paras for m in re.finditer(";", p.text)]
     return len(out), out, ""
 
 

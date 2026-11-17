@@ -40,13 +40,13 @@ function useToasts() {
 }
 
 const TABS: ['cards' | 'town', string, string][] = [
-  ['cards', tr('进展'), tr('每个项目的进展、风险和要你决定的事；和负责人对话')],
+  ['cards', tr('进展'), tr('每个项目的进展、风险和要你决定的事，也能和负责人对话')],
   ['town', tr('小镇'), tr('每个项目的细节：中控屏的面板，或者在小镇里走动')],
 ];
 
 type Mode = 'board' | '2d' | '3d';
 const MODES: [Mode, 'board' | 'map' | 'cube', string, string][] = [
-  ['board', 'board', tr('中控屏'), tr('每个项目的细节摆成面板，不用走动')],
+  ['board', 'board', tr('中控屏'), tr('每个项目的细节摆成面板，一眼看全')],
   ['2d', 'map', tr('平面'), tr('小镇的平面地图，走到建筑门口办事')],
   ['3d', 'cube', tr('3D 漫游'), tr('在 3D 的小镇里走动，人站在同一个地方')],
 ];
@@ -388,7 +388,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           <span>{tr('本周')} <b>${hud.bank.week.toFixed(2)}</b></span>
         </div>}
         <div className="hud-r">
-          {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? tr('没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板；仓库和印刷厂的 pi 用 pi 自己的设置') : hud.model}>
+          {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? tr('没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板。仓库和印刷厂的 pi 用 pi 自己的设置') : hud.model}>
             {!online ? tr('连接断开') : DEMO ? tr('静态演示') : hud.offline ? tr('离线模式') : hud.provider}</span>}
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>

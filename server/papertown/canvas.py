@@ -618,7 +618,7 @@ class Canvas:
                     if to not in TO:
                         raise CanvasError("任务交给 lead、coder 或 writer")
                     if to != n["to"] and n["status"] == "sent":
-                        raise CanvasError("这件事已经发出去了；要换人先重新打开它")
+                        raise CanvasError("这件事已经发出去了，要换人先重新打开它")
                     n["to"] = to
                 if status is not None:
                     if status not in ("draft", "done"):
@@ -838,7 +838,7 @@ class Canvas:
                         _log(t, "converged", f"硬卡口放行：{t.get('round') or 1} 轮收敛（违规 {g['before']}→{g['now']} 处）", by="Papertown")
                         changed = True
                     if force == stage:
-                        raise CanvasError("这道卡口没有阻断的规则，不用派修补单")
+                        raise CanvasError("修补单在卡口有规则阻断时才派得出去")
                     continue
                 if force != stage and (node.get("waived") or not g["reached"]):
                     continue

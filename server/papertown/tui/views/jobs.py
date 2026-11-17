@@ -285,7 +285,7 @@ class Jobs(Place):
 
     @work(group="jb-ask")
     async def action_search(self) -> None:
-        q = await self.app.push_screen_wait(Prompt("搜索任务", "按编号、名字、命令或提交人找；空着回车就是不筛", self.search))
+        q = await self.app.push_screen_wait(Prompt("搜索任务", "按编号、名字、命令或提交人找，空着回车就是不筛", self.search))
         self.search = q or ""
         self.paint_list()
 
@@ -293,9 +293,9 @@ class Jobs(Place):
     async def action_submit(self, name: str = "", command: str = "", line: str | None = None) -> None:
         lines = [(f"#{ln['seq']} {clip(ln['title'], 30)}", ln["id"]) for ln in sorted(self.town.lines, key=lambda x: -x["seq"])]
         v = await self.app.push_screen_wait(Form("在实验农场提交任务", [
-            ("line_id", "项目（在它的代码目录里跑；不选就在农场自己的目录）", line, lines),
+            ("line_id", "项目（在它的代码目录里跑，不选就在农场自己的目录）", line, lines),
             ("name", "名字", name or "job"),
-            ("command", "命令（shell；输出 PROGRESS 50 报进度，RESULT {…} 报结果）", command),
+            ("command", "命令（shell，输出 PROGRESS 50 报进度、RESULT {…} 报结果）", command),
         ], hint="由本地执行器运行。nvidb 的任务在这里只能看，提交请用 nvidb job submit"))
         if not v or not v.get("command"):
             return

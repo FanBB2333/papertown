@@ -151,7 +151,7 @@ export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) 
   return (
     <div className="cm-page bounds">
       <p className="bd-intro muted small">
-        {tr('给 agent 定规矩：必须完成的、不能做的、动手前要先问你的。全局的给小助手，也往下传给每个项目；项目的给它的负责人，也往下传给员工；员工的只管它自己。')}
+        {tr('给 agent 定规矩：必须完成的、不能做的、动手前要先问你的。全局的给小助手，也往下传给每个项目。项目的给它的负责人，也往下传给员工。员工的只管它自己。')}
         {tr('不能做和需要询问的条目可以绑定一个经过 Papertown 的动作，它会替你拦下，或者等你点头再执行。')}
       </p>
       <div className="bd-grid">

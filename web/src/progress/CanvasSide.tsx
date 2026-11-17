@@ -214,7 +214,7 @@ function GateDetail({ n, v, busy, act, lineId, onConsole, onPick }: {
               {who && who.status !== 'done' && <p className="gp-tk">↳ {tr('已写进修补单 {0}，{1}{2}', who.id, WHO[who.to ?? 'lead'], who.status === 'sent' ? tr('正在改') : TASK[(who.status ?? 'draft') as TaskStatus])}</p>}
             </div>
           )))}
-          {failing.some(c => (c.last?.total ?? 0) > 6) && <p className="small muted">{tr('每条规则只列前 6 处；展开卡口后在每条规则的「结果」里看全部。')}</p>}
+          {failing.some(c => (c.last?.total ?? 0) > 6) && <p className="small muted">{tr('每条规则只列前 6 处，展开卡口后在每条规则的「结果」里看全部。')}</p>}
         </section>
       )}
     </>
@@ -340,7 +340,7 @@ function InfoDetail({ n, v, r, line, onConsole, onPick }: {
           ? <a className="btn" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={13} />{tr('打开对话')}</a>
           : <button className="btn" onClick={() => onConsole(line.id, { mod: INFO_MOD[k] })}><Icon n="board" size={13} />{tr('在中控屏里打开')}</button>}
       </div>
-      <p className="small muted">{tr('资料卡跟着项目自己更新，不用编辑。把任务连到它上面，agent 会知道这件事和项目的这部分有关。')}</p>
+      <p className="small muted">{tr('资料卡跟着项目自动更新。把任务连到它上面，agent 会知道这件事和项目的这部分有关。')}</p>
     </>
   );
 }
@@ -362,7 +362,7 @@ function StageDetail({ n, near, onPick }: { n: CanvasNode; near: CanvasNode[]; o
         <button className="lnk" onClick={() => onPick(`gate:${n.locked!.gate}`)}>{tr('看这道卡口')}</button></div>}
       {checks.length > 0 && <section className="cv-sec"><h5>{tr('连着的卡口和巡检')}</h5><ul className="cv-links">{checks.map(row)}</ul></section>}
       {tasks.length > 0 && <section className="cv-sec"><h5>{tr('连着的任务')}</h5><ul className="cv-links">{tasks.map(row)}</ul></section>}
-      <p className="small muted">{tr('软巡检盯着哪道工序，就从项目走到那道工序开始问负责人；不连工序的一直会问。')}</p>
+      <p className="small muted">{tr('软巡检盯着哪道工序，就从项目走到那道工序开始问负责人，不连工序的一直会问。')}</p>
     </>
   );
 }
@@ -385,13 +385,13 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onPick }: {
       {n.loop === 'hard' && (
         <div className={`gp-card g-${n.converged ? 'pass' : 'block'}`}>
           <p>{n.converged ? tr('「{0}」硬卡口已经放行：{1} 轮收敛。', gate?.gate?.name ?? n.stage ?? '', n.round || 1)
-            : tr('「{0}」硬卡口阻断时 Papertown 自动写的修补单，现在是第 {1} 轮；做完后卡口还没放行，会再打回一轮。', gate?.gate?.name ?? n.stage ?? '', n.round || 1)}</p>
+            : tr('「{0}」硬卡口阻断时 Papertown 自动写的修补单，现在是第 {1} 轮。做完后卡口还没放行，会再打回一轮。', gate?.gate?.name ?? n.stage ?? '', n.round || 1)}</p>
           {(n.trail?.length ?? 0) > 0 && <p className="gp-trail">{tr('收敛进度：{0}', (n.trail ?? []).map(x => tr('{0} 处', x)).join(' → '))}</p>}
           {gate && <button className="lnk" onClick={() => onPick(gate.id)}>{tr('看这道卡口')}</button>}
         </div>
       )}
       {n.loop === 'soft' && from && (
-        <p className="small muted">{tr('由软巡检「{0}」派出的纠偏任务；做完连着的工序会被重新审视。', label(from))} <button className="lnk" onClick={() => onPick(from.id)}>{tr('看这项巡检')}</button></p>
+        <p className="small muted">{tr('由软巡检「{0}」派出的纠偏任务，做完后连着的工序会被重新审视。', label(from))} <button className="lnk" onClick={() => onPick(from.id)}>{tr('看这项巡检')}</button></p>
       )}
       <p className="cv-agent">
         <span className={`dot s-${who.there ? who.status : 'stopped'}`} />
@@ -429,13 +429,13 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onPick }: {
           <div className="seg" role="radiogroup" aria-label={tr('交给谁')}>
             {(['lead', 'coder', 'writer'] as const).map(k => (
               <button key={k} type="button" role="radio" aria-checked={to === k} disabled={st === 'sent' && k !== n.to} className={to === k ? 'on' : ''} onClick={() => setTo(k)}
-                title={st === 'sent' && k !== n.to ? tr('已经发出去了；要换人先重新打开它') : ''}>{WHO[k]}</button>
+                title={st === 'sent' && k !== n.to ? tr('已经发出去了，要换人先重新打开它') : ''}>{WHO[k]}</button>
             ))}
           </div>
         </label>
         <label className="field">{tr('名字')}<input value={title} maxLength={60} onChange={e => setTitle(e.target.value)} /></label>
         <label className="field">{tr('要它做什么')}
-          <textarea rows={wideRows(text)} value={text} maxLength={4000} placeholder={tr('写清楚要做的事和做到什么算完成；它会连同这个节点连着的检查、工序一起收到')} onChange={e => setText(e.target.value)} />
+          <textarea rows={wideRows(text)} value={text} maxLength={4000} placeholder={tr('写清楚要做的事和做到什么算完成，它会连同这个节点连着的检查、工序一起收到')} onChange={e => setText(e.target.value)} />
         </label>
       </div>
       <div className="cv-row">
@@ -445,7 +445,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onPick }: {
         {dirty && <button className="btn" disabled={busy || !title.trim()} onClick={() => act(save, tr('保存了'))}>{tr('只保存')}</button>}
         {st === 'sent' && <button className="btn" disabled={busy} onClick={() => act(() => api.setNode(line.id, n.id, { status: 'done' }))}>{tr('标成完成')}</button>}
       </div>
-      <p className="small muted">{tr('它做完会用 pt task {0} done 回一句结果，卡住了回 blocked；这句话也会成为一条汇报。', n.id)}</p>
+      <p className="small muted">{tr('它做完会用 pt task {0} done 回一句结果，卡住了回 blocked。这句话也会成为一条汇报。', n.id)}</p>
     </>
   );
 }
@@ -475,7 +475,7 @@ function NoteDetail({ n, busy, act, lineId }: { n: CanvasNode; busy: boolean; ac
       {text.trim() !== (n.text ?? '') && (
         <div className="cv-row"><button className="btn pri" disabled={busy || !text.trim()} onClick={() => act(() => api.setNode(lineId, n.id, { text: text.trim() }), tr('保存了'))}>{tr('保存')}</button></div>
       )}
-      <p className="small muted">{tr('备注：只给你自己看；连着任务时会一起发给 agent')}</p>
+      <p className="small muted">{tr('备注只给你自己看，连着任务时会一起发给 agent')}</p>
     </>
   );
 }
@@ -503,7 +503,7 @@ function Links({ near, busy, onPick, onCut, onNew }: {
           <button className="btn" onClick={() => onNew('note')}><Icon n="plus" size={13} />{tr('加备注')}</button>
         </div>
       </section>
-      <p className="small muted">{tr('双击一条线可以在线上写几个字，说明这条线的意思；连着任务的线，上面的字会一起发给 agent。')}</p>
+      <p className="small muted">{tr('双击一条线可以在线上写几个字，说明这条线的意思。连着任务的线，上面的字会一起发给 agent。')}</p>
     </>
   );
 }
@@ -563,7 +563,7 @@ export function NewForm({ d, v, busy, onKind, onAdd, onCancel }: {
               {d.kind === 'hard'
                 ? <input value={text} maxLength={500} placeholder={'\\bnovel\\b'} onChange={e => setText(e.target.value)} />
                 : <textarea autoFocus={d.kind === 'note'} rows={d.kind === 'task' ? wideRows(text) : 4} value={text} maxLength={d.kind === 'task' ? 4000 : 2000} onChange={e => setText(e.target.value)}
-                  placeholder={d.kind === 'task' ? tr('写清楚要做的事和做到什么算完成；它会连同这个节点连着的检查、工序一起收到')
+                  placeholder={d.kind === 'task' ? tr('写清楚要做的事和做到什么算完成，它会连同这个节点连着的检查、工序一起收到')
                     : d.kind === 'soft' ? tr('比如「每个模块都有消融实验吗？缺哪个列出来」') : ''} />}
             </label>
             {d.kind === 'hard' && (

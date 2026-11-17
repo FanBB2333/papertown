@@ -83,7 +83,7 @@ export function Interior(p: Props) {
           <div><h1>{info.title}</h1><p>{info.sub}</p></div>
         </div>
         {room && (
-          <div className="seg in-view" role="tablist" title={tr('车间：每个项目的 Agent 在做什么；明细：项目、对话和任务的全部内容')}>
+          <div className="seg in-view" role="tablist" title={tr('车间看每个项目的 Agent 在做什么，明细看项目、对话和任务的全部内容')}>
             <button className={view === 'floor' ? 'on' : ''} onClick={() => setView('floor')}>{tr('车间')}</button>
             <button className={view === 'detail' ? 'on' : ''} onClick={() => setView('detail')}>{tr('明细')}</button>
           </div>

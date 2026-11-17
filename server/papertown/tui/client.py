@@ -35,7 +35,7 @@ class Api:
             except ValueError:
                 detail = r.text
             if isinstance(detail, list):
-                detail = "；".join(f"{'.'.join(str(x) for x in d.get('loc', [])[1:])} {d.get('msg', '')}".strip() for d in detail)
+                detail = "，".join(f"{'.'.join(str(x) for x in d.get('loc', [])[1:])} {d.get('msg', '')}".strip() for d in detail)
             raise ApiError(str(detail or f"HTTP {r.status_code}"))
         return r.json() if r.content else None
 

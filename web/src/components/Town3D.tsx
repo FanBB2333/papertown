@@ -185,7 +185,7 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
           <span>{tr('对准建筑点击或按')} <K k="F" /> {tr('进去 ·')} <K k="V" /> {tr('视角 ·')} <K k="T" /> {tr('昼夜 ·')} <K k="M" /> {tr('回到平面 ·')} <K k="Esc" /> {tr('放开鼠标')}</span>
         </div>
       )}
-      <div className="pnl t3-mini" title={tr('点一下就过去；点建筑到它门口')} onClick={onMini}>
+      <div className="pnl t3-mini" title={tr('点一下就过去，点建筑就到它门口')} onClick={onMini}>
         <div dangerouslySetInnerHTML={{ __html: mini }} />
         <svg className="t3-me" viewBox={MINI_VB} preserveAspectRatio="xMidYMid meet">
           <g ref={marker}><path className="cone" d="M0,0L130,-60A143,143 0 0 1 130,60Z" /><circle r="24" /></g>

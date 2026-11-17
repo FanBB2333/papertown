@@ -32,7 +32,7 @@ export function DemoWelcome() {
         <ul>
           <li>{tr('用 WASD 走动，到门口按 F，或者直接点建筑')}</li>
           <li>{tr('点顶栏的「3D 漫游」：空格跳，双击空格飞起来，按 F 走进建筑看里面的机器')}</li>
-          <li>{tr('进图书馆试一下检索；在设置里切换 English / 简体 / 繁體')}</li>
+          <li>{tr('进图书馆试一下检索，或者在设置里切换 English / 简体 / 繁體')}</li>
         </ul>
         <div className="btns">
           <a className="btn pri" href={REPO} target="_blank" rel="noreferrer"><GitHubMark />{tr('去 GitHub 看源码')}</a>

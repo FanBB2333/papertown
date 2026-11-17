@@ -1,5 +1,5 @@
 // A card offering Paseo's new models as the default for the assistant and the projects' leads.
-// 不用了 dismisses the news for good; × only hides it until the next page load.
+// 忽略 dismisses the news for good; × only hides it until the next page load.
 
 import { useEffect, useState } from 'react';
 import { api, listen, type ModelNews, type PaseoDefault, type PaseoDefaults } from '../api';
@@ -40,7 +40,7 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
   }
   const change = () => done(async () => {
     for (const r of roles) await api.setPaseoDefault(r, { provider: m.provider, model: m.model, thinking: think(defs[r], m) });
-    toast(tr('{0}以后默认用 {1} · {2}。已经在跑的不受影响。', ROLES.filter(r => roles.has(r[0])).map(r => r[1]).join(tr('和')), m.label, m.name));
+    toast(tr('{0}以后默认用 {1} · {2}。已经在跑的保持原样。', ROLES.filter(r => roles.has(r[0])).map(r => r[1]).join(tr('和')), m.label, m.name));
   });
   const newest = [...news].reverse().slice(0, SHOWN);
 
@@ -68,9 +68,9 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
       </div>
       <div className="btns">
         <button className="btn pri" disabled={busy || !roles.size} onClick={change}>{tr('切换')}</button>
-        <button className="btn" disabled={busy} onClick={() => done(async () => {})}>{tr('不用了')}</button>
+        <button className="btn" disabled={busy} onClick={() => done(async () => {})}>{tr('忽略')}</button>
       </div>
-      <p className="muted small">{tr('只改以后启动时的默认；已经在跑的负责人和小助手不受影响，小助手开新对话时换上。')}</p>
+      <p className="muted small">{tr('只改以后启动时的默认。已经在跑的负责人和小助手保持原样，小助手开新对话时换上。')}</p>
     </aside>
   );
 }

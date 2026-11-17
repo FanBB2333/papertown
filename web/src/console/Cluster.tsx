@@ -83,7 +83,7 @@ export function Cluster({ mine, onOpen }: Props) {
     <section className="cs queue cl">
       <div className="cs-h">
         {head}<h3>{tr('GPU 与队列')}</h3>
-        <span className={`live${stale ? ' stale' : ''}`} title={tr('nvidb 的 keeper 定时去各台机器读卡；Papertown 每 {0} 秒从 nvidb 取一次最新的读数', g.poll_s ?? 10)}>
+        <span className={`live${stale ? ' stale' : ''}`} title={tr('nvidb 的 keeper 定时去各台机器读卡，Papertown 每 {0} 秒从 nvidb 取一次最新的读数', g.poll_s ?? 10)}>
           <i />{stale ? (probed ? tr('nvidb 已经 {0} 没有新读数', dur(age / 1000)) : tr('还没有读数')) : tr('实时 · {0}读的卡', secsAgo(age))}
         </span>
         <button className="ib" onClick={refreshGpus} title={tr('现在就从 nvidb 取一次')}><Icon n="refresh" size={14} /></button>
@@ -211,7 +211,7 @@ function OccRow({ o, ctx, where }: { o: Occ; ctx: Ctx; where?: boolean }) {
       data-ref={j ? `job:nvidb-${j.id}` : `proc:${o.node}:${o.gpu}:${o.key}`} data-ref-label={j ? `${tr('任务')} #${j.id} ${j.name}` : `${o.user} · ${o.what}`}
       onPointerEnter={() => j && setHover(j.id)}
       onPointerMove={e => tip.show(e, { title: j ? `#${j.id} ${j.name}` : `${o.what}`, rows, foot: j?.notes ? j.notes.slice(0, 160) : j ? undefined
-        : `${tr('不是从队列启动的，Papertown 只能看到它占着卡')}${o.atLeast ? tr('；nvidb 不记它的开始时间，≥ 表示 Papertown 开始看时它已经在了') : ''}` })}
+        : `${tr('不是从队列启动的，Papertown 只能看到它占着卡')}${o.atLeast ? tr('。nvidb 不记它的开始时间，≥ 表示 Papertown 开始看时它已经在了') : ''}` })}
       onPointerLeave={() => { setHover(null); tip.hide(); }}>
       {pct != null && <i className="cl-fill" style={{ width: `${Math.min(100, pct)}%` }} />}
       <span className="cl-s">{o.kind === 'job' ? ST.running.sign : '⊙'}</span>

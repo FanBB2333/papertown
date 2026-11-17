@@ -71,7 +71,7 @@ def hatch(town: "Town", line: dict, worker: dict) -> tuple[dict, object]:
         covered = {t for h in top for t in h["matched"]}
         missing = [t for t in sc["terms"] if t not in covered]
         similar = [{"paper_id": h["paper_id"], "title": h["title"], "similarity": h["similarity"],
-                    "note": f"共用关键词：{', '.join(h['matched'][:5]) or '无'}；{h['year']} 年，{h['authors']}"} for h in top]
+                    "note": f"共用关键词：{', '.join(h['matched'][:5]) or '无'} · {h['year']} 年，{h['authors']}"} for h in top]
         verdict = v.get("verdict", "可孵化")
         summary = v.get("summary", verdict)
         gap = (f"最相近的工作里没有出现：{', '.join(missing[:6])}。" if missing else "关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。")
@@ -342,7 +342,7 @@ def ask(town: "Town", worker: dict, building: dict, question: str, line: dict | 
         items = r.get("line_items") or []
         last = items[-1] if isinstance(items, list) and items else None
         state = f"最近的产出是「{last['title']}」（{last['stage']}）。" if last else ""
-        return {"text": f"这里是{town.world.name(building)}，{context}{state}离线模式下我只能报告状态；接入模型后可以回答具体问题。"}
+        return {"text": f"这里是{town.world.name(building)}，{context}{state}离线模式下我只能报告状态，接入模型后可以回答具体问题。"}
 
     plan = [("", "line_items")] if line else []
     task = AgentTask(worker=worker, stage="ask", building=town.world.name(building),

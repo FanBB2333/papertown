@@ -30,7 +30,7 @@ export function Data(p: Props) {
   return (
     <div className="cm-page data">
       {none && <div className="cm-empty in"><Icon n="table" size={30} /><h3>{tr('还没有实验数据')}</h3>
-        <p>{tr('方法设计定下数据集和指标，实验跑完后结果会出现在这里；代码仓库里的 results/、outputs/ 等目录也会列出来。')}</p></div>}
+        <p>{tr('方法设计定下数据集和指标，实验跑完后结果会出现在这里，代码仓库里的 results/、outputs/ 等目录也会列出来。')}</p></div>}
 
       {(meta.datasets.length > 0 || meta.metrics.length > 0) && (
         <div className="meta-line">
@@ -55,7 +55,7 @@ function Results({ r }: { r: NonNullable<LineData['results']> }) {
   return (
     <section className="cs">
       <div className="cs-h"><span className="cs-ic"><Icon n="spark" size={15} /></span><h3>{tr('结果')}</h3>{r.simulated && <span className="chip warn">{tr('模拟结果，不是真实实验')}</span>}
-        <span className="muted small">{tr('每个指标一张图，从高到低；橙色是我们的方法')}</span></div>
+        <span className="muted small">{tr('每个指标一张图，从高到低，橙色是我们的方法')}</span></div>
       <div className="sm-grid">
         {r.metrics.map((m, i) => {
           const ours = r.rows.find(x => x.ours)?.values[i];
@@ -86,7 +86,7 @@ function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) =>
   const [pick, setPick] = useState<string | null>(null);
   return (
     <section className="cs">
-      <div className="cs-h"><span className="cs-ic"><Icon n="flask" size={15} /></span><h3>{tr('运行结果 · {0}', runs.length)}</h3><span className="muted small">{tr('nvidb 任务交回的 result.json；点一张卡看全部')}</span></div>
+      <div className="cs-h"><span className="cs-ic"><Icon n="flask" size={15} /></span><h3>{tr('运行结果 · {0}', runs.length)}</h3><span className="muted small">{tr('nvidb 任务交回的 result.json，点一张卡看全部')}</span></div>
       <div className="rcards">
         {runs.map((r, i) => {
           const h = headlines(r.result, 4);
@@ -96,7 +96,7 @@ function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) =>
               <span className="rc-h"><StateTag s={stOf(r.state)} /><span className="muted small">{ago(r.finished_at)}</span></span>
               <b className="rc-n" title={r.name}>{r.name}</b>
               {h.length ? <span className="rc-m">{h.map(x => <span key={x.k}><strong>{fmtNum(x.v)}</strong><em title={x.k}>{x.name}</em></span>)}</span>
-                : '_truncated' in (r.result as object) ? <span className="muted small rc-s">{tr('结果太长，nvidb 只交回了前一部分；点开看')}</span>
+                : '_truncated' in (r.result as object) ? <span className="muted small rc-s">{tr('结果太长，nvidb 只交回了前一部分，点开看')}</span>
                   : <span className="muted small rc-s">{JSON.stringify(r.result).slice(0, 120)}</span>}
             </button>
           );
@@ -271,7 +271,7 @@ function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen:
             <thead><tr>
               <th className="cmp-tag">{tr('文件夹')}</th>
               {shownCols.map(k => (
-                <th key={k} title={`${k}\n${tr('点一下排序，再点一下换方向；双击画成条形图')}`}
+                <th key={k} title={`${k}\n${tr('点一下排序，再点一下换方向，双击画成条形图')}`}
                   className={`sortable num${sort?.k === k ? ` on ${sort.up ? 'up' : 'down'}` : ''}${focus === k ? ' focus' : ''}`}
                   onClick={() => setSort(s => ({ k, up: s?.k === k ? !s.up : false }))} onDoubleClick={() => setFocus(k)}>{short(k)}</th>
               ))}

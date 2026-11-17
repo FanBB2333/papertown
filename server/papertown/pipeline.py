@@ -198,7 +198,7 @@ class Pipeline:
         def who(i: str) -> str:
             return f"{title(workers[i])} Lv.{workers[i]['level']}"
 
-        roster = "；".join(f"{NAMES[k]}：{', '.join(who(i) for i in v)}" for k, v in plan["team"].items())
+        roster = " · ".join(f"{NAMES[k]}：{', '.join(who(i) for i in v)}" for k, v in plan["team"].items())
         self._say(line_id, None, f"项目 #{ln['seq']} 在造纸厂立项。人才市场编队：{roster}。{plan['reason']}。", kind="team",
                   mill="mill", team=plan["team"])
         self._stage(line_id, "team", "done")

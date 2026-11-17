@@ -136,7 +136,7 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
         {lead ? (
           <p className="muted">{tr('负责人盯着这个项目：项目有动静时看一眼，催员工干活、给他们派活，有要紧的事向你汇报、问你。它只跑在 Paseo 里，工作目录是 Papertown 自己的，不碰项目的仓库。')}</p>
         ) : repo ? (
-          <p className="warn-box">{tr('这是从本地接入的项目：员工会直接在')} <code>{repo}</code> {tr('里改文件，改动是真的。启动时会让它先看 git status、提交和推送前问你；它的说明和 pt 工具放在 Papertown 自己的目录里，不写进仓库。')}</p>
+          <p className="warn-box">{tr('这是从本地接入的项目：员工会直接在')} <code>{repo}</code> {tr('里改文件，改动是真的。启动时会让它先看 git status、提交和推送前问你。它的说明和 pt 工具放在 Papertown 自己的目录里，不写进仓库。')}</p>
         ) : <p className="muted">{tr('选一种运行方式。工作目录都是这个项目在')}{r.place}{tr('的目录，启动时会先把项目简报发给它。')}</p>}
         <div className="hire-opts">
           <div className="hire-card">
@@ -472,7 +472,7 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
       <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
         <div className="pnl-s">
           <h4>Paseo</h4>
-          <p className="muted small">{tr('同一段对话也在 Paseo 的桌面端和手机上。权限审批在这里就能点；命令和模型切换在「完整界面」里。')}</p>
+          <p className="muted small">{tr('同一段对话也在 Paseo 的桌面端和手机上。权限审批在这里就能点，命令和模型切换在「完整界面」里。')}</p>
           <div className="btns"><button className="btn" onClick={() => run(() => api.brief(agent.id))}>{tr('发送项目简报')}</button></div>
           {agent.cwd && <p className="muted small path">{tr('目录：')}{agent.cwd}</p>}
         </div>

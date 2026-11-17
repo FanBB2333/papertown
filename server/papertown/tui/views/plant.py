@@ -157,7 +157,7 @@ class Plant(Place):
             st = job_state(j.get("state"))
             parts.append(Text.assemble((f"{i + 1:>2} ", p["faint"]), job_mark(st, t, p), (f" {clip(j.get('name'), 34)}", p["ink"]),
                                        (f"  {JOB[st]}", p["muted"]), ("  挂起" if j.get("held") else "", p["warn"])))
-        parts.append(Text("排在前面的先跑；在 nvidb 里调顺序", style=p["faint"]))
+        parts.append(Text("排在前面的先跑，顺序在 nvidb 里调", style=p["faint"]))
         pane.show(Padding(Group(*parts), (0, 1)))
 
     def tick(self, t: float) -> None:

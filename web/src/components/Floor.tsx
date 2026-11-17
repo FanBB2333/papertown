@@ -19,7 +19,7 @@ interface Lane { id: string; seq: number; title: string; status: string; tag: st
 export type CoreType = 'mill' | 'depot' | 'farm' | 'press';
 
 const THEME: Record<CoreType, { title: string; how: string; empty: string }> = {
-  mill: { title: tr('生产车间'), how: tr('每条生产线是一篇论文，八道工序排在传送带上；工位上站的是负责这道工序的 Agent，论文跟着传送带走到它现在的工序。'), empty: tr('还没有论文上线。放入一颗 idea，孵化后它会在这里占一条生产线。') },
+  mill: { title: tr('生产车间'), how: tr('每条生产线是一篇论文，八道工序排在传送带上，工位上站的是负责这道工序的 Agent，论文跟着传送带走到它现在的工序。'), empty: tr('还没有论文上线。放入一颗 idea，孵化后它会在这里占一条生产线。') },
   depot: { title: tr('货架区'), how: tr('每个项目一排货架：读代码、写代码、跑测试，打包好的实验箱子发往实验农场。站在货架前的是这个项目的代码员工。'), empty: tr('还没有项目。项目立项后，仓库会给它一排货架和一位代码员工。') },
   farm: { title: tr('试验田'), how: tr('每个项目一垄田，每个实验任务是一块地：排队是种子，运行中按进度长高，跑完结穗，失败就枯了。看田员在田边盯着。'), empty: tr('田里还空着。流水线跑到实验工序、或代码员工提交任务后，这里就会种上。') },
   press: { title: tr('印刷车间'), how: tr('每篇论文一台印刷机：排字、开印、校对、装订出厂。机器旁是写这篇论文的员工，纸张停在它正在做的那一步。'), empty: tr('还没有稿子。项目立项后，印刷厂会给它一台印刷机和一位写作员工。') },

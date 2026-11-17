@@ -253,7 +253,7 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea,
         <>
           {head(a)}
           <div className="as-start">
-            <p className="as-lead">{tr('一个本地 agent，和员工一样跑在 Paseo 或 pi 里。它知道你在看哪一页、指着什么，会去读这一页数据的出处来回答；要它办的事，先在这里请你点头。')}</p>
+            <p className="as-lead">{tr('一个本地 agent，和员工一样跑在 Paseo 或 pi 里。它知道你在看哪一页、指着什么，会去读这一页数据的出处来回答。要它办的事，先在这里请你点头。')}</p>
             <Earlier limit={3} title={tr('接着之前的对话')} onPick={resume} />
             <div className="hire-card">
               <h3>Paseo</h3>
@@ -418,7 +418,7 @@ function ReplyMsg({ r, last, again }: { r: ItRow; last: boolean; again?: () => v
 function Hello({ mod, onAsk }: { mod: string; onAsk: (text: string) => void }) {
   return (
     <div className="as-hello">
-      <p>{tr('问这一页的事，或者请它帮你办。它看得到你在哪一页；想问得更准，就指给它看，或者先在页面上选中一段字。')}</p>
+      <p>{tr('问这一页的事，或者请它帮你办。它看得到你在哪一页。想问得更准，就指给它看，或者先在页面上选中一段字。')}</p>
       <div className="as-asks">{(ASK[mod] ?? ASK_ANY).map(q => <button key={q} onClick={() => onAsk(q)}><Icon n="chat" size={14} />{q}</button>)}</div>
     </div>
   );
@@ -480,7 +480,7 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
   }
   const placeholder = target.kind === 'idea' ? tr('写一颗新 idea，孵化员会去图书馆和 arXiv 查重…')
     : target.kind === 'adjust' ? tr('改写你的 idea，孵化员会重新查重…')
-      : !started ? tr('先在上面启动小助手；写新 idea 不用等它')
+      : !started ? tr('先在上面启动小助手，写新 idea 现在就可以')
         : off ? tr('连不上 Paseo，等它启动后再问（写新 idea 照常可用）')
         : !working ? tr('问这一页的事，或者请它帮你办') : agent.runtime === 'pi' ? tr('它在忙，发出的消息会排在它手上的事之后') : tr('它在忙，发出的消息会插进它手上的事');
   return (

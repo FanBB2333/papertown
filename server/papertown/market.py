@@ -80,8 +80,8 @@ class Market:
             "write": take("writer"),
             "review": take("reviewer", reviewers),
         }
-        reason = (f"复杂度 {t['complexity']}，最相近工作相似度 {t['closest']}；"
-                  f"{'方法设计加一名调研员；' if len(team['method']) > 1 else ''}审稿人 {len(team['review'])} 名；"
+        reason = (f"复杂度 {t['complexity']}，最相近工作相似度 {t['closest']}。"
+                  f"{'方法设计加一名调研员，' if len(team['method']) > 1 else ''}审稿人 {len(team['review'])} 名。"
                   f"{'预算偏紧，优先用低级别员工（便宜模型）' if cheap else '按 ROI 选人'}")
         return {"triage": t, "team": team, "alloc": ALLOC, "reason": reason, "size": len(used)}
 

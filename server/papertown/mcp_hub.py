@@ -126,7 +126,7 @@ class McpHub:
         if name not in cat:
             raise McpError("没有这个 MCP server")
         if cat[name]["source"] != "town":
-            raise McpError("只有在小镇里添加的才能删；别的可以停用")
+            raise McpError("只有在小镇里添加的才能删，别的可以停用")
         self.disconnect(name)
         with self._lock:
             d = self._town_config()

@@ -57,7 +57,7 @@ class ScriptedProvider(Provider):
     def complete(self, *, model: str, system: str, turns: list[Turn], tools: list[ToolSpec],
                  max_tokens: int = 8000, hint: ScriptHint | None = None) -> Reply:
         if hint is None:
-            text = "离线模式下没有模型可以自由回答；接入 Claude 或 DeepSeek 后这里会给出真正的回复。"
+            text = "离线模式下没有模型可以自由回答，接入 Claude 或 DeepSeek 后这里会给出真正的回复。"
             return self._reply(system, turns, text, None)
         available = {t.name for t in tools}
         loaded, results = collect(turns)
