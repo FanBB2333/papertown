@@ -1,0 +1,238 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="720" viewBox="0 0 1440 720">
+
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Segoe UI", sans-serif; fill: #18202a; }
+      .mono { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; }
+      .muted { fill: #64748b; }
+      .ink2 { fill: #334155; }
+      .white { fill: #ffffff; }
+      .ok { fill: #0d9488; }
+      .ok-ink { fill: #0f766e; }
+      .bad { fill: #e11d48; }
+      .warn { fill: #d97706; }
+      .brand { fill: #2563eb; }
+      .purple { fill: #7c3aed; }
+      .bold { font-weight: 600; }
+      .heavy { font-weight: 700; }
+    </style>
+    <filter id="sh-sm" x="-8%" y="-8%" width="116%" height="124%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+    <filter id="sh-md" x="-10%" y="-10%" width="120%" height="128%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.09"/>
+    </filter>
+    <filter id="glow-bad" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#e11d48" flood-opacity="0.22"/>
+    </filter>
+    <filter id="glow-brand" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#2563eb" flood-opacity="0.24"/>
+    </filter>
+    <pattern id="dots" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#cbd5e1" opacity="0.7"/>
+    </pattern>
+    <pattern id="hazard-red" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+      <rect width="4" height="8" fill="#ffe4e6"/>
+      <rect x="4" width="4" height="8" fill="#fecdd3"/>
+    </pattern>
+    <pattern id="hazard-ok" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+      <rect width="4" height="8" fill="#ccfbf1"/>
+      <rect x="4" width="4" height="8" fill="#99f6e4"/>
+    </pattern>
+    <marker id="arr-ok" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#0d9488"/>
+    </marker>
+    <marker id="arr-brand" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arr-lock" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arr-bad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#e11d48"/>
+    </marker>
+    <marker id="arr-warn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#d97706"/>
+    </marker>
+    <marker id="arr-spec" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 2 L 8 5 L 0 8 z" fill="#7c3aed"/>
+    </marker>
+    <marker id="clamp-end" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <line x1="5" y1="1" x2="5" y2="9" stroke="#334155" stroke-width="2.4"/>
+      <line x1="1" y1="5" x2="5" y2="5" stroke="#334155" stroke-width="2"/>
+    </marker>
+  </defs>
+
+<rect width="1440" height="720" fill="#f8fafc"/>
+<text x="40" y="44" font-size="20" class="heavy">「研究回路」节点与连线视觉语法规范（Hard vs Soft Visual Grammar）</text>
+<text x="40" y="68" font-size="13" class="muted">造型即语义：用切角机械结构表达确定性代码限制（Hard），用流体双环与虚线结构表达概率模型引导与审视（Soft）</text>
+<rect x="40" y="92" width="432" height="396" rx="14" fill="#ffffff" stroke="#cbd5e1" filter="url(#sh-sm)"/>
+<rect x="40" y="92" width="432" height="40" rx="14" fill="#fff1f2"/><text x="60" y="117" font-size="14" class="heavy" fill="#be123c">1. 硬机制家族（Hard · 确定性代码与物理拦截）</text>
+<text x="60" y="156" font-size="12" class="bold ink2">A. 硬卡口节点（Hard Gate · 串联门禁）— 切角八边形 + 刻度 + 锁扣</text>
+
+    <g filter="url(#sh-sm)">
+      
+      <polygon points="70,168 240,168 250,178 250,230 240,240 70,240 60,230 60,178" fill="#ffffff" stroke="#0d9488" stroke-width="2"/>
+      <polygon points="71,171 239,171 247,179 247,229 239,237 71,237 63,229 63,179" fill="none" stroke="#0d9488" stroke-opacity="0.22" stroke-width="1"/>
+      <rect x="68" y="176" width="174" height="20" rx="4" fill="#f0fdfa"/>
+      <rect x="68" y="176" width="6" height="20" rx="2" fill="url(#hazard-ok)"/>
+      <polygon points="82,182 86,186 82,190 78,186" fill="#0d9488"/>
+      <text x="91" y="190" font-size="10.5" class="mono heavy" fill="#0f766e">HARD · 1.1 P0</text>
+      <rect x="200" y="178" width="40" height="16" rx="4" fill="#ccfbf1"/>
+      <text x="220" y="189.5" font-size="10" text-anchor="middle" class="bold" fill="#0f766e">放行</text>
+      <text x="74" y="214" font-size="12.5" class="bold">禁用词检测</text>
+      <text x="238" y="214" font-size="11.5" text-anchor="end" class="mono heavy" fill="#0d9488">0 / ≤0</text>
+      <text x="74" y="229" font-size="10.5" class="mono muted">R1:8 → R2:0 · 清零</text>
+    </g>
+    
+
+    <g filter="url(#sh-sm)">
+      
+      <polygon points="274,168 444,168 454,178 454,230 444,240 274,240 264,230 264,178" fill="#fffafb" stroke="#e11d48" stroke-width="2"/>
+      <polygon points="275,171 443,171 451,179 451,229 443,237 275,237 267,229 267,179" fill="none" stroke="#e11d48" stroke-opacity="0.22" stroke-width="1"/>
+      <rect x="272" y="176" width="174" height="20" rx="4" fill="#ffe4e6"/>
+      <rect x="272" y="176" width="6" height="20" rx="2" fill="url(#hazard-red)"/>
+      <polygon points="286,182 290,186 286,190 282,186" fill="#e11d48"/>
+      <text x="295" y="190" font-size="10.5" class="mono heavy" fill="#be123c">HARD · 3.2 P0</text>
+      <rect x="404" y="178" width="40" height="16" rx="4" fill="#fecdd3"/>
+      <text x="424" y="189.5" font-size="10" text-anchor="middle" class="bold" fill="#be123c">阻断</text>
+      <text x="278" y="214" font-size="12.5" class="bold">图表长标题</text>
+      <text x="442" y="214" font-size="11.5" text-anchor="end" class="mono heavy" fill="#e11d48">1 / ≤0</text>
+      <text x="278" y="229" font-size="10.5" class="mono muted">main.tex:184 违规</text>
+    </g>
+    
+<text x="60" y="272" font-size="12" class="bold ink2">B. 硬卡口聚合组（Gate Cluster · 可一键展开子项）</text>
+
+    <g filter="url(#sh-sm)">
+      
+      <polygon points="70,284 444,284 454,294 454,350 444,360 70,360 60,350 60,294" fill="#fffafb" stroke="#e11d48" stroke-width="2"/>
+      <polygon points="71,287 443,287 451,295 451,349 443,357 71,357 63,349 63,295" fill="none" stroke="#e11d48" stroke-opacity="0.22" stroke-width="1"/>
+      <rect x="68" y="292" width="378" height="20" rx="4" fill="#ffe4e6"/>
+      <rect x="68" y="292" width="6" height="20" rx="2" fill="url(#hazard-red)"/>
+      <polygon points="82,298 86,302 82,306 78,302" fill="#e11d48"/>
+      <text x="91" y="306" font-size="10.5" class="mono heavy" fill="#be123c">HARD · P0/P1</text>
+      <rect x="404" y="294" width="40" height="16" rx="4" fill="#fecdd3"/>
+      <text x="424" y="305.5" font-size="10" text-anchor="middle" class="bold" fill="#be123c">阻断</text>
+      <text x="74" y="330" font-size="12.5" class="bold">lastcheck 写作硬卡口组 (6 项规则)</text>
+      <text x="442" y="330" font-size="11.5" text-anchor="end" class="mono heavy" fill="#e11d48">4/6 放行</text>
+      <rect x="74" y="338" width="10" height="10" rx="2" fill="#10b981"/><rect x="88" y="338" width="10" height="10" rx="2" fill="#10b981"/><rect x="102" y="338" width="10" height="10" rx="2" fill="#10b981"/><rect x="116" y="338" width="10" height="10" rx="2" fill="#10b981"/><rect x="130" y="338" width="10" height="10" rx="2" fill="#f59e0b"/><rect x="144" y="338" width="10" height="10" rx="2" fill="#e11d48"/><text x="164" y="347" font-size="10.5" class="mono ink2">R1:19处 → R3:3处 (点开逐条定位)</text>
+    </g>
+    
+<text x="60" y="392" font-size="12" class="bold ink2">C. 硬边界夹（Hard Clamp · 前置代码动作锁）</text>
+
+    <g>
+      <rect x="60" y="404" width="394" height="62" rx="6" fill="#f8fafc" stroke="#334155" stroke-width="2.2"/>
+      <rect x="60" y="404" width="394" height="20" rx="4" fill="#1e293b"/>
+      <text x="72" y="418" font-size="10" class="mono bold white">■ HARD CLAMP · bounds.never / 系统动作级锁死</text>
+      <text x="72" y="440" font-size="12" class="bold">禁止取消 nvidb 队列任务 · 禁止修改本地仓库外路径</text>
+      <text x="72" y="457" font-size="10.5" class="muted">不依赖大模型自觉，Papertown 服务端直接物理拒绝或挂起审批</text>
+    </g>
+    
+<rect x="504" y="92" width="432" height="396" rx="14" fill="#ffffff" stroke="#cbd5e1" filter="url(#sh-sm)"/>
+<rect x="504" y="92" width="432" height="40" rx="14" fill="#f5f3ff"/><text x="524" y="117" font-size="14" class="heavy" fill="#6d28d9">2. 软机制家族（Soft · 概率引导与语义审视）</text>
+<text x="524" y="156" font-size="12" class="bold ink2">A. 软巡检节点（Soft Sentinel · 持续校准）— 双环透镜胶囊 + 判词</text>
+
+    <g filter="url(#sh-sm)">
+      <rect x="521" y="165" width="398" height="80" rx="27" fill="none" stroke="#d97706" stroke-opacity="0.35" stroke-width="1.4" stroke-dasharray="5,4"/>
+      <rect x="524" y="168" width="392" height="74" rx="24" fill="#fffdf7" stroke="#d97706" stroke-width="1.6"/>
+      <rect x="534" y="176" width="372" height="19" rx="9.5" fill="#fef3c7"/>
+      <circle cx="545" cy="185.5" r="5" fill="none" stroke="#d97706" stroke-width="1.6"/>
+      <circle cx="545" cy="185.5" r="2" fill="#d97706"/>
+      <text x="555" y="189.5" font-size="10.5" class="bold" fill="#b45309">SOFT · 每 12h · 负责人</text>
+      <rect x="866" y="177.5" width="38" height="16" rx="8" fill="#fde68a"/>
+      <text x="885" y="188.5" font-size="10" text-anchor="middle" class="bold" fill="#b45309">预警</text>
+      <text x="540" y="211" font-size="12.5" class="bold">实验方向与消融完备性</text>
+      <text x="540" y="228" font-size="10.8" class="ink2">“主表公平，但缺步长 &gt;50 消融；建议补跑并更新 §4.3”</text>
+      <circle cx="878" cy="229" r="3.6" fill="#10b981"/><circle cx="889" cy="229" r="3.6" fill="#10b981"/><circle cx="900" cy="229" r="3.6" fill="#f59e0b"/>
+    </g>
+    
+
+    <g filter="url(#sh-sm)">
+      <rect x="521" y="257" width="398" height="80" rx="27" fill="none" stroke="#0d9488" stroke-opacity="0.35" stroke-width="1.4" stroke-dasharray="5,4"/>
+      <rect x="524" y="260" width="392" height="74" rx="24" fill="#f8fafc" stroke="#0d9488" stroke-width="1.6"/>
+      <rect x="534" y="268" width="372" height="19" rx="9.5" fill="#f0fdfa"/>
+      <circle cx="545" cy="277.5" r="5" fill="none" stroke="#0d9488" stroke-width="1.6"/>
+      <circle cx="545" cy="277.5" r="2" fill="#0d9488"/>
+      <text x="555" y="281.5" font-size="10.5" class="bold" fill="#0f766e">SOFT · 写作更新触发</text>
+      <rect x="866" y="269.5" width="38" height="16" rx="8" fill="#ccfbf1"/>
+      <text x="885" y="280.5" font-size="10" text-anchor="middle" class="bold" fill="#0f766e">契合</text>
+      <text x="540" y="303" font-size="12.5" class="bold">主张有据 (Claim-Evidence)</text>
+      <text x="540" y="320" font-size="10.8" class="ink2">“引言 3 条核心贡献均与表 1、表 2 及图 4 一一对应”</text>
+      <circle cx="878" cy="321" r="3.6" fill="#f59e0b"/><circle cx="889" cy="321" r="3.6" fill="#10b981"/><circle cx="900" cy="321" r="3.6" fill="#10b981"/>
+    </g>
+    
+<text x="524" y="366" font-size="12" class="bold ink2">B. 软限制规范卡（Soft Prompt Spec · 前置提示词引导）</text>
+
+    <g>
+      <rect x="524" y="380" width="392" height="86" rx="12" fill="#faf5ff" stroke="#8b5cf6" stroke-width="1.6" stroke-dasharray="5,3"/>
+      <text x="538" y="400" font-size="10.5" class="mono bold" fill="#6d28d9">◌ SOFT SPEC · Prompt / AGENTS.md / bounds.must</text>
+      <text x="538" y="421" font-size="12.5" class="bold">研究核心假设与写作风格要求（注入 Agent 上下文）</text>
+      <text x="538" y="441" font-size="11" class="ink2">因为模型是概率生成模型，软限制负责“引导方向”，</text>
+      <text x="538" y="457" font-size="11" class="muted">其执行偏差必须交由下游「硬卡口 + 软巡检」闭环兜底。</text>
+    </g>
+    
+<rect x="968" y="92" width="432" height="396" rx="14" fill="#ffffff" stroke="#cbd5e1" filter="url(#sh-sm)"/>
+<rect x="968" y="92" width="432" height="40" rx="14" fill="#eff6ff"/><text x="988" y="117" font-size="14" class="heavy" fill="#1d4ed8">3. 工序、返工执行单与人类决策节点</text>
+<text x="988" y="156" font-size="12" class="bold ink2">A. 工序工位站（Stage Station · 内嵌驻场员工与实时进度）</text>
+
+    <g filter="url(#glow-brand)">
+      <rect x="988" y="168" width="392" height="76" rx="13" fill="#f8fbff" stroke="#2563eb" stroke-width="1.8" />
+      <rect x="988" y="178" width="4.5" height="56" rx="2" fill="#2563eb"/>
+      <circle cx="1014" cy="196" r="14" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+      <text x="1014" y="200" font-size="10.5" text-anchor="middle" class="mono heavy" fill="#1d4ed8">78%</text>
+      <text x="1035" y="191" font-size="10" class="mono muted">STAGE 06</text>
+      <text x="1035" y="208" font-size="13.5" class="heavy">写作排版</text>
+      
+        <rect x="1302" y="176" width="70" height="17" rx="8.5" fill="#dbeafe"/>
+        <circle cx="1311" cy="184.5" r="3" fill="#2563eb"/>
+        <text x="1318" y="188" font-size="9.8" class="bold" fill="#2563eb">写作员工</text>
+        
+      <text x="1002" y="226" font-size="10.8" class="muted">main.tex · 6,420 词 · PDF 3m 前编译</text>
+      
+        <rect x="1000" y="234" width="368" height="4" rx="2" fill="#dbeafe"/>
+        <rect x="1000" y="234" width="287" height="4" rx="2" fill="#2563eb"/>
+        
+    </g>
+    
+<text x="988" y="272" font-size="12" class="bold ink2">B. 回路执行单（Loop Task · 自动打回修补 / 软纠偏派单）</text>
+
+    <g>
+      <rect x="988" y="284" width="392" height="72" rx="10" fill="#fffafb" stroke="#e11d48" stroke-width="1.6"/>
+      <rect x="988" y="284" width="6" height="72" rx="3" fill="#e11d48"/>
+      <text x="1004" y="304" font-size="10.5" class="mono bold" fill="#be123c">↻ 自动修补单 #t7 · 第 3 轮 · 写作员工</text>
+      <text x="1004" y="324" font-size="12.5" class="bold">按 lastcheck 3.2 缩短图 3 标题并移除 seed</text>
+      <text x="1004" y="343" font-size="10.8" class="muted">附带精确行号定位 → 员工改完运行 pt checks run 闭环</text>
+    </g>
+    
+<text x="988" y="384" font-size="12" class="bold ink2">C. 人类拍板节点（Human Decision Beacon）</text>
+
+    <g>
+      <polygon points="1004,398 1364,398 1380,432 1364,466 1004,466 988,432" fill="#fffbeb" stroke="#d97706" stroke-width="1.8"/>
+      <text x="1014" y="421" font-size="10.5" class="mono bold" fill="#b45309">👤 HUMAN IN THE LOOP · 关键立项 / 偏航仲裁 / 终审</text>
+      <text x="1014" y="441" font-size="12.5" class="bold">软巡检严重偏离或硬卡口超轮次时唤醒你拍板</text>
+      <text x="1014" y="458" font-size="10.5" class="muted">支持一键批准、退回重做或调整研究假设</text>
+    </g>
+    
+<rect x="40" y="512" width="1360" height="176" rx="14" fill="#ffffff" stroke="#cbd5e1" filter="url(#sh-sm)"/>
+<text x="60" y="542" font-size="14" class="heavy">4. 四种回路控制连线语义（Edges as Control Flow，彻底取代无方向灰线）</text>
+<rect x="60" y="558" width="316" height="112" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="74" y="580" font-size="12" class="bold">① 主推进与门禁阻断线</text>
+<line x1="80" y1="606" x2="346" y2="606" stroke="#0d9488" stroke-width="2.8"  marker-end="url(#arr-ok)"/>
+<text x="74" y="636" font-size="11" class="ink2">上游硬卡口全过 → 实线亮起放行；卡口未过 → </text>
+<text x="74" y="654" font-size="11" class="muted">下游变为带「锁死」徽标的灰虚线</text>
+<rect x="396" y="558" width="316" height="112" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="410" y="580" font-size="12" class="bold">② 硬打回内循环弧 (Hard Loop)</text>
+<line x1="416" y1="606" x2="682" y2="606" stroke="#e11d48" stroke-width="2.8" stroke-dasharray="7,4" marker-end="url(#arr-bad)"/>
+<text x="410" y="636" font-size="11" class="ink2">P0 硬卡口未过 → 动态绯红短划弧打回给员工，</text>
+<text x="410" y="654" font-size="11" class="muted">跑 pt checks run 直到 0 违规</text>
+<rect x="732" y="558" width="316" height="112" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="746" y="580" font-size="12" class="bold">③ 软纠偏反馈弧 (Soft Steering)</text>
+<line x1="752" y1="606" x2="1018" y2="606" stroke="#d97706" stroke-width="2.8" stroke-dasharray="3,4" marker-end="url(#arr-warn)"/>
+<text x="746" y="636" font-size="11" class="ink2">软巡检发现偏航/缺消融 → 琥珀点划弧跨阶段回连</text>
+<text x="746" y="654" font-size="11" class="muted">实验/方法，派发纠偏单</text>
+<rect x="1068" y="558" width="316" height="112" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="1082" y="580" font-size="12" class="bold">④ 前置约束注入线 (Spec / Clamp)</text>
+<line x1="1088" y1="606" x2="1354" y2="606" stroke="#8b5cf6" stroke-width="2.8" stroke-dasharray="4,4" marker-end="url(#arr-spec)"/>
+<text x="1082" y="636" font-size="11" class="ink2">虚线箭头代表 Prompt 软引导注入；实心 T</text>
+<text x="1082" y="654" font-size="11" class="muted"> 型夹线代表 Code 硬边界物理钳制</text>
+</svg>
