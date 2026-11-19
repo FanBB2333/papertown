@@ -26,14 +26,15 @@ import { Popover } from '@cloudflare/kumo';
 import {
   Background, BackgroundVariant, BaseEdge, ConnectionMode, Controls, EdgeLabelRenderer, getBezierPath, MiniMap, Panel, Position,
   getViewportForBounds, ReactFlow, ReactFlowProvider, useEdgesState, useInternalNode, useNodesInitialized, useNodesState, useOnViewportChange, useReactFlow, ViewportPortal,
-  type Connection, type Edge, type EdgeProps, type InternalNode, type OnConnectEnd,
+  type Connection, type Edge, type EdgeProps, type InternalNode, type NodeChange, type OnConnectEnd,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { api, type CanvasEdge, type CanvasNode, type CanvasView, type NewNode, type ProjectCard, type TaskTo } from '../api';
 import { flash, usePanelNote } from '../console/page';
 import { Icon, type IconName } from '../console/icons';
 import { tr, trx } from '../i18n';
-import { follow, href } from '../route';
+import { setSettings, useSettings } from '../settings';
+import { follow, go, href } from '../route';
 import { Inspector, KIND, label, Mark, NewForm, WHO, type Draft, type Kind } from './CanvasSide';
 import { status, type Act } from './Checks';
 import { LoopReport } from './LoopReport';
@@ -70,17 +71,13 @@ function wires(v: CanvasView): CanvasEdge[] {
 const hay = (n: CanvasNode) => [label(n), n.text, n.id, n.check?.id, n.check && trx(n.check.text), n.to && WHO[n.to], n.gate?.name].filter(Boolean).join(' ').toLowerCase();
 const typing = (e: Event) => !!(e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable=true]');
 
+// the loop's switches, kept with the browser's settings (the settings page's 研究回路 section)
 function usePrefs() {
-  const base: Prefs = { map: false, snap: false, hint: true, legend: true, lines: false };
-  const [p, setP] = useState<Prefs>(() => {
-    try { return { ...base, ...JSON.parse(localStorage.getItem('pt-canvas') ?? '{}') }; } catch { return base; }
-  });
-  const set = (x: Partial<Prefs>) => setP(old => {
-    const next = { ...old, ...x };
-    try { localStorage.setItem('pt-canvas', JSON.stringify(next)); } catch { /* a convenience only */ }
-    return next;
-  });
-  return [p, set] as const;
+  const s = useSettings();
+  const p: Prefs = { map: s.cvMap, snap: s.cvSnapGrid, hint: s.cvHint, legend: s.cvLegend, lines: s.cvLines };
+  const KEYS = { map: 'cvMap', snap: 'cvSnapGrid', hint: 'cvHint', legend: 'cvLegend', lines: 'cvLines' } as const;
+  const set = (x: Partial<Prefs>) => setSettings(Object.fromEntries(Object.entries(x).map(([k, v]) => [KEYS[k as keyof Prefs], v])));
+  return [p, set, s] as const;
 }
 
 // a correction a sentinel asks for: written here, for you to read before it goes out
@@ -95,7 +92,8 @@ function fixSeed(n: CanvasNode): Draft['seed'] {
 
 // ---------- lines: from rim to rim, wherever the two nodes are, and round the nodes in between ----------
 
-const BoxCtx = createContext<Box[]>([]); // where every node is, for the lines to keep off
+const NONE: Box[] = [];
+const BoxCtx = createContext<Box[]>(NONE); // where every node is, for the lines to keep off
 const boxOf = (n: InternalNode): Box => ({ id: n.id, x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, w: n.measured.width ?? 0, h: n.measured.height ?? 0 });
 
 const centre = (n: InternalNode) => ({ x: n.internals.positionAbsolute.x + (n.measured.width ?? 0) / 2, y: n.internals.positionAbsolute.y + (n.measured.height ?? 0) / 2 });
@@ -362,7 +360,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   const [editing, setEditing] = useState<string | null>(null);
   const [ctx, setCtx] = useState<{ x: number; y: number; items: Item[] } | null>(null);
   const [hot, setHot] = useState<string | null>(null);
-  const [prefs, setPrefs] = usePrefs();
+  const [prefs, setPrefs, cs] = usePrefs();
   const [nodes, setNodes, onNodesChange] = useNodesState<FNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<FEdge>([]);
   const rf = useReactFlow();
@@ -399,9 +397,13 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   // how far out the loop is seen from: canvas.css sizes type by the zoom and picks what the nodes say by the face.
   // Each face is left a little past where it is entered, so a zoom resting on a threshold does not flicker.
   const face = useRef<'near' | 'mid' | 'far'>('near');
+  const adapt = useRef(cs.cvAdapt);
+  adapt.current = cs.cvAdapt;
   const scale = (zoom: number) => {
     const el = wrap.current;
     if (!el) return;
+    el.style.setProperty('--zr', zoom.toFixed(3)); // the real zoom, for what must stay one pixel wide
+    if (!adapt.current) zoom = 1; // nodes as they are at 100%, whatever the zoom
     el.style.setProperty('--z', zoom.toFixed(3));
     const was = face.current;
     const now = was === 'near' ? (zoom < 0.45 ? 'far' : zoom < 0.7 ? 'mid' : 'near')
@@ -411,6 +413,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     if (el.dataset.lod !== now) el.dataset.lod = now;
   };
   useOnViewportChange({ onChange: vp => scale(vp.zoom) });
+  useEffect(() => { scale(rf.getZoom()); }, [cs.cvAdapt]); // eslint-disable-line react-hooks/exhaustive-deps
   // the whole loop: its lanes and whatever has been dragged beyond them
   const frame = useMemo(() => {
     if (!v?.nodes.length) return null;
@@ -576,6 +579,42 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
 
   const boxes = useMemo<Box[]>(() => nodes.filter(n => n.id !== NEW).map(n => ({ id: n.id, x: n.position.x, y: n.position.y,
     w: n.measured?.width ?? SIZE[n.data.n.kind][0], h: n.measured?.height ?? SIZE[n.data.n.kind][1] })), [nodes]);
+  // dragging one node: its edges and middle lines snap to the other nodes' within a few pixels, with a guide drawn
+  const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
+  const onNodes = (changes: NodeChange<FNode>[]) => {
+    const moving = changes.filter(c => c.type === 'position' && c.dragging && c.position);
+    if (!cs.cvGuides || moving.length !== 1) {
+      if (guides.x != null || guides.y != null) setGuides({ x: null, y: null });
+      onNodesChange(changes);
+      return;
+    }
+    const c = moving[0] as Extract<NodeChange<FNode>, { type: 'position' }>, me = boxes.find(b => b.id === c.id);
+    if (!me || !c.position) { onNodesChange(changes); return; }
+    const reach = cs.cvGuideDist / rf.getZoom(), others = boxes.filter(b => b.id !== c.id);
+    const best = (at: number, size: number, lines: (b: Box) => number[]) => {
+      let hit: { to: number; line: number } | null = null, gap = reach;
+      for (const off of [0, size / 2, size]) for (const b of others) for (const l of lines(b)) {
+        const d = Math.abs(at + off - l);
+        if (d < gap) { gap = d; hit = { to: l - off, line: l }; }
+      }
+      return hit;
+    };
+    const sx = best(c.position.x, me.w, b => [b.x, b.x + b.w / 2, b.x + b.w]), sy = best(c.position.y, me.h, b => [b.y, b.y + b.h / 2, b.y + b.h]);
+    setGuides({ x: sx?.line ?? null, y: sy?.line ?? null });
+    onNodesChange(changes.map(x => (x === c ? { ...c, position: { x: sx?.to ?? c.position!.x, y: sy?.to ?? c.position!.y } } : x)));
+  };
+  // several nodes laid out in rows, about as many across as down, in the order they read
+  const grid = (ns: CanvasNode[]) => {
+    if (ns.length < 2) return;
+    const sorted = [...ns].sort((a, b) => a.y - b.y || a.x - b.x), across = Math.ceil(Math.sqrt(ns.length));
+    const w = Math.max(...ns.map(n => SIZE[n.kind][0])), h = Math.max(...ns.map(n => SIZE[n.kind][1]));
+    const x0 = Math.min(...ns.map(n => n.x)), y0 = Math.min(...ns.map(n => n.y));
+    const at: Spots = Object.fromEntries(sorted.map((n, i) => [n.id, [x0 + (i % across) * (w + 40), y0 + Math.floor(i / across) * (h + 40)]]));
+    const was = spots(ns);
+    remember(tr('排成网格'), async () => { await place(was); });
+    place(at);
+  };
+
   const begin = (d: Draft) => { select(null); setReport(false); setDraft(d); };
   const pick = (id: string) => {
     setDraft(null);
@@ -706,6 +745,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     { icon: 'rows', label: tr('顶部对齐'), run: () => align(ns, 'top') },
     { icon: 'cards', label: tr('横向等距'), run: () => align(ns, 'row'), off: ns.length < 3 },
     { icon: 'cards', label: tr('纵向等距'), run: () => align(ns, 'column'), off: ns.length < 3 },
+    { icon: 'board', label: tr('排成网格'), run: () => grid(ns) },
     null,
     { icon: 'close', label: tr('删掉这 {0} 个', ns.length), run: () => remove(ns), danger: true, key: '⌫' },
   ];
@@ -753,6 +793,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     { icon: 'lens', label: tr('缩放到 100%'), run: () => zoomTo('one'), key: '0' },
     { icon: 'wand', label: tr('按回路规整'), run: tidy },
     { icon: prefs.lines ? 'check' : 'eye', label: prefs.lines ? tr('收起次要的连线') : tr('显示全部连线'), run: () => setPrefs({ lines: !prefs.lines }) },
+    { icon: 'sliders', label: tr('画布设置…'), run: () => go('/settings/loop') },
     null,
     { icon: 'refresh', label: tr('立即全检'), run: runAll },
   ];
@@ -873,7 +914,9 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                 <label className="cv-mi"><input type="checkbox" checked={prefs.lines} onChange={e => setPrefs({ lines: e.target.checked })} /><span>{tr('显示全部连线')}</span></label>
                 <label className="cv-mi"><input type="checkbox" checked={prefs.legend} onChange={e => setPrefs({ legend: e.target.checked })} /><span>{tr('图例')}</span></label>
                 <label className="cv-mi"><input type="checkbox" checked={prefs.map} onChange={e => setPrefs({ map: e.target.checked })} /><span>{tr('小地图')}</span></label>
+                <label className="cv-mi"><input type="checkbox" checked={cs.cvGuides} onChange={e => setSettings({ cvGuides: e.target.checked })} /><span>{tr('吸附到其他节点')}</span></label>
                 <label className="cv-mi"><input type="checkbox" checked={prefs.snap} onChange={e => setPrefs({ snap: e.target.checked })} /><span>{tr('拖动时对齐网格')}</span></label>
+                <Row close={close} it={{ icon: 'sliders', label: tr('画布设置…'), run: () => go('/settings/loop') }} />
                 {v && v.spare.length > 0 && (
                   <>
                     <hr />
@@ -902,6 +945,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                   <li>{tr('{0}C 复制、{0}X 剪切、{0}V 粘贴、{0}D 复制一份（任务和备注），别处复制的文字粘贴成备注', MOD)}</li>
                   <li>{tr('Delete 删掉、{0}A 全选、{0}Z 撤销，方向键挪一小步（按住 Shift 挪一大步）', MOD)}</li>
                   <li>{tr('N 新任务、⇧N 新备注、F 适应窗口、0 回到 100%、+ − 缩放')}</li>
+                  <li>{tr('触控板双指移动是平移，双指捏合或按住 {0} 滚动是缩放', MOD.trim())}</li>
                   <li>{tr('按 / 叫出小助手，让它改回路、解释卡口为什么没放行')}</li>
                 </ul>
               </>
@@ -911,11 +955,11 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       </header>
 
       <div className="cv-body">
-        <div className={`cv-flow${lit ? ' has-dim' : ''}`} ref={wrap} onMouseMove={e => { pointer.current = { x: e.clientX, y: e.clientY }; }} onMouseLeave={() => { pointer.current = null; }} onDoubleClick={e => { if ((e.target as HTMLElement).classList.contains('react-flow__pane')) here(e.clientX, e.clientY, 'task'); }}>
-          <OpsCtx.Provider value={ops}><BoxCtx.Provider value={boxes}>
-            <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-              connectionMode={ConnectionMode.Loose} colorMode={dark ? 'dark' : 'light'} minZoom={floor * 0.98} maxZoom={1.8} translateExtent={extent} zoomOnDoubleClick={false}
-              snapToGrid={prefs.snap} snapGrid={[22, 22]} deleteKeyCode={['Backspace', 'Delete']} multiSelectionKeyCode={['Meta', 'Control', 'Shift']} disableKeyboardA11y
+        <div className={`cv-flow${lit ? ' has-dim' : ''}${cs.cvMarch ? '' : ' still'}`} ref={wrap} onMouseMove={e => { pointer.current = { x: e.clientX, y: e.clientY }; }} onMouseLeave={() => { pointer.current = null; }} onDoubleClick={e => { if ((e.target as HTMLElement).classList.contains('react-flow__pane')) here(e.clientX, e.clientY, 'task'); }}>
+          <OpsCtx.Provider value={ops}><BoxCtx.Provider value={cs.cvAvoid ? boxes : NONE}>
+            <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodes} onEdgesChange={onEdgesChange}
+              connectionMode={ConnectionMode.Loose} colorMode={dark ? 'dark' : 'light'} minZoom={floor * 0.98} maxZoom={1.8} translateExtent={extent} zoomOnDoubleClick={false} panOnScroll={cs.cvScroll === 'pan'} zoomOnPinch
+              snapToGrid={prefs.snap} snapGrid={[+cs.cvGap, +cs.cvGap]} deleteKeyCode={['Backspace', 'Delete']} multiSelectionKeyCode={['Meta', 'Control', 'Shift']} disableKeyboardA11y
               onBeforeDelete={async d => { // Delete on nodes goes through remove (it asks, and only takes the loop's own nodes off); lines go as they are
                 const ns = d.nodes.filter(n => n.id !== NEW).map(n => n.data.n);
                 if (ns.length) remove(ns);
@@ -925,7 +969,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
               onNodeClick={(e, n) => { if (n.id === NEW) return; if (e.metaKey || e.ctrlKey || e.shiftKey) setSel(null); else pick(n.id); }}
               onSelectionStart={() => setSel(null)} onPaneClick={() => { setSel(null); setEditing(null); }} onMoveStart={e => { setCtx(null); if (e) auto.current = false; }}
               onNodeDragStart={(_, _n, all) => { dragging.current = true; setCtx(null); before.current = Object.fromEntries(all.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)]])); }}
-              onNodeDragStop={onDragStop}
+              onNodeDragStop={(e, n, all) => { setGuides({ x: null, y: null }); onDragStop(e, n, all); }}
               onSelectionDragStart={(_, all) => { dragging.current = true; before.current = Object.fromEntries(all.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)]])); }}
               onSelectionDragStop={(e, all) => onDragStop(e, all[0], all)}
               onSelectionContextMenu={(e, all) => menuAt(e, several(all.filter(n => n.id !== NEW).map(n => n.data.n)))}
@@ -938,8 +982,14 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                 menuAt(e, ns.length > 1 && ns.some(x => x.id === n.id) ? several(ns) : nodeItems(n.data.n));
               }}
               onEdgeContextMenu={(e, edge) => { if (!virtual(edge.id)) menuAt(e, edgeItems(edge.id)); }}>
-              <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} />
-              {v && <Lanes v={v} />}
+              {cs.cvBg !== 'none' && <Background variant={cs.cvBg === 'lines' ? BackgroundVariant.Lines : BackgroundVariant.Dots} gap={+cs.cvGap} size={cs.cvBg === 'lines' ? 1 : 1.4} />}
+              {v && cs.cvLanes && <Lanes v={v} />}
+              {(guides.x != null || guides.y != null) && frame && (
+                <ViewportPortal>
+                  {guides.x != null && <i className="cv-guide v" style={{ left: guides.x, top: frame.y - 400, height: frame.height + 800 }} />}
+                  {guides.y != null && <i className="cv-guide h" style={{ top: guides.y, left: frame.x - 400, width: frame.width + 800 }} />}
+                </ViewportPortal>
+              )}
               <Controls showInteractive={false} />
               {prefs.map && <MiniMap pannable zoomable nodeClassName={n => `mm-${n.type}`} />}
               {prefs.legend && !report && <Legend onClose={() => setPrefs({ legend: false })} />}

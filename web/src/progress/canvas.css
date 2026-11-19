@@ -19,7 +19,7 @@
 
 /* ---------- the bar: where you are, what stays bright, find, how things stand, new and more ---------- */
 .cv-top { flex: none; display: flex; align-items: center; gap: 12px; height: 50px; padding: 0 12px; box-sizing: border-box; border-bottom: 1px solid var(--line); background: var(--panel); }
-.cv-back { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; padding: 5px 8px 5px 4px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; }
+.cv-back { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; padding: 5px 8px 5px 4px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; }
 .cv-back b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-back:hover { color: var(--brand); }
 .cv-top h2 { margin: 0 4px 0 -4px; padding-left: 12px; border-left: 1px solid var(--line); font: 600 14.5px var(--font); white-space: nowrap; }
@@ -27,7 +27,8 @@
 .cv-filter button { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .cv-filter em { min-width: 16px; padding: 0 5px; border-radius: 99px; font: 600 11px/16px var(--font); font-style: normal; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); background: color-mix(in srgb, var(--ink) 9%, transparent); }
 .cv-filter button.on em { color: #fff; background: var(--brand); }
-.cv-top > .cg-sum { flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; font-size: 12.5px; gap: 12px; }
+/* the counts stay whole: the project name and the search box give way first, and below 1360px the counts go altogether */
+.cv-top > .cg-sum { flex: none; flex-wrap: nowrap; white-space: nowrap; font-size: 12.5px; gap: 12px; }
 .cv-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .cv-acts .btn, .cv-row .btn, .cv-side-f .btn, .cv-open { display: inline-flex; align-items: center; gap: 5px; }
 .cv kbd, .cv-menu kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 5px; font: 500 10.5px/16px var(--font); color: var(--muted); background: var(--bg); white-space: nowrap; }
@@ -204,6 +205,11 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 .cv .react-flow__edge.w-assign { pointer-events: none; }
 .cv .react-flow__edge.w-note .react-flow__edge-path { stroke: color-mix(in srgb, var(--warn) 55%, var(--line)); stroke-dasharray: calc(2px * var(--k, 1)) calc(4px * var(--k, 1)); --p: calc(6px * var(--k, 1)); stroke-linecap: round; }
 .cv .react-flow__edge.selected .react-flow__edge-path { stroke: var(--brand); stroke-width: calc(2.4px * var(--k, 1)); }
+.cv-flow.still .react-flow__edge-path { animation: none !important; }
+/* where a dragged node snaps to another: a thin line through both, as thin at any zoom */
+.cv-guide { position: absolute; pointer-events: none; background: var(--brand); opacity: .75; }
+.cv-guide.v { width: calc(1px / var(--zr, 1)); }
+.cv-guide.h { height: calc(1px / var(--zr, 1)); }
 @keyframes cv-march { to { stroke-dashoffset: calc(-1 * var(--p, 10px)); } } /* one whole dash, so the march does not jump */
 .cv-hint { display: flex; align-items: center; gap: 4px; margin: 10px; padding: 3px 4px 3px 12px; border: 1px solid var(--line); border-radius: 99px; background: color-mix(in srgb, var(--panel) 90%, transparent); backdrop-filter: blur(6px); font-size: 12px; color: var(--muted); white-space: nowrap; }
 
@@ -714,7 +720,7 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .cv-human > .cv-far { inset: calc(2px * var(--k)); padding: 2px 30px; clip-path: polygon(25px 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 25px 100%, 0 50%); }
 
 /* narrower: the bar keeps what it must */
-@media (max-width: 1240px) { .cv-top > .cg-sum { display: none; } }
+@media (max-width: 1360px) { .cv-top > .cg-sum { display: none; } }
 @media (max-width: 980px) { .cv-back b, .cv-find kbd { display: none; } .cv-find { flex-basis: 150px; } }
 /* narrow: the bar wraps to two rows, and the open node comes up from the bottom, over the canvas */
 @media (max-width: 760px) {

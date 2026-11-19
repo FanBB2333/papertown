@@ -43,6 +43,21 @@ export interface Settings {
   pgStages: boolean;
   pgDone: boolean;
   pgCols: Pane[];
+  // the research loop
+  cvScroll: 'pan' | 'zoom';
+  cvBg: 'dots' | 'lines' | 'none';
+  cvGap: '16' | '22' | '32';
+  cvSnapGrid: boolean;
+  cvGuides: boolean;
+  cvGuideDist: number;
+  cvLines: boolean;
+  cvAvoid: boolean;
+  cvMarch: boolean;
+  cvAdapt: boolean;
+  cvLanes: boolean;
+  cvLegend: boolean;
+  cvMap: boolean;
+  cvHint: boolean;
 }
 
 // the macOS app defaults to the macOS look; index.html's inline script must decide the same way
@@ -55,7 +70,20 @@ export const DEFAULTS: Settings = {
   edTheme: 'auto', edIcons: 'dots',
   pgView: 'blocks', pgSort: 'need', pgGroup: 'none', pgDensity: 'roomy', pgCard: 'mid', pgText: 'mid', pgWidth: 'mid', pgStages: true, pgDone: true,
   pgCols: ['summary', 'attention', 'running', 'planned'],
+  cvScroll: 'pan', cvBg: 'dots', cvGap: '22', cvSnapGrid: false, cvGuides: true, cvGuideDist: 8, cvLines: false, cvAvoid: true, cvMarch: true,
+  cvAdapt: true, cvLanes: true, cvLegend: true, cvMap: false, cvHint: true,
 };
+
+// the loop's switches used to be kept on their own, under pt-canvas
+function oldLoop(): Partial<Settings> {
+  try {
+    const o = JSON.parse(localStorage.getItem('pt-canvas') ?? 'null');
+    if (!o || typeof o !== 'object') return {};
+    const b = (k: string) => (typeof o[k] === 'boolean' ? o[k] : undefined);
+    const out: Partial<Settings> = { cvMap: b('map'), cvSnapGrid: b('snap'), cvHint: b('hint'), cvLegend: b('legend'), cvLines: b('lines') };
+    return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined));
+  } catch { return {}; }
+}
 
 const KEY = 'pt-settings';
 // Saves hold every setting, so old defaults persist: v2 moves start 'console' to 'cards', v3 edTheme 'paper' to 'auto'.
@@ -94,10 +122,10 @@ function load(): Settings {
     const v = JSON.parse(localStorage.getItem(KEY) ?? 'null');
     if (v && typeof v === 'object') {
       const { v: ver = 1, ...saved } = v;
-      return { ...DEFAULTS, ...saved, ...(ver < 2 && saved.start === 'console' ? { start: 'cards' } : {}), ...(ver < 3 && saved.edTheme === 'paper' ? { edTheme: 'auto' } : {}) };
+      return { ...DEFAULTS, ...('cvLines' in saved ? {} : oldLoop()), ...saved, ...(ver < 2 && saved.start === 'console' ? { start: 'cards' } : {}), ...(ver < 3 && saved.edTheme === 'paper' ? { edTheme: 'auto' } : {}) };
     }
   } catch { /* storage blocked or bad data */ }
-  return { ...DEFAULTS };
+  return { ...DEFAULTS, ...oldLoop() };
 }
 
 export function getSettings() { return current; }

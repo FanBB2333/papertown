@@ -2,7 +2,7 @@
 // settings (settings.ts) and the server's model, agents, access and demo samples.
 
 import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Table, Text } from '@cloudflare/kumo';
-import { ArrowCounterClockwiseIcon, CodeIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
+import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, listen, type AuthState, type Hud, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
@@ -19,12 +19,13 @@ import { LANG, LANGS, setLang, tr } from '../i18n';
 import { go } from '../route';
 
 // each section: its address, name, what is in it, icon, and the colour of its tile in the macOS look
-type Section = 'look' | 'showcase' | 'progress' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'access' | 'demo' | 'keys';
+type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'access' | 'demo' | 'keys';
 const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
   [tr('界面'), [
     ['look', tr('外观与动效'), tr('界面风格、明暗、语言和动画'), PaletteIcon, '#5856d6'],
     ['showcase', tr('风格展示'), tr('每种风格的材质、控件和配色'), SwatchesIcon, '#ff2d55'],
     ['progress', tr('进展页'), tr('块或行、排序、分组、密度'), RowsIcon, '#007aff'],
+    ['loop', tr('研究回路'), tr('平移缩放、网格、吸附、连线和图例'), GraphIcon, '#34c759'],
     ['editor', tr('编辑器'), tr('颜色主题和文件图标'), CodeIcon, '#af52de'],
   ]],
   [tr('小镇'), [
@@ -131,6 +132,61 @@ function Editor({ s }: { s: S }) {
             </button>
           ))}
         </div>
+      </Card>
+    </>
+  );
+}
+
+function LoopSection({ s }: { s: S }) {
+  return (
+    <>
+      <Card title={tr('移动和缩放')}>
+        <Row label={tr('触控板双指和滚轮')} desc={tr('平移：双指移动在画布上走，捏合或按住 ⌘ 滚动缩放。缩放：双指移动直接缩放')}>
+          <Pick label={tr('触控板双指和滚轮')} value={s.cvScroll} options={[['pan', tr('平移')], ['zoom', tr('缩放')]]} onChange={set('cvScroll')} />
+        </Row>
+        <Row label={tr('随缩放调整节点')} desc={tr('缩小时字跟着放大、细节收起，远看只留名字和一个数字')}>
+          <Toggle label={tr('随缩放调整节点')} value={s.cvAdapt} onChange={set('cvAdapt')} />
+        </Row>
+      </Card>
+      <Card title={tr('网格和吸附')}>
+        <Row label={tr('背景')}>
+          <Pick label={tr('背景')} value={s.cvBg} options={[['dots', tr('点')], ['lines', tr('网格线')], ['none', tr('空白')]]} onChange={set('cvBg')} />
+        </Row>
+        <Row label={tr('网格大小')}>
+          <Pick label={tr('网格大小')} value={s.cvGap} options={[['16', tr('小')], ['22', tr('中')], ['32', tr('大')]]} onChange={set('cvGap')} />
+        </Row>
+        <Row label={tr('对齐网格')} desc={tr('拖动节点时一格一格地走')}>
+          <Toggle label={tr('对齐网格')} value={s.cvSnapGrid} onChange={set('cvSnapGrid')} />
+        </Row>
+        <Row label={tr('吸附到其他节点')} desc={tr('拖动节点时，边或中线靠近别的节点就自动对齐，并画出参考线')}>
+          <Toggle label={tr('吸附到其他节点')} value={s.cvGuides} onChange={set('cvGuides')} />
+        </Row>
+        {s.cvGuides && (
+          <Row label={tr('吸附距离')} desc={tr('离多近开始吸附，按屏幕上的像素算')}>
+            <Range label={tr('吸附距离')} value={s.cvGuideDist} min={4} max={16} step={1} fmt={v => `${v}px`} onChange={set('cvGuideDist')} />
+          </Row>
+        )}
+      </Card>
+      <Card title={tr('连线')}>
+        <Row label={tr('显示全部连线')} desc={tr('关着时，巡检、规范、边界和升级的线只在指到节点或打开它时出现')}>
+          <Toggle label={tr('显示全部连线')} value={s.cvLines} onChange={set('cvLines')} />
+        </Row>
+        <Row label={tr('连线绕开节点')} desc={tr('线碰到两端以外的节点时，从节点之间的空隙绕过去')}>
+          <Toggle label={tr('连线绕开节点')} value={s.cvAvoid} onChange={set('cvAvoid')} />
+        </Row>
+        <Row label={tr('流动动画')} desc={tr('发出去的任务和正在打回的修补单，线上有流动的虚线')}>
+          <Toggle label={tr('流动动画')} value={s.cvMarch} onChange={set('cvMarch')} />
+        </Row>
+      </Card>
+      <Card title={tr('画布上显示')}>
+        <Row label={tr('泳道')} desc={tr('软层、主干和回路三条背景带')}>
+          <Toggle label={tr('泳道')} value={s.cvLanes} onChange={set('cvLanes')} />
+        </Row>
+        <Row label={tr('图例')}><Toggle label={tr('图例')} value={s.cvLegend} onChange={set('cvLegend')} /></Row>
+        <Row label={tr('小地图')}><Toggle label={tr('小地图')} value={s.cvMap} onChange={set('cvMap')} /></Row>
+        <Row label={tr('操作提示')} desc={tr('画布上方那行「双击空白处新建…」')}>
+          <Toggle label={tr('操作提示')} value={s.cvHint} onChange={set('cvHint')} />
+        </Row>
       </Card>
     </>
   );
@@ -549,6 +605,7 @@ export function SettingsPage({ section, hud, onClose }: { section?: string; hud:
             {key === 'look' && <Look s={s} />}
             {key === 'showcase' && <Showcase s={s} />}
             {key === 'progress' && <ProgressPage s={s} />}
+            {key === 'loop' && <LoopSection s={s} />}
             {key === 'editor' && <Editor s={s} />}
             {key === 'map' && <MapSection s={s} />}
             {key === 'walk' && <Walk s={s} />}
