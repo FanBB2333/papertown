@@ -205,7 +205,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
           <Select value={think} options={m.thinking.map(x => ({ value: x, label: x }))} onChange={setThink} />
         </label>
       )}
-      {!info.status.web && <p className="muted small">{tr('Paseo 网页端未开启；这里仍可对话，也可在 Paseo 桌面端打开。')}</p>}
+      {!info.status.web && <p className="muted small">{tr('Paseo 网页端没开。在这里照样能对话，也可以去 Paseo 桌面端看。')}</p>}
       <button className="btn pri" disabled={busy || !prov} onClick={() => onStart({ runtime: 'paseo', provider: prov, model: model || undefined, thinking: think || undefined })}>
         {busy ? tr('启动中…') : tr('在 Paseo 里启动')}
       </button>

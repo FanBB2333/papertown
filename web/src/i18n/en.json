@@ -3298,7 +3298,7 @@
  "消息": "Message",
  "发送方式": "Delivery mode",
  "重试": "Retry",
- "Paseo 网页端未开启；这里仍可对话，也可在 Paseo 桌面端打开。": "The Paseo web UI is disabled. You can still chat here or open the conversation in Paseo Desktop.",
+ "Paseo 网页端没开。在这里照样能对话，也可以去 Paseo 桌面端看。": "The Paseo web UI is off. You can chat here as usual, or open the conversation in Paseo Desktop.",
  "会话没有工作目录，无法导入": "This conversation has no working directory and cannot be imported.",
  "{0}（模型列表没读到）": "{0} (models unavailable)",
  "{0} 的模型列表没读到：{1}。可以先用它的默认模型启动，或者换一个供应商。": "Couldn't read {0}'s models: {1}. You can start it on its default model, or pick another provider."

@@ -417,7 +417,7 @@ class Agents:
 
     def _switchable(self, a: dict) -> None:
         if a.get("node_id"):
-            raise AgentError("节点使用固定的 Paseo 会话；要换会话，请创建另一个任务节点")
+            raise AgentError("任务节点固定用自己的 Paseo 会话。要换会话，请新建一个任务节点")
         if self.db.val("select 1 from agent_events where agent_id = ? and json_extract(data, '$.held') = 1", a["id"]):
             raise AgentError("还有排队的消息，处理完后才能切换对话")
         if a.get("line_id"):
