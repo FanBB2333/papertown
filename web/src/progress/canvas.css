@@ -104,6 +104,10 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 .cv-body { flex: 1; min-height: 0; display: flex; }
 .cv-flow { position: relative; flex: 1; min-width: 0; }
 .cv-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; pointer-events: none; }
+/* a failed load or refresh: a bar over the loop, clickable, the loop still usable around it */
+.cv-err { position: absolute; top: 56px; left: 50%; z-index: 6; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: min(560px, calc(100% - 32px)); margin: 0; padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); border-radius: 9px; font-size: 13px; color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); box-shadow: 0 6px 20px rgb(0 0 0 / .12); }
+.cv-err .lnk { flex: none; }
 .cv .react-flow {
   --xy-background-color: var(--bg); --xy-background-pattern-color: color-mix(in srgb, var(--muted) 34%, transparent);
   --xy-edge-stroke: var(--cv-wire); --xy-edge-stroke-selected: var(--brand); --xy-connectionline-stroke: var(--brand);

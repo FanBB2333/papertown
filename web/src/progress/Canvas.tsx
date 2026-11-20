@@ -1002,8 +1002,8 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
             </ReactFlow>
           </BoxCtx.Provider></OpsCtx.Provider>
           {v && report && <LoopReport v={v} onPick={pick} onClose={() => setReport(false)} toast={toast} />}
-          {loadError ? <p className="cv-wait warn-box" role="alert">{loadError} <button className="lnk" onClick={reload}>{tr('重试')}</button></p>
-            : !v && <p className="cv-wait muted">{tr('加载中…')}</p>}
+          {loadError && <p className="cv-err" role="alert"><span>{loadError}</span><button className="lnk" onClick={reload}>{tr('重试')}</button></p>}
+          {!v && !loadError && <p className="cv-wait muted">{tr('加载中…')}</p>}
         </div>
 
         {v && draft && <NewForm key={`${draft.link}:${draft.seed?.title ?? ''}`} d={draft} v={v} busy={busy} onKind={kind => setDraft({ ...draft, kind })} onAdd={create} onCancel={() => setDraft(null)} />}
