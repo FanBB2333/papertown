@@ -86,7 +86,7 @@ export interface Agent {
 }
 
 export interface PaseoModel { id: string; name: string; thinking: string[]; default_thinking: string | null }
-export interface PaseoProvider { id: string; label: string; modes: string; models: PaseoModel[] }
+export interface PaseoProvider { id: string; label: string; modes: string; models: PaseoModel[]; error?: string | null } // error: why its models could not be read
 export interface PaseoInfo {
   status: { ok: boolean; note: string; server_id?: string; web?: string | null; version?: string };
   providers: PaseoProvider[];

@@ -143,5 +143,5 @@ class PaseoModels:
             wait = self.s.paseo_watch
             try:
                 self.check()
-            except PaseoError as e:
-                self.town.trace("PASEO", "模型列表读取失败", str(e))
+            except Exception as e:  # noqa: BLE001 - the watcher must outlive any one bad reading; the trace says what it was
+                self.town.trace("PASEO", "模型列表读取失败", f"{type(e).__name__}: {e}")

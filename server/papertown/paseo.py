@@ -178,13 +178,20 @@ class Paseo:
             rows = [p for p in rows if p.get("status") == "available"]
 
             def models(p: dict) -> dict:
-                ms = self._cli("provider", "models", p["provider"], timeout=40)
-                return {"id": p["provider"], "label": p.get("label") or p["provider"], "modes": p.get("modes") or "",
-                        "models": [{"id": m["id"], "name": m.get("model") or m["id"], "thinking": m.get("thinkingOptionIds") or [],
-                                    "default_thinking": m.get("defaultThinkingOptionId")} for m in ms]}
+                out = {"id": p["provider"], "label": p.get("label") or p["provider"], "modes": p.get("modes") or "", "models": [], "error": None}
+                try:  # one provider that cannot list its models leaves the others usable, and says why
+                    ms = self._cli("provider", "models", p["provider"], timeout=40)
+                except PaseoError as e:
+                    return out | {"error": str(e)}
+                return out | {"models": [{"id": m["id"], "name": m.get("model") or m["id"], "thinking": m.get("thinkingOptionIds") or [],
+                                          "default_thinking": m.get("defaultThinkingOptionId")} for m in ms]}
             with ThreadPoolExecutor(4) as ex:
                 return list(ex.map(models, rows))
-        return self._cached("providers", 300, load, fresh)
+        rows = self._cached("providers", 300, load, fresh)
+        if any(p.get("error") for p in rows):  # asked again next time rather than kept for five minutes
+            with self._lock:
+                self._cache.pop("providers", None)
+        return rows
 
     def url(self, agent_id: str) -> str | None:
         st = self.status()

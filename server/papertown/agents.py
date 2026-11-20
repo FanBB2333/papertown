@@ -754,8 +754,8 @@ class Agents:
         while not self._halt.wait(6):
             try:
                 self.sync_paseo()
-            except PaseoError as e:
-                self.town.trace("PASEO", "会话同步失败", str(e))
+            except Exception as e:  # noqa: BLE001 - the watcher must outlive any one bad reading; the trace says what it was
+                self.town.trace("PASEO", "会话同步失败", f"{type(e).__name__}: {e}")
 
     def sync_paseo(self) -> None:
         """Refresh native status before delivering queued messages to the same session."""

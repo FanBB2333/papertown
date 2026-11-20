@@ -192,8 +192,9 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
     <>
       {d?.provider && <p className="muted small">{tr('Papertown 给它配的是 {0}', [d.provider, d.model, d.thinking].filter(Boolean).join(' / '))}{info.providers.some(x => x.id === d.provider) ? '' : tr('，但 Paseo 里没有这个供应商')}</p>}
       <label className="field">{tr('供应商')}
-        <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.label }))} onChange={id => pick(info, id)} />
+        <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.error ? tr('{0}（模型列表没读到）', x.label) : x.label }))} onChange={id => pick(info, id)} />
       </label>
+      {pv?.error && <p className="warn-box small">{tr('{0} 的模型列表没读到：{1}。可以先用它的默认模型启动，或者换一个供应商。', pv.label, pv.error)}</p>}
       {!!pv?.models.length && (
         <label className="field">{tr('模型')}
           <Select value={model} options={pv.models.map(x => ({ value: x.id, label: x.name }))} onChange={id => pick(info, prov, id)} />

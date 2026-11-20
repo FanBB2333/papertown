@@ -54,3 +54,22 @@ def test_tui_reports_transport_and_invalid_json_failures():
         finally:
             await api.close()
     asyncio.run(run())
+
+
+def test_one_provider_without_models_leaves_the_others_and_is_asked_again(monkeypatch):
+    p = Paseo('/bin/echo')
+    calls = []
+
+    def cli(*args, timeout=30):
+        calls.append(args)
+        if args == ('provider', 'ls'):
+            return [{'provider': 'claude', 'status': 'available'}, {'provider': 'codex', 'status': 'available'}]
+        if args == ('provider', 'models', 'codex'):
+            raise PaseoError('paseo provider 超时')
+        return [{'id': 'm1', 'model': 'Model 1'}]
+    monkeypatch.setattr(p, '_cli', cli)
+    rows = {r['id']: r for r in p.providers()}
+    assert [m['id'] for m in rows['claude']['models']] == ['m1'] and rows['claude']['error'] is None
+    assert rows['codex']['models'] == [] and '超时' in rows['codex']['error']
+    p.providers()
+    assert calls.count(('provider', 'ls')) == 2  # not kept while a provider failed
