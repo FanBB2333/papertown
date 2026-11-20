@@ -41,7 +41,7 @@ export interface Hall {
   dispose(): void;
 }
 
-const LAMP = { done: '#62b25c', run: '#f2b233', wait: '#dd5a4b', todo: '#8f877b' } as const;
+const LAMP = { done: '#62b25c', run: '#f2b233', wait: '#dd5a4b', todo: '#8f877b', fail: '#a8322a' } as const;
 const RUNS = new Set(['running', 'linked']);
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const hash = (s: string, k = 0) => {
@@ -51,7 +51,7 @@ const hash = (s: string, k = 0) => {
 };
 const statusName = (s: string) => ({
   running: tr('进行中'), waiting: tr('等待中'), paused: tr('暂停'), done: tr('已完成'), linked: tr('已关联'),
-  queued: tr('排队中'), failed: tr('失败'), cancelled: tr('已取消'), run: tr('进行中'), wait: tr('等待中'), todo: tr('未开始'),
+  queued: tr('排队中'), failed: tr('失败'), cancelled: tr('已取消'), run: tr('进行中'), wait: tr('等待中'), todo: tr('未开始'), fail: tr('出错'),
 } as Record<string, string>)[s] ?? s;
 
 interface Box { x0: number; z0: number; x1: number; z1: number; top: number; drift?: () => [number, number] }

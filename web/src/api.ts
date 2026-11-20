@@ -23,7 +23,7 @@ export interface WorldState { placements: Placement[]; running: RunningLine[]; h
 export interface WorkerRef { id: string; role: string; level: number; title?: string }
 
 export interface Stage {
-  key: string; name: string; status: 'todo' | 'run' | 'done' | 'wait'; pct: number; building: string; out: string;
+  key: string; name: string; status: 'todo' | 'run' | 'done' | 'wait' | 'fail'; pct: number; building: string; out: string;
   note: string | null; workers: WorkerRef[];
 }
 
@@ -120,7 +120,7 @@ export interface CardRepo {
 export interface MemoryCounts { sessions: number; notes: number; messages: number; at: string | null }
 export interface ProjectCard {
   line: { id: string; seq: number; title: string; status: string; linked: boolean; updated_at: string;
-    stages: { key: string; name: string; status: 'todo' | 'run' | 'wait' | 'done' }[]; stage: { name: string; status: string; pct: number } | null };
+    stages: { key: string; name: string; status: 'todo' | 'run' | 'wait' | 'done' | 'fail' }[]; stage: { name: string; status: string; pct: number } | null };
   lead: Agent | null; card: Card | null; prev: number | null; pending: { at: string; note: string } | null;
   jobs: Record<string, number>; asks: number;
   running: CardRun[]; queued: CardRun[]; repos: { code: CardRepo | null; paper: CardRepo | null }; memory: MemoryCounts;

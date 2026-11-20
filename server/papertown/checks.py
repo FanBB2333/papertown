@@ -44,7 +44,7 @@ HISTORY_MAX = 30
 TREND_MAX = 40
 SOFT_EVERY = 24  # hours before a soft check is asked again
 FILES_MAX = 200
-REACHED = ("run", "wait", "done")
+REACHED = ("run", "wait", "fail", "done")
 
 
 class CheckError(Exception):

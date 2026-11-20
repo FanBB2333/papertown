@@ -124,7 +124,7 @@ function SpineBox({ b, v, r }: { b: Box; v: CanvasView; r: ProjectCard }) {
   const last = b.nodes[b.nodes.length - 1], st = n.status ?? 'todo';
   const name = b.nodes.length === 1 ? n.title : b.nodes.length === 2 ? `${n.title} › ${last.title}` : `${n.title} … ${last.title}`;
   const sub = b.nodes.length > 1 ? tr('已完成') : n.locked ? tr('卡口阻断中') : st === 'run' ? tr('进行中 {0}%', n.pct ?? 0)
-    : st === 'wait' ? tr('等你') : st === 'done' ? (n.ref === 'exp' && r.jobs.done ? tr('{0} 完成', r.jobs.done) : tr('完成')) : tr('待开始');
+    : st === 'wait' ? tr('等你') : st === 'fail' ? tr('出错') : st === 'done' ? (n.ref === 'exp' && r.jobs.done ? tr('{0} 完成', r.jobs.done) : tr('完成')) : tr('待开始');
   return (
     <button className={`lp-st st-${n.locked ? 'locked' : b.nodes.length > 1 ? 'done' : st}`} data-box={b.id} onClick={() => openAt(seq, n.id)}>
       <b><em>{b.nodes.length > 1 ? `${num(n)}–${num(last)}` : num(n)}</em>{name}</b>

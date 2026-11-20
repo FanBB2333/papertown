@@ -34,7 +34,7 @@ export function Overview(p: Props) {
   const parts: { m: ModId; icon: IconName; t: string; v: string; s?: string }[] = [
     { m: 'survey', icon: 'lens', t: tr('调研'), v: h?.verdict ?? (l.linked?.paper?.title ? tr('本地项目') : '—'), s: h ? tr('最接近 {0} 篇', h.similar?.length ?? 0) : undefined },
     { m: 'code', icon: 'code', t: tr('代码仓库'), v: p.info?.code ? p.info.code.name : tr('暂无'), s: p.info?.code ? [p.info.code.branch, p.info.code.dirty ? tr('{0} 处改动', p.info.code.dirty) : tr('无改动')].filter(Boolean).join(' · ') : undefined },
-    { m: 'exp', icon: 'flask', t: tr('实验'), v: exp ? { done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('还没开始') }[exp.status] : '—', s: exp?.note ? gist(exp.note, 36) : undefined },
+    { m: 'exp', icon: 'flask', t: tr('实验'), v: exp ? { done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('还没开始'), fail: tr('出错') }[exp.status] : '—', s: exp?.note ? gist(exp.note, 36) : undefined },
     { m: 'paper', icon: 'doc', t: tr('论文'), v: p.info?.paper ? p.info.paper.main ?? p.info.paper.name : tr('暂无'), s: p.info?.paper ? (p.info.paper.pdf ? tr('有 PDF') : tr('还没编译')) : undefined },
   ];
 
@@ -73,9 +73,9 @@ export function Overview(p: Props) {
           {l.stages.map((s, i) => (
             <li key={s.key} className={`ov-step s-${s.status}`} style={{ ['--i' as string]: i }} data-ref={`stage:${s.key}`} data-ref-label={`${tr('工序')} ${s.name}`}>
               <button onClick={() => p.go(STAGE_MOD[s.key] ?? 'overview')} title={s.note ?? s.out}>
-                <span className="ov-dot">{s.status === 'done' ? '✓' : i + 1}</span>
+                <span className="ov-dot">{s.status === 'done' ? '✓' : s.status === 'fail' ? '✕' : i + 1}</span>
                 <b>{s.name}</b>
-                <span className="muted small">{s.status === 'run' ? `${s.pct}%` : s.status === 'wait' ? tr('等你') : '\u00a0'}</span>
+                <span className="muted small">{s.status === 'run' ? `${s.pct}%` : s.status === 'wait' ? tr('等你') : s.status === 'fail' ? tr('出错') : '\u00a0'}</span>
               </button>
             </li>
           ))}

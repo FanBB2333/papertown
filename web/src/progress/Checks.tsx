@@ -11,7 +11,7 @@ import { tr, trx } from '../i18n';
 import type { ConsoleTarget } from './Project';
 
 export const ST: Record<CheckStatus, string> = { pass: tr('通过'), warn: tr('有问题'), fail: tr('没过'), none: tr('没有可查的'), wait: tr('等负责人判断') };
-export const STAGE: Record<string, string> = { todo: tr('没开始'), run: tr('进行中'), wait: tr('等你'), done: tr('完成') };
+export const STAGE: Record<string, string> = { todo: tr('没开始'), run: tr('进行中'), wait: tr('等你'), done: tr('完成'), fail: tr('出错') };
 const EVERY = [6, 12, 24, 48, 72, 168];
 export const status = (c: Check): CheckStatus => c.last?.status ?? (c.kind === 'soft' ? 'wait' : 'none');
 // a count in the unit the check counts in

@@ -293,6 +293,7 @@ a.ov-ask > .ic:last-child { color: var(--muted); animation: none; }
 .ov-step.s-run .ov-dot { border-color: var(--brand); color: var(--brand); box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand) 40%, transparent); animation: pop .6s var(--spring-pop) both, halo 2.2s var(--out) 1s infinite; animation-delay: calc(var(--i) * 55ms + .1s), 1s; }
 @keyframes halo { to { box-shadow: 0 0 0 10px transparent; } }
 .ov-step.s-wait .ov-dot { border-color: var(--warn); color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--panel)); }
+.ov-step.s-fail .ov-dot { border-color: var(--bad); color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, var(--panel)); }
 
 .ov-parts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .ov-part {

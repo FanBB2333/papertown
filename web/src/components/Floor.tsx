@@ -47,10 +47,10 @@ function millLanes(lines: Line[]): Lane[] {
   return lines.map(l => {
     const parked = ['paused', 'failed'].includes(l.status);
     const nextTodo = l.stages.findIndex(s => s.status !== 'done');
-    const at = l.status === 'done' ? l.stages.length - 1 : Math.max(0, l.stages.findIndex(s => s.status === 'run' || s.status === 'wait'), parked ? nextTodo : -1);
+    const at = l.status === 'done' ? l.stages.length - 1 : Math.max(0, l.stages.findIndex(s => s.status === 'run' || s.status === 'wait' || s.status === 'fail'), parked ? nextTodo : -1);
     const stations: Station[] = l.stages.map((s, i) => {
       const here = i === at && l.status !== 'done';
-      let state: SState = s.status === 'done' ? 'done' : s.status === 'run' ? 'run' : s.status === 'wait' ? 'wait' : 'todo';
+      let state: SState = s.status === 'done' ? 'done' : s.status === 'run' ? 'run' : s.status === 'wait' ? 'wait' : s.status === 'fail' ? 'bad' : 'todo';
       if (here && parked) state = l.status === 'failed' ? 'bad' : 'rest';
       const wstate: WState = state === 'run' ? 'working' : state === 'wait' ? 'waiting' : state === 'rest' ? 'resting' : state === 'bad' ? 'error' : state === 'done' ? 'done' : 'off';
       const say = state === 'run' ? `${s.name}${s.pct ? ` ${s.pct}%` : ''}` : state === 'wait' ? tr('等你决定') : state === 'rest' ? tr('歇着，点继续') : state === 'bad' ? tr('出错了') : undefined;

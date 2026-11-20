@@ -522,7 +522,7 @@ class Canvas:
                 "before": sum(_over(c, (c.get("first") or {}).get("value")) for c in on), "now": sum(_over(c, (c["last"] or {}).get("value")) for c in on),
                 "policy": policy, "ticket": ticket["id"] if ticket else None, "ticket_status": ticket["status"] if ticket else None,
                 "round": ticket.get("round") or 0 if ticket else 0, "escalated": bool(ticket and ticket.get("escalated") and ticket["status"] != "done"),
-                "open": bool(n.get("open")), "waived": bool(n.get("waived")), "reached": (stages.get(stage) or {}).get("status") in ("run", "wait", "done"),
+                "open": bool(n.get("open")), "waived": bool(n.get("waived")), "reached": (stages.get(stage) or {}).get("status") in ("run", "fail", "wait", "done"),
                 "next": later[0] if later else None, "locks": NAMES[later[0]] if later else None}
 
     def _bounds(self, line_id: str) -> dict:

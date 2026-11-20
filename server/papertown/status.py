@@ -49,7 +49,7 @@ def departments(town: "Town") -> list[dict]:
         at.setdefault(r["building"], {})[r["id"]] = {k: r[k] for k in ("id", "seq", "title", "status", "stage", "pct")}
     # a linked project can be at work at several stages at once
     for s in town.db.q("select s.building, s.key, s.status as st, s.pct, l.id, l.seq, l.title, l.status from stages s"
-                       " join lines l on l.id = s.line_id where s.status in ('run', 'wait') and l.status not in ('dropped', 'done')"):
+                       " join lines l on l.id = s.line_id where s.status in ('run', 'wait', 'fail') and l.status not in ('dropped', 'done')"):
         at.setdefault(s["building"], {}).setdefault(s["id"], {"id": s["id"], "seq": s["seq"], "title": s["title"], "stage": NAMES.get(s["key"], s["key"]),
                                                              "status": "waiting" if s["st"] == "wait" else s["status"], "pct": s["pct"]})
     staff: dict[str, list[dict]] = {}

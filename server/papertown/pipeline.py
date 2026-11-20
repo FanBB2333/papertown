@@ -74,7 +74,7 @@ class Pipeline:
         if linked:
             self.town.linked.overlay(line_id, out_stages)
         done = sum(1 for r in out_stages if r["status"] == "done")
-        cur = next((r for r in out_stages if r["status"] in ("run", "wait")), None)
+        cur = next((r for r in out_stages if r["status"] in ("run", "wait", "fail")), None)
         items = self.db.q("select id, kind, stage, building, title, created_at from items where line_id = ? order by created_at", line_id)
         files = [f for f in ("main.tex", "refs.bib", "main.pdf", "paper.zip") if (self.town.press.root / line_id / f).exists()]
         return {**{k: ln[k] for k in ("id", "seq", "title", "idea", "budget", "spent", "status", "stage", "mill_id", "verdict",
@@ -129,7 +129,7 @@ class Pipeline:
             except Exception as e:  # keep the town alive; the line records what went wrong
                 traceback.print_exc()
                 for stage in self.db.q("select key from stages where line_id = ? and status = 'run'", line_id):
-                    self._stage(line_id, stage["key"], "wait", note=str(e))
+                    self._stage(line_id, stage["key"], "fail", note=str(e))  # 「继续」runs it again
                 self._set_line(line_id, status="failed", note=f"{type(e).__name__}: {e}")
                 self._say(line_id, None, f"流水线出错停下了：{e}", kind="error")
                 self._publish(line_id)

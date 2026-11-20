@@ -78,6 +78,7 @@ def test_failed_model_stops_the_stage_without_fabricating_a_template(town, mode)
     assert 'authentication failed' in line['note'] if mode == 'provider_error' else '模型没有提交结果' in line['note']
     assert town.pipeline.item(lid, 'hatch') is None
     assert not town.db.val("select 1 from stages where line_id = ? and status = 'run'", lid)
+    assert town.db.val("select status from stages where line_id = ? and key = 'hatch'", lid) == 'fail'
     runs = town.db.q('select status, error from runs where line_id = ?', lid)
     assert runs and all(r['status'] == 'failed' and r['error'] for r in runs)
     assert not town.db.val("select 1 from trace where label = '离线模板' and line_id = ?", lid)

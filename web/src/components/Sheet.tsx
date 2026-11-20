@@ -33,11 +33,12 @@ const STAGE_TOOLS: Record<string, string[]> = {
   write: ['library.get', 'press.typeset'], review: ['press.read'], ship: ['press.package'],
 };
 
-const STAGE_WORD: Record<Stage['status'], string> = { done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('排队') };
+const STAGE_WORD: Record<Stage['status'], string> = { done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('排队'), fail: tr('出错') };
 
 const chip = (st: string, pct?: number) => st === 'done' ? <span className="chip ok">{STAGE_WORD.done}</span>
   : st === 'run' ? <span className="chip pri">{STAGE_WORD.run}{pct ? ` ${pct}%` : ''}</span>
-    : st === 'wait' ? <span className="chip warn">{STAGE_WORD.wait}</span> : <span className="chip">{STAGE_WORD.todo}</span>;
+    : st === 'wait' ? <span className="chip warn">{STAGE_WORD.wait}</span>
+      : st === 'fail' ? <span className="chip bad">{STAGE_WORD.fail}</span> : <span className="chip">{STAGE_WORD.todo}</span>;
 
 const chips = (xs: string[]) => xs.length ? xs.map(x => <span key={x} className="chip">{x}</span>) : <span className="muted">—</span>;
 
@@ -55,7 +56,7 @@ function Belt({ stations }: { stations: { key: string; name: string; st: string;
       <div className="stations" style={style}>
         <div className="belt" />
         {stations.map((s, i) => (
-          <div key={s.key} className={`stn ${s.st === 'wait' ? 'run' : s.st}`} data-open={s.open} title={s.open ? tr('打开{0}所在的建筑', s.name) : undefined}>
+          <div key={s.key} className={`stn ${s.st === 'wait' ? 'run' : s.st === 'fail' ? 'todo' : s.st}`} data-open={s.open} title={s.open ? tr('打开{0}所在的建筑', s.name) : undefined}>
             <div className="stn-ic">{s.icon}</div>
             <b>{i + 1}. {s.name}</b>
             {chip(s.st, s.pct)}

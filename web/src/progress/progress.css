@@ -57,6 +57,7 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pc-stages li.s-done { background: var(--ok); }
 .pc-stages li.s-run { background: var(--brand); }
 .pc-stages li.s-wait { background: var(--warn); }
+.pc-stages li.s-fail { background: var(--bad); }
 .pc-stage { line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .pc-panes { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }

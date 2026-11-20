@@ -30,7 +30,7 @@ export const PANE_KEYS = Object.keys(PANES) as Pane[];
 export const youNeeded = (c: ProjectCard) => c.asks > 0 || !!c.card?.need_you.length || ['waiting', 'paused', 'failed'].includes(c.line.status);
 
 const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
-const STAGE_ST: Record<'todo' | 'run' | 'wait' | 'done', string> = { done: tr('完成'), run: tr('进行中'), wait: tr('等你'), todo: tr('还没开始') };
+const STAGE_ST: Record<'todo' | 'run' | 'wait' | 'done' | 'fail', string> = { done: tr('完成'), run: tr('进行中'), wait: tr('等你'), todo: tr('还没开始'), fail: tr('出错') };
 
 // what a card's buttons do, the same on the card and on the project's page
 export function useCardActs(r: ProjectCard, toast: (t: string) => void, onChange: (r: ProjectCard) => void) {
@@ -65,7 +65,7 @@ export function Stages({ r }: { r: ProjectCard }) {
         {line.stages.map(s => <li key={s.key} className={`s-${s.status}`} title={`${s.name} · ${STAGE_ST[s.status]}`} />)}
       </ol>
       <span className="small muted pc-stage">
-        {line.stage ? `${line.stage.name} · ${line.stage.status === 'wait' ? tr('等你') : line.stage.status === 'todo' ? tr('还没开始') : `${line.stage.pct}%`}` : tr('全部完成')}
+        {line.stage ? `${line.stage.name} · ${line.stage.status === 'wait' ? tr('等你') : line.stage.status === 'fail' ? tr('出错') : line.stage.status === 'todo' ? tr('还没开始') : `${line.stage.pct}%`}` : tr('全部完成')}
         {!!r.jobs.failed && <> · <b className="bad-t">{tr('{0} 个失败', r.jobs.failed)}</b></>}
         {r.asks > 0 && <> · <b className="pg-wait">{tr('{0} 个问题等你', r.asks)}</b></>}
         {!!r.checks?.hard.fail && <> · <b className="bad-t" title={tr('研究回路上必须满足的硬检查')}>{tr('{0} 项硬检查没过', r.checks.hard.fail)}</b></>}
