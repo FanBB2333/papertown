@@ -677,11 +677,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             rows = town.agents.paseo.conversations()
         except PaseoError as e:
             raise HTTPException(400, str(e)) from e
-        linked = {a["ext_id"]: f"#{a['seq']} 的{ROLES[a['role']]['name']}" for a in town.db.q(
-            "select a.ext_id, a.role, l.seq from agents a join lines l on l.id = a.line_id where a.runtime = 'paseo' and a.ext_id is not null")}
+        linked = {a["ext_id"]: town.leads._who(a) for a in town.db.q(
+            "select * from agents where runtime = 'paseo' and ext_id is not null and line_id is not null")}
+
+        def owner(c: dict) -> str | None:
+            """Who has the conversation: the agent it is open in, else the one its label names (set aside, still theirs)."""
+            if c["id"] in linked:
+                return linked[c["id"]]
+            aid = (c.get("labels") or {}).get("papertown.agent")
+            if not aid:
+                return None
+            a = town.agents.get(aid)
+            return town.leads._who(a) if a else "另一个 Papertown Agent"
         # the assistant's own conversations are not for a project to take
         mine = [c for c in rows if (c.get("labels") or {}).get("papertown.role") != ASSISTANT]
-        return {"conversations": [c | {"linked": linked.get(c["id"]) or (c.get("labels") or {}).get("papertown.agent")} for c in mine]}
+        return {"conversations": [c | {"linked": owner(c)} for c in mine]}
 
     @app.post("/api/agents/{agent_id}/open")
     def agent_open_desktop(agent_id: str):

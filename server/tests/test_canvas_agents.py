@@ -370,3 +370,17 @@ def test_a_stuck_task_can_still_be_reported_done_in_the_same_round(flow):
     assert task(c, lid, nid)['status'] == 'done' and task(c, lid, nid)['result'] == '自己补上了数据'
     late = bridge(c, town, a, 'task', {'id': nid, 'status': 'blocked', 'text': '又卡住了'})
     assert late.status_code == 400 and task(c, lid, nid)['status'] == 'done'
+
+
+def test_the_conversation_list_names_node_agents_and_set_aside_owners(flow):
+    c, town, link, lid = flow
+    nid = node(c, lid)
+    a = bind(c, lid, nid)
+    seq = c.get(f'/api/lines/{lid}/canvas').json()['seq']
+    owners = lambda: {x['id']: x['linked'] for x in c.get('/api/paseo/conversations').json()['conversations']}
+    assert owners()[a['ext_id']] == f'#{seq} 的代码员工（节点 {nid}）'
+    assert c.delete(f'/api/lines/{lid}/canvas/nodes/{nid}').status_code == 200
+    assert owners()[a['ext_id']] == f'#{seq} 的代码员工（节点 {nid}）'  # set aside, still labelled as theirs
+    link.convs.append({'id': 'stray', 'provider': 'codex', 'status': 'idle', 'cwd': '/tmp', 'labels': {'papertown.agent': 'gone-agent'}})
+    assert owners()['stray'] == '另一个 Papertown Agent'
+
