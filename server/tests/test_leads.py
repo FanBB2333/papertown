@@ -12,6 +12,8 @@ d="$(dirname "$0")"
 echo "$@" >> "$d/calls.log"
 case "$1" in
   status) echo '{"localDaemon": "running", "connectedDaemon": "reachable", "serverId": "srv_test", "daemonVersion": "0.13.2"}' ;;
+  project) echo '{"projectId":"prj-test"}' ;;
+  workspace) echo '{"workspaceId":"wks-test"}' ;;
   run) n=$(($(cat "$d/n" 2>/dev/null || echo 0) + 1)); echo $n > "$d/n"; echo "{\"agentId\": \"pa-$n\", \"status\": \"running\", \"provider\": \"codex\"}" ;;
   ls) n=$(cat "$d/n" 2>/dev/null || echo 0); printf '['; i=1
       while [ $i -le $n ]; do [ $i -gt 1 ] && printf ','; printf '{"id": "pa-%s", "status": "idle", "provider": "codex"}' $i; i=$((i+1)); done; echo ']' ;;

@@ -16,6 +16,7 @@ import './canvas.css';
 
 export function useCanvas(lineId: string) {
   const [v, setV] = useState<CanvasView | null>(null);
+  const [error, setError] = useState('');
   const [bump, setBump] = useState(0);
   useEffect(() => listen(e => {
     const x = e as { type: string; line_id?: string; line?: { id: string }; agent?: { line_id?: string | null } };
@@ -24,10 +25,11 @@ export function useCanvas(lineId: string) {
   }), [lineId]);
   useEffect(() => {
     let alive = true;
-    api.canvas(lineId).then(x => alive && setV(x)).catch(() => {});
+    api.canvas(lineId).then(x => { if (alive) { setV(x); setError(''); } })
+      .catch(e => { if (alive) setError((e as Error).message); });
     return () => { alive = false; };
   }, [lineId, bump]);
-  return [v, setV, useCallback(() => setBump(b => b + 1), [])] as const;
+  return [v, setV, useCallback(() => setBump(b => b + 1), []), error] as const;
 }
 
 // how big each kind of node is drawn: where new nodes go beside it, and the lanes' width
@@ -299,8 +301,9 @@ function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast
 }
 
 export function LoopCard({ r, toast }: { r: ProjectCard; toast: (t: string) => void }) {
-  const [v] = useCanvas(r.line.id);
+  const [v, , reload, error] = useCanvas(r.line.id);
   const to = loopPath(r.line.seq);
+  if (error) return <p role="alert" className="warn-box">{error} <button className="lnk" onClick={reload}>{tr('重试')}</button></p>;
   if (!v) return null;
   return (
     <section className="psec lp-card" id="loop" aria-label={tr('研究回路')}>

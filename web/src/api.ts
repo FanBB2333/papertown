@@ -82,6 +82,7 @@ export interface Agent {
   model: string | null; cost: number; attach: string | null; name: string; last: AgentEvent | null; updated_at: string;
   runtime: 'pi' | 'paseo'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
   down?: string | null; // why it cannot be reached now (its status is then offline)
+  node_id?: string | null; workspace_id?: string | null;
 }
 
 export interface PaseoModel { id: string; name: string; thinking: string[]; default_thinking: string | null }
@@ -147,7 +148,7 @@ export interface CheckEdit { on?: boolean; params?: Record<string, number>; titl
 export type CanvasKind = 'stage' | 'gate' | 'hard' | 'soft' | 'spec' | 'clamp' | 'human' | 'task' | 'note' | 'info';
 export type TaskStatus = 'draft' | 'sent' | 'done' | 'blocked';
 export type TaskTo = 'lead' | 'coder' | 'writer';
-export interface TaskLog { ts: string; kind: 'made' | 'sent' | 'resent' | 'done' | 'blocked' | 'back' | 'marked' | 'reopened' | 'round' | 'escalated' | 'converged'; text: string; by: string }
+export interface TaskLog { ts: string; kind: 'made' | 'bound' | 'sent' | 'resent' | 'done' | 'blocked' | 'back' | 'marked' | 'reopened' | 'round' | 'escalated' | 'converged'; text: string; by: string }
 export type GateState = 'pass' | 'warn' | 'block' | 'none' | 'off';
 export interface Gate {
   stage: string; name: string; state: GateState; checks: string[]; pass: number; total: number; blocking: { id: string; title: string }[];
@@ -163,6 +164,7 @@ export interface CanvasNode {
   check?: Check; gate?: Gate;
   rules?: BoundRule[]; budget?: { budget: number; spent: number }; items?: HumanItem[];
   to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string; log?: TaskLog[];
+  agent_id?: string | null; agent?: Agent | null;
   // a task on the loop: a rework ticket (the stage whose gate sent it back, its round, the counts so far) or a correction (the sentinel it came from)
   loop?: 'hard' | 'soft' | null; stage?: string | null; round?: number; trail?: number[]; from?: string | null; escalated?: boolean; converged?: boolean;
 }
@@ -209,7 +211,7 @@ export interface Llm {
   providers: { id: string; name: string; models: string[] }[];
 }
 export interface PaseoConversation {
-  id: string; title: string | null; provider: string; model: string | null; cwd: string; status: string;
+  id: string; title: string | null; provider: string; model: string | null; cwd: string | null; status: string;
   updated: string; last_user: string | null; linked: string | null;
 }
 export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
@@ -366,8 +368,10 @@ async function call<T>(method: string, url: string, body?: unknown, keep?: (v: o
   const r = await fetch(url, {
     method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await r.json().catch(() => ({}));
   if (r.status === 401 && !url.startsWith('/api/auth/')) dispatchEvent(new Event('pt-signed-out')); // back to the landing, except for the auth calls themselves
+  let data;
+  try { data = await r.json(); }
+  catch { throw new Error(tr('服务返回了无效的 JSON（HTTP {0}）', r.status)); }
   if (!r.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? trx(data.detail) : tr('输入有误')) : tr('请求失败 {0}', r.status));
   return localize(data, keep) as T;
 }
@@ -416,7 +420,7 @@ export const api = {
   dismissModels: (keys?: string[]) => call<{ news: ModelNews[] }>('POST', '/api/paseo/news/dismiss', { keys: keys ?? null }),
   conversations: () => call<{ conversations: PaseoConversation[] }>('GET', '/api/paseo/conversations'),
   importAgent: (lineId: string, role: AgentRole, extId: string) => call<Agent>('POST', '/api/agents/import', { line_id: lineId, role, ext_id: extId }),
-  timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null } }>('GET', `/api/agents/${id}/timeline`, undefined, said),
+  timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; queued: AgentEvent[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null } }>('GET', `/api/agents/${id}/timeline`, undefined, said),
   permit: (id: string, requestId: string, allow: boolean) => call<{ ok: boolean }>('POST', `/api/agents/${id}/permit`, { request_id: requestId, allow }),
   llm: () => call<Llm>('GET', '/api/llm'),
   samples: () => call<{ added: string[]; note: string }>('POST', '/api/samples'),
@@ -476,6 +480,8 @@ export const api = {
     call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}`, b, kept),
   dropNode: (lineId: string, id: string) => call<CanvasView>('DELETE', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}`, undefined, kept),
   sendNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/send`, undefined, kept),
+  bindNode: (lineId: string, id: string, options: StartOpts & { ext_id?: string }) =>
+    call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/agent`, options, kept),
   backNode: (lineId: string, id: string, text: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/back`, { text }, kept),
   labelEdge: (lineId: string, id: string, label: string) => call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/edges/${encodeURIComponent(id)}`, { label }, kept),
   restoreNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/restore`, undefined, kept),

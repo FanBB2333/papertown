@@ -32,6 +32,7 @@ Any agent of a project has:
     .papertown/pt checks [run]               the project's checks: hard ones and where they fail
                                              (run: check again now), soft ones and the lead's verdicts
     .papertown/pt tasks                      the tasks the user put on the project's canvas for you
+    .papertown/pt tell task:<id> "..."       to another task's assigned agent in the same project
     .papertown/pt task <id> done|blocked "…" close one: what came of it, or why it is stuck
 
 The console's assistant has more (see its AGENTS.md):
@@ -218,9 +219,10 @@ def main(a):
     elif a[0] == "tasks":
         print(call("/tasks")["text"])
     elif a[0] == "task":
-        if len(a) < 4 or a[2] not in ("done", "blocked"):
+        opts, rest = options(a[1:], many=(), flags=())
+        if len(rest) < 3 or rest[1] not in ("done", "blocked"):
             sys.exit('用法：pt task <编号> done|blocked "结果或原因"')
-        print(call("/task", {"id": a[1], "status": a[2], "text": " ".join(a[3:])})["text"])
+        print(call("/task", {"id": rest[0], "status": rest[1], "text": " ".join(rest[2:]), "dispatch": opts.get("dispatch")})["text"])
     elif a[0] == "check":
         if len(a) < 4 or a[2] not in ("pass", "warn", "fail"):
             sys.exit('用法：pt check <编号> pass|warn|fail "理由"')

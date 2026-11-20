@@ -64,7 +64,7 @@ function wires(v: CanvasView): CanvasEdge[] {
   const ids = new Set(v.nodes.map(n => n.id)), joined = new Set(v.edges.flatMap(e => [`${e.source}>${e.target}`, `${e.target}>${e.source}`]));
   const extra = v.nodes.flatMap(n => {
     const to = `info:agent:${n.to}`;
-    return n.kind === 'task' && ids.has(to) && !joined.has(`${n.id}>${to}`) ? [{ id: `as:${n.id}`, source: n.id, target: to }] : [];
+    return n.kind === 'task' && !n.agent_id && ids.has(to) && !joined.has(`${n.id}>${to}`) ? [{ id: `as:${n.id}`, source: n.id, target: to }] : [];
   });
   return [...v.edges, ...extra];
 }
@@ -349,7 +349,7 @@ export default function CanvasPage(p: { r: ProjectCard; toast: (t: string) => vo
 
 function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => void; onConsole: (lineId: string, t?: ConsoleTarget) => void }) {
   const { line } = r;
-  const [v, setV, reload] = useCanvas(line.id);
+  const [v, setV, reload, loadError] = useCanvas(line.id);
   const [sel, setSel] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [wide, setWide] = useState(false);
@@ -760,7 +760,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       ...(soft && c.on && ['fail', 'warn'].includes(status(c)) ? [{ icon: 'wand', label: tr('派人纠偏'), run: () => ops.fix(n) } as Item] : []),
       ...(soft && c.on ? [{ icon: 'send', label: tr('让负责人现在查'), run: () => ops.ask(n), off: !v?.lead } as Item] : []),
       ...(c ? [{ icon: c.on ? 'stop' : 'play', label: c.on ? tr('关掉这项检查') : tr('打开这项检查'), run: () => toggle(n) } as Item] : []),
-      ...(n.kind === 'task' ? [{ icon: 'send', label: st === 'draft' ? tr('发给{0}', WHO[n.to ?? 'lead']) : tr('再发一次'), run: () => ops.send(n), off: !v?.agents[n.to ?? 'lead'].there } as Item] : []),
+      ...(n.kind === 'task' ? [{ icon: 'send', label: st === 'draft' ? tr('发给{0}', WHO[n.to ?? 'lead']) : tr('再发一次'), run: () => ops.send(n), off: n.agent_id ? !n.agent?.started : !v?.agents[n.to ?? 'lead'].there } as Item] : []),
       ...(n.kind === 'task' && st === 'sent' ? [{ icon: 'check', label: tr('标成完成'), run: () => setTask(n, 'done') } as Item] : []),
       ...(n.kind === 'task' && (st === 'done' || st === 'blocked') ? [{ icon: 'refresh', label: tr('重新打开'), run: () => setTask(n, 'draft') } as Item] : []),
     ];
@@ -1002,7 +1002,8 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
             </ReactFlow>
           </BoxCtx.Provider></OpsCtx.Provider>
           {v && report && <LoopReport v={v} onPick={pick} onClose={() => setReport(false)} toast={toast} />}
-          {!v && <p className="cv-wait muted">{tr('加载中…')}</p>}
+          {loadError ? <p className="cv-wait warn-box" role="alert">{loadError} <button className="lnk" onClick={reload}>{tr('重试')}</button></p>
+            : !v && <p className="cv-wait muted">{tr('加载中…')}</p>}
         </div>
 
         {v && draft && <NewForm key={`${draft.link}:${draft.seed?.title ?? ''}`} d={draft} v={v} busy={busy} onKind={kind => setDraft({ ...draft, kind })} onAdd={create} onCancel={() => setDraft(null)} />}

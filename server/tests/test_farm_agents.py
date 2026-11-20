@@ -140,6 +140,8 @@ FAKE_PASEO = r"""#!/bin/sh
 echo "$@" >> "$(dirname "$0")/calls.log"
 case "$1" in
   status) echo '{"localDaemon": "running", "connectedDaemon": "reachable", "serverId": "srv_test", "daemonVersion": "0.13.2"}' ;;
+  project) echo '{"projectId":"prj-test"}' ;;
+  workspace) echo '{"workspaceId":"wks-test"}' ;;
   run) echo '{"agentId": "pa-1", "status": "running", "provider": "pi", "cwd": "/tmp", "title": "t"}' ;;
   ls) echo '[{"id": "pa-1", "status": "idle", "provider": "pi/openai-codex/gpt-5.6-luna"}]' ;;
   provider) if [ "$2" = ls ]; then echo '[{"provider": "pi", "label": "Pi", "status": "available"}, {"provider": "omp", "status": "unavailable"}]';
@@ -206,11 +208,17 @@ class FakeLink:
     def status(self, fresh=False):
         return {"ok": True, "note": ""}
 
+    def project(self, path):
+        return "prj-" + path.name
+
+    def workspace(self, project_id, path, title):
+        return f"wks-{len(self.made) + 1}"
+
     def create(self, **kw):
         self.made.append(kw)
         ext = f"pa-{len(self.made)}"
         self.convs.insert(0, {"id": ext, "provider": kw["provider"], "model": kw["model"], "thinking": kw["thinking"], "status": "running",
-                              "labels": kw["labels"], "updated": f"2026-11-0{len(self.made)}T00:00:00Z", "last_user": None})
+                              "labels": kw["labels"], "cwd": str(kw["cwd"]), "workspace_id": kw.get("workspace_id"), "updated": f"2026-11-0{len(self.made)}T00:00:00Z", "last_user": None})
         return {"agentId": ext}
 
     def send(self, agent_id, text):
@@ -292,7 +300,7 @@ def test_a_leads_conversations_are_listed_renewed_and_resumed(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         link = FakeLink()
-        for name in ("conversations", "status", "create", "send", "interrupt", "list"):
+        for name in ("conversations", "status", "create", "send", "interrupt", "list", "project", "workspace"):
             setattr(town.agents.paseo, name, getattr(link, name))
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
         wait_for(town, lid, {"waiting"})

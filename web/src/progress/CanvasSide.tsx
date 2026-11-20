@@ -16,6 +16,7 @@ import { INFO_MOD, InfoBody, infoKind, InfoState } from './CanvasInfo';
 import { CheckHistory, CheckResult, CheckSettings, ST, STAGE, status, type Act } from './Checks';
 import { bad, gateChecks, gateLook, GATE_ST, level, LEVEL, over, ROLE, VERDICT } from './loop';
 import type { ConsoleTarget } from './Project';
+import { NodeConversation } from './NodeConversation';
 
 export type Kind = NewNode['kind'];
 export interface Draft { kind: Kind; x: number; y: number; link: string | null; seed?: { title?: string; text?: string; to?: TaskTo } }
@@ -24,6 +25,7 @@ export const TASK: Record<TaskStatus, string> = { draft: tr('还没发'), sent: 
 export const WHO: Record<TaskTo, string> = { lead: tr('项目负责人'), coder: tr('代码员工'), writer: tr('写作员工') };
 export const KIND: Record<Kind, string> = { task: tr('派任务'), soft: tr('软检查'), hard: tr('硬检查'), note: tr('备注') };
 const LOG: Record<TaskLog['kind'], string> = {
+  bound: tr('绑定了 Paseo 会话'),
   made: tr('建了这个任务'), sent: tr('发出'), resent: tr('改了再发'), done: tr('交回：完成'), blocked: tr('交回：卡住了'), back: tr('退回重做'),
   marked: tr('标成完成'), reopened: tr('重新打开'), round: tr('又打回一轮'), escalated: tr('交给你拍板'), converged: tr('卡口放行，收敛'),
 };
@@ -85,7 +87,7 @@ export function Inspector({ n, v, r, line, wide, onWide, busy, act, onConsole, o
   const tabs: [string, string][] = n.check
     ? [['main', tr('结果')], ['hist', n.check.history.length ? tr('历史 {0}', n.check.history.length) : tr('历史')], ['set', tr('设置')]]
     : n.gate ? [['main', tr('门禁与前后对比')], ['curve', tr('收敛曲线')], ['set', tr('代码规则设置')]]
-      : n.kind === 'task' ? [['main', tr('任务')], ['log', tr('记录 {0}', n.log?.length ?? 0)]]
+      : n.kind === 'task' ? [['main', tr('任务')], ['chat', tr('对话')], ['log', tr('记录 {0}', n.log?.length ?? 0)]]
         : [['main', n.kind === 'note' ? tr('备注') : n.kind === 'stage' ? tr('工序') : tr('详情')]];
   tabs.push(['links', near.length ? tr('连着 {0}', near.length) : tr('连线')]);
   return (
@@ -115,8 +117,9 @@ export function Inspector({ n, v, r, line, wide, onWide, busy, act, onConsole, o
               : tab === 'set' ? <CheckSettings key={n.id} c={n.check} busy={busy} act={act} lineId={line.id} />
                 : <CheckResult c={n.check} lead={v.lead} busy={busy} act={act} lineId={line.id} onConsole={onConsole} onFix={onFix} />
           ) : n.kind === 'task' ? (
-            tab === 'log' ? <TaskLogList log={n.log ?? []} />
-              : <TaskDetail key={n.id} n={n} v={v} busy={busy} act={act} line={line} onAgents={() => onConsole(line.id, { mod: 'agents' })} onPick={onPick} />
+            tab === 'chat' ? <NodeConversation key={n.id} node={n} lineId={line.id} busy={busy} act={act} />
+              : tab === 'log' ? <TaskLogList log={n.log ?? []} />
+                : <TaskDetail key={n.id} n={n} v={v} busy={busy} act={act} line={line} onAgents={() => onConsole(line.id, { mod: 'agents' })} onChat={() => setTab('chat')} onPick={onPick} />
           ) : n.kind === 'info' ? <InfoDetail n={n} v={v} r={r} line={line} onConsole={onConsole} onPick={onPick} />
             : n.kind === 'note' ? <NoteDetail key={n.id} n={n} busy={busy} act={act} lineId={line.id} />
             : <StageDetail n={n} near={near.map(x => x.o)} onPick={onPick} />}
@@ -367,14 +370,14 @@ function StageDetail({ n, near, onPick }: { n: CanvasNode; near: CanvasNode[]; o
   );
 }
 
-function TaskDetail({ n, v, busy, act, line, onAgents, onPick }: {
-  n: CanvasNode; v: CanvasView; busy: boolean; act: Act; line: { id: string; seq: number }; onAgents: () => void; onPick: (id: string) => void;
+function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
+  n: CanvasNode; v: CanvasView; busy: boolean; act: Act; line: { id: string; seq: number }; onAgents: () => void; onChat: () => void; onPick: (id: string) => void;
 }) {
   const [title, setTitle] = useState(n.title ?? '');
   const [text, setText] = useState(n.text ?? '');
   const [to, setTo] = useState<TaskTo>(n.to ?? 'lead');
   const [back, setBack] = useState<string | null>(null);
-  const st = (n.status ?? 'draft') as TaskStatus, who = v.agents[to], ask = `/progress/${line.seq}/ask`;
+  const st = (n.status ?? 'draft') as TaskStatus, who = n.agent_id ? { there: !!n.agent?.started, status: n.agent?.status } : v.agents[to], ask = `/progress/${line.seq}/ask`;
   const dirty = title.trim() !== (n.title ?? '') || text.trim() !== (n.text ?? '') || to !== n.to;
   const save = () => api.setNode(line.id, n.id, { title: title.trim(), text: text.trim(), to });
   const send = () => act(async () => { if (dirty) await save(); return api.sendNode(line.id, n.id); }, tr('发给{0}了', WHO[to]));
@@ -395,9 +398,10 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onPick }: {
       )}
       <p className="cv-agent">
         <span className={`dot s-${who.there ? who.status : 'stopped'}`} />
-        <b>{WHO[to]}</b>
+        <b>{n.agent_id ? `${WHO[to]} · ${n.id}` : WHO[to]}</b>
         <span className="muted">{who.there ? AGENT_STATUS[who.status ?? ''] ?? who.status : tr('还没启动')}{st === 'sent' && n.sent_at ? ` · ${tr('{0}发出', ago(n.sent_at))}` : ''}</span>
-        {!who.there ? <button className="lnk" onClick={onAgents}>{tr('去启动')}</button>
+        {n.agent?.runtime === 'paseo' ? <button className="lnk" onClick={onChat}>{tr('打开对话')}</button>
+          : !who.there ? <button className="lnk" onClick={onChat}>{tr('安排独立 Agent')}</button>
           : to === 'lead' ? <a className="lnk" href={href(ask)} onClick={e => follow(e, ask)}>{tr('打开对话')}</a>
             : <button className="lnk" onClick={onAgents}>{tr('打开对话')}</button>}
       </p>
@@ -428,7 +432,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onPick }: {
         <label className="field">{tr('交给谁')}
           <div className="seg" role="radiogroup" aria-label={tr('交给谁')}>
             {(['lead', 'coder', 'writer'] as const).map(k => (
-              <button key={k} type="button" role="radio" aria-checked={to === k} disabled={st === 'sent' && k !== n.to} className={to === k ? 'on' : ''} onClick={() => setTo(k)}
+              <button key={k} type="button" role="radio" aria-checked={to === k} disabled={(st === 'sent' || !!n.agent_id) && k !== n.to} className={to === k ? 'on' : ''} onClick={() => setTo(k)}
                 title={st === 'sent' && k !== n.to ? tr('已经发出去了，要换人先重新打开它') : ''}>{WHO[k]}</button>
             ))}
           </div>

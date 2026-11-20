@@ -96,10 +96,11 @@ function Talk({ agent: initial, asks, head, toast, onAnswered }: {
   function send() {
     const s = text.trim();
     if (!s) return;
-    setText('');
     stick.current = true;
-    if (!(working && mode === 'queue')) t.wrote(s);
-    api.say(t.agent.id, s, working ? mode : undefined).catch(e => toast((e as Error).message));
+    api.say(t.agent.id, s, working ? mode : undefined).then(event => {
+      if (event.data.delivered) t.wrote(s);
+      setText(current => current.trim() === s ? '' : current);
+    }).catch(e => toast((e as Error).message));
   }
   return (
     <>
@@ -113,7 +114,7 @@ function Talk({ agent: initial, asks, head, toast, onAnswered }: {
           {t.items === null && !t.err && <p className="as-wait">{tr('加载中…')}</p>}
           {t.items && !t.items.length && !t.sent.length && <p className="as-wait">{tr('还没有对话。问它项目的事，或者交代它一件事。')}</p>}
           <PaseoLog rows={rows} sent={t.sent} asks={t.asks} working={working}
-            onPermit={(id, allow) => { t.answered(id); api.permit(t.agent.id, id, allow).catch(e => toast((e as Error).message)); }} />
+            onPermit={(id, allow) => { api.permit(t.agent.id, id, allow).then(() => t.answered(id)).catch(e => toast((e as Error).message)); }} />
         </div>
       </div>
       {asks.length > 0 && (

@@ -112,11 +112,12 @@ def test_the_assistant_reads_the_page_and_asks_before_it_acts(tmp_path):
         assert "return loss\n```" in md and "那一块写着：11 已取消" in md
 
         first = town.agents.get("assistant")["ext_id"]
-        assert c.post("/api/assistant/new").json()["started"] is False
-
-        convs = [{"id": first, "provider": "pi", "model": "m1", "status": "idle", "labels": {"papertown.agent": "assistant", "papertown.role": "assistant"}, "last_user": "2026-10-31T10:00:00Z"},
-                 {"id": "other", "provider": "codex", "model": "m2", "status": "idle", "labels": {"papertown.agent": "coder-line_1", "papertown.role": "coder"}, "last_user": "2026-10-31T11:00:00Z"}]
+        convs = [{"id": first, "provider": "pi", "model": "m1", "cwd": str(home), "workspace_id": "wks-assistant", "status": "idle", "labels": {"papertown.agent": "assistant", "papertown.role": "assistant"}, "last_user": "2026-10-31T10:00:00Z"},
+                 {"id": "other", "provider": "codex", "model": "m2", "cwd": str(home), "workspace_id": "wks-assistant", "status": "idle", "labels": {"papertown.agent": "coder-line_1", "papertown.role": "coder"}, "last_user": "2026-10-31T11:00:00Z"}]
         town.agents.paseo.conversations = lambda: convs
+        response = c.post("/api/assistant/new")
+        assert response.status_code == 200, response.text
+        assert response.json()["started"] is False
         h = c.get("/api/assistant/history").json()["conversations"]
         assert [x["id"] for x in h] == [first] and h[0]["title"] == "这个任务怎么了" and not h[0]["current"]
         assert c.post("/api/assistant/resume", json={"id": "other"}).status_code == 400

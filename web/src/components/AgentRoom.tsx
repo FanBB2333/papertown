@@ -204,7 +204,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
           <Select value={think} options={m.thinking.map(x => ({ value: x, label: x }))} onChange={setThink} />
         </label>
       )}
-      {!info.status.web && <p className="muted small">{tr('Paseo 的网页端没开，房间里显示不了对话，可以去 Paseo 桌面端看。打开方法：')}<code>paseo daemon config set features.webUi.enabled true</code>{tr('，再')} <code>paseo daemon restart</code>{tr('。')}</p>}
+      {!info.status.web && <p className="muted small">{tr('Paseo 网页端未开启；这里仍可对话，也可在 Paseo 桌面端打开。')}</p>}
       <button className="btn pri" disabled={busy || !prov} onClick={() => onStart({ runtime: 'paseo', provider: prov, model: model || undefined, thinking: think || undefined })}>
         {busy ? tr('启动中…') : tr('在 Paseo 里启动')}
       </button>
@@ -213,7 +213,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
 }
 
 // an existing Paseo conversation on this machine, taken over as this project's agent
-function ImportCard({ busy, onPick }: { busy: boolean; onPick: (id: string) => void }) {
+export function ImportCard({ busy, onPick }: { busy: boolean; onPick: (id: string) => void }) {
   const [list, setList] = useState<PaseoConversation[] | null>(null);
   const [err, setErr] = useState('');
   const [q, setQ] = useState('');
@@ -229,9 +229,9 @@ function ImportCard({ busy, onPick }: { busy: boolean; onPick: (id: string) => v
           {list.length > 5 && <input className="conv-q" value={q} placeholder={tr('按标题、供应商或目录筛选')} onChange={e => setQ(e.target.value)} />}
           <div className="conv-list">
             {shown.map(c => (
-              <button key={c.id} className="conv" disabled={busy || !!c.linked} onClick={() => onPick(c.id)} title={c.cwd}>
+              <button key={c.id} className="conv" disabled={busy || !!c.linked || !c.cwd} onClick={() => onPick(c.id)} title={c.cwd ?? undefined}>
                 <b>{c.title || tr('（无标题）')}</b>
-                <span className="muted small">{[c.provider, c.model].filter(Boolean).join(' · ')} · {short(c.cwd)} · {ago(c.last_user ?? c.updated)}</span>
+                <span className="muted small">{[c.provider, c.model].filter(Boolean).join(' · ')} · {c.cwd ? short(c.cwd) : tr('会话没有工作目录，无法导入')} · {ago(c.last_user ?? c.updated)}</span>
                 {c.linked && <em>{tr('已导入给')} {c.linked}</em>}
               </button>
             ))}
@@ -325,6 +325,7 @@ export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t
   const [agent, setAgent] = useState(initial);
   const [items, setItems] = useState<PaseoItem[] | null>(null);
   const [asks, setAsks] = useState<PaseoPermission[]>([]);
+  const [queued, setQueued] = useState<AgentEvent[]>([]);
   const [err, setErr] = useState('');
   const [sent, setSent] = useState<{ text: string; had: number }[]>([]);
   const status = useRef(initial.status);
@@ -345,6 +346,7 @@ export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t
         setItems(d.items);
         latest.current = d.items;
         setAsks(d.paseo?.permissions ?? []);
+        setQueued(d.queued);
         setSent(xs => xs.filter(x => times(d.items, x.text) <= x.had));
         setErr('');
       } catch (e) {
@@ -359,7 +361,7 @@ export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t
 
   const texts = useMemo(() => sent.map(x => x.text), [sent]);
   return {
-    agent, items, asks, err, sent: texts,
+    agent, items, asks, queued, err, sent: texts,
     wrote: (t: string) => { nudge.current = Date.now(); setSent(xs => [...xs, { text: t, had: times(latest.current, t) + xs.filter(x => x.text === t).length }]); },
     answered: (id: string) => { nudge.current = Date.now(); setAsks(xs => xs.filter(x => x.id !== id)); },
   };
@@ -415,10 +417,12 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
   function send() {
     const t = text.trim();
     if (!t) return;
-    setText('');
     stick.current = true;
-    if (!(working && mode === 'queue')) wrote(t);
-    run(() => api.say(agent.id, t, working ? mode : undefined));
+    run(async () => {
+      const event = await api.say(agent.id, t, working ? mode : undefined);
+      if (event.data.delivered) wrote(t);
+      setText(current => current.trim() === t ? '' : current);
+    });
   }
 
   const rows = useMemo(() => fold(items ?? [], i => i.kind === 'tool'), [items]);
@@ -450,7 +454,7 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
                 {err && <div className="note err">{err}</div>}
                 {items && !items.length && !sent.length && <div className="room-empty small-empty"><p>{tr('还没有对话。')}</p></div>}
                 <PaseoLog rows={rows} sent={sent} asks={asks} working={working}
-                  onPermit={(id, allow) => { answered(id); run(() => api.permit(agent.id, id, allow)); }} />
+                  onPermit={(id, allow) => run(async () => { await api.permit(agent.id, id, allow); answered(id); })} />
               </div>
               <div className="chat-compose">
                 <textarea value={text} rows={2} placeholder={!working ? tr('对{0}说点什么，Enter 发送', r.name) : mode === 'steer' ? tr('插话，它做完这一步就会看到') : tr('排队，等它做完手上的事')}

@@ -93,12 +93,22 @@ class Leads:
         if a["role"] == "assistant":
             return NAMES["assistant"]
         seq = self.db.val("select seq from lines where id = ?", a["line_id"])
-        return f"#{seq} 的{NAMES.get(a['role'], a['role'])}"
+        who = f"#{seq} 的{NAMES[a['role']]}"
+        return f"{who}（节点 {a['node_id']}）" if a.get("node_id") else who
 
     def target(self, sender: dict, to: str, line: str | None = None) -> dict:
         """Whom a message goes to: a lead tells its workers, a worker its lead, the assistant a
         project's lead (or, named, one of its workers)."""
         to = str(to or "").strip().lower()
+        if to.startswith("task:"):
+            if sender["role"] == "assistant" and not line:
+                raise LeadError("说一下是哪个项目")
+            lid = line if sender["role"] == "assistant" else sender["line_id"]
+            from .canvas import CanvasError
+            try:
+                return self.town.canvas.message_target(lid, to.removeprefix("task:"))
+            except CanvasError as e:
+                raise LeadError(str(e)) from e
         role = {"代码员工": "coder", "写作员工": "writer", "负责人": "lead", "项目负责人": "lead"}.get(to, to)
         if sender["role"] == "assistant":
             if not line:
@@ -412,7 +422,7 @@ class Leads:
 
     def _loop(self) -> None:
         while not self._halt.wait(self.s.lead_tick):
-            for a in self.db.q("select * from agents where role = 'lead' and runtime is not null"):
+            for a in self.db.q("select * from agents where role = 'lead' and node_id is null and runtime is not null"):
                 try:
                     self.look(a)
                 except Exception:  # noqa: BLE001 - one project's trouble must not stop the others' check-ins

@@ -747,3 +747,9 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 
 .cg-set { display: flex; flex-direction: column; gap: 10px; }
 .cg-set-btns { display: flex; gap: 6px; }
+
+.node-conversation { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.node-conversation .node-transcript { max-height: 52vh; min-height: 180px; padding: 10px 0; overflow: auto; }
+.node-conversation .path { overflow-wrap: anywhere; }
+.node-conversation .hire-card { padding: 12px; }
+.node-conversation .cv-row { flex-wrap: wrap; }

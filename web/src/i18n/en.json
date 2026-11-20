@@ -3288,5 +3288,16 @@
  "操作提示": "Tips bar",
  "画布上方那行「双击空白处新建…」": "The “Double-click empty space…” line at the top",
  "排成网格": "Lay out in a grid",
- "画布设置…": "Canvas settings…"
+ "画布设置…": "Canvas settings…",
+ "服务返回了无效的 JSON（HTTP {0}）": "The server returned invalid JSON (HTTP {0})",
+ "绑定了 Paseo 会话": "Bound a Paseo conversation",
+ "安排独立 Agent": "Assign a dedicated agent",
+ "这个任务使用独立的 Paseo 会话。派发、补充信息和返工都会回到这里。": "This task has its own Paseo conversation. Assignments, follow-ups and rework return here.",
+ "当前使用项目岗位的共享会话。可为尚未派发的任务创建或导入独立会话。": "This task currently shares the project role’s conversation. Create or import a dedicated conversation before dispatching it.",
+ "还没有可打开的 Paseo 会话。": "No Paseo conversation is available yet.",
+ "消息": "Message",
+ "发送方式": "Delivery mode",
+ "重试": "Retry",
+ "Paseo 网页端未开启；这里仍可对话，也可在 Paseo 桌面端打开。": "The Paseo web UI is disabled. You can still chat here or open the conversation in Paseo Desktop.",
+ "会话没有工作目录，无法导入": "This conversation has no working directory and cannot be imported."
 }

@@ -106,6 +106,7 @@ class Town:
         self.paseo_models.start()
 
     def stop(self) -> None:
+        self.agents.shutdown()
         self.paseo_models.stop()
         self.leads.stop()
         self.checks.stop()

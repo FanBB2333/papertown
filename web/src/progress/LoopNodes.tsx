@@ -57,7 +57,7 @@ function Tools({ n, on }: { n: CanvasNode; on: boolean }) {
       {n.kind === 'soft' && n.check && bad(n.check) && <button className="t" onClick={() => o.fix(n)} title={tr('建一个纠偏任务，连回它盯着的工序，你看过再发')}><Icon n="wand" size={13} />{tr('派人纠偏')}</button>}
       {n.check?.on && n.check.kind === 'soft' && <button className="t" disabled={o.busy} onClick={() => o.ask(n)}><Icon n="send" size={13} />{tr('现在问')}</button>}
       {n.kind === 'task' && n.status === 'draft' && (
-        <button className="t" disabled={o.busy || !o.agents?.[n.to ?? 'lead'].there} onClick={() => o.send(n)}><Icon n="send" size={13} />{tr('发送')}</button>
+        <button className="t" disabled={o.busy || !(n.agent_id ? n.agent?.started : o.agents?.[n.to ?? 'lead'].there)} onClick={() => o.send(n)}><Icon n="send" size={13} />{tr('发送')}</button>
       )}
       <button title={tr('在它旁边派任务')} aria-label={tr('在它旁边派任务')} onClick={() => o.beside(n, 'task')}><Icon n="plus" size={14} /></button>
       {(n.kind === 'task' || n.kind === 'note') && <button title={tr('复制一个')} aria-label={tr('复制一个')} onClick={() => o.dup(n)}><Icon n="copy" size={13} /></button>}
@@ -204,7 +204,8 @@ function HumanNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
 }
 
 function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
-  const st = (n.status ?? 'draft') as TaskStatus, who = useContext(OpsCtx)?.agents?.[n.to ?? 'lead'];
+  const st = (n.status ?? 'draft') as TaskStatus, role = useContext(OpsCtx)?.agents?.[n.to ?? 'lead'];
+  const who = n.agent_id ? { there: !!n.agent?.started, status: n.agent?.status } : role;
   const when = st === 'sent' ? n.sent_at : st === 'draft' ? null : n.done_at;
   const head = n.loop === 'hard' ? tr('硬打回修补单 · 第 {0} 轮', n.round || 1) : n.loop === 'soft' ? tr('软纠偏任务单') : tr('任务');
   const trail = n.trail ?? [];

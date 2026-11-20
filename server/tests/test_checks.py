@@ -111,7 +111,7 @@ def test_the_research_loop_gates_its_stages_and_sends_rework_back(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         link = FakeLink()
-        for name in ("conversations", "status", "create", "send", "interrupt", "list"):
+        for name in ("conversations", "status", "create", "send", "interrupt", "list", "project", "workspace"):
             setattr(town.agents.paseo, name, getattr(link, name))
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
         wait_for(town, lid, {"waiting"})

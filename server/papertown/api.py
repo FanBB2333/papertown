@@ -25,6 +25,7 @@ from .canvas import CanvasError
 from .cards import CardError
 from .checks import CheckError
 from .paseo_models import ModelError
+from .paseo import PaseoError
 from .leads import LeadError
 from .config import SERVER_DIR, Settings
 from .library import RAG_LIMITS
@@ -182,6 +183,7 @@ class TaskIn(BaseModel):
     id: str = Field(min_length=1, max_length=40)
     status: str
     text: str = Field(min_length=1, max_length=4000)
+    dispatch: str | None = Field(default=None, max_length=80)
 
 
 class VerdictIn(BaseModel):
@@ -242,6 +244,13 @@ class StartIn(BaseModel):
     provider: str | None = None
     model: str | None = None
     thinking: str | None = None
+
+
+class NodeAgentIn(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    thinking: str | None = None
+    ext_id: str | None = None
 
 
 class LlmIn(BaseModel):
@@ -666,13 +675,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def paseo_conversations():
         try:
             rows = town.agents.paseo.conversations()
-        except Exception as e:  # noqa: BLE001 - the SDK's own message is the useful part
+        except PaseoError as e:
             raise HTTPException(400, str(e)) from e
         linked = {a["ext_id"]: f"#{a['seq']} 的{ROLES[a['role']]['name']}" for a in town.db.q(
             "select a.ext_id, a.role, l.seq from agents a join lines l on l.id = a.line_id where a.runtime = 'paseo' and a.ext_id is not null")}
         # the assistant's own conversations are not for a project to take
         mine = [c for c in rows if (c.get("labels") or {}).get("papertown.role") != ASSISTANT]
-        return {"conversations": [c | {"linked": linked.get(c["id"])} for c in mine]}
+        return {"conversations": [c | {"linked": linked.get(c["id"]) or (c.get("labels") or {}).get("papertown.agent")} for c in mine]}
 
     @app.post("/api/agents/{agent_id}/open")
     def agent_open_desktop(agent_id: str):
@@ -715,7 +724,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         st = p.status(fresh=True)
         try:
             providers = p.providers(fresh) if st["ok"] else []
-        except Exception as e:  # noqa: BLE001 - the CLI's own message is the useful part
+        except PaseoError as e:
             st = st | {"note": str(e)}
             providers = []
         if providers:
@@ -888,6 +897,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/send")
     def canvas_send(line_id: str, node_id: str):
         return canvas(town.canvas.send, line_id, node_id)
+
+    @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/agent")
+    def canvas_bind(line_id: str, node_id: str, body: NodeAgentIn):
+        return canvas(town.canvas.bind, line_id, node_id, body.provider, body.model, body.thinking, body.ext_id)
 
     @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/back")
     def canvas_back(line_id: str, node_id: str, body: BackIn):
@@ -1125,7 +1138,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/bridge/{agent_id}/task")
     def bridge_task(agent_id: str, body: TaskIn, x_papertown_token: str | None = Header(default=None)):
         bridged(agent_id, x_papertown_token)
-        return canvas(town.canvas.close, agent_id, body.id, body.status, body.text)
+        return canvas(town.canvas.close, agent_id, body.id, body.status, body.text, body.dispatch)
 
     @app.get("/api/bridge/{agent_id}/card")
     def bridge_card(agent_id: str, x_papertown_token: str | None = Header(default=None)):

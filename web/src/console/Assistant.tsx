@@ -283,7 +283,7 @@ function PaseoSide({ agent, side }: { agent: Agent; side: Side }) {
   useEffect(() => { setDown(why); return () => setDown(''); }, [why, setDown]);
   return (
     <Talk side={side} agent={why ? { ...t.agent, status: 'offline' } : t.agent} rows={rows} loading={t.items === null && !why} err={why} perms={t.asks} onSent={t.wrote}
-      onPermit={(id, allow) => { t.answered(id); api.permit(ID, id, allow).catch(e => side.toast((e as Error).message)); }} />
+      onPermit={(id, allow) => { api.permit(ID, id, allow).then(() => t.answered(id)).catch(e => side.toast((e as Error).message)); }} />
   );
 }
 

@@ -15,6 +15,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 APP_CLI = "/Applications/Paseo.app/Contents/Resources/bin/paseo"
 APP_NODE = "/Applications/Paseo.app/Contents/Frameworks/Paseo Helper.app/Contents/MacOS/Paseo Helper"  # Electron, run as node
@@ -62,14 +63,19 @@ class Paseo:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             raise PaseoError(f"paseo {args[0]} 超时") from None
+        except OSError as e:
+            raise PaseoError(f"无法运行 Paseo：{e}") from e
         out = r.stdout.strip()
         if r.returncode != 0:
             msg = (r.stderr.strip() or out).splitlines()
             raise PaseoError(f"paseo {args[0]} 失败：{msg[-1] if msg else r.returncode}")
         try:
-            return json.loads(out) if out else None
+            result = json.loads(out)
         except json.JSONDecodeError:
             raise PaseoError(f"paseo {args[0]} 的输出不是 JSON") from None
+        if isinstance(result, dict) and result.get("error"):
+            raise PaseoError(f"paseo {args[0]} 失败：{result['error']}")
+        return result
 
     def _link(self, *args: str, timeout: float = 30) -> Any:
         """Run paseo_link/link.mjs (the SDK) and parse its JSON."""
@@ -82,15 +88,25 @@ class Paseo:
         if not st["ok"]:
             raise PaseoError(st["note"])
         env = {**os.environ, "ELECTRON_RUN_AS_NODE": "1"}
-        if self.host:
-            env["PASEO_WS"] = f"ws://{self.host}/ws"
+        endpoint = self.host or st.get("listen")
+        if not endpoint:
+            raise PaseoError("Paseo 没有公布 TCP 端点，请设置 PAPERTOWN_PASEO_HOST=主机:端口")
+        address = urlsplit(endpoint if "://" in endpoint else f"ws://{endpoint}")
+        if address.scheme not in ("ws", "wss", "tcp") or not address.hostname or address.path not in ("", "/ws"):
+            raise PaseoError("Paseo SDK 需要 TCP/WebSocket 端点，请把 PAPERTOWN_PASEO_HOST 设为主机:端口")
+        env["PASEO_WS"] = urlunsplit(("ws" if address.scheme == "tcp" else address.scheme, address.netloc, "/ws", "", ""))
         try:
             r = subprocess.run([*node, str(LINK / "link.mjs"), *args], capture_output=True, text=True, timeout=timeout, cwd=LINK, env=env)
         except subprocess.TimeoutExpired:
             raise PaseoError("读取 Paseo 超时") from None
+        except OSError as e:
+            raise PaseoError(f"无法运行 Paseo SDK：{e}") from e
         if r.returncode != 0:
             raise PaseoError(f"读取 Paseo 失败：{(r.stderr.strip().splitlines() or [r.returncode])[-1]}")
-        return json.loads(r.stdout)
+        try:
+            return json.loads(r.stdout)
+        except json.JSONDecodeError:
+            raise PaseoError("Paseo SDK 的输出不是 JSON") from None
 
     def conversations(self) -> list[dict]:
         """Every Paseo agent on this machine, newest first (not archived)."""
@@ -101,6 +117,21 @@ class Paseo:
 
     def label(self, agent_id: str, labels: dict[str, str]) -> None:
         self._cli("agent", "update", agent_id, *_pairs("--label", labels))
+        with self._lock:
+            self._cache.pop("conversations", None)
+
+    def project(self, path: Path) -> str:
+        result = self._cli("project", "create", str(path))
+        if not isinstance(result, dict) or not result.get("projectId"):
+            raise PaseoError("Paseo 没有返回 project id（需要 Paseo 0.14 或更新版本）")
+        return result["projectId"]
+
+    def workspace(self, project_id: str, path: Path, title: str) -> str:
+        result = self._cli("workspace", "create", "--isolation", "local", "--project", project_id,
+                           "--path", str(path), "--title", title)
+        if not isinstance(result, dict) or not result.get("workspaceId"):
+            raise PaseoError("Paseo 没有返回 workspace id")
+        return result["workspaceId"]
 
     def _cached(self, key: str, ttl: float, fn, fresh: bool = False) -> Any:
         with self._lock:
@@ -147,10 +178,7 @@ class Paseo:
             rows = [p for p in rows if p.get("status") == "available"]
 
             def models(p: dict) -> dict:
-                try:
-                    ms = self._cli("provider", "models", p["provider"], timeout=40) or []
-                except PaseoError:
-                    ms = []
+                ms = self._cli("provider", "models", p["provider"], timeout=40)
                 return {"id": p["provider"], "label": p.get("label") or p["provider"], "modes": p.get("modes") or "",
                         "models": [{"id": m["id"], "name": m.get("model") or m["id"], "thinking": m.get("thinkingOptionIds") or [],
                                     "default_thinking": m.get("defaultThinkingOptionId")} for m in ms]}
@@ -163,12 +191,14 @@ class Paseo:
         return f"{st['web']}/h/{st['server_id']}/agent/{agent_id}" if st.get("web") and st.get("server_id") else None
 
     def create(self, *, title: str, provider: str, model: str | None, thinking: str | None, cwd: Path,
-               labels: dict[str, str], env: dict[str, str], prompt: str) -> dict:
+               labels: dict[str, str], env: dict[str, str], prompt: str, workspace_id: str | None = None) -> dict:
         args = ["run", "--no-wait", "--title", title, "--provider", provider, "--cwd", str(cwd)]
         if model:
             args += ["--model", model]
         if thinking:
             args += ["--thinking", thinking]
+        if workspace_id:
+            args += ["--workspace", workspace_id]
         r = self._cli(*args, *_pairs("--label", labels), *_pairs("--env", env), prompt, timeout=90) or {}
         if not r.get("agentId"):
             raise PaseoError("Paseo 没有返回 agent id")
@@ -180,7 +210,7 @@ class Paseo:
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
             f.write(text)
         try:
-            self._cli("send", agent_id, "--no-wait", "--prompt-file", f.name, timeout=60)
+            self._cli("send", agent_id, "--no-wait", "--prompt-file", f.name, "--behavior", "steer", timeout=60)
         finally:
             os.unlink(f.name)
 

@@ -8,6 +8,7 @@ import threading
 from typing import TYPE_CHECKING
 
 from .db import now, read_json, write_json
+from .paseo import PaseoError
 
 if TYPE_CHECKING:
     from .town import Town
@@ -61,7 +62,7 @@ class PaseoModels:
         if provider:
             try:
                 rows = self.paseo.providers()
-            except Exception as e:  # noqa: BLE001 - the CLI's own message is the useful part
+            except PaseoError as e:
                 raise ModelError(f"读不到 Paseo 的模型列表，没法核对：{e}") from e
             p = next((x for x in rows if x["id"] == provider), None)
             if not p:
@@ -142,5 +143,5 @@ class PaseoModels:
             wait = self.s.paseo_watch
             try:
                 self.check()
-            except Exception:  # noqa: BLE001 - Paseo away or busy: the next reading tries again
-                pass
+            except PaseoError as e:
+                self.town.trace("PASEO", "模型列表读取失败", str(e))

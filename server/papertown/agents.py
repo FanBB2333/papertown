@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import threading
 import time
+from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -199,6 +200,25 @@ def _attach(session: str) -> str:
     return f"tmux -L {SOCKET} attach -t {session}"
 
 
+def _serialized(fn):
+    """Keep session changes, sends and queue delivery in one order."""
+    @wraps(fn)
+    def call(self, *args, **kwargs):
+        with self._delivery_lock:
+            return fn(self, *args, **kwargs)
+    return call
+
+
+def _session_change(fn):
+    """Take the canvas lock first: startup reads gates, and sending can start pi."""
+    serialized = _serialized(fn)
+    @wraps(fn)
+    def call(self, *args, **kwargs):
+        with self.town.canvas._lock:
+            return serialized(self, *args, **kwargs)
+    return call
+
+
 class Agents:
     def __init__(self, town: "Town"):
         self.town = town
@@ -210,8 +230,11 @@ class Agents:
         self._inbox: dict[str, list[dict]] = {}
         self._state: dict[str, dict] = {}  # what each pi's bridge last reported: model, thinking, session
         self._lock = threading.Lock()
+        self._delivery_lock = threading.RLock()
+        self._versions: dict[str, int] = {}
         self._seq = 0
-        self._watching = False
+        self._watch_thread: threading.Thread | None = None
+        self._halt = threading.Event()
         self._paseo_up: bool | None = None  # whether the Paseo daemon answered when the watcher last looked
 
     def available(self) -> dict:
@@ -257,18 +280,21 @@ class Agents:
         out["last"] = self.db.one("select * from agent_events where agent_id = ? and kind in ('assistant', 'note', 'user') order by id desc limit 1", a["id"])
         return out
 
-    def ensure(self, line_id: str, role: str) -> dict:
+    def ensure(self, line_id: str, role: str, node_id: str | None = None) -> dict:
         if role not in ROLES or role == "assistant":
             raise AgentError(f"没有这个岗位：{role}")
         line = self.db.one("select * from lines where id = ?", line_id)
         if not line:
             raise AgentError("没有这个项目")
-        agent_id = f"{role}-{line_id}"
+        agent_id = f"node-{line_id}-{node_id}" if node_id else f"{role}-{line_id}"
         a = self.get(agent_id)
         if a:
+            if node_id and a["role"] != role and not a["runtime"]:
+                self.db.update("agents", {"id": agent_id}, role=role, cwd=str(self._workdir(line_id, role)))
+                return self.get(agent_id)
             return a
         cwd = self._workdir(line_id, role)
-        self.db.insert("agents", {"id": agent_id, "line_id": line_id, "role": role, "status": "stopped" if role in CHAT_ROLES else "watching",
+        self.db.insert("agents", {"id": agent_id, "line_id": line_id, "role": role, "node_id": node_id, "status": "stopped" if role in CHAT_ROLES else "watching",
                                   "tmux": f"pt-{agent_id}" if role in PI_ROLES else None, "cwd": str(cwd) if cwd else None,
                                   "token": secrets.token_urlsafe(18), "model": None, "cost": 0, "created_at": now(), "updated_at": now()})
         self._publish(agent_id)
@@ -301,14 +327,23 @@ class Agents:
             return d
         return self._workdir(line_id, role)
 
+    def home(self, a: dict) -> Path:
+        """Node sessions have their own credentials and guide, even when they share project files."""
+        if not a.get("node_id"):
+            return self._home(a["line_id"], a["role"])
+        path = self.s.projects_dir / a["line_id"] / "agents" / a["node_id"]
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def roster(self, role: str) -> list[dict]:
         """Every project with its agent for this role (None until one is created)."""
         lines = self.db.q("select id, seq, title, status, stage from lines where status != 'dropped' order by seq desc")
-        agents = {a["line_id"]: a for a in self.db.q("select * from agents where role = ?", role)}
+        agents = {a["line_id"]: a for a in self.db.q("select * from agents where role = ? and node_id is null", role)}
         return [{"line": ln, "agent": self.public(agents.get(ln["id"]))} for ln in lines]
 
     def _set(self, agent_id: str, **fields) -> None:
         self.db.update("agents", {"id": agent_id}, updated_at=now(), **fields)
+        self._versions[agent_id] = self._versions.get(agent_id, 0) + 1
         self._publish(agent_id)
 
     def _publish(self, agent_id: str) -> None:
@@ -333,7 +368,7 @@ class Agents:
     def attach(self, agent_id: str, conv: dict) -> None:
         """Take a Paseo conversation (back) as the agent's own."""
         self._set(agent_id, runtime="paseo", ext_id=conv["id"], model=model_label(conv["provider"], conv.get("model")),
-                  status=PASEO_STATUS.get(conv["status"], "idle"))
+                  cwd=conv["cwd"], workspace_id=conv.get("workspace_id"), status=PASEO_STATUS.get(conv["status"], "error"))
         self.watch()
 
     def _chat(self, agent_id: str) -> dict:
@@ -346,12 +381,12 @@ class Agents:
         """The agent's conversations in Paseo, by the label it created or imported them with."""
         try:
             convs = self.paseo.conversations()
-        except PaseoError:
-            return []
+        except PaseoError as e:
+            raise AgentError(str(e)) from e
         return [c for c in convs if (c.get("labels") or {}).get("papertown.agent") == agent_id]
 
     def _titles(self, a: dict) -> Path:
-        return self._home(a["line_id"], a["role"]) / "conversations.json"
+        return self.home(a) / "conversations.json"
 
     def title(self, agent_id: str, text: str) -> None:
         """The first thing the user said in the agent's Paseo conversation, as its name among the others."""
@@ -376,31 +411,48 @@ class Agents:
 
     def _interrupt(self, a: dict) -> None:
         if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "working":
-            try:
-                self.abort(a["id"])
-            except AgentError:
-                pass
+            self.abort(a["id"])
 
+    def _switchable(self, a: dict) -> None:
+        if a.get("node_id"):
+            raise AgentError("节点使用固定的 Paseo 会话；要换会话，请创建另一个任务节点")
+        if self.db.val("select 1 from agent_events where agent_id = ? and json_extract(data, '$.held') = 1", a["id"]):
+            raise AgentError("还有排队的消息，处理完后才能切换对话")
+        if a.get("line_id"):
+            from .canvas import CanvasError
+            try:
+                active = self.town.canvas.active_for(a)
+            except CanvasError as e:
+                raise AgentError(str(e)) from e
+            if active:
+                raise AgentError("还有已派发的任务，交回结果或重新打开任务后才能切换对话")
+
+    @_session_change
     def fresh(self, agent_id: str) -> dict:
         """A new conversation. Paseo's is set aside (it stays in Paseo): the assistant then waits for a model to be
         picked, the others start another at once on the same model, so a lead keeps supervising. pi starts a new session."""
         a = self._chat(agent_id)
+        self._switchable(a)
         if a.get("runtime") == "paseo":
             conv = next((c for c in self._own(agent_id) if c["id"] == a.get("ext_id")), None)
             self._interrupt(a)
-            self.detach(agent_id)
             if a["role"] != "assistant":
                 provider, _, model = (a.get("model") or "").partition("/")  # if it is gone from Paseo: the model it was on
                 if conv:
                     provider, model = conv["provider"], conv.get("model")
-                return self._start_paseo(self.get(agent_id), provider or None, model or None, (conv or {}).get("thinking"))
+                return self._start_paseo(a | {"ext_id": None}, provider or None, model or None, (conv or {}).get("thinking"))
+            self.detach(agent_id)
         elif a.get("runtime") == "pi" and self.alive(a):
             self.say(agent_id, "/new")
         return self.public(self.get(agent_id))
 
+    @_session_change
     def resume(self, agent_id: str, ext_id: str) -> dict:
         """Go back to one of the agent's earlier conversations; the one open now is set aside as a new one would."""
         a = self._chat(agent_id)
+        if a.get("ext_id") == ext_id:
+            return self.public(a)
+        self._switchable(a)
         conv = next((c for c in self._own(agent_id) if c["id"] == ext_id), None)
         if not conv:
             raise AgentError("Paseo 里没有这段对话了")
@@ -428,7 +480,7 @@ class Agents:
         cwd = Path(a["cwd"])
         cwd.mkdir(parents=True, exist_ok=True)
         text = self._guide_text(a, runtime)
-        home = self._home(a["line_id"], a["role"])
+        home = self.home(a)
         (home / "AGENTS.md").write_text(text, encoding="utf-8")
         if runtime == "paseo":
             if home == cwd:
@@ -460,7 +512,7 @@ class Agents:
 
     def pt(self, a: dict) -> Path:
         """A Paseo agent's `pt` by full path, since an imported conversation works elsewhere."""
-        return self._home(a["line_id"], a["role"]) / ".papertown" / "pt"
+        return self.home(a) / ".papertown" / "pt"
 
     def _linked_intro(self, a: dict, runtime: str) -> str:
         """A linked project's first message: the guide, then the brief."""
@@ -471,19 +523,19 @@ class Agents:
 
     def _tools(self, a: dict) -> Path:
         """Write `.papertown/pt` and its link.json (who it speaks for, for a shell without PAPERTOWN_* env); returns pt."""
-        tools = self._home(a["line_id"], a["role"]) / ".papertown"
+        tools = self.home(a) / ".papertown"
         tools.mkdir(parents=True, exist_ok=True)
         for sub in ("q", "a"):  # requests by file, for a sandbox without network (relay.py)
             (tools / sub).mkdir(exist_ok=True)
         shutil.copyfile(PT, tools / "pt")
         (tools / "pt").chmod(0o755)
         link = tools / "link.json"
-        link.write_text(json.dumps({"url": self.s.url, "agent": a["id"], "token": a["token"]}), encoding="utf-8")
-        link.chmod(0o600)
+        write_json(link, {"url": self.s.url, "agent": a["id"], "token": a["token"]}, mode=0o600)
         if a["role"] == "assistant":
             self.town.assistant.tools(tools)
         return tools / "pt"
 
+    @_session_change
     def start(self, agent_id: str, runtime: str | None = None, provider: str | None = None,
               model: str | None = None, thinking: str | None = None) -> dict:
         a = self.get(agent_id)
@@ -491,6 +543,8 @@ class Agents:
             raise AgentError("这个员工不能对话")
         if (runtime or a.get("runtime")) == "paseo":
             return self._start_paseo(a, provider, model, thinking)
+        if a.get("node_id"):
+            raise AgentError("节点 Agent 只在 Paseo 里运行")
         if a["role"] == "lead":
             raise AgentError("项目负责人只在 Paseo 里运行")
         if not (self.pi and self.tmux):
@@ -535,6 +589,29 @@ class Agents:
             self._set(agent_id, status="error")
             self.record(agent_id, "note", {"text": "pi 没有连上 Papertown。" + (f"终端最后几行：{' / '.join(screen)}" if screen else ""), "error": True})
 
+    def _workspace(self, a: dict) -> str | None:
+        """One Paseo project per research project, with a workspace for each role or task."""
+        if not a["line_id"]:
+            return None
+        if a.get("workspace_id"):
+            return a["workspace_id"]
+        line = self.db.one("select * from lines where id = ?", a["line_id"])
+        project_id = line["paseo_project"]
+        if not project_id:
+            project_id = self.paseo.project(self.s.projects_dir / a["line_id"])
+            self.db.update("lines", {"id": a["line_id"]}, paseo_project=project_id)
+        title = f"#{line['seq']} · {a.get('node_id') or ROLES[a['role']]['name']} · {line['title']}"
+        workspace_id = self.paseo.workspace(project_id, Path(a["cwd"]), title)
+        self.db.update("agents", {"id": a["id"]}, workspace_id=workspace_id)
+        return workspace_id
+
+    @staticmethod
+    def labels(a: dict) -> dict[str, str]:
+        labels = {"papertown": "1", "papertown.agent": a["id"], "papertown.line": a["line_id"] or "-", "papertown.role": a["role"]}
+        if a.get("node_id"):
+            labels["papertown.node"] = a["node_id"]
+        return labels
+
     def _start_paseo(self, a: dict, provider: str | None, model: str | None, thinking: str | None) -> dict:
         """Create the agent in Paseo with its brief as the first message; once there, starting again only reopens it."""
         if a.get("ext_id"):
@@ -552,7 +629,10 @@ class Agents:
             title, prompt = "Papertown · 小助手", self.town.assistant.intro()
         else:
             line = self.db.one("select * from lines where id = ?", a["line_id"])
-            if a["role"] == "lead":
+            if a.get("node_id"):
+                title = f"Papertown #{line['seq']} · {a['node_id']} · {ROLES[a['role']]['name']}"
+                prompt = self._linked_intro(a, "paseo") + f"\n\n你负责研究回路节点 {a['node_id']}，等待该节点的任务；不要自行启动其他任务。"
+            elif a["role"] == "lead":
                 title, prompt = f"Papertown #{line['seq']} 项目负责人：{line['title']}", self.brief(a["id"])
             else:
                 title = f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}"
@@ -564,7 +644,7 @@ class Agents:
             r = self.paseo.create(
                 title=title, provider=provider, model=model,
                 thinking=thinking, cwd=Path(a["cwd"]), prompt=prompt,
-                labels={"papertown": "1", "papertown.agent": a["id"], "papertown.line": a["line_id"] or "-", "papertown.role": a["role"]},
+                workspace_id=self._workspace(a), labels=self.labels(a),
                 env={"PAPERTOWN_URL": self.s.url, "PAPERTOWN_AGENT": a["id"], "PAPERTOWN_AGENT_TOKEN": a["token"], "PAPERTOWN_AGENT_ROLE": a["role"]})
         except PaseoError as e:
             raise AgentError(str(e)) from e
@@ -578,25 +658,36 @@ class Agents:
         """Take over an existing Paseo conversation as this project's agent for the role."""
         if role not in PI_ROLES:
             raise AgentError("这个岗位不能对话")
+        return self.import_session(self.ensure(line_id, role)["id"], ext_id)
+
+    @_session_change
+    def import_session(self, agent_id: str, ext_id: str) -> dict:
+        a = self._chat(agent_id)
+        if a.get("ext_id") == ext_id:
+            return self.public(a)
+        if a.get("runtime"):
+            self._switchable(a)
         try:
             conv = next((c for c in self.paseo.conversations() if c["id"] == ext_id), None)
         except PaseoError as e:
             raise AgentError(str(e)) from e
         if not conv:
             raise AgentError("Paseo 里没有这段对话")
+        if not conv.get("cwd"):
+            raise AgentError("这段 Paseo 对话没有工作目录，不能导入")
         other = self.db.one("select id from agents where ext_id = ? and runtime = 'paseo'", ext_id)
-        a = self.ensure(line_id, role)
+        owner = (conv.get("labels") or {}).get("papertown.agent")
         if other and other["id"] != a["id"]:
-            o = self.get(other["id"])
-            seq = self.db.val("select seq from lines where id = ?", o["line_id"])
-            raise AgentError(f"这段对话已经导入给了 #{seq} 的{ROLES[o['role']]['name']}")
+            raise AgentError(f"这段对话已经导入给了{self.town.leads._who(self.get(other['id']))}")
+        if owner and owner != a["id"]:
+            raise AgentError("这段对话已经属于另一个 Papertown Agent，不能重复导入")
         try:
-            self.paseo.label(ext_id, {"papertown": "1", "papertown.agent": a["id"], "papertown.line": line_id, "papertown.role": role})
+            self.paseo.label(ext_id, self.labels(a))
         except PaseoError as e:
             raise AgentError(str(e)) from e
         self._tools(a)
         self._set(a["id"], runtime="paseo", ext_id=ext_id, model=model_label(conv["provider"], conv.get("model")),
-                  cwd=conv.get("cwd") or a["cwd"], status=PASEO_STATUS.get(conv["status"], "idle"))
+                  cwd=conv["cwd"], workspace_id=conv.get("workspace_id"), status=PASEO_STATUS.get(conv["status"], "error"))
         self.record(a["id"], "note", {"text": f"导入了 Paseo 里的对话「{conv.get('title') or ext_id[:8]}」。点侧栏的「发送项目简报」，它就知道这个项目和怎么用 Papertown。"})
         self.watch()
         return self.public(self.get(a["id"]))
@@ -610,16 +701,22 @@ class Agents:
     def timeline(self, agent_id: str, limit: int = 200) -> dict:
         """A Paseo agent's conversation, trimmed for the room; also refreshes its status."""
         a = self._paseo_agent(agent_id)
+        version = self._versions.get(agent_id, 0)
         try:
             t = self.paseo.timeline(a["ext_id"], limit)
         except PaseoError as e:
             raise AgentError(str(e)) from e
-        snap = t.get("agent") or {}
-        status = PASEO_STATUS.get(snap.get("status"), a["status"])
-        model = model_label(snap.get("provider"), snap.get("model")) or a["model"]
-        if status != a["status"] or model != a["model"]:
-            self._set(agent_id, status=status, model=model)
-        return {"agent": self.public(self.get(agent_id)), "paseo": snap, "items": t.get("items", [])}
+        snap = t["agent"]
+        status = PASEO_STATUS.get(snap["status"], "error")
+        model = model_label(snap["provider"], snap.get("model"))
+        with self._delivery_lock:
+            current = self._paseo_agent(agent_id)
+            if current["ext_id"] != a["ext_id"]:
+                raise AgentError("会话已切换，请重新读取对话")
+            if self._versions.get(agent_id, 0) == version and (status != a["status"] or model != a["model"]):
+                self._set(agent_id, status=status, model=model)
+            queued = self.db.q("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1 order by id", agent_id)
+            return {"agent": self.public(self.get(agent_id)), "paseo": snap, "items": t["items"], "queued": queued}
 
     def permit(self, agent_id: str, request_id: str, allow: bool) -> None:
         """Answer a Paseo agent's permission request."""
@@ -639,34 +736,48 @@ class Agents:
             raise AgentError(str(e)) from e
 
     def watch(self) -> None:
-        """Follow the status of the Paseo agents (a few seconds behind)."""
-        if self._watching or not self.db.val("select 1 from agents where runtime = 'paseo' and ext_id is not null"):
+        """Follow native status and release queued messages while the server is running."""
+        if self._watch_thread or not self.db.val("select 1 from agents where runtime = 'paseo' and ext_id is not null"):
             return
-        self._watching = True
-        threading.Thread(target=self._watch_paseo, daemon=True).start()
+        self._halt.clear()
+        self._watch_thread = threading.Thread(target=self._watch_paseo, daemon=True, name="paseo-watch")
+        self._watch_thread.start()
+
+    def shutdown(self) -> None:
+        self._halt.set()
+        if self._watch_thread:
+            self._watch_thread.join(timeout=2)
+        self._watch_thread = None
 
     def _watch_paseo(self) -> None:
-        while True:
-            time.sleep(6)
-            rows = {a["ext_id"]: a for a in self.db.q("select * from agents where runtime = 'paseo' and ext_id is not null")}
-            if not rows:
-                continue
-            up = self.paseo.status()["ok"]
-            if up != self._paseo_up:  # the daemon stopped or came back: every Paseo agent shows it at once
-                if self._paseo_up is not None:
-                    for a in rows.values():
-                        self._publish(a["id"])
-                self._paseo_up = up
-            if not up:
-                continue
+        while not self._halt.wait(6):
             try:
-                live = {x["id"]: x for x in self.paseo.list({"papertown": "1"})}
-            except PaseoError:
-                continue
-            for pid, a in rows.items():
-                x = live.get(pid)
-                status = PASEO_STATUS.get(x["status"], "idle") if x else "stopped"
-                model = x.get("provider") if x else a["model"]
+                self.sync_paseo()
+            except PaseoError as e:
+                self.town.trace("PASEO", "会话同步失败", str(e))
+
+    def sync_paseo(self) -> None:
+        """Refresh native status before delivering queued messages to the same session."""
+        rows = self.db.q("select * from agents where runtime = 'paseo' and ext_id is not null")
+        if not rows:
+            return
+        up = self.paseo.status()["ok"]
+        if up != self._paseo_up:
+            self._paseo_up = up
+            for a in rows:
+                self._publish(a["id"])
+        if not up:
+            return
+        versions = {a["id"]: self._versions.get(a["id"], 0) for a in rows}
+        live = {x["id"]: x for x in self.paseo.list({"papertown": "1"})}
+        for previous in rows:
+            with self._delivery_lock:
+                a = self.get(previous["id"])
+                if a["ext_id"] != previous["ext_id"] or self._versions.get(a["id"], 0) != versions[a["id"]]:
+                    continue
+                x = live.get(a["ext_id"])
+                status = PASEO_STATUS.get(x["status"], "error") if x else "stopped"
+                model = model_label(x["provider"], x.get("model")) if x else a["model"]
                 if status != a["status"] or model != a["model"]:
                     self._set(a["id"], status=status, model=model)
                     if not x:
@@ -674,18 +785,23 @@ class Agents:
                 if status == "idle":
                     self.release(a["id"])
 
+    @_serialized
     def release(self, agent_id: str) -> None:
-        """Send a Paseo agent that is done the oldest message that was queued for it."""
+        """Deliver the oldest queued message; failures remain visible and retryable."""
         a = self.get(agent_id)
         row = self.db.one("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1"
                           " order by id limit 1", agent_id)
-        if not a or not row or not a.get("ext_id"):
+        if not a or not row or not a.get("ext_id") or a["status"] != "idle":
+            return
+        if row["data"].get("ext_id", a["ext_id"]) != a["ext_id"]:
+            self.amend(row["id"], row["data"] | {"held": False, "error": "目标会话已改变，消息未发送"})
             return
         try:
             self.paseo.send(a["ext_id"], row["data"]["text"])
-        except PaseoError:
+        except PaseoError as e:
+            self.amend(row["id"], row["data"] | {"error": str(e)})
             return
-        self.amend(row["id"], row["data"] | {"delivered": True, "held": False})
+        self.amend(row["id"], row["data"] | {"delivered": True, "held": False, "error": None})
         self._set(agent_id, status="working")
 
     def stop(self, agent_id: str) -> dict:
@@ -707,6 +823,7 @@ class Agents:
                 self.db.update("agents", {"id": a["id"]}, status="stopped", updated_at=now())
         self.watch()
 
+    @_session_change
     def say(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
         """A message to the agent. While it works, `mode` "steer" puts it into the current turn and "queue"
         holds it until the turn ends; without one, pi queues and Paseo steers."""
@@ -716,6 +833,8 @@ class Agents:
         text = text.strip()
         if not text:
             raise AgentError("消息是空的")
+        if mode not in (None, "queue", "steer"):
+            raise AgentError("发送模式只能是 queue 或 steer")
         if a.get("runtime") == "paseo":
             if not a.get("ext_id"):
                 raise AgentError("先在 Paseo 里启动它")
@@ -723,13 +842,13 @@ class Agents:
                 self.title(agent_id, text)
             busy = a["status"] == "working"
             if busy and mode == "queue":  # Paseo has no queue of its own: the watcher sends it once the agent is idle
-                return self.record(agent_id, "user", {"text": text, "origin": origin, "delivered": False, "queued": True, "held": True})
+                return self.record(agent_id, "user", {"text": text, "origin": origin, "ext_id": a["ext_id"], "delivered": False, "queued": True, "held": True})
             try:
                 self.paseo.send(a["ext_id"], text)
             except PaseoError as e:
                 raise AgentError(str(e)) from e
             self._set(agent_id, status="working")
-            return self.record(agent_id, "user", {"text": text, "origin": origin, "delivered": True, "steered": busy})
+            return self.record(agent_id, "user", {"text": text, "origin": origin, "ext_id": a["ext_id"], "delivered": True, "steered": busy})
         if text.startswith("/") and len(text) > 1 and not text[1:2].isspace():
             return self._command(a, text)
         running = self.alive(a)
