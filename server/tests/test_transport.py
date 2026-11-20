@@ -73,3 +73,17 @@ def test_one_provider_without_models_leaves_the_others_and_is_asked_again(monkey
     assert rows['codex']['models'] == [] and '超时' in rows['codex']['error']
     p.providers()
     assert calls.count(('provider', 'ls')) == 2  # not kept while a provider failed
+
+
+@pytest.mark.parametrize(('stderr', 'fails'), [
+    ('', False),  # idle, or stopped
+    ('Warning: Failed to stop agent pa-1: daemon refused', True),
+])
+def test_a_stop_paseo_could_not_do_is_a_failure(monkeypatch, stderr, fails):
+    p = Paseo('/bin/echo')
+    monkeypatch.setattr(subprocess, 'run', lambda args, **kw: subprocess.CompletedProcess(args, 0, '{"stoppedCount": 0, "agentIds": []}', stderr))
+    if fails:
+        with pytest.raises(PaseoError, match='daemon refused'):
+            p.interrupt('pa-1')
+    else:
+        p.interrupt('pa-1')

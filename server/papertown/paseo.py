@@ -55,7 +55,9 @@ class Paseo:
         self._cache: dict[str, tuple[float, Any]] = {}
         self._lock = threading.Lock()
 
-    def _cli(self, *args: str, timeout: float = 30) -> Any:
+    def _cli(self, *args: str, timeout: float = 30, warned: str | None = None) -> Any:
+        """Run the CLI with --json and parse its output. `warned`: a stderr warning that means the command failed
+        although it exited 0 (stop reports an agent it could not interrupt only as a warning)."""
         if not self.bin:
             raise PaseoError("本机没有找到 Paseo（paseo CLI）")
         cmd = [self.bin, *args, "--json", *(["--host", self.host] if self.host else [])]
@@ -75,6 +77,9 @@ class Paseo:
             raise PaseoError(f"paseo {args[0]} 的输出不是 JSON") from None
         if isinstance(result, dict) and result.get("error"):
             raise PaseoError(f"paseo {args[0]} 失败：{result['error']}")
+        failed = [x for x in r.stderr.splitlines() if warned and warned in x]
+        if failed:
+            raise PaseoError(f"paseo {args[0]} 失败：{failed[-1].strip()}")
         return result
 
     def _link(self, *args: str, timeout: float = 30) -> Any:
@@ -222,7 +227,7 @@ class Paseo:
             os.unlink(f.name)
 
     def interrupt(self, agent_id: str) -> None:
-        self._cli("stop", agent_id)
+        self._cli("stop", agent_id, warned="Failed to stop")
 
     def permit(self, agent_id: str, request_id: str, allow: bool) -> None:
         self._cli("permit", "allow" if allow else "deny", agent_id, request_id)
