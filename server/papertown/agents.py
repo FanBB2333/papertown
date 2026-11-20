@@ -211,7 +211,8 @@ def _serialized(fn):
 
 
 def _session_change(fn):
-    """Take the canvas lock first: startup reads gates, and sending can start pi."""
+    """Take the canvas lock first, then the delivery lock: whatever may start pi or build a brief reads the canvas, and
+    nothing that holds the delivery lock may wait for the canvas lock."""
     serialized = _serialized(fn)
     @wraps(fn)
     def call(self, *args, **kwargs):
@@ -536,9 +537,21 @@ class Agents:
             self.town.assistant.tools(tools)
         return tools / "pt"
 
-    @_session_change
     def start(self, agent_id: str, runtime: str | None = None, provider: str | None = None,
               model: str | None = None, thinking: str | None = None) -> dict:
+        """A Paseo start reads its brief (and through it the canvas) first, then holds only the delivery lock while
+        Paseo creates the session, so canvases elsewhere are not kept waiting on Paseo's CLI. A pi start keeps the
+        canvas lock throughout: its bridge reads gates as it comes up."""
+        a = self.get(agent_id)
+        if a and a["role"] in CHAT_ROLES and (runtime or a.get("runtime")) == "paseo" and not a.get("ext_id"):
+            intro = self._paseo_intro(a)
+            with self._delivery_lock:
+                return self._start_paseo(self.get(agent_id), provider, model, thinking, intro)
+        return self._start_held(agent_id, runtime, provider, model, thinking)
+
+    @_session_change
+    def _start_held(self, agent_id: str, runtime: str | None = None, provider: str | None = None,
+                    model: str | None = None, thinking: str | None = None) -> dict:
         a = self.get(agent_id)
         if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")
@@ -613,7 +626,25 @@ class Agents:
             labels["papertown.node"] = a["node_id"]
         return labels
 
-    def _start_paseo(self, a: dict, provider: str | None, model: str | None, thinking: str | None) -> dict:
+    def _paseo_intro(self, a: dict) -> tuple[str, str]:
+        """The guide written to the agent's home, and the title and first message of its Paseo session."""
+        self._guide(a, "paseo")
+        if a["role"] == "assistant":
+            return "Papertown · 小助手", self.town.assistant.intro()
+        line = self.db.one("select * from lines where id = ?", a["line_id"])
+        if a.get("node_id"):
+            return (f"Papertown #{line['seq']} · {a['node_id']} · {ROLES[a['role']]['name']}",
+                    self._linked_intro(a, "paseo") + f"\n\n你负责研究回路节点 {a['node_id']}，等待该节点的任务；不要自行启动其他任务。")
+        if a["role"] == "lead":
+            return f"Papertown #{line['seq']} 项目负责人：{line['title']}", self.brief(a["id"])
+        title = f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}"
+        if self.town.linked.of(a["line_id"]):
+            return title, self._linked_intro(a, "paseo")
+        return title, ("这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n"
+                       + self.town.brief(a["line_id"], a["role"]))
+
+    def _start_paseo(self, a: dict, provider: str | None, model: str | None, thinking: str | None,
+                     intro: tuple[str, str] | None = None) -> dict:
         """Create the agent in Paseo with its brief as the first message; once there, starting again only reopens it."""
         if a.get("ext_id"):
             return self.public(a)
@@ -625,22 +656,7 @@ class Agents:
         st = self.paseo.status(fresh=True)
         if not st["ok"]:
             raise AgentError(st["note"])
-        self._guide(a, "paseo")
-        if a["role"] == "assistant":
-            title, prompt = "Papertown · 小助手", self.town.assistant.intro()
-        else:
-            line = self.db.one("select * from lines where id = ?", a["line_id"])
-            if a.get("node_id"):
-                title = f"Papertown #{line['seq']} · {a['node_id']} · {ROLES[a['role']]['name']}"
-                prompt = self._linked_intro(a, "paseo") + f"\n\n你负责研究回路节点 {a['node_id']}，等待该节点的任务；不要自行启动其他任务。"
-            elif a["role"] == "lead":
-                title, prompt = f"Papertown #{line['seq']} 项目负责人：{line['title']}", self.brief(a["id"])
-            else:
-                title = f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}"
-                if self.town.linked.of(a["line_id"]):
-                    prompt = self._linked_intro(a, "paseo")
-                else:
-                    prompt = "这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
+        title, prompt = intro or self._paseo_intro(a)
         try:
             r = self.paseo.create(
                 title=title, provider=provider, model=model,
@@ -842,10 +858,21 @@ class Agents:
                 self.db.update("agents", {"id": a["id"]}, status="stopped", updated_at=now())
         self.watch()
 
-    @_session_change
     def say(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
         """A message to the agent. While it works, `mode` "steer" puts it into the current turn and "queue"
-        holds it until the turn ends; without one, pi queues and Paseo steers."""
+        holds it until the turn ends; without one, pi queues and Paseo steers. A message to a Paseo session holds
+        only the delivery lock; one that may have to start pi also holds the canvas lock, taken first."""
+        if (self.get(agent_id) or {}).get("runtime") == "paseo":
+            with self._delivery_lock:
+                if (self.get(agent_id) or {}).get("runtime") == "paseo":  # still, now that the order is ours
+                    return self._say(agent_id, text, mode, origin)
+        return self._say_held(agent_id, text, mode, origin)
+
+    @_session_change
+    def _say_held(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
+        return self._say(agent_id, text, mode, origin)
+
+    def _say(self, agent_id: str, text: str, mode: str | None, origin: str) -> dict:
         a = self.get(agent_id)
         if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")

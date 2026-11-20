@@ -148,6 +148,7 @@ class Canvas:
         self.town = town
         self.s = town.s
         self._lock = threading.RLock()
+        self._binding: set[tuple[str, str]] = set()  # tasks whose session is being made, outside the lock
 
     def _path(self, line_id: str) -> Path:
         return self.s.projects_dir / line_id / "canvas.json"
@@ -996,19 +997,38 @@ class Canvas:
 
     def bind(self, line_id: str, node_id: str, provider: str | None = None, model: str | None = None,
              thinking: str | None = None, ext_id: str | None = None) -> dict:
-        """Bind a task to its own native Paseo session; its project role remains a prompt template."""
+        """Bind a task to its own native Paseo session; its project role remains a prompt template. The session is made
+        without holding the canvas lock (Paseo's CLI can take a while), and the task is checked again before it is bound:
+        a task deleted, sent, rebound or given to another role meanwhile leaves the new session stopped."""
+        key = (line_id, node_id)
         with self._lock:
-            d = self._load(line_id)
-            n = self._node(d, node_id)
+            n = self._node(self._load(line_id), node_id)
             if n["kind"] != "task" or n["status"] != "draft":
                 raise CanvasError("只有尚未派发的任务能绑定会话，请先重新打开任务")
             if n.get("agent_id"):
                 raise CanvasError("这个节点已经绑定了会话")
-            a = self.town.agents.ensure(line_id, n["to"], node_id)
+            if key in self._binding:
+                raise CanvasError("这个节点正在安排 Agent，稍等一下")
+            self._binding.add(key)
+            role = n["to"]
+        try:
+            a = self.town.agents.ensure(line_id, role, node_id)
             if ext_id:
                 a = self.town.agents.import_session(a["id"], ext_id)
             else:
                 a = self.town.agents.start(a["id"], "paseo", provider, model, thinking)
+        finally:
+            with self._lock:
+                self._binding.discard(key)
+        with self._lock:
+            d = self._load(line_id)
+            n = next((x for x in d["nodes"] if x["id"] == node_id and x["kind"] == "task"), None)
+            if not n or n["status"] != "draft" or n.get("agent_id") or n["to"] != role:
+                try:
+                    self.town.agents.retire(a["id"], "安排 Agent 期间任务被改动或删掉了")
+                except AgentError as e:
+                    raise CanvasError(f"安排 Agent 期间任务被改动或删掉了，新会话{e}") from e
+                raise CanvasError("安排 Agent 期间任务被改动或删掉了，新建的会话已经停用")
             n["agent_id"] = a["id"]
             _log(n, "bound", f"Paseo · {a['model']} · {a['ext_id']}")
             self._save(line_id, d)

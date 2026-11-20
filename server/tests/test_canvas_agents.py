@@ -320,3 +320,38 @@ def test_pt_task_keeps_dashes_in_the_result(args, text, dispatch):
     spec.loader.exec_module(pt)
     rest, got = pt.task_args(args)
     assert ' '.join(rest[2:]) == text and got == dispatch
+
+
+def test_the_canvas_stays_readable_while_paseo_makes_a_session(flow, monkeypatch):
+    c, town, link, lid = flow
+    one, two = node(c, lid, '慢的'), node(c, lid, '另一个')
+    inside, go = threading.Event(), threading.Event()
+    original = link.create
+    def slow(**kwargs):
+        inside.set()
+        assert go.wait(5)
+        return original(**kwargs)
+    monkeypatch.setattr(town.agents.paseo, 'create', slow)
+    with ThreadPoolExecutor(1) as pool:
+        bound = pool.submit(bind, c, lid, one)
+        assert inside.wait(5)
+        assert task(c, lid, two)['status'] == 'draft'  # read while the session is being made
+        same = c.post(f'/api/lines/{lid}/canvas/nodes/{one}/agent', json={'provider': 'codex'})
+        assert same.status_code == 400 and '正在安排' in same.json()['detail']
+        go.set()
+        assert bound.result(5)['ext_id']
+
+
+def test_a_task_removed_while_its_session_is_made_leaves_it_stopped(flow, monkeypatch):
+    c, town, link, lid = flow
+    nid = node(c, lid)
+    original = link.create
+    def remove_first(**kwargs):
+        made = original(**kwargs)
+        assert c.delete(f'/api/lines/{lid}/canvas/nodes/{nid}').status_code == 200
+        return made
+    monkeypatch.setattr(town.agents.paseo, 'create', remove_first)
+    response = c.post(f'/api/lines/{lid}/canvas/nodes/{nid}/agent', json={'provider': 'codex'})
+    assert response.status_code == 400 and '删掉' in response.json()['detail']
+    agent = town.db.one('select * from agents where node_id = ?', nid)
+    assert agent['ext_id'] is None and agent['status'] == 'stopped'
