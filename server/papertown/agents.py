@@ -787,6 +787,24 @@ class Agents:
                     self.release(a["id"])
 
     @_serialized
+    def retire(self, agent_id: str, why: str) -> None:
+        """A node agent whose task is gone: stop what it is doing, cut its access to Papertown (its token changes) and set
+        its conversation aside. The conversation stays in Paseo, still labelled as this agent's."""
+        a = self.get(agent_id)
+        if not a:
+            return
+        if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "working" and not self.down(a):
+            try:
+                self.paseo.interrupt(a["ext_id"])
+            except PaseoError as e:
+                raise AgentError(f"停不下它：{e}") from e
+        for row in self.db.q("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1", agent_id):
+            self.amend(row["id"], row["data"] | {"held": False, "error": why})
+        self.db.update("agents", {"id": agent_id}, token=secrets.token_urlsafe(18))
+        self._set(agent_id, runtime=None, ext_id=None, workspace_id=None, status="stopped", model=None)
+        self.record(agent_id, "note", {"text": f"{why}。Paseo 里的对话还在，它已经不能再访问 Papertown。"})
+
+    @_serialized
     def release(self, agent_id: str) -> None:
         """Deliver the oldest queued message; failures remain visible and retryable."""
         a = self.get(agent_id)

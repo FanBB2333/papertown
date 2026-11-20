@@ -30,7 +30,7 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .agents import ROLES
+from .agents import ROLES, AgentError
 from .checks import BAD, GATE, HARD_IDS, STATUS as CHECK_STATUS, CheckError, clip
 from .db import now, write_json
 from .pipeline import INDEX, NAMES
@@ -684,6 +684,11 @@ class Canvas:
                     raise CanvasError(str(e)) from e
             elif n["kind"] in ("stage", "gate", *FIXED):
                 d["gone"].append(node_id)
+            elif n["kind"] == "task" and n.get("agent_id"):  # its own session stops with it
+                try:
+                    self.town.agents.retire(n["agent_id"], f"任务节点 {node_id} 从研究回路上删掉了")
+                except AgentError as e:
+                    raise CanvasError(f"这个任务的 Agent {e}，节点先留着") from e
             d["nodes"] = [x for x in d["nodes"] if x["id"] != node_id]
             d["edges"] = [e for e in d["edges"] if node_id not in (e["source"], e["target"])]
             self._save(line_id, d)

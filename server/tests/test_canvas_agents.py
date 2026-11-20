@@ -275,3 +275,33 @@ def test_a_session_still_starting_shows_as_starting(flow):
     a = bind(c, lid, node(c, lid))
     next(x for x in link.convs if x['id'] == a['ext_id'])['status'] = 'initializing'
     assert c.get(f"/api/agents/{a['id']}/timeline").json()['agent']['status'] == 'starting'
+
+
+def test_removing_a_bound_task_stops_its_agent_and_cuts_its_access(flow, monkeypatch):
+    c, town, link, lid = flow
+    nid = node(c, lid)
+    a = bind(c, lid, nid)
+    stopped = []
+    monkeypatch.setattr(town.agents.paseo, 'interrupt', stopped.append)
+    old = town.agents.get(a['id'])
+    assert old['status'] == 'working'
+    assert c.delete(f'/api/lines/{lid}/canvas/nodes/{nid}').status_code == 200
+    assert stopped == [a['ext_id']]
+    after = town.agents.get(a['id'])
+    assert after['runtime'] is None and after['ext_id'] is None and after['token'] != old['token']
+    denied = c.post(f"/api/bridge/{a['id']}/task", json={'id': nid, 'status': 'done', 'text': '迟到的结果'},
+                    headers={'x-papertown-token': old['token']})
+    assert denied.status_code == 403
+
+
+def test_a_bound_task_stays_when_its_agent_cannot_be_stopped(flow, monkeypatch):
+    c, town, link, lid = flow
+    nid = node(c, lid)
+    bind(c, lid, nid)
+
+    def fail(ext_id):
+        raise PaseoError('daemon busy')
+    monkeypatch.setattr(town.agents.paseo, 'interrupt', fail)
+    response = c.delete(f'/api/lines/{lid}/canvas/nodes/{nid}')
+    assert response.status_code == 400 and 'daemon busy' in response.json()['detail']
+    assert task(c, lid, nid)['agent']['runtime'] == 'paseo'
