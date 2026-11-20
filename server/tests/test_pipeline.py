@@ -58,3 +58,26 @@ def test_restart_parks_running_lines(town):
     town.db.update("lines", {"id": line["id"]}, status="running")
     town.pipeline.recover()
     assert town.pipeline.line(line["id"])["status"] == "paused"
+
+
+@pytest.mark.parametrize('mode', ['provider_error', 'missing_result'])
+def test_failed_model_stops_the_stage_without_fabricating_a_template(town, mode):
+    from papertown.llm import ProviderError, Reply, Usage
+
+    class BrokenProvider:
+        name = 'broken'
+
+        def complete(self, **kwargs):
+            if mode == 'provider_error':
+                raise ProviderError('authentication failed')
+            return Reply(text='I have no result', calls=[], usage=Usage())
+
+    town.provider = BrokenProvider()
+    lid = town.pipeline.submit_idea(IDEA)['id']
+    line = wait_for(town, lid, {'failed'})
+    assert 'authentication failed' in line['note'] if mode == 'provider_error' else '模型没有提交结果' in line['note']
+    assert town.pipeline.item(lid, 'hatch') is None
+    assert not town.db.val("select 1 from stages where line_id = ? and status = 'run'", lid)
+    runs = town.db.q('select status, error from runs where line_id = ?', lid)
+    assert runs and all(r['status'] == 'failed' and r['error'] for r in runs)
+    assert not town.db.val("select 1 from trace where label = '离线模板' and line_id = ?", lid)

@@ -128,6 +128,8 @@ class Pipeline:
                 fn(line_id, *args)
             except Exception as e:  # keep the town alive; the line records what went wrong
                 traceback.print_exc()
+                for stage in self.db.q("select key from stages where line_id = ? and status = 'run'", line_id):
+                    self._stage(line_id, stage["key"], "wait", note=str(e))
                 self._set_line(line_id, status="failed", note=f"{type(e).__name__}: {e}")
                 self._say(line_id, None, f"流水线出错停下了：{e}", kind="error")
                 self._publish(line_id)

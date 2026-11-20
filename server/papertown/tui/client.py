@@ -37,19 +37,31 @@ class Api:
             if isinstance(detail, list):
                 detail = "，".join(f"{'.'.join(str(x) for x in d.get('loc', [])[1:])} {d.get('msg', '')}".strip() for d in detail)
             raise ApiError(str(detail or f"HTTP {r.status_code}"))
-        return r.json() if r.content else None
+        if not r.content:
+            return None
+        try:
+            return r.json()
+        except ValueError as e:
+            raise ApiError(f"服务返回了无效的 JSON（HTTP {r.status_code}）") from e
+
+    async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        try:
+            response = await self.http.request(method, path, **kwargs)
+        except httpx.HTTPError as e:
+            raise ApiError(f"连接 Papertown 失败：{e}") from e
+        return self._ok(response)
 
     async def get(self, url: str, /, **params: Any) -> Any:  # positional-only, so a query may be called path
-        return self._ok(await self.http.get(url, params={k: v for k, v in params.items() if v is not None}))
+        return await self._request("GET", url, params={k: v for k, v in params.items() if v is not None})
 
     async def post(self, path: str, body: Any = None) -> Any:
-        return self._ok(await self.http.post(path, json=body))
+        return await self._request("POST", path, json=body)
 
     async def put(self, path: str, body: Any = None) -> Any:
-        return self._ok(await self.http.put(path, json=body))
+        return await self._request("PUT", path, json=body)
 
     async def delete(self, path: str) -> Any:
-        return self._ok(await self.http.delete(path))
+        return await self._request("DELETE", path)
 
     async def health(self) -> dict | None:
         try:

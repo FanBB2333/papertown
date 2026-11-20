@@ -1,6 +1,4 @@
-"""The agent loop every worker runs, until the model calls the stage's submit tool.
-If the model fails (provider error, budget, no submission) the stage gets the offline template, marked degraded.
-"""
+"""Run a worker until it submits a result. Failures stop the stage; only the explicit mock provider uses templates."""
 
 from __future__ import annotations
 
@@ -39,7 +37,7 @@ class AgentTask:
     building: str
     prompt: str
     finish: ToolSpec
-    payload: Callable[[dict], dict]  # final answer from tool results (offline / degraded)
+    payload: Callable[[dict], dict]  # final answer for the explicit mock provider
     args: Callable[[str, dict], dict | None] = lambda key, r: None  # tool arguments (offline)
     line_id: str | None = None
     persona: str = ""
@@ -85,12 +83,12 @@ def run_agent(town: "Town", task: AgentTask) -> AgentResult:
 
     turns = [Turn("user", text=task.prompt)]
     results: dict = {}
-    spent, steps, nudged, retried, degraded = 0.0, 0, False, False, None
+    spent, steps, nudged, retried, failure = 0.0, 0, False, False, None
     final: dict | None = None
 
     while steps < task.max_steps and final is None:
         if task.budget is not None and spent >= task.budget:
-            degraded = f"超出预算 ${task.budget:.2f}"
+            failure = f"超出预算 ${task.budget:.2f}"
             break
         steps += 1
         t0 = time.monotonic()
@@ -101,7 +99,7 @@ def run_agent(town: "Town", task: AgentTask) -> AgentResult:
                 retried = True
                 time.sleep(2)
                 continue
-            degraded = str(e)
+            failure = str(e)
             break
         ms = int((time.monotonic() - t0) * 1000)
         c = town.bank.charge(run_id, task.line_id, provider.name, model, reply.usage)
@@ -112,7 +110,7 @@ def run_agent(town: "Town", task: AgentTask) -> AgentResult:
 
         if not reply.calls:
             if nudged:
-                degraded = "模型没有提交结果"
+                failure = "模型没有提交结果"
                 break
             nudged = True
             turns.append(Turn("user", text=f"请调用 {task.finish.name} 提交结果。"))
@@ -135,10 +133,10 @@ def run_agent(town: "Town", task: AgentTask) -> AgentResult:
         turns.append(Turn("tool", results=out))
 
     if final is None:
-        degraded = degraded or f"{task.max_steps} 步内没有完成"
-        final = task.payload(results)
-        town.trace("LLM", "离线模板", f"改用模板完成：{degraded}", 0, run_id=run_id, line_id=task.line_id)
+        failure = failure or f"{task.max_steps} 步内没有完成"
+        town.db.update("runs", {"id": run_id}, status="failed", steps=steps, ended_at=now(), error=failure)
+        town.trace("LLM", "执行失败", failure, 0, run_id=run_id, line_id=task.line_id)
+        raise ProviderError(failure)
 
-    town.db.update("runs", {"id": run_id}, status="degraded" if degraded else "done", steps=steps, ended_at=now(),
-                   error=degraded)
-    return AgentResult(final, steps, spent, degraded, sorted(ctx.loaded), results)
+    town.db.update("runs", {"id": run_id}, status="done", steps=steps, ended_at=now(), error=None)
+    return AgentResult(final, steps, spent, None, sorted(ctx.loaded), results)

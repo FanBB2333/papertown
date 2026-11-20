@@ -67,12 +67,19 @@ final class WebBuild {
         // vite alone: the page doesn't wait on the type check, which `pnpm build` still runs
         guard await sh("pnpm exec vite build --outDir dist.next --emptyOutDir", env),
               fm.fileExists(atPath: next.appendingPathComponent("index.html").path) else { return false }
-        try? fm.removeItem(at: prev)
-        if fm.fileExists(atPath: dist.path) { try? fm.moveItem(at: dist, to: prev) }
+        var movedPrevious = false
         do {
+            if fm.fileExists(atPath: prev.path) { try fm.removeItem(at: prev) }
+            if fm.fileExists(atPath: dist.path) {
+                try fm.moveItem(at: dist, to: prev)
+                movedPrevious = true
+            }
             try fm.moveItem(at: next, to: dist)
         } catch {
-            try? fm.moveItem(at: prev, to: dist)
+            if movedPrevious {
+                do { try fm.moveItem(at: prev, to: dist) }
+                catch { Logs.begin(Logs.build, "couldn't restore the previous build: \(error.localizedDescription)") }
+            }
             Logs.begin(Logs.build, "couldn't put the new build in place: \(error.localizedDescription)")
             return false
         }

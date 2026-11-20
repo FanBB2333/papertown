@@ -8,7 +8,7 @@ papertown/
   town.py        把下面所有部件接在一起，注册员工可用的工具
   pipeline.py    一颗 idea 一条流水线：孵化 → 编队 → 方法 → 实验 → 写作 → 审稿 → 出港
   stages.py      每道工序交给哪个 skill、提交什么格式
-  agent.py       员工的 agent 循环：选模型、扣预算、调工具、失败降级
+  agent.py       员工的 agent 循环：选模型、扣预算、调工具、失败停止并记录原因
   llm/           provider：Anthropic、OpenAI 兼容、离线脚本
   skills.py      Agent Skills 注册表（渐进加载，热插拔）
   tools.py       工具注册表，每次调用写一条 trace
