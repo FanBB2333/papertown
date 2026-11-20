@@ -400,8 +400,11 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
         <span className={`dot s-${who.there ? who.status : 'stopped'}`} />
         <b>{n.agent_id ? `${WHO[to]} · ${n.id}` : WHO[to]}</b>
         <span className="muted">{who.there ? AGENT_STATUS[who.status ?? ''] ?? who.status : tr('还没启动')}{st === 'sent' && n.sent_at ? ` · ${tr('{0}发出', ago(n.sent_at))}` : ''}</span>
-        {n.agent?.runtime === 'paseo' ? <button className="lnk" onClick={onChat}>{tr('打开对话')}</button>
-          : !who.there ? <button className="lnk" onClick={onChat}>{tr('安排独立 Agent')}</button>
+        {n.agent_id || n.agent?.runtime === 'paseo' ? <button className="lnk" onClick={onChat}>{tr('打开对话')}</button>
+          : !who.there ? <>
+            {st === 'draft' && <button className="lnk" onClick={onChat}>{tr('安排独立 Agent')}</button>}
+            <button className="lnk" onClick={onAgents}>{tr('去启动')}</button>
+          </>
           : to === 'lead' ? <a className="lnk" href={href(ask)} onClick={e => follow(e, ask)}>{tr('打开对话')}</a>
             : <button className="lnk" onClick={onAgents}>{tr('打开对话')}</button>}
       </p>
