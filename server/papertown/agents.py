@@ -417,7 +417,7 @@ class Agents:
 
     def _switchable(self, a: dict) -> None:
         if a.get("node_id"):
-            raise AgentError("任务节点固定用自己的 Paseo 会话。要换会话，请新建一个任务节点")
+            raise AgentError("节点使用固定的 Paseo 会话。要换会话，请创建另一个任务节点")
         if self.db.val("select 1 from agent_events where agent_id = ? and json_extract(data, '$.held') = 1", a["id"]):
             raise AgentError("还有排队的消息，处理完后才能切换对话")
         if a.get("line_id"):
@@ -459,7 +459,7 @@ class Agents:
         if not conv:
             raise AgentError("Paseo 里没有这段对话了")
         if not conv.get("cwd"):
-            raise AgentError("这段 Paseo 对话没有工作目录，没法切换过去")
+            raise AgentError("这段 Paseo 对话没有工作目录，无法切换")
         if a.get("ext_id") != ext_id:
             self._interrupt(a)
             self.attach(agent_id, conv)
@@ -815,12 +815,12 @@ class Agents:
             try:
                 self.paseo.interrupt(a["ext_id"])
             except PaseoError as e:
-                raise AgentError(f"停不下它：{e}") from e
+                raise AgentError(f"无法停止 Agent：{e}") from e
         for row in self.db.q("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1", agent_id):
             self.amend(row["id"], row["data"] | {"held": False, "error": why})
         self.db.update("agents", {"id": agent_id}, token=secrets.token_urlsafe(18))
         self._set(agent_id, runtime=None, ext_id=None, workspace_id=None, status="stopped", model=None)
-        self.record(agent_id, "note", {"text": f"{why}。Paseo 里的对话还在，它已经不能再访问 Papertown。"})
+        self.record(agent_id, "note", {"text": f"{why}。Paseo 中的对话已保留，该 Agent 已无法访问 Papertown。"})
 
     @_serialized
     def release(self, agent_id: str) -> None:

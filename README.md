@@ -286,11 +286,11 @@ cd server/papertown/paseo_link && pnpm install          # SDK，装一次
 
 本机 Paseo 里已有的对话也能接过来：在没有员工的项目房间里点「导入 Paseo 里已有的对话」，选一段，它就成了这个项目的员工。工作目录保持对话原来的目录，Papertown 给它打上 `papertown.*` 标签，一段对话只能导入给一个项目。
 
-研究回路里的任务也能有自己的 Agent：选中尚未派发的任务，打开「对话 → 安排独立 Agent」，选择 Paseo 的供应商、模型和思考强度，或导入已有会话。同一个项目的多个任务可以选择不同的 harness。绑定后，派发、聊天、权限请求、结果和返工都围绕同一段会话；要换会话，需要新建任务。没有独立绑定的旧任务继续交给项目岗位员工。删掉绑了独立会话的任务节点时，Papertown 会先打断它手上的事，再让它访问 Papertown 的凭据作废，Paseo 里的对话保留下来。打断失败时节点先留着，并说明原因。
+研究回路里的任务也能有自己的 Agent：选中尚未派发的任务，打开「对话 → 安排独立 Agent」，选择 Paseo 的供应商、模型和思考强度，或导入已有会话。同一个项目的多个任务可以选择不同的 harness。绑定后，派发、聊天、权限请求、结果和返工都围绕同一段会话；要换会话，需要新建任务。没有独立绑定的旧任务继续交给项目岗位员工。删除已绑定独立会话的任务节点时，Papertown 会先中断该会话当前的工作，再使其访问凭据失效，Paseo 中的对话予以保留。中断失败时节点保留，并返回失败原因。
 
 新建会话使用 Paseo 原生的 **Project → Workspace → Agent** 层级（需要 Paseo 0.14 或更新版本）：每个 Papertown 项目对应一个 Paseo Project，每个任务对应一个 Workspace。节点各有独立的简报、桥接凭据和对话，但 `local` Workspace 可以共用代码或论文目录，不提供文件隔离。导入的会话保留原来的 Workspace 和工作目录，不会自动搬到新 Project。
 
-节点间通信通过 `pt tell task:<节点编号> "信息"` 进入对方 Paseo 会话。Papertown 负责同项目寻址、权限和任务状态，Paseo 负责实际 Agent 执行；画布连线提供关联上下文，不会自动触发下游任务。完成时必须执行派发消息给出的 `pt task … done|blocked … --dispatch <本轮编号>`，普通聊天回复或 Agent 变为空闲都不会标记完成。报过 blocked 的任务在同一轮里还能再报 done。排队消息固定投递到原会话，发送失败会保留错误；返工会生成新编号并拒绝旧回报。
+节点间通信通过 `pt tell task:<节点编号> "信息"` 进入对方 Paseo 会话。Papertown 负责同项目寻址、权限和任务状态，Paseo 负责实际 Agent 执行；画布连线提供关联上下文，不会自动触发下游任务。完成时必须执行派发消息给出的 `pt task … done|blocked … --dispatch <本轮编号>`，普通聊天回复或 Agent 变为空闲都不会标记完成。已回报 blocked 的任务可在同一轮内改报 done。排队消息固定投递到原会话，发送失败会保留错误；返工会生成新编号并拒绝旧回报。
 
 本机真实连通性测试：`cd server && .venv/bin/python scripts/verify_paseo.py --provider codex`。它会调用真实模型，在临时项目创建两个 Agent，验证消息转交和任务回报，保存报告后归档它创建的 Paseo Project。可用 `--model` 指定模型；权限请求仍由 Paseo 原生机制处理。
 

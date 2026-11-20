@@ -687,9 +687,9 @@ class Canvas:
                 d["gone"].append(node_id)
             elif n["kind"] == "task" and n.get("agent_id"):  # its own session stops with it
                 try:
-                    self.town.agents.retire(n["agent_id"], f"任务节点 {node_id} 从研究回路上删掉了")
+                    self.town.agents.retire(n["agent_id"], f"任务节点 {node_id} 已从研究回路删除")
                 except AgentError as e:
-                    raise CanvasError(f"这个任务的 Agent {e}，节点先留着") from e
+                    raise CanvasError(f"{e}，任务节点已保留") from e
             d["nodes"] = [x for x in d["nodes"] if x["id"] != node_id]
             d["edges"] = [e for e in d["edges"] if node_id not in (e["source"], e["target"])]
             self._save(line_id, d)
@@ -1008,7 +1008,7 @@ class Canvas:
             if n.get("agent_id"):
                 raise CanvasError("这个节点已经绑定了会话")
             if key in self._binding:
-                raise CanvasError("这个节点正在安排 Agent，稍等一下")
+                raise CanvasError("该节点正在安排 Agent，请稍后再试")
             self._binding.add(key)
             role = n["to"]
         try:
@@ -1025,10 +1025,10 @@ class Canvas:
             n = next((x for x in d["nodes"] if x["id"] == node_id and x["kind"] == "task"), None)
             if not n or n["status"] != "draft" or n.get("agent_id") or n["to"] != role:
                 try:
-                    self.town.agents.retire(a["id"], "安排 Agent 期间任务被改动或删掉了")
+                    self.town.agents.retire(a["id"], "安排 Agent 期间任务已被修改或删除")
                 except AgentError as e:
-                    raise CanvasError(f"安排 Agent 期间任务被改动或删掉了，新会话{e}") from e
-                raise CanvasError("安排 Agent 期间任务被改动或删掉了，新建的会话已经停用")
+                    raise CanvasError(f"安排 Agent 期间任务已被修改或删除，新会话{e}") from e
+                raise CanvasError("安排 Agent 期间任务已被修改或删除，新建的会话已停用")
             n["agent_id"] = a["id"]
             _log(n, "bound", f"Paseo · {a['model']} · {a['ext_id']}")
             self._save(line_id, d)
@@ -1048,7 +1048,7 @@ class Canvas:
         pt = shlex.quote(str(self.town.agents.pt(a))) if a["runtime"] == "paseo" else ".papertown/pt"
         dispatch = f' --dispatch {n["dispatch"]}'
         return (f'做完运行 `{pt} task {n["id"]} done "结果"{dispatch}`，卡住运行 `{pt} task {n["id"]} blocked "原因"{dispatch}`。'
-                '报过卡住之后自己解决了，用同一条命令报 done 即可。'
+                '回报 blocked 后如已自行解决，可使用同一 --dispatch 回报 done。'
                 '只有成功回报后，画布才会更新；普通对话回复不会关闭任务。'
                 f'\n向同项目另一个任务传递信息：`{pt} tell task:<节点编号> "信息"`；信息会进入对方会话，不会自动派发或完成任务。')
 
@@ -1134,7 +1134,7 @@ class Canvas:
                 return {"text": "已经记录过这个结果。"}
             # in progress: either word; stuck: done once the agent got past it, in the same round
             if not (n["status"] == "sent" or (n["status"] == "blocked" and status == "done")):
-                raise CanvasError("这个任务没有在执行中，请等待重新派发" if n["status"] != "blocked" else "已经报过卡住了，解决后用 done 回报")
+                raise CanvasError("这个任务没有在执行中，请等待重新派发" if n["status"] != "blocked" else "该任务已回报 blocked，问题解决后请回报 done")
             n |= {"status": status, "done_at": now(), "result": text[:4000], "by": self.town.leads._who(a)}
             _log(n, status, text, by=n["by"])
             self._save(lid, d)

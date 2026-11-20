@@ -352,7 +352,7 @@ def test_a_task_removed_while_its_session_is_made_leaves_it_stopped(flow, monkey
         return made
     monkeypatch.setattr(town.agents.paseo, 'create', remove_first)
     response = c.post(f'/api/lines/{lid}/canvas/nodes/{nid}/agent', json={'provider': 'codex'})
-    assert response.status_code == 400 and '删掉' in response.json()['detail']
+    assert response.status_code == 400 and '删除' in response.json()['detail']
     agent = town.db.one('select * from agents where node_id = ?', nid)
     assert agent['ext_id'] is None and agent['status'] == 'stopped'
 

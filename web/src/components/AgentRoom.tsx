@@ -192,9 +192,9 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
     <>
       {d?.provider && <p className="muted small">{tr('Papertown 给它配的是 {0}', [d.provider, d.model, d.thinking].filter(Boolean).join(' / '))}{info.providers.some(x => x.id === d.provider) ? '' : tr('，但 Paseo 里没有这个供应商')}</p>}
       <label className="field">{tr('供应商')}
-        <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.error ? tr('{0}（模型列表没读到）', x.label) : x.label }))} onChange={id => pick(info, id)} />
+        <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.error ? tr('{0}（模型列表读取失败）', x.label) : x.label }))} onChange={id => pick(info, id)} />
       </label>
-      {pv?.error && <p className="warn-box small">{tr('{0} 的模型列表没读到：{1}。可以先用它的默认模型启动，或者换一个供应商。', pv.label, pv.error)}</p>}
+      {pv?.error && <p className="warn-box small">{tr('{0} 的模型列表读取失败：{1}。可使用默认模型启动，或选择其他供应商。', pv.label, pv.error)}</p>}
       {!!pv?.models.length && (
         <label className="field">{tr('模型')}
           <Select value={model} options={pv.models.map(x => ({ value: x.id, label: x.name }))} onChange={id => pick(info, prov, id)} />
@@ -205,7 +205,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
           <Select value={think} options={m.thinking.map(x => ({ value: x, label: x }))} onChange={setThink} />
         </label>
       )}
-      {!info.status.web && <p className="muted small">{tr('Paseo 网页端没开。在这里照样能对话，也可以去 Paseo 桌面端看。')}</p>}
+      {!info.status.web && <p className="muted small">{tr('Paseo 网页端未开启。这里仍可对话，也可在 Paseo 桌面端打开。')}</p>}
       <button className="btn pri" disabled={busy || !prov} onClick={() => onStart({ runtime: 'paseo', provider: prov, model: model || undefined, thinking: think || undefined })}>
         {busy ? tr('启动中…') : tr('在 Paseo 里启动')}
       </button>
