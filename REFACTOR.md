@@ -1,8 +1,36 @@
 # 全仓重构：完成记录
 
-更新于 2026-11-16。续写已完成，当前代码和验收结果以下节为准。后面的原始交接记录保留作范围与决策依据，其中的“还没做”“接下来”是接手时的状态。
+更新于 2026-11-20。最新一轮以本节为准；2026-11-16 的完成记录及原始交接记录保留供追溯，其中的“还没做”“接下来”是接手时的状态。
 
-## 续写结果与验收
+## 2026-11-20：Paseo 节点协作与失败处理
+
+本轮接续全仓重构，检查 server、Web、TUI、macOS 和设计构建，集中改动真实 Agent 数据通路和会掩盖失败的逻辑。继续复用 Paseo，没有引入新的多 Agent 运行框架。
+
+- 任务节点可以创建或导入独立 Paseo 会话，复用现有模型选择、对话记录、权限卡片和聊天组件。项目岗位员工与节点 Agent 分开寻址，多个同岗位节点不会共用身份或覆盖桥接凭据。
+- 新建会话落入原生 Project / Workspace 层级；导入保留原目录及 Workspace，并检查已有归属。SDK 列表读取全部分页及后台 Workspace，过滤归档会话。
+- 派发、节点间传话、结果回报、返工串成闭环。回报校验实际 Agent 身份及本轮 dispatch，重复结果不重复建报告，迟到的旧回报不能关闭新一轮任务。
+- 会话切换、发送及队列释放串行处理；统一会话启动与画布操作的取锁顺序，避免负责人简报读取与节点派发互相等待。排队消息记录目标会话，失败保留错误。晚到的状态或历史读取不能覆盖新会话或新一轮执行状态。停止服务时退出 Paseo 轮询。
+- 移除真实模型失败后用离线模板制造完成结果的兜底；失败保存原因并停止工序。显式 mock 模式保留，已有持久化数据迁移、断线恢复和文件权限仍保留。
+- 损坏画布明确报错并保留原文件；CLI/SDK、HTTP 和 TUI 不再把无效返回伪装为空结果。网页发送失败保留输入，权限操作成功后才收起请求；缺少工作目录的导入会话禁用并说明原因。macOS 前端替换失败会记录恢复结果。
+
+验证采用隔离临时数据，不修改用户研究项目：
+
+| 验证 | 结果 |
+|---|---|
+| `cd server && .venv/bin/pytest -q` | **76 passed, 1 skipped**，59.79 秒；跳过项需要本机 skim；最终发送锁调整另复验直接调用链 |
+| `node --test server/papertown/paseo_link/protocol.test.mjs` | **2 passed**；分页、归档过滤、权限 ID、工具及消息映射 |
+| `cd web && pnpm build` / `pnpm -s i18n:missing` | TypeScript、Vite 和全部英文翻译通过 |
+| 本机 Paseo 0.14.0 + SDK 0.13.2 | 两轮双 Codex Agent 测试通过：节点派发 → Paseo 执行 → 同项目节点传话 → 带 dispatch 的 pt 回报 → 画布结果；临时 Paseo Project 已归档 |
+| 浏览器交互 | 三种主题各 8 条路由，共 **24 次页面检查，零脚本/console error**；节点创建会话、派发和发送消息通过 |
+| 三主题截图 | Cloudflare 浅色、macOS 深色、纸本浅色的画布节点对话布局已检查 |
+| macOS | 用 `/Applications/Xcode.app/Contents/Developer` 的 Swift 工具链执行 `swift build` 通过 |
+| 设计与补丁 | `cd design && node build.mjs`、`git diff --check` 通过 |
+
+真实验证脚本保存在 `server/scripts/verify_paseo.py`。最后一轮的本机报告为 `/var/folders/4_/1vr9bn512m569p5b2yxjky_w0000gn/T/papertown-live-paseo-1d6c2_xf/verification.json`，浏览器结果为 `/tmp/papertown-paseo-ui-results.json`，截图在 `/tmp/papertown-paseo-screens/`。报告和截图留在临时目录，不作为运行依赖，也不提交会话正文或凭据。
+
+当前边界：local Workspace 是会话组织结构，不隔离共享文件；画布连线不是自动 DAG 调度。实际模型端到端验证使用本机 Codex，其他 harness 的组合由模拟协议覆盖，未验证远端或 GPU 执行。CLI 发送缺少持久化幂等键，发生“已送达但确认丢失”或进程中途退出时，队列重试仍可能重复投递，不能承诺跨进程 exactly-once。原有未绑定节点的岗位派发和回报继续兼容。
+
+## 2026-11-16：续写结果与验收
 
 保留并接续了 Claude 的未提交修改，没有覆盖原有工作。4.2 的 24 项建议已逐项处理：第 12 项的标签渲染已经共用，无需再搬一次；第 9 项只移除未读的 `animated`，保留 Textual 的 `title` 属性；其余项完成抽取或调用替换。`leads.NAMES` 使用现有 `ROLES`，实际代码中已有 `assistant`。
 
