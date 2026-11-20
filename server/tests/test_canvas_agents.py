@@ -384,3 +384,12 @@ def test_the_conversation_list_names_node_agents_and_set_aside_owners(flow):
     link.convs.append({'id': 'stray', 'provider': 'codex', 'status': 'idle', 'cwd': '/tmp', 'labels': {'papertown.agent': 'gone-agent'}})
     assert owners()['stray'] == '另一个 Papertown Agent'
 
+
+def test_resuming_a_conversation_without_a_working_directory_is_refused(flow):
+    c, town, link, lid = flow
+    a = town.agents.ensure(lid, 'coder')
+    town.agents.start(a['id'], 'paseo', 'codex', 'test-model')
+    link.convs.append({'id': 'no-cwd', 'provider': 'codex', 'status': 'idle', 'cwd': None, 'labels': {'papertown.agent': a['id']}})
+    response = c.post(f"/api/agents/{a['id']}/conversations/no-cwd")
+    assert response.status_code == 400 and '工作目录' in response.json()['detail']
+    assert town.agents.get(a['id'])['ext_id'] != 'no-cwd' and town.agents.get(a['id'])['cwd']

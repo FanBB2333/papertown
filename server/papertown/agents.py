@@ -458,6 +458,8 @@ class Agents:
         conv = next((c for c in self._own(agent_id) if c["id"] == ext_id), None)
         if not conv:
             raise AgentError("Paseo 里没有这段对话了")
+        if not conv.get("cwd"):
+            raise AgentError("这段 Paseo 对话没有工作目录，没法切换过去")
         if a.get("ext_id") != ext_id:
             self._interrupt(a)
             self.attach(agent_id, conv)
