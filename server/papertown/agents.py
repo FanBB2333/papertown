@@ -39,7 +39,8 @@ CHAT_ROLES = (*PI_ROLES, "assistant", "lead")
 # pi's built-in commands that open its terminal UI: typed into tmux rather than sent to the bridge
 TUI_COMMANDS = {"settings", "scoped-models", "export", "import", "share", "bug", "changelog", "hotkeys",
                 "fork", "tree", "trust", "login", "logout", "resume", "copy"}
-PASEO_STATUS = {"running": "working", "idle": "idle", "closed": "idle", "error": "error", "permission": "working"}
+# Paseo's lifecycle (initializing, idle, running, error, closed) and the CLI's permission state, as the room shows them
+PASEO_STATUS = {"initializing": "starting", "running": "working", "idle": "idle", "closed": "idle", "error": "error", "permission": "working"}
 
 # how an agent reaches the town, by runtime
 TOOLS = {

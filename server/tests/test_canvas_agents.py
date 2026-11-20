@@ -268,3 +268,10 @@ def test_role_session_cannot_switch_with_active_tasks_or_on_failed_creation(flow
     monkeypatch.setattr(town.agents.paseo, 'create', fail)
     assert c.post(f"/api/agents/{a['id']}/conversations/new").status_code == 400
     assert town.agents.get(a['id'])['ext_id'] == a['ext_id']
+
+
+def test_a_session_still_starting_shows_as_starting(flow):
+    c, town, link, lid = flow
+    a = bind(c, lid, node(c, lid))
+    next(x for x in link.convs if x['id'] == a['ext_id'])['status'] = 'initializing'
+    assert c.get(f"/api/agents/{a['id']}/timeline").json()['agent']['status'] == 'starting'
