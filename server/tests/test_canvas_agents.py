@@ -305,3 +305,18 @@ def test_a_bound_task_stays_when_its_agent_cannot_be_stopped(flow, monkeypatch):
     response = c.delete(f'/api/lines/{lid}/canvas/nodes/{nid}')
     assert response.status_code == 400 and 'daemon busy' in response.json()['detail']
     assert task(c, lid, nid)['agent']['runtime'] == 'paseo'
+
+
+@pytest.mark.parametrize('args, text, dispatch', [
+    (['t3', 'done', '修好了', '--dispatch', 'abc'], '修好了', 'abc'),
+    (['t3', 'blocked', '--model 参数无效', '--dispatch', 'abc'], '--model 参数无效', 'abc'),
+    (['t3', 'done', '用', '--seed', '3', '重跑通过', '--dispatch', 'abc'], '用 --seed 3 重跑通过', 'abc'),
+    (['t3', 'done', '没有带编号'], '没有带编号', None),
+])
+def test_pt_task_keeps_dashes_in_the_result(args, text, dispatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('pt_cli', Path(__file__).parents[1] / 'papertown' / 'pi' / 'pt.py')
+    pt = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pt)
+    rest, got = pt.task_args(args)
+    assert ' '.join(rest[2:]) == text and got == dispatch

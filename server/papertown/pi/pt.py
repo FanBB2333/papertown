@@ -153,6 +153,19 @@ def options(args, many=("--choice",), flags=("--point",)):
     return opts, rest
 
 
+def task_args(args):
+    """`pt task`'s words and its --dispatch: only that one option is taken out, so a result may itself contain
+    words that start with --."""
+    rest = list(args)
+    if "--dispatch" in rest:
+        i = len(rest) - 1 - rest[::-1].index("--dispatch")
+        if i + 1 < len(rest):
+            dispatch = rest[i + 1]
+            del rest[i:i + 2]
+            return rest, dispatch
+    return rest, None
+
+
 def read(path):
     try:
         with open(path, encoding="utf-8") as f:
@@ -219,10 +232,10 @@ def main(a):
     elif a[0] == "tasks":
         print(call("/tasks")["text"])
     elif a[0] == "task":
-        opts, rest = options(a[1:], many=(), flags=())
+        rest, dispatch = task_args(a[1:])
         if len(rest) < 3 or rest[1] not in ("done", "blocked"):
-            sys.exit('用法：pt task <编号> done|blocked "结果或原因"')
-        print(call("/task", {"id": rest[0], "status": rest[1], "text": " ".join(rest[2:]), "dispatch": opts.get("dispatch")})["text"])
+            sys.exit('用法：pt task <编号> done|blocked "结果或原因" [--dispatch 本轮编号]')
+        print(call("/task", {"id": rest[0], "status": rest[1], "text": " ".join(rest[2:]), "dispatch": dispatch})["text"])
     elif a[0] == "check":
         if len(a) < 4 or a[2] not in ("pass", "warn", "fail"):
             sys.exit('用法：pt check <编号> pass|warn|fail "理由"')
