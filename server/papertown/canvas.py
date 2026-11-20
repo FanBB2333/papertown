@@ -1048,6 +1048,7 @@ class Canvas:
         pt = shlex.quote(str(self.town.agents.pt(a))) if a["runtime"] == "paseo" else ".papertown/pt"
         dispatch = f' --dispatch {n["dispatch"]}'
         return (f'做完运行 `{pt} task {n["id"]} done "结果"{dispatch}`，卡住运行 `{pt} task {n["id"]} blocked "原因"{dispatch}`。'
+                '报过卡住之后自己解决了，用同一条命令报 done 即可。'
                 '只有成功回报后，画布才会更新；普通对话回复不会关闭任务。'
                 f'\n向同项目另一个任务传递信息：`{pt} tell task:<节点编号> "信息"`；信息会进入对方会话，不会自动派发或完成任务。')
 
@@ -1131,8 +1132,9 @@ class Canvas:
                 raise CanvasError("这是上一轮任务的回报，请按最新任务消息里的 --dispatch 参数回报")
             if n["status"] == status and n.get("result") == text[:4000]:
                 return {"text": "已经记录过这个结果。"}
-            if n["status"] != "sent":
-                raise CanvasError("这个任务没有在执行中，请等待重新派发")
+            # in progress: either word; stuck: done once the agent got past it, in the same round
+            if not (n["status"] == "sent" or (n["status"] == "blocked" and status == "done")):
+                raise CanvasError("这个任务没有在执行中，请等待重新派发" if n["status"] != "blocked" else "已经报过卡住了，解决后用 done 回报")
             n |= {"status": status, "done_at": now(), "result": text[:4000], "by": self.town.leads._who(a)}
             _log(n, status, text, by=n["by"])
             self._save(lid, d)

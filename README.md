@@ -290,7 +290,7 @@ cd server/papertown/paseo_link && pnpm install          # SDK，装一次
 
 新建会话使用 Paseo 原生的 **Project → Workspace → Agent** 层级（需要 Paseo 0.14 或更新版本）：每个 Papertown 项目对应一个 Paseo Project，每个任务对应一个 Workspace。节点各有独立的简报、桥接凭据和对话，但 `local` Workspace 可以共用代码或论文目录，不提供文件隔离。导入的会话保留原来的 Workspace 和工作目录，不会自动搬到新 Project。
 
-节点间通信通过 `pt tell task:<节点编号> "信息"` 进入对方 Paseo 会话。Papertown 负责同项目寻址、权限和任务状态，Paseo 负责实际 Agent 执行；画布连线提供关联上下文，不会自动触发下游任务。完成时必须执行派发消息给出的 `pt task … done|blocked … --dispatch <本轮编号>`，普通聊天回复或 Agent 变为空闲都不会标记完成。排队消息固定投递到原会话，发送失败会保留错误；返工会生成新编号并拒绝旧回报。
+节点间通信通过 `pt tell task:<节点编号> "信息"` 进入对方 Paseo 会话。Papertown 负责同项目寻址、权限和任务状态，Paseo 负责实际 Agent 执行；画布连线提供关联上下文，不会自动触发下游任务。完成时必须执行派发消息给出的 `pt task … done|blocked … --dispatch <本轮编号>`，普通聊天回复或 Agent 变为空闲都不会标记完成。报过 blocked 的任务在同一轮里还能再报 done。排队消息固定投递到原会话，发送失败会保留错误；返工会生成新编号并拒绝旧回报。
 
 本机真实连通性测试：`cd server && .venv/bin/python scripts/verify_paseo.py --provider codex`。它会调用真实模型，在临时项目创建两个 Agent，验证消息转交和任务回报，保存报告后归档它创建的 Paseo Project。可用 `--model` 指定模型；权限请求仍由 Paseo 原生机制处理。
 

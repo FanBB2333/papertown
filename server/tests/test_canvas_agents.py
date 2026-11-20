@@ -355,3 +355,18 @@ def test_a_task_removed_while_its_session_is_made_leaves_it_stopped(flow, monkey
     assert response.status_code == 400 and '删掉' in response.json()['detail']
     agent = town.db.one('select * from agents where node_id = ?', nid)
     assert agent['ext_id'] is None and agent['status'] == 'stopped'
+
+
+def test_a_stuck_task_can_still_be_reported_done_in_the_same_round(flow):
+    c, town, link, lid = flow
+    nid = node(c, lid)
+    a = bind(c, lid, nid)
+    assert c.post(f'/api/lines/{lid}/canvas/nodes/{nid}/send').status_code == 200
+    link.idle(); town.agents.sync_paseo()
+    assert bridge(c, town, a, 'task', {'id': nid, 'status': 'blocked', 'text': '缺数据'}).status_code == 200
+    again = bridge(c, town, a, 'task', {'id': nid, 'status': 'blocked', 'text': '还是缺数据'})
+    assert again.status_code == 400 and 'done' in again.json()['detail']
+    assert bridge(c, town, a, 'task', {'id': nid, 'status': 'done', 'text': '自己补上了数据'}).status_code == 200
+    assert task(c, lid, nid)['status'] == 'done' and task(c, lid, nid)['result'] == '自己补上了数据'
+    late = bridge(c, town, a, 'task', {'id': nid, 'status': 'blocked', 'text': '又卡住了'})
+    assert late.status_code == 400 and task(c, lid, nid)['status'] == 'done'
