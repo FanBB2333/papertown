@@ -1,8 +1,12 @@
-// Snapshots every GET the static demo makes into dist-demo/demo/<key>.json, plus the papers' files.
-// Run it against a fresh offline instance, never the one you work in; it fails if personal data is left.
+// Snapshots every GET the static demo makes into dist-demo/demo/<key>.json, plus the papers' files and PDFs.
+// Run it against a fresh offline instance, never the one you work in: it compiles the papers there, and it fails
+// if personal data is left. Give that instance an empty home and data directory, nothing of yours linked in, and
+// TeX on its PATH; let the sample projects run for a few minutes before taking the snapshot.
 //
-//   PAPERTOWN_PROVIDER=mock PAPERTOWN_DATA_DIR=/tmp/pt-demo PAPERTOWN_NVIDB=0 … papertown serve --port 8001
-//   node scripts/demo-snapshot.mjs [http://127.0.0.1:8001] [dist-demo]
+//   HOME=/tmp/pt-demo/home PAPERTOWN_PROVIDER=mock PAPERTOWN_DATA_DIR=/tmp/pt-demo/var PAPERTOWN_NVIDB=0 \
+//     PAPERTOWN_PASEO_BIN=/nonexistent PAPERTOWN_PASEO_WATCH=0 PAPERTOWN_PROJECTS=/nonexistent \
+//     server/.venv/bin/papertown serve --port 8001
+//   PAPERTOWN_DEMO_SOURCE=http://127.0.0.1:8001 pnpm build:demo     (or: node scripts/demo-snapshot.mjs [source] [dist-demo])
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -46,7 +50,8 @@ const world = await get('/api/world');
 const lines = await get('/api/lines');
 for (const u of ['/api/messages?limit=120', '/api/trace?limit=80', '/api/papers/fresh', '/api/departments', '/api/skills', '/api/skim', '/api/skim?fresh=1',
   '/api/skim/resolve', '/api/mcp', '/api/rag', '/api/gpus', '/api/gpus?fresh=1', '/api/paseo', '/api/paseo/conversations', '/api/llm',
-  '/api/agents?role=coder', '/api/agents?role=writer', '/api/agents?role=monitor']) await get(u);
+  '/api/agents?role=coder', '/api/agents?role=writer', '/api/agents?role=monitor', '/api/agents?role=lead', '/api/agents?role=',
+  '/api/cards', '/api/paseo/news', '/api/reports', '/api/bounds', '/api/assistant']) await get(u);
 await get('/api/library?limit=5000', 'library_all');
 
 for (const pl of world.placements) { await get(`/api/buildings/${pl.id}`); await get(`/api/buildings/${pl.type}`); }
@@ -58,6 +63,10 @@ for (const ln of lines) {
   await get(`/api/lines/${ln.id}`);
   await get(`/api/lines/${ln.id}/papers`);
   await get(`/api/skim/resolve?line_id=${ln.id}`);
+  // the project page, its research loop and what hangs off them
+  for (const part of ['card', 'canvas', 'canvas/report', 'pages', 'lead', 'memory']) await get(`/api/lines/${ln.id}/${part}`);
+  await get(`/api/reports?line_id=${ln.id}`);
+  await get(`/api/bounds?line_id=${ln.id}`);
   for (const j of (await get(`/api/jobs?line_id=${ln.id}`))?.jobs ?? []) jobs.add(j.id);
   for (const name of ln.files ?? []) {
     const r = await fetch(`${SRC}/api/lines/${ln.id}/files/${name}`);
@@ -69,7 +78,16 @@ for (const ln of lines) {
 }
 const TEXT = /\.(tex|bib|sty|cls|bst|md|txt|py|ts|js|json|jsonl|ya?ml|toml|cfg|sh|csv|tsv)$/i;
 for (const ln of lines) {
-  const ws = await get(`/api/lines/${ln.id}/ws`);
+  let ws = await get(`/api/lines/${ln.id}/ws`);
+  if (ws?.paper && !ws.paper.pdf && ws.latexmk) { // compile it there, so the paper panel has its PDF
+    await fetch(`${SRC}/api/lines/${ln.id}/ws/paper/compile`, { method: 'POST' });
+    saved.delete(demoKey(`/api/lines/${ln.id}/ws`));
+    ws = await get(`/api/lines/${ln.id}/ws`);
+  }
+  if (ws?.paper?.pdf) { // the PDF the paper panel shows beside the source
+    const r = await fetch(`${SRC}/api/lines/${ln.id}/ws/paper/pdf`);
+    if (r.ok) { mkdirSync(join(OUT, 'files', ln.id), { recursive: true }); writeFileSync(join(OUT, 'files', ln.id, 'main.pdf'), Buffer.from(await r.arrayBuffer())); }
+  }
   const data = await get(`/api/lines/${ln.id}/data`);
   const want = new Map();
   for (const root of ['code', 'paper']) {
@@ -81,12 +99,13 @@ for (const ln of lines) {
   for (const [root, path] of want.values()) await get(`/api/lines/${ln.id}/ws/${root}/file?${new URLSearchParams({ path })}`);
 }
 for (const id of jobs) await get(`/api/jobs/${id}?tail=400`);
-for (const role of ['coder', 'writer', 'monitor']) {
+for (const role of ['coder', 'writer', 'monitor', 'lead']) {
   for (const row of saved.get(demoKey('/api/agents', `?role=${role}`))?.roster ?? []) if (row.agent) agents.set(row.agent.id, row.agent);
 }
 for (const a of agents.values()) {
   await get(`/api/agents/${a.id}?after=0`);
   await get(`/api/agents/${a.id}/timeline`);
+  await get(`/api/agents/${a.id}/conversations`);
   await get(`/api/skim/resolve?line_id=${a.line_id}&agent_id=${a.id}`);
 }
 

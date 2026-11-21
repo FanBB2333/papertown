@@ -1,12 +1,12 @@
-// What the static demo adds to the town: a card on the first visit that says what Papertown
-// is and what can be tried here, and a link to the repository in the top bar.
+// What the static demo adds to the page: a card on the first visit that says what Papertown
+// is and where to look, and a link to the repository in the top bar.
 
 import { useState } from 'react';
 import { REPO } from '../demo';
 import { tr } from '../i18n';
 import '../demo.css';
 
-const SEEN = 'papertown.demo-seen';
+const SEEN = 'papertown.demo-seen-2'; // a new key when the card says something new, so it shows again
 
 function seen() {
   try { return localStorage.getItem(SEEN) === '1'; } catch { return false; }
@@ -27,12 +27,13 @@ export function DemoWelcome() {
     <div className="demo-veil" role="dialog" aria-modal="true" onClick={e => { if (e.target === e.currentTarget) close(); }}>
       <div className="demo-card pnl">
         <h2>{tr('欢迎来到 Papertown')}</h2>
-        <p>{tr('一个把 AI 科研流水线画成手绘小镇的开源项目：idea 在孵化场查重，在造纸厂立项，在实验农场跑实验，在印刷厂写成论文，经过质检所后出厂。')}</p>
-        <p className="muted">{tr('这是静态演示，内容来自一次离线运行的快照。可以随便走走、进建筑看看，这里的改动不会保存。')}</p>
+        <p>{tr('一个开源的科研流水线：idea 经过查重、立项、方法设计、实验、写作和审稿，最后成为一篇论文。每个项目走同一套研究流程，agent 员工做事，你在关键处监督、纠错和拍板。')}</p>
+        <p className="muted">{tr('这是只读的静态演示，内容来自一次离线运行的快照，五个示例项目停在不同的阶段。这里的改动不会保存。')}</p>
         <ul>
-          <li>{tr('用 WASD 走动，到门口按 F，或者直接点建筑')}</li>
-          <li>{tr('点顶栏的「3D 漫游」：空格跳，双击空格飞起来，按 F 走进建筑看里面的机器')}</li>
-          <li>{tr('进图书馆试一下检索，或者在设置里切换 English / 简体 / 繁體')}</li>
+          <li>{tr('「进展」里每个项目一张卡片，点开项目页，再进入「研究回路」')}</li>
+          <li>{tr('研究回路按研究流程排成四行分块，按住 ⌘ 或 Ctrl 滚动缩放，点节点在右侧看详情')}</li>
+          <li>{tr('「小镇 › 中控屏」里是每个项目的调研、代码、实验、数据、论文和员工，也可以切到平面地图或 3D 漫游')}</li>
+          <li>{tr('在设置里切换 English / 简体 / 繁體')}</li>
         </ul>
         <div className="btns">
           <a className="btn pri" href={REPO} target="_blank" rel="noreferrer"><GitHubMark />{tr('去 GitHub 看源码')}</a>

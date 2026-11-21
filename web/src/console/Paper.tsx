@@ -56,7 +56,7 @@ function Tex(p: Props) {
   const [run, setRun] = useState<Compiled | null>(null);
   const [busy, setBusy] = useState(false);
   const [v, setV] = useState(0);
-  const [hasPdf, setHasPdf] = useState(!!place.pdf || DEMO);
+  const [hasPdf, setHasPdf] = useState(!!place.pdf);
   const [logOpen, setLogOpen] = useState(false);
   const [drag, setDrag] = useState(false);
   const [at, setAt] = useState<{ line: number; picked: string }>({ line: 1, picked: '' });

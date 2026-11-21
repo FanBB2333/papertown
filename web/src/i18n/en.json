@@ -1428,15 +1428,10 @@
  "静态演示": "Static demo",
  "在 GitHub 上查看": "View on GitHub",
  "欢迎来到 Papertown": "Welcome to Papertown",
- "一个把 AI 科研流水线画成手绘小镇的开源项目：idea 在孵化场查重，在造纸厂立项，在实验农场跑实验，在印刷厂写成论文，经过质检所后出厂。": "An open-source project that draws an AI research pipeline as a hand-drawn town: an idea is checked for overlap at the Hatchery, started as a project at the Paper Mill, run as experiments on the Experiment Farm, written up at the TeX Press and shipped once the Review Lab passes it.",
- "这是静态演示，内容来自一次离线运行的快照。可以随便走走、进建筑看看，这里的改动不会保存。": "This is a static demo: what you see is a snapshot of an offline run. Walk around and look inside the buildings; nothing you change here is saved.",
- "进图书馆试一下检索，或者在设置里切换 English / 简体 / 繁體": "Try a search in the Library, or switch between English / 简体 / 繁體 in Settings",
  "去 GitHub 看源码": "See the source on GitHub",
  "先逛逛": "Look around first",
  "这是只读的演示：要让小镇真的跑起来，请到 GitHub 上克隆 Papertown，在本机启动。": "This demo is read-only. To run the town for real, clone Papertown from GitHub and start it on your machine.",
  "演示里没有这部分数据": "This part is not in the demo snapshot",
- "用 WASD 走动，到门口按 F，或者直接点建筑": "Walk with WASD and press F at a door, or just click a building",
- "点顶栏的「3D 漫游」：空格跳，双击空格飞起来，按 F 走进建筑看里面的机器": "Click “3D walk” in the top bar: Space jumps, a double tap flies, and F takes you inside a building to see its machines",
  "空格": "Space",
  "3D 里跳，连按两下起飞或落地，飞行时按住上升": "Jump in 3D, tap twice to take off or land, hold to climb while flying",
  "3D 里下蹲，蹲着走到边上不会掉下去。飞行时下降": "Crouch in 3D (crouched, you stop at an edge instead of falling off). Descend while flying",
@@ -3388,5 +3383,11 @@
  "{0} 次运行，{1} 次出自仓库里的 {2} 个脚本": "{0} runs, {1} of them from {2} scripts in the repository",
  "当前关联的代码仓库里没有这个文件": "This file is not in the code repository linked here",
  "触控板双指移动或滚轮是平移，双指捏合或按住 {0} 滚动是缩放，滚轮每格缩放一小步": "Two fingers on the trackpad or the wheel pan; a pinch, or scrolling with {0} held, zooms, one small step per wheel notch",
- "平移：双指移动或滚轮在画布上走，捏合或按住 ⌘（Windows 上是 Ctrl）滚动缩放。缩放：双指移动或滚轮直接缩放。滚轮每格缩放一小步，快慢跟随「滚轮缩放速度」": "Pan: two fingers or the wheel move across the canvas; pinch, or scroll with ⌘ held (Ctrl on Windows), to zoom. Zoom: two fingers or the wheel zoom directly. A wheel notch zooms one small step, at the pace of “Wheel zoom speed”"
+ "平移：双指移动或滚轮在画布上走，捏合或按住 ⌘（Windows 上是 Ctrl）滚动缩放。缩放：双指移动或滚轮直接缩放。滚轮每格缩放一小步，快慢跟随「滚轮缩放速度」": "Pan: two fingers or the wheel move across the canvas; pinch, or scroll with ⌘ held (Ctrl on Windows), to zoom. Zoom: two fingers or the wheel zoom directly. A wheel notch zooms one small step, at the pace of “Wheel zoom speed”",
+ "一个开源的科研流水线：idea 经过查重、立项、方法设计、实验、写作和审稿，最后成为一篇论文。每个项目走同一套研究流程，agent 员工做事，你在关键处监督、纠错和拍板。": "An open-source research pipeline: an idea goes through a novelty check, project setup, method design, experiments, writing and review, and ends as a paper. Every project follows the same research flow. Agents do the work, and you supervise, correct and decide at the points that matter.",
+ "这是只读的静态演示，内容来自一次离线运行的快照，五个示例项目停在不同的阶段。这里的改动不会保存。": "This is a read-only static demo: what you see is a snapshot of an offline run, with five sample projects at different stages. Nothing you change here is saved.",
+ "「进展」里每个项目一张卡片，点开项目页，再进入「研究回路」": "In “Progress” every project has a card. Open its page, then its research loop",
+ "研究回路按研究流程排成四行分块，按住 ⌘ 或 Ctrl 滚动缩放，点节点在右侧看详情": "The research loop lays the research flow out in four rows of blocks. Scroll with ⌘ or Ctrl held to zoom, and click a node to see it on the right",
+ "「小镇 › 中控屏」里是每个项目的调研、代码、实验、数据、论文和员工，也可以切到平面地图或 3D 漫游": "“Town › Console” holds each project’s survey, code, experiments, data, paper and agents. You can also switch to the map or the 3D walk",
+ "在设置里切换 English / 简体 / 繁體": "Switch between English / 简体 / 繁體 in the settings"
 }
