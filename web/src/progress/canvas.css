@@ -155,7 +155,34 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 
 /* an info card: the project live */
 .cv-info { display: flex; flex-direction: column; gap: 5px; width: 250px; padding: 9px 11px 10px; border-radius: 12px; background: color-mix(in srgb, var(--panel) 92%, var(--bg)); font-size: 12px; line-height: 1.45; }
-.cv-info.i-card { width: 300px; } .cv-info.i-agent { width: 210px; gap: 2px; padding: 8px 11px; }
+/* on the loop a card is as big as the server says (canvas.py INFO_SIZE), whatever it holds: what does not fit is cut off under a fade */
+.cv-n.cv-info { box-sizing: border-box; }
+.cv-info.i-agent { gap: 2px; padding: 8px 11px; }
+.cv-info .ci-body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; overflow: hidden; }
+.cv-info.i-agent .ci-body { gap: 2px; }
+.cv-info .ci-body > * { flex: none; }
+.cv-info .ci-body::after { content: ''; position: absolute; inset: auto 0 0; height: 10px; background: linear-gradient(transparent, color-mix(in srgb, var(--panel) 92%, var(--bg))); pointer-events: none; }
+.cv-info .ci-clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ci-what { font-weight: 600; color: var(--ink); }
+.ci-paper { display: flex; align-items: baseline; gap: 7px; }
+.ci-paper b { flex: none; font: 600 11px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.ci-paper span { flex: 1; min-width: 0; color: var(--ink); }
+.cv-info:not(.full) .ci-paper span, .ci-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ci-paper small { flex: none; font-size: 11px; color: var(--muted); }
+.ci-steps { margin: 0; padding-left: 17px; } .ci-steps li { overflow-wrap: anywhere; }
+.cv-info:not(.full) .ci-steps li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ci-ran { display: flex; align-items: center; gap: 7px; }
+.ci-ran i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.ci-ran:is(.s-completed, .s-done) i { background: var(--ok); } .ci-ran:is(.s-failed, .s-lost, .s-timeout) i { background: var(--bad); }
+.ci-ran span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.ci-ran code { flex: none; max-width: 52%; padding: 0 5px; border-radius: 5px; font: 11px var(--mono); color: var(--muted); background: color-mix(in srgb, var(--ink) 6%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-info.full .ci-ran code { max-width: 70%; }
+.ci-ran code.out { background: none; outline: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent); outline-offset: -1px; } /* what ran is not in the repository linked here */
+.ci-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ci-chips span, .ci-chips em { padding: 0 7px; border-radius: 99px; font-size: 11.5px; font-style: normal; color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); white-space: nowrap; }
+.ci-chips em { color: var(--muted); background: none; }
+.ci-metrics.top { margin-top: 0; padding-top: 0; border-top: 0; }
+.ci-metrics small { flex: none; font-size: 11px; color: var(--muted); }
 .cv-info > header { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 .cv-info > header b { flex: 1; min-width: 0; font: 600 12.5px var(--font); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-info p { margin: 0; overflow-wrap: anywhere; }
@@ -361,10 +388,26 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 
 /* the lanes behind the nodes */
 .cv .react-flow__viewport-portal { z-index: -1; pointer-events: none; }
-.cv-lanes { position: absolute; left: 0; top: 0; pointer-events: none; }
-.cv-lane { --c: var(--brand); position: absolute; left: 0; top: 0; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--c) 18%, var(--line)); border-radius: 24px; background: color-mix(in srgb, var(--c) 3.5%, transparent); }
-.cv-lane span { position: absolute; left: 22px; top: 14px; font: 600 13px var(--lp-mono); letter-spacing: .02em; color: color-mix(in srgb, var(--c) 45%, var(--muted)); white-space: nowrap; }
-.cv-lane.l-soft { --c: var(--lp-spec); } .cv-lane.l-spine { --c: var(--muted); } .cv-lane.l-loop { --c: var(--lp-hard); }
+/* the blocks: the parts of the research flow, a frame round each one's nodes (Canvas.tsx: Blocks). A part has a hue of
+   its own, kept off the status colours; the header carries its name, so the hue is never the only thing that says it */
+.cv-blocks { position: absolute; left: 0; top: 0; z-index: -1; pointer-events: none; }
+.cv-block { --c: var(--muted); position: absolute; left: 0; top: 0; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--c) 24%, var(--line)); border-radius: 22px; background: color-mix(in srgb, var(--c) 4%, transparent); }
+/* where a task or a note being dragged would go */
+.cv-block.into { border-color: var(--brand); border-style: dashed; background: color-mix(in srgb, var(--brand) 7%, transparent); }
+.cv-block > header { position: absolute; inset: 0 0 auto 0; height: 64px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 12px 0 20px; border-radius: 22px 22px 0 0; pointer-events: auto; cursor: zoom-in; user-select: none; }
+.cv-block > header:hover { background: color-mix(in srgb, var(--c) 6%, transparent); }
+.cv-block > header b { flex: none; display: inline-flex; align-items: center; gap: 7px; font: 650 15px var(--font); color: color-mix(in srgb, var(--c) 60%, var(--ink)); white-space: nowrap; }
+.cv-block > header > span { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; }
+.cv-block > header em { --p: var(--muted); flex: none; padding: 1px 8px; border-radius: 99px; font: 500 11.5px var(--font); color: color-mix(in srgb, var(--p) 85%, var(--ink)); background: color-mix(in srgb, var(--p) 12%, var(--panel)); }
+.cv-block > header em.t-pass { --p: var(--lp-pass); } .cv-block > header em.t-warn { --p: var(--lp-amber); } .cv-block > header em.t-bad { --p: var(--lp-hard); } .cv-block > header em.t-run { --p: var(--brand); }
+.cv-block > header small { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; color: var(--muted); }
+.cv-block > header .ib { flex: none; opacity: 0; transition: opacity .15s; }
+.cv-block > header:hover .ib, .cv-block > header .ib:focus-visible { opacity: 1; }
+.cv-block.b-survey, .lp-blk.b-survey { --c: #7c3aed; } .cv-block.b-code, .lp-blk.b-code { --c: #4f46e5; } .cv-block.b-exp, .lp-blk.b-exp { --c: #2563eb; }
+.cv-block.b-data, .lp-blk.b-data { --c: #0284c7; } .cv-block.b-paper, .lp-blk.b-paper { --c: #c026d3; }
+[data-mode=dark] :is(.cv-block, .lp-blk).b-survey { --c: #a78bfa; } [data-mode=dark] :is(.cv-block, .lp-blk).b-code { --c: #818cf8; } [data-mode=dark] :is(.cv-block, .lp-blk).b-exp { --c: #60a5fa; }
+[data-mode=dark] :is(.cv-block, .lp-blk).b-data { --c: #38bdf8; } [data-mode=dark] :is(.cv-block, .lp-blk).b-paper { --c: #e879f9; }
+.lg-block { display: inline-block; width: 20px; height: 13px; border: 1px solid color-mix(in srgb, #7c3aed 30%, var(--line)); border-radius: 5px; background: color-mix(in srgb, #7c3aed 7%, transparent); }
 
 /* every node's head: what kind, small and set in type */
 :is(.cv-gate, .cv-sen, .cv-spec, .cv-human, .cv-task) > header { display: flex; align-items: center; gap: 6px; min-width: 0; font: 600 10.5px var(--lp-mono); letter-spacing: .01em; color: var(--muted); white-space: nowrap; }
@@ -596,8 +639,19 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .lp-spark circle { fill: var(--lp-pass); } .lp-spark circle.a { fill: var(--lp-hard); }
 .lp-spark.up polyline { stroke: var(--lp-amber); } .lp-spark.up circle { fill: var(--lp-amber); } .lp-spark.up circle.a { fill: var(--muted); }
 .lp-card .cv-open { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
-.lp-track { position: relative; display: flex; flex-direction: column; gap: 22px; padding: 12px 14px; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px;
+.lp-track { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px; overflow-x: auto; border: 1px solid var(--line); border-radius: 14px;
   background: radial-gradient(circle, color-mix(in srgb, var(--muted) 22%, transparent) 1px, transparent 1.4px) 0 0 / 18px 18px, var(--bg); }
+/* the blocks stand as on the loop: four rows from the top down, each the whole width */
+.lp-band { display: flex; align-items: stretch; gap: 10px; min-width: max-content; }
+/* a block: a part of the research flow, as the console lists them; its rows are the sentinels, the stages and gates, what was sent back */
+.lp-blk { --c: var(--muted); position: relative; flex: 1 0 auto; display: flex; flex-direction: column; gap: 12px; padding: 8px 12px 12px; border: 1px solid color-mix(in srgb, var(--c) 24%, var(--line)); border-radius: 12px;
+  background: color-mix(in srgb, var(--c) 4%, var(--bg)); }
+.lp-blk > header { display: flex; align-items: center; gap: 6px; min-height: 22px; }
+.lp-blk-h { display: inline-flex; align-items: center; gap: 5px; padding: 0; border: 0; background: none; font: 650 12.5px var(--font); color: color-mix(in srgb, var(--c) 60%, var(--ink)); cursor: pointer; white-space: nowrap; }
+.lp-blk-h:hover { text-decoration: underline; }
+.lp-say { --p: var(--muted); padding: 0 7px; border-radius: 99px; font-size: 11px; font-style: normal; white-space: nowrap; color: color-mix(in srgb, var(--p) 85%, var(--ink)); background: color-mix(in srgb, var(--p) 13%, var(--panel)); }
+.lp-say.t-warn { --p: var(--lp-amber); } .lp-say.t-bad { --p: var(--lp-hard); } .lp-say.t-run { --p: var(--brand); }
+.lp-none { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .lp-wires { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
 .lp-wires path { fill: none; stroke-width: 1.6; }
 .lp-wires .w-watch { stroke: color-mix(in srgb, var(--muted) 60%, var(--line)); stroke-dasharray: 3 4; }
@@ -606,7 +660,8 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .lp-wires .w-soft { stroke: var(--lp-amber); stroke-width: 2.2; stroke-dasharray: 1 5; stroke-linecap: round; }
 .lp-head { fill: var(--muted); } .lp-head.h-hard { fill: var(--lp-hard); } .lp-head.h-soft { fill: var(--lp-amber); }
 .lp-row { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; min-width: max-content; min-height: 34px; }
-.lp-lane { flex: none; width: 74px; font: 600 10px var(--lp-mono); color: var(--muted); line-height: 1.3; }
+.lp-row.lp-soft { min-height: 30px; }
+.lp-row.lp-spine { min-height: 46px; }
 .lp-row button { font: inherit; color: inherit; cursor: pointer; }
 .lp-sen { --c: var(--muted); display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border: 1.5px solid var(--c); border-radius: 99px; background: color-mix(in srgb, var(--c) 6%, var(--panel)); font-size: 12.5px !important; white-space: nowrap; }
 .lp-sen .cv-ring2 { --c: inherit; border-color: var(--c); background: radial-gradient(circle, var(--c) 0 32%, transparent 38%); }
@@ -662,11 +717,17 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .cv-flow[data-lod=mid] { --t: 0; }
 .cv-flow[data-lod=far] { --t: 0; --f: 1; }
 .cv-flow .cv-n { position: relative; transition: border-color .15s, box-shadow .15s, border-width .2s ease-out, padding .2s ease-out; }
-.cv-flow .cv-n *, .cv-lane span, .cv-flow .cv-el { transition: font-size .2s ease-out, line-height .2s ease-out, opacity .2s ease-out, width .2s ease-out, height .2s ease-out, padding .2s ease-out; }
+.cv-flow .cv-n *, .cv-block > header :is(b, em, small), .cv-flow .cv-el { transition: font-size .2s ease-out, line-height .2s ease-out, opacity .2s ease-out, width .2s ease-out, height .2s ease-out, padding .2s ease-out; }
 .cv .react-flow__edge-path { transition: stroke-width .2s ease-out; }
 .cv-arrow, .cv-tee { scale: var(--k, 1); transition: scale .2s ease-out; }
-.cv-lane { border-width: calc(1px * var(--k)); }
-.cv-lane span { font-size: calc(13px * min(var(--k), 2)); }
+/* a block's header reads further out than its nodes do: zoomed out, the loop is its blocks and what each says */
+.cv-block { border-width: calc(1px * var(--k)); }
+.cv-block > header b { font-size: calc(15px * min(var(--k), 2.2)); }
+.cv-block > header b svg { width: calc(15px * min(var(--k), 2.2)); height: calc(15px * min(var(--k), 2.2)); }
+.cv-block > header em { font-size: calc(11.5px * min(var(--k), 1.9)); padding: calc(1px * var(--km)) calc(8px * var(--km)); }
+.cv-block > header small { font-size: calc(11.5px * var(--ks) * var(--t)); opacity: var(--t); }
+/* a part with nothing else to say (no stage, no task yet) keeps its one line at every zoom: what the project has there */
+.cv-block > header small.only { font-size: calc(11.5px * min(var(--k), 1.9)); opacity: 1; }
 .cv-flow .cv-el { font-size: calc(11.5px * var(--k)); padding: calc(1px * var(--k)) calc(3px * var(--k)); }
 /* the frame keeps its weight */
 .cv-flow .cv-n:not(.cv-gate, .cv-human) { border-width: calc(1px * var(--k)); }
@@ -694,7 +755,10 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .cv-flow .cv-task p.res { margin-top: calc(2px * var(--t)); padding: calc(2px * var(--t)) calc(6px * var(--t)); }
 .cv-flow .cv-task small { font-size: calc(10.5px * var(--ks) * var(--t)); opacity: var(--t); }
 .cv-flow .cv-ring small { font-size: calc(8.5px * var(--ks) * var(--t)); }
-.cv-flow .cv-info > :not(header, .cv-far, .react-flow__handle) { opacity: var(--t); }
+/* a card says what it holds at every zoom but the farthest: its type grows with the others', and it shows as many lines as then fit */
+.cv-flow .cv-info > .ci-body { font-size: calc(12px * var(--ks)); opacity: calc(1 - var(--f)); }
+.cv-flow .cv-info > header b { font-size: calc(12.5px * var(--km)); }
+.cv-flow .cv-info > header svg { width: calc(13px * var(--km)); height: calc(13px * var(--km)); }
 /* the name, the state and the figure grow into the room that leaves */
 .cv-flow .cv-st-b b { font-size: calc(15px * var(--km)); line-height: 1.15; }
 .cv-flow .cv-ring b { font-size: calc(11px * min(var(--km), 1.5)); }
@@ -746,7 +810,7 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
   .cv, .cv-side { animation: none; }
   .st-wait > .cg-dot, .cv-task.t-sent header em::before, .cv .react-flow__edge.w-task.t-sent .react-flow__edge-path { animation: none; }
   .cv-sen::before, .cv-gw.g-block, .cv .react-flow__edge:is(.w-hard, .w-soft) .react-flow__edge-path, .cv-st.st-wait .cv-ring { animation: none; }
-  .cv-flow .cv-n, .cv-flow .cv-n *, .cv-flow .cv-sen::before, .cv-lane span, .cv-flow .cv-el, .cv .react-flow__edge-path, .cv-arrow, .cv-tee { transition: none; }
+  .cv-flow .cv-n, .cv-flow .cv-n *, .cv-flow .cv-sen::before, .cv-block > header :is(b, em, small), .cv-flow .cv-el, .cv .react-flow__edge-path, .cv-arrow, .cv-tee { transition: none; }
 }
 
 .cg-set { display: flex; flex-direction: column; gap: 10px; }

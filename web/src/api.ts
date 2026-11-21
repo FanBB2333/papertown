@@ -1,6 +1,7 @@
 // REST calls and the live event stream from the Papertown server.
 
 import { DEMO, demoCall, demoFile } from './demo';
+import type { FlowPart } from './flow';
 import { localize, tr, trx } from './i18n';
 
 export interface Placement {
@@ -24,6 +25,7 @@ export interface WorkerRef { id: string; role: string; level: number; title?: st
 
 export interface Stage {
   key: string; name: string; status: 'todo' | 'run' | 'done' | 'wait' | 'fail'; pct: number; building: string; out: string;
+  mod: FlowPart; // the part of the research flow its work is in
   note: string | null; workers: WorkerRef[];
 }
 
@@ -142,9 +144,10 @@ export interface Check {
 export type GateLevel = 'block' | 'warn';
 export interface CheckEdit { on?: boolean; params?: Record<string, number>; title?: string; prompt?: string; every?: number; gate?: GateLevel }
 
-// a project's research loop (canvas.py): a free graph in three lanes. Stages and their hard gates along the spine,
-// the soft spec, the hard clamp and the sentinels (soft checks) above, rework tickets, corrections, tasks, notes and
-// the human gate below
+// a project's research loop (canvas.py): a free graph framed by the parts of the research flow (flow.ts), a block
+// each. A stage is in its part's block with its hard gate, the sentinels (soft checks) that watch it and what they send
+// back; the soft spec, the hard clamp and the human gate are in the overview; a task or a note is where it was put
+export interface CanvasBlock { key: FlowPart; title: string; x: number; y: number; w: number; h: number } // the slot it has while empty
 export type CanvasKind = 'stage' | 'gate' | 'hard' | 'soft' | 'spec' | 'clamp' | 'human' | 'task' | 'note' | 'info';
 export type TaskStatus = 'draft' | 'queued' | 'sent' | 'done' | 'blocked'; // queued: dispatched, waiting for its turn
 // why a queued task has not gone out: a task before it (not done, or done on a result to be looked at again), or the one at work in its directory
@@ -160,7 +163,8 @@ export interface Gate {
 export interface BoundRule { id: string; kind: 'must' | 'never' | 'ask'; text: string; from: string; action: string | null }
 export interface HumanItem { kind: 'escalated' | 'blocked' | 'stale' | 'fail' | 'ask' | 'line'; id: string; text: string; gate?: string }
 export interface CanvasNode {
-  id: string; kind: CanvasKind; x: number; y: number; title?: string; text?: string;
+  id: string; kind: CanvasKind; x: number; y: number; mod: FlowPart; title?: string; text?: string; // mod: the block it belongs to
+  w?: number; h?: number; // an info card: how big it is drawn
   ref?: string; status?: string; pct?: number; // a stage: its key, state and progress; a task: its state; an info card: what it shows
   note?: string; role?: TaskTo | null; locked?: { gate: string; title: string } | null; // a stage: its note, who works there, the gate holding it
   check?: Check; gate?: Gate;
@@ -176,7 +180,7 @@ export type EdgeKind = 'flow' | 'watch' | 'spec' | 'clamp' | 'hard_loop' | 'soft
 export interface CanvasEdge { id: string; source: string; target: string; label?: string; kind?: EdgeKind }
 export interface CanvasView {
   line_id: string; seq: number; title: string; nodes: CanvasNode[]; edges: CanvasEdge[]; gone: { id: string; title: string }[];
-  spare: { id: string; title: string }[]; lanes: { key: 'soft' | 'spine' | 'loop'; title: string; y0: number; y1: number }[]; checks: Check[];
+  spare: { id: string; title: string }[]; blocks: CanvasBlock[]; rows: FlowPart[][]; checks: Check[]; // rows: the blocks as they stand, row by row
   summary: { hard: CheckCounts; soft: CheckCounts }; tasks: Record<TaskStatus, number>;
   trend: { ts: string; pass: number; fail: number; total: number; found: number }[]; found: { first: number | null; now: number | null };
   rounds: number; ran: string | null; rules: { exclusive: boolean }; // exclusive: one task per working directory at a time
@@ -305,6 +309,7 @@ export interface Compiled { ok: boolean; log: string; pages?: number | null; sec
 export interface DataRun {
   id: string; name: string; state: string; where: string | null; started_at: string | null; finished_at: string | null;
   elapsed_s: number | null; exit_code: number | null; vram_mb: number | null; result: unknown;
+  script?: string | null; entry?: string | null; // the file of the code repository its command ran, and the script or module as the command names it
 }
 export interface LineData {
   meta: { datasets: string[]; metrics: string[]; baselines: string[]; seeds: number | null; gpu_hours: number | null; backend: string | null };
@@ -491,7 +496,10 @@ export const api = {
   orderEdge: (lineId: string, id: string, b: { order?: boolean; flip?: boolean }) => call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/edges/${encodeURIComponent(id)}`, b, kept),
   setLoopRules: (lineId: string, exclusive: boolean) => call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/rules`, { exclusive }, kept),
   restoreNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/restore`, undefined, kept),
-  moveNodes: (lineId: string, at: Record<string, [number, number]>) => call<{ ok: boolean }>('POST', `/api/lines/${lineId}/canvas/move`, { at }),
+  // blocks: where slots go, said outright (a block dragged by its header; a layout put back, with w and h). The answer: the tasks and
+  // notes that changed block by where they were dropped (mods), and the slots that went with nodes that all moved together (blocks)
+  moveNodes: (lineId: string, at: Record<string, [number, number]>, blocks?: Record<string, number[]>) =>
+    call<{ ok: boolean; mods: Record<string, FlowPart>; blocks: Record<string, number[]>; at: Record<string, [number, number]> }>('POST', `/api/lines/${lineId}/canvas/move`, { at, blocks }),
   connect: (lineId: string, source: string, target: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/edges`, { source, target }, kept),
   disconnect: (lineId: string, id: string) => call<CanvasView>('DELETE', `/api/lines/${lineId}/canvas/edges/${encodeURIComponent(id)}`, undefined, kept),
   tidyCanvas: (lineId: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/tidy`, undefined, kept),

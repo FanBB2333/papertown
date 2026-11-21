@@ -241,9 +241,9 @@ function InfoNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   const o = useContext(OpsCtx);
   if (!o?.v) return null;
   return (
-    <div className={`cv-n cv-info i-${infoKind(n)}${selected ? ' on' : ''}`} {...refOf(n)}>
+    <div className={`cv-n cv-info i-${infoKind(n)}${selected ? ' on' : ''}`} style={{ width: n.w, height: n.h }} {...refOf(n)}>
       <header><Icon n={INFO_ICON[infoKind(n)] ?? 'doc'} size={13} /><b>{n.title}</b><InfoState n={n} r={o.r} v={o.v} /></header>
-      <InfoBody n={n} r={o.r} v={o.v} />
+      <div className="ci-body"><InfoBody n={n} r={o.r} v={o.v} /></div>
       <Far t={n.title} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>

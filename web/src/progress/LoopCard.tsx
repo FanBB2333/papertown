@@ -1,8 +1,8 @@
 // A project's research loop (研究回路), as its page in 进展 shows it: how far along the loop is, which gate holds
-// it and which round of rework it is in, and what the hard and the soft checks found. Above, the loop on three
-// tracks: the sentinels, the spine of stages and gates, the loops back that are under way; below, the hard checks
-// before → after and the sentinels' verdicts, which is the report. Anything on it opens the full loop (Canvas.tsx)
-// at that node.
+// it and which round of rework it is in, and what the hard and the soft checks found. Above, the loop block by
+// block, the parts of the research flow in the console's order (flow.ts): in each, the sentinels over the stages they
+// watch, its stages and gates, and the loops back that are under way; below, the hard checks before → after and the
+// sentinels' verdicts, which is the report. Anything on it opens the full loop (Canvas.tsx) at that node or block.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type CanvasNode, type CanvasView, type Check, type ProjectCard } from '../api';
@@ -11,7 +11,8 @@ import { ago } from '../console/util';
 import { tr, trx } from '../i18n';
 import { follow, go, href } from '../route';
 import { status } from './Checks';
-import { bad, drop, gateChecks, gateLook, GATE_ST, level, loopPath, over, trail, VERDICT } from './loop';
+import { PART, type FlowPart } from '../flow';
+import { bad, blockPills, drop, gateChecks, gateLook, GATE_ST, level, loopPath, over, partLine, trail, VERDICT } from './loop';
 import './canvas.css';
 
 export function useCanvas(lineId: string) {
@@ -35,13 +36,15 @@ export function useCanvas(lineId: string) {
 // how big each kind of node is drawn: where new nodes go beside it, and the lanes' width
 export const SIZE: Record<CanvasNode['kind'], [number, number]> = {
   stage: [230, 92], gate: [250, 96], hard: [210, 76], soft: [290, 96], spec: [270, 92], clamp: [270, 92], human: [300, 104],
-  task: [290, 108], note: [200, 80], info: [250, 130],
+  task: [290, 108], note: [200, 80], info: [250, 190],
 };
+export const sizeOf = (n: CanvasNode): [number, number] => (n.w && n.h ? [n.w, n.h] : SIZE[n.kind]); // a card says how big it is
 
-// a node the loop should open at once, when it is opened from elsewhere (this card, the assistant)
-export const wanted: { node: string | null } = { node: null };
-export function openAt(seq: number, node?: string) {
+// a node the loop should open at once, or a block it should show, when it is opened from elsewhere (this card, the assistant)
+export const wanted: { node: string | null; block: FlowPart | null } = { node: null, block: null };
+export function openAt(seq: number, node?: string, block?: FlowPart) {
   wanted.node = node ?? null;
+  wanted.block = block ?? null;
   go(loopPath(seq));
 }
 
@@ -89,8 +92,8 @@ function phase(v: CanvasView) {
   return tr('巡检中');
 }
 
-// the spine, small: done stages run together, each gate a box of its own
-type Box = { id: string; kind: 'stage' | 'gate'; nodes: CanvasNode[] };
+// the stages and gates, small: in a block, done stages run together, each gate a box of its own
+type Box = { id: string; kind: 'stage' | 'gate'; mod: FlowPart; nodes: CanvasNode[] };
 function boxes(v: CanvasView): Box[] {
   const keys = ['idea', 'hatch', 'team', 'method', 'exp', 'write', 'review', 'ship'];
   const by = new Map(v.nodes.map(n => [n.id, n]));
@@ -100,10 +103,10 @@ function boxes(v: CanvasView): Box[] {
     const s = by.get(`stage:${k}`), g = by.get(`gate:${k}`);
     if (s) {
       const last = out[out.length - 1];
-      const join = last?.kind === 'stage' && s.status === 'done' && last.nodes.every(x => x.status === 'done') && !watched.has(s.id) && !last.nodes.some(x => watched.has(x.id));
-      if (join) last.nodes.push(s); else out.push({ id: s.id, kind: 'stage', nodes: [s] });
+      const join = last?.kind === 'stage' && last.mod === s.mod && s.status === 'done' && last.nodes.every(x => x.status === 'done') && !watched.has(s.id) && !last.nodes.some(x => watched.has(x.id));
+      if (join) last.nodes.push(s); else out.push({ id: s.id, kind: 'stage', mod: s.mod, nodes: [s] });
     }
-    if (g) out.push({ id: g.id, kind: 'gate', nodes: [g] });
+    if (g) out.push({ id: g.id, kind: 'gate', mod: g.mod, nodes: [g] });
   }
   return out;
 }
@@ -200,42 +203,57 @@ function Track({ v, r }: { v: CanvasView; r: ProjectCard }) {
         </defs>
         {paths.map((p, i) => <path key={i} d={p.d} className={p.cls} markerEnd={`url(#lp-a-${p.cls.split(' ')[0].slice(2)})`} />)}
       </svg>
-      <div className="lp-row lp-soft">
-        <span className="lp-lane">SOFT {tr('软巡检')}</span>
-        {sentinels.map(s => {
-          const c = s.check!, k = status(c);
-          return (
-            <button key={s.id} className={`lp-sen v-${k}`} data-box={s.id} onClick={() => openAt(v.seq, s.id)} title={c.last?.note || trx(c.text)}
-              onMouseEnter={() => setHot(s.id)} onMouseLeave={() => setHot(null)} onFocus={() => setHot(s.id)} onBlur={() => setHot(null)}>
-              <i className="cv-ring2" />{trx(c.title)}<em>{VERDICT[k]}{k === 'pass' ? ' ✓' : k === 'warn' || k === 'fail' ? ' !' : ''}</em>
-            </button>
-          );
-        })}
-        {!sentinels.length && <span className="muted small">{tr('没有开着的软巡检')}</span>}
-      </div>
-      <div className="lp-row lp-spine">
-        <span className="lp-lane">SPINE {tr('主干')}</span>
-        {spine.map((b, i) => (
-          <span key={b.id} className="lp-step">
-            {i > 0 && <i className={`lp-arrow${b.kind === 'stage' && b.nodes[0].locked ? ' lock' : ''}`} aria-hidden />}
-            <SpineBox b={b} v={v} r={r} />
-          </span>
-        ))}
-      </div>
-      <div className="lp-row lp-loop">
-        <span className="lp-lane">LOOP {tr('回路')}</span>
-        {loops.map(t => (
-          <button key={t.id} className={`lp-tk l-${t.loop}${t.escalated ? ' esc' : ''}`} data-box={t.id} onClick={() => openAt(v.seq, t.id)} title={t.title}>
-            <Icon n={t.loop === 'hard' ? 'refresh' : 'spark'} size={12} />
-            {t.loop === 'hard' ? tr('硬卡口打回重修 · 第 {0} 轮（{1}）', t.round || 1, t.id) : tr('软纠偏：{0}（{1}）', t.title ?? '', t.id)}
-            {t.escalated && <em>{tr('等你拍板')}</em>}
-          </button>
-        ))}
-        {human?.items?.length ? (
-          <button className="lp-tk l-human" data-box={human.id} onClick={() => openAt(v.seq, human.id)}><Icon n="person" size={12} />{tr('人类拍板 · {0} 件待定', human.items.length)}</button>
-        ) : null}
-        {!loops.length && !human?.items?.length && <span className="muted small">{tr('没有在打回或纠偏的事')}</span>}
-      </div>
+      {v.rows.map(row => (
+        <div key={row.join()} className="lp-band">
+          {row.map(key => {
+        const part = PART[key];
+        const ns = v.nodes.filter(n => n.mod === part.id);
+        const sens = sentinels.filter(s => s.mod === part.id), steps = spine.filter(b => b.mod === part.id), back = loops.filter(t => t.mod === part.id);
+        const mine = part.id === 'overview' && human?.items?.length ? human : null;
+        const line = partLine(part.id, r, v);
+        return (
+          <section key={part.id} className={`lp-blk b-${part.id}`}>
+            <header>
+              <button className="lp-blk-h" onClick={() => openAt(v.seq, undefined, part.id)} title={tr('在完整回路里看「{0}」', part.name)}><Icon n={part.icon} size={13} />{part.name}</button>
+              {blockPills(part.id, ns).filter(p => p.tone !== 'pass' && p.tone !== 'none').map(p => <em key={p.text} className={`lp-say t-${p.tone}`}>{p.text}</em>)}
+            </header>
+            <div className="lp-row lp-soft">
+              {sens.map(s => {
+                const c = s.check!, k = status(c);
+                return (
+                  <button key={s.id} className={`lp-sen v-${k}`} data-box={s.id} onClick={() => openAt(v.seq, s.id)} title={c.last?.note || trx(c.text)}
+                    onMouseEnter={() => setHot(s.id)} onMouseLeave={() => setHot(null)} onFocus={() => setHot(s.id)} onBlur={() => setHot(null)}>
+                    <i className="cv-ring2" />{trx(c.title)}<em>{VERDICT[k]}{k === 'pass' ? ' ✓' : k === 'warn' || k === 'fail' ? ' !' : ''}</em>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="lp-row lp-spine">
+              {steps.map((b, i) => (
+                <span key={b.id} className="lp-step">
+                  {i > 0 && <i className={`lp-arrow${b.kind === 'stage' && b.nodes[0].locked ? ' lock' : ''}`} aria-hidden />}
+                  <SpineBox b={b} v={v} r={r} />
+                </span>
+              ))}
+              {!steps.length && !mine && line && <span className="lp-none">{line}</span>}
+              {mine && <button className="lp-tk l-human" data-box={mine.id} onClick={() => openAt(v.seq, mine.id)}><Icon n="person" size={12} />{tr('人类拍板 · {0} 件待定', mine.items!.length)}</button>}
+            </div>
+            {back.length > 0 && (
+              <div className="lp-row lp-loop">
+                {back.map(t => (
+                  <button key={t.id} className={`lp-tk l-${t.loop}${t.escalated ? ' esc' : ''}`} data-box={t.id} onClick={() => openAt(v.seq, t.id)} title={t.title}>
+                    <Icon n={t.loop === 'hard' ? 'refresh' : 'spark'} size={12} />
+                    {t.loop === 'hard' ? tr('硬卡口打回重修 · 第 {0} 轮（{1}）', t.round || 1, t.id) : tr('软纠偏：{0}（{1}）', t.title ?? '', t.id)}
+                    {t.escalated && <em>{tr('等你拍板')}</em>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+          })}
+        </div>
+      ))}
     </div>
   );
 }

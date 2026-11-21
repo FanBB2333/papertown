@@ -1,8 +1,12 @@
 // A project's research loop (研究回路) at /progress/<number>/loop (and the older /canvas): the whole window is a free
-// graph laid over three lanes. The soft layer on top (the soft spec, the hard clamp, the sentinels watching stages),
-// the spine in the middle (stations and the hard gates between them), the loop back below (rework tickets a gate
-// sent back, corrections a sentinel asked for, your tasks and notes, the human gate). The lanes are where things
-// start and where 按回路规整 puts them back; nothing holds a node in one. Lines say what they do: the flow (grey
+// graph framed by the parts of the project's research flow, the ones the console lists (flow.ts: 概览, 调研, 代码仓库,
+// 实验, 数据, 论文, 员工). Each part is a block: a frame round the nodes that belong to it, with a header that says
+// how the part stands and opens its panel in the console. In a block, the sentinels sit over the stages they watch,
+// then the stages and the hard gates between them, then what was sent back (rework tickets, corrections) and your
+// tasks and notes; the overview holds the soft spec, the hard clamp and the human gate. So the loop reads at two
+// levels: far out, the blocks and what each says; closer, a block's own nodes. A block is where its nodes start and
+// where 按分块规整 puts them back; nothing holds a node in one, a task or a note dropped in another frame joins that
+// block, and a block dragged by its header moves whole. Lines say what they do: the flow (grey
 // and locked past a gate that blocks), a sentinel watching, the spec injected, the clamp, a gate's rework loop, a
 // sentinel's correction. Only the flow and what is under way are always drawn; the quieter lines (a sentinel
 // watching, the spec, the clamp, the way to the human gate) show for the node under the pointer or the open one, in
@@ -30,6 +34,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { api, type CanvasEdge, type CanvasNode, type CanvasView, type NewNode, type ProjectCard, type TaskTo } from '../api';
+import { PART, type FlowPart } from '../flow';
 import { flash, usePanelNote } from '../console/page';
 import { Icon, type IconName } from '../console/icons';
 import { tr, trx } from '../i18n';
@@ -38,10 +43,11 @@ import { follow, go, href } from '../route';
 import { clip, Inspector, KIND, label, Mark, NewForm, orderOf, sentWord, WHO, type Draft, type Kind } from './CanvasSide';
 import { status, type Act } from './Checks';
 import { LoopReport } from './LoopReport';
-import { LoopSummary, SIZE, useCanvas, wanted } from './LoopCard';
+import { LoopSummary, sizeOf, useCanvas, wanted } from './LoopCard';
+import { MoreCtx, useMore } from './CanvasInfo';
 import { kindOf, mine, nodeTypes, OpsCtx, type FNode, type Ops } from './LoopNodes';
 import { around, crosses, halfway, rounded, type Box, type Pt } from './avoid';
-import { gateLook, needs, side } from './loop';
+import { blockPills, gateLook, needs, partLine, side } from './loop';
 import type { ConsoleTarget } from './Project';
 
 type FEdge = Edge<{ bow: boolean; arrow: boolean; tee: boolean; step: boolean; hidden: boolean; label: string; tag: string; tone: string; order?: boolean; can?: boolean }>; // order: an order line; can: between two tasks, so it can be one
@@ -94,6 +100,8 @@ function fixSeed(n: CanvasNode): Draft['seed'] {
 
 const NONE: Box[] = [];
 const BoxCtx = createContext<Box[]>(NONE); // where every node is, for the lines to keep off
+type Rect = { x: number; y: number; w: number; h: number };
+const FrameCtx = createContext<Map<string, Rect>>(new Map()); // the frame of the block each node is in, for the flow to go round
 const boxOf = (n: InternalNode): Box => ({ id: n.id, x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, w: n.measured.width ?? 0, h: n.measured.height ?? 0 });
 
 const centre = (n: InternalNode) => ({ x: n.internals.positionAbsolute.x + (n.measured.width ?? 0) / 2, y: n.internals.positionAbsolute.y + (n.measured.height ?? 0) / 2 });
@@ -104,14 +112,40 @@ function rim(n: InternalNode, to: { x: number; y: number }) {
   return { x: c.x + dx * s, y: c.y + dy * s, side: sx < sy ? (dx > 0 ? Position.Right : Position.Left) : dy > 0 ? Position.Bottom : Position.Top };
 }
 const TURN: Record<Position, number> = { [Position.Left]: 0, [Position.Top]: 90, [Position.Right]: 180, [Position.Bottom]: 270 };
+// the flow's way between two blocks in different rows (see Wire), or null when a node stands in it
+function between(ba: Box, bb: Box, ca: Pt, cb: Pt, fa: Rect, fb: Rect, others: Box[], frames: Map<string, Rect>) {
+  let pts: Pt[], side: Position;
+  if (fb.y >= fa.y + fa.h) {
+    const px = ca.x + Math.min(40, ba.w / 4), gy = fb.y - 18, q = { x: bb.x - 3, y: cb.y };
+    const first = !others.some(x => frames.get(x.id) === fb && x.x < bb.x && x.y < bb.y + bb.h && x.y + x.h > bb.y); // nothing left of it in its block
+    const xl = first ? fb.x - 28 : bb.x - 40;
+    pts = [{ x: px, y: ba.y + ba.h + 3 }, { x: px, y: gy }, { x: xl, y: gy }, { x: xl, y: q.y }, q];
+    side = Position.Left;
+  } else {
+    const qx = cb.x - Math.min(40, bb.w / 4), gy = fb.y + fb.h + 18;
+    pts = [{ x: ca.x, y: ba.y - 3 }, { x: ca.x, y: gy }, { x: qx, y: gy }, { x: qx, y: bb.y + bb.h + 3 }];
+    side = Position.Bottom;
+  }
+  if (crosses(pts, others, 6)) return null;
+  return { pts, side, lx: (pts[1].x + pts[2].x) / 2, ly: pts[1].y };
+}
 
 function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
   const a = useInternalNode(source), b = useInternalNode(target);
-  const o = useContext(OpsCtx), boxes = useContext(BoxCtx);
+  const o = useContext(OpsCtx), boxes = useContext(BoxCtx), frames = useContext(FrameCtx);
   if (!a || !b) return null;
-  const ca = centre(a), cb = centre(b);
+  const ca = centre(a), cb = centre(b), fa = frames.get(source), fb = frames.get(target);
   let path: string, lx: number, ly: number, end: { x: number; y: number }, turn: number, drawn: Pt[]; // drawn: the line as points, to see what it passes through
-  if (data?.bow) { // a loop back, or the way back between two nodes already joined: an arc beside the straight line
+  let gutter = false; // a line laid along the gaps between the blocks keeps off the nodes as it is
+  const ba = boxOf(a), bb = boxOf(b);
+  // the flow from a block to one in another row keeps to the gaps. Going down: out of the bottom, along the gap over
+  // the other row, down beside the stage it goes to and in from the left. Going up: out of the top, along the gap under
+  // the other row and in from below. The two keep to their own half of the gap and of the node, so a stage the flow
+  // comes up to and leaves again (立项编队) has them side by side.
+  const far = data?.step && fa && fb && fa !== fb && (fb.y >= fa.y + fa.h || fa.y >= fb.y + fb.h) ? between(ba, bb, ca, cb, fa, fb, boxes.filter(x => x.id !== source && x.id !== target), frames) : null;
+  if (far) {
+    path = rounded(far.pts, 14); lx = far.lx; ly = far.ly; end = far.pts[far.pts.length - 1]; turn = TURN[far.side]; drawn = far.pts; gutter = true;
+  } else if (data?.bow) { // a loop back, or the way back between two nodes already joined: an arc beside the straight line
     const len = Math.hypot(cb.x - ca.x, cb.y - ca.y) || 1, bend = Math.min(110, len * 0.3);
     const ctrl = { x: (ca.x + cb.x) / 2 + ((cb.y - ca.y) / len) * bend * 2, y: (ca.y + cb.y) / 2 - ((cb.x - ca.x) / len) * bend * 2 };
     const p = rim(a, ctrl), q = rim(b, ctrl);
@@ -139,11 +173,11 @@ function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
     } else { path = `M${p.x},${p.y} L${q.x},${q.y}`; lx = (p.x + q.x) / 2; ly = (p.y + q.y) / 2; }
   }
   // through a node it does not join: round it instead, by the gaps between the nodes
-  const others = data?.hidden ? [] : boxes.filter(x => x.id !== source && x.id !== target);
+  const others = data?.hidden || gutter ? [] : boxes.filter(x => x.id !== source && x.id !== target);
   if (others.length && crosses(drawn, others, 12)) {
     const way = around(ca, cb, others);
     if (way) {
-      const ba = boxOf(a), bb = boxOf(b), inA = (p: Pt) => p.x > ba.x - 4 && p.x < ba.x + ba.w + 4 && p.y > ba.y - 4 && p.y < ba.y + ba.h + 4, inB = (p: Pt) => p.x > bb.x - 4 && p.x < bb.x + bb.w + 4 && p.y > bb.y - 4 && p.y < bb.y + bb.h + 4;
+      const inA = (p: Pt) => p.x > ba.x - 4 && p.x < ba.x + ba.w + 4 && p.y > ba.y - 4 && p.y < ba.y + ba.h + 4, inB = (p: Pt) => p.x > bb.x - 4 && p.x < bb.x + bb.w + 4 && p.y > bb.y - 4 && p.y < bb.y + bb.h + 4;
       const via = way.slice(1, -1);
       while (via.length && inA(via[0])) via.shift();
       while (via.length && inB(via[via.length - 1])) via.pop();
@@ -188,7 +222,7 @@ function toNodes(v: CanvasView, sel: string | null, draft: Draft | null, lit: Se
   }));
   if (draft) {
     out.push({ ...(old.get(NEW) ?? {}), id: NEW, type: 'ghost', position: { x: draft.x, y: draft.y }, selectable: false, connectable: false,
-      data: { n: { id: NEW, kind: 'note', x: draft.x, y: draft.y, title: KIND[draft.kind] } } });
+      data: { n: { id: NEW, kind: 'note', x: draft.x, y: draft.y, mod: 'overview', title: KIND[draft.kind] } } });
   }
   return out;
 }
@@ -210,7 +244,9 @@ function look(e: CanvasEdge, a: CanvasNode, b: CanvasNode): { cls: string; arrow
     case 'spec': return { ...none, cls: 'w-spec', arrow: true, quiet: true };
     case 'clamp': return { ...none, cls: 'w-clamp', tee: true, quiet: true };
     case 'escalate': {
-      const on = !!(b.items?.length || a.items?.length);
+      // lit when what waits at the human gate came up from this stage's gate, not for whatever else waits there
+      const human = b.kind === 'human' ? b : a, from = b.kind === 'human' ? a : b;
+      const on = !!human.items?.some(i => i.kind === 'escalated' && i.gate === from.ref);
       return { ...none, cls: `w-esc${on ? ' on' : ''}`, arrow: true, quiet: !on };
     }
     case 'member': return { ...none, cls: 'w-member' };
@@ -261,18 +297,56 @@ function toEdges(v: CanvasView, draft: Draft | null, lit: Set<string> | null, fo
   return out;
 }
 
-// the three lanes under the nodes, as wide as what is on them
-function Lanes({ v }: { v: CanvasView }) {
-  if (!v.nodes.length) return null;
-  const x0 = Math.min(...v.nodes.map(n => n.x)) - 70, x1 = Math.max(...v.nodes.map(n => n.x + SIZE[n.kind][0])) + 70;
+// ---------- the blocks: the parts of the research flow, each a frame round its nodes ----------
+
+// A frame's margin round its nodes and the room its header takes, and the gap between two frames: canvas.py lays the
+// blocks out with the same three (_fit, _block_at).
+const PAD = 28, HEAD = 64, BGAP = 56;
+interface Frame { key: FlowPart; x: number; y: number; w: number; h: number; ns: CanvasNode[] }
+// Each block's frame: round its slot, which the server keeps round its nodes (a block is as tall as what is in it, and
+// the rows under it make room), and round its nodes where they are now (`live`) while one is being dragged.
+function framesOf(v: CanvasView, live?: Map<string, Box>): Frame[] {
+  return v.blocks.map(b => {
+    const ns = v.nodes.filter(n => n.mod === b.key);
+    const at = [{ x: b.x, y: b.y, w: b.w, h: b.h }, ...(live ? ns.flatMap(n => live.get(n.id) ?? []) : [])];
+    const x0 = Math.min(...at.map(p => p.x)), y0 = Math.min(...at.map(p => p.y));
+    return { key: b.key, x: x0 - PAD, y: y0 - HEAD, w: Math.max(...at.map(p => p.x + p.w)) - x0 + 2 * PAD, h: Math.max(...at.map(p => p.y + p.h)) - y0 + HEAD + PAD, ns };
+  });
+}
+
+// The block a task or a note put at a point joins: the one whose frame the point is in, or the nearest. Under a frame,
+// down to where the next one's nodes start, is still the upper block's: where its next row of tasks goes (canvas.py
+// decides the same way, _block_at).
+function blockAt(frames: Frame[], x: number, y: number): FlowPart {
+  const far = (f: Frame) => Math.max(f.x - x, 0, x - f.x - f.w) ** 2 + Math.max(f.y + HEAD - 16 - y, 0, y - (f.y + f.h + BGAP + HEAD - 16)) ** 2;
+  return frames.reduce((a, b) => (far(b) < far(a) ? b : a)).key;
+}
+
+// The frames under the nodes. A header says how the part stands (its stages, gates, sentinels and tasks, and what the
+// project has there), zooms to the block on a click and opens the part's panel.
+function Blocks({ v, r, frames, into, onShow, onOpen }: {
+  v: CanvasView; r: ProjectCard; frames: Frame[]; into: FlowPart | null; onShow: (key: FlowPart) => void; onOpen: (key: FlowPart) => void;
+}) {
   return (
     <ViewportPortal>
-      <div className="cv-lanes" aria-hidden>
-        {v.lanes.map(l => (
-          <div key={l.key} className={`cv-lane l-${l.key}`} style={{ transform: `translate(${x0}px, ${l.y0}px)`, width: x1 - x0, height: l.y1 - l.y0 }}>
-            <span>{trx(l.title)}</span>
-          </div>
-        ))}
+      <div className="cv-blocks">
+        {frames.map(f => {
+          const p = PART[f.key], pills = blockPills(f.key, f.ns), line = partLine(f.key, r, v);
+          return (
+            <section key={f.key} className={`cv-block b-${f.key}${into === f.key ? ' into' : ''}`} style={{ transform: `translate(${f.x}px, ${f.y}px)`, width: f.w, height: f.h }} aria-label={p.name}>
+              <header className="nopan nodrag" onClick={() => onShow(f.key)} title={tr('点击放大到「{0}」', p.name)}>
+                <b><Icon n={p.icon} size={15} />{p.name}</b>
+                <span>
+                  {pills.map(x => <em key={x.text} className={`t-${x.tone}`}>{x.text}</em>)}
+                  {line && <small className={pills.length ? '' : 'only'}>{line}</small>}
+                </span>
+                <button className="ib" onClick={e => { e.stopPropagation(); onOpen(f.key); }} title={tr('在中控屏里打开「{0}」', p.name)} aria-label={tr('在中控屏里打开「{0}」', p.name)}>
+                  <Icon n="board" size={13} />
+                </button>
+              </header>
+            </section>
+          );
+        })}
       </div>
     </ViewportPortal>
   );
@@ -286,6 +360,7 @@ function Legend({ onClose }: { onClose: () => void }) {
       <p><span><i className="cv-dia" />{tr('卡口：用代码查')}</span><span><i className="cv-ring2" />{tr('巡检：负责人判断')}</span></p>
       <p><span><i className="lg c-pass" />{tr('通过')}</span><span><i className="lg c-warn" />{tr('要留意')}</span><span><i className="lg c-bad" />{tr('没过，打回重改')}</span><span><i className="lg c-wait" />{tr('还没查，或在等前面')}</span></p>
       <p><span><i className="lg-order" />{tr('顺序线：前一个任务完成后，才派发后一个')}</span></p>
+      <p><span><i className="lg-block" />{tr('分块：与中控屏「研究流程」的各项一一对应，高度随内容伸缩')}</span></p>
       <p className="more">{tr('节点和线用同一套颜色。其余的线平时收着，鼠标移到节点上或点开它就能看到。')}</p>
     </Panel>
   );
@@ -359,6 +434,7 @@ export default function CanvasPage(p: { r: ProjectCard; toast: (t: string) => vo
 function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => void; onConsole: (lineId: string, t?: ConsoleTarget) => void }) {
   const { line } = r;
   const [v, setV, reload, loadError] = useCanvas(line.id);
+  const more = useMore(line.id, `${line.stages.map(x => x.status).join()}:${r.jobs.done ?? 0}:${r.jobs.failed ?? 0}`);
   const [sel, setSel] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [wide, setWide] = useState(false);
@@ -380,7 +456,6 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   const cur = v?.nodes.find(n => n.id === sel) ?? null;
   const dark = document.documentElement.dataset.mode === 'dark';
   const todo = useMemo(() => v?.nodes.filter(needs).length ?? 0, [v]);
-  const loopY = v?.lanes.find(l => l.key === 'loop');
 
   // what stays bright: what you search for, what the view keeps, or the open node and what it is wired to
   const [lit, focus] = useMemo<[Set<string> | null, string | null]>(() => {
@@ -423,11 +498,12 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   };
   useOnViewportChange({ onChange: vp => scale(vp.zoom) });
   useEffect(() => { scale(rf.getZoom()); }, [cs.cvAdapt]); // eslint-disable-line react-hooks/exhaustive-deps
-  // the whole loop: its lanes and whatever has been dragged beyond them
+  // the whole loop: its blocks, wherever their nodes have been dragged
   const frame = useMemo(() => {
     if (!v?.nodes.length) return null;
-    const x0 = Math.min(...v.nodes.map(n => n.x)) - 70, x1 = Math.max(...v.nodes.map(n => n.x + SIZE[n.kind][0])) + 70;
-    const y0 = Math.min(...v.lanes.map(l => l.y0), ...v.nodes.map(n => n.y - 30)), y1 = Math.max(...v.lanes.map(l => l.y1), ...v.nodes.map(n => n.y + SIZE[n.kind][1] + 30));
+    const fs = framesOf(v);
+    const x0 = Math.min(...fs.map(f => f.x)) - 36, x1 = Math.max(...fs.map(f => f.x + f.w)) + 36;
+    const y0 = Math.min(...fs.map(f => f.y)) - 30, y1 = Math.max(...fs.map(f => f.y + f.h)) + 30;
     return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
   }, [v]);
   const frameKey = frame ? `${frame.x},${frame.y},${frame.width},${frame.height}` : '';
@@ -480,12 +556,36 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     Object.assign(moved.current, at);
     setV(x => x && { ...x, nodes: x.nodes.map(n => (at[n.id] ? { ...n, x: at[n.id][0], y: at[n.id][1] } : n)) });
   };
-  const store = (at: Spots) => api.moveNodes(line.id, at).catch(e => toast((e as Error).message))
-    .finally(() => { for (const k of Object.keys(at)) if (moved.current[k] === at[k]) delete moved.current[k]; });
+  const settled = (at: Spots) => { for (const k of Object.keys(at)) if (moved.current[k] === at[k]) delete moved.current[k]; };
+  // What the server answers once nodes are where they were put: a task or a note dropped in another block's frame
+  // has joined it, the blocks are fitted round their nodes again, and the nodes that went with their block (the rows
+  // under one that grew) are where it says.
+  const settle = (x: Awaited<ReturnType<typeof api.moveNodes>> | undefined, say = true) => {
+    if (!x) return;
+    const went = x.at ?? {}, slots = x.blocks ?? {}, mods = x.mods ?? {};
+    Object.assign(moved.current, went);
+    setV(y => y && { ...y, nodes: y.nodes.map(n => (went[n.id] || mods[n.id] ? { ...n, x: went[n.id]?.[0] ?? n.x, y: went[n.id]?.[1] ?? n.y, mod: mods[n.id] ?? n.mod } : n)),
+      blocks: y.blocks.map(b => { const t = slots[b.key]; return t ? { ...b, x: t[0], y: t[1], w: t[2], h: t[3] } : b; }) });
+    for (const k of Object.keys(went)) if (moved.current[k] === went[k]) delete moved.current[k];
+    const ids = Object.keys(mods);
+    if (say && ids.length) toast(tr('已归入「{0}」分块', PART[mods[ids[0]]].name));
+  };
+  const store = (at: Spots) => api.moveNodes(line.id, at).then(x => settle(x)).catch(e => toast((e as Error).message)).finally(() => settled(at));
   const place = (at: Spots) => { put(at); return store(at); };
+  // The whole layout put back as it was: every node and every block's slot. This is how a move is taken back, since
+  // moving one node can move the rows under it.
+  const placeAll = (at: Spots, slots: Record<string, number[]>) => {
+    put(at);
+    setV(x => x && { ...x, blocks: x.blocks.map(b => { const t = slots[b.key]; return t ? { ...b, x: t[0], y: t[1], w: t[2], h: t[3] } : b; }) });
+    return api.moveNodes(line.id, at, slots).then(x => settle(x, false)).catch(e => toast((e as Error).message)).finally(() => settled(at));
+  };
+  const keep = () => {
+    const was = spots(v?.nodes ?? []), slots = Object.fromEntries((v?.blocks ?? []).map(b => [b.key, [b.x, b.y, b.w, b.h]]));
+    return async () => { await placeAll(was, slots); };
+  };
   // the arrows: a step at a time, saved once the keys rest, taken back as one move
   const nudge = (ns: CanvasNode[], dx: number, dy: number) => {
-    if (!saving.current) { const was = spots(ns); remember(tr('移动'), async () => { await place(was); }); }
+    if (!saving.current) remember(tr('移动'), keep());
     const at: Spots = Object.fromEntries(ns.map(n => [n.id, [n.x + dx, n.y + dy]]));
     put(at);
     window.clearTimeout(saving.current?.timer);
@@ -557,7 +657,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     const own = ns.filter(copyable);
     if (!own.length) { toast(tr('只有任务和备注能复制成新节点')); return; }
     const one = own.length === 1;
-    make(own.map(n => ({ kind: n.kind as 'task' | 'note', x: n.x + (one ? 36 : 44), y: n.y + (one ? SIZE[n.kind][1] + 28 : 44), title: n.title, text: n.text, to: n.to })),
+    make(own.map(n => ({ kind: n.kind as 'task' | 'note', x: n.x + (one ? 36 : 44), y: n.y + (one ? sizeOf(n)[1] + 28 : 44), title: n.title, text: n.text, to: n.to })),
       tr('复制一份'), tr('复制了 {0} 个节点', own.length));
   };
   const snip = (ns: CanvasNode[]) => {
@@ -574,13 +674,12 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     const at: Spots = Object.fromEntries(sorted.map((n, i) => [n.id,
       how === 'left' ? [Math.min(...ns.map(x => x.x)), n.y] : how === 'top' ? [n.x, Math.min(...ns.map(x => x.y))]
         : how === 'row' ? [Math.round(first.x + ((last.x - first.x) * i) / k), n.y] : [n.x, Math.round(first.y + ((last.y - first.y) * i) / k)]]));
-    const was = spots(ns);
-    remember(tr('对齐'), async () => { await place(was); });
+    remember(tr('对齐'), keep());
     place(at);
   };
   const centre = (n: CanvasNode) => {
     auto.current = false;
-    rf.setCenter(n.x + SIZE[n.kind][0] / 2, n.y + SIZE[n.kind][1] / 2, { zoom: Math.max(rf.getZoom(), 0.8), duration: 300 });
+    rf.setCenter(n.x + sizeOf(n)[0] / 2, n.y + sizeOf(n)[1] / 2, { zoom: Math.max(rf.getZoom(), 0.8), duration: 300 });
   };
   const zoomTo = (how: 'in' | 'out' | 'one') => {
     auto.current = false;
@@ -588,7 +687,26 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   };
 
   const boxes = useMemo<Box[]>(() => nodes.filter(n => n.id !== NEW).map(n => ({ id: n.id, x: n.position.x, y: n.position.y,
-    w: n.measured?.width ?? SIZE[n.data.n.kind][0], h: n.measured?.height ?? SIZE[n.data.n.kind][1] })), [nodes]);
+    w: n.measured?.width ?? sizeOf(n.data.n)[0], h: n.measured?.height ?? sizeOf(n.data.n)[1] })), [nodes]);
+  // the blocks' frames, round the nodes where they are now
+  const frames = useMemo(() => (v ? framesOf(v, new Map(boxes.map(b => [b.id, b]))) : []), [v, boxes]);
+  const frameOf = useMemo(() => new Map(frames.flatMap(f => f.ns.map(n => [n.id, f as Rect] as const))), [frames]);
+  // the block a task or a note being dragged would join if it were dropped now
+  const [into, setInto] = useState<FlowPart | null>(null);
+  const aim = (moving: FNode[]) => {
+    const free = moving.map(n => n.data.n).filter(n => (n.kind === 'task' || n.kind === 'note') && !n.loop);
+    if (!v || !free.length) { if (into) setInto(null); return; }
+    const me = moving.find(n => n.id === free[0].id)!, [w, h] = sizeOf(free[0]);
+    const to = blockAt(framesOf(v), me.position.x + (me.measured?.width ?? w) / 2, me.position.y + h / 2);
+    const next = to !== free[0].mod ? to : null;
+    if (next !== into) setInto(next);
+  };
+  const showBlock = (key: FlowPart) => {
+    const f = frames.find(x => x.key === key);
+    if (!f) return;
+    auto.current = false;
+    rf.fitBounds({ x: f.x, y: f.y, width: f.w, height: f.h }, { padding: 0.08, duration: 300 });
+  };
   // dragging one node: its edges and middle lines snap to the other nodes' within a few pixels, with a guide drawn
   const [guides, setGuides] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const onNodes = (changes: NodeChange<FNode>[]) => {
@@ -617,11 +735,10 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   const grid = (ns: CanvasNode[]) => {
     if (ns.length < 2) return;
     const sorted = [...ns].sort((a, b) => a.y - b.y || a.x - b.x), across = Math.ceil(Math.sqrt(ns.length));
-    const w = Math.max(...ns.map(n => SIZE[n.kind][0])), h = Math.max(...ns.map(n => SIZE[n.kind][1]));
+    const w = Math.max(...ns.map(n => sizeOf(n)[0])), h = Math.max(...ns.map(n => sizeOf(n)[1]));
     const x0 = Math.min(...ns.map(n => n.x)), y0 = Math.min(...ns.map(n => n.y));
     const at: Spots = Object.fromEntries(sorted.map((n, i) => [n.id, [x0 + (i % across) * (w + 40), y0 + Math.floor(i / across) * (h + 40)]]));
-    const was = spots(ns);
-    remember(tr('排成网格'), async () => { await place(was); });
+    remember(tr('排成网格'), keep());
     place(at);
   };
 
@@ -652,7 +769,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     begin({ kind, x: Math.round(p.x - 100), y: Math.round(p.y - 24), link });
   };
   const add = (kind: Kind) => { const p = middle(); begin({ kind, x: Math.round(p.x - 100), y: Math.round(p.y - 30), link: null }); };
-  const beside = (n: CanvasNode, kind: Kind, seed?: Draft['seed']) => begin({ kind, x: n.x + SIZE[n.kind][0] + 70, y: n.y + 50, link: n.id, seed });
+  const beside = (n: CanvasNode, kind: Kind, seed?: Draft['seed']) => begin({ kind, x: n.x + sizeOf(n)[0] + 70, y: n.y + 50, link: n.id, seed });
   async function create(b: NewNode) {
     setBusy(true);
     try {
@@ -704,7 +821,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     fix: n => {
       if (n.kind === 'gate' && n.gate) gate(n.gate.stage, 'rework');
       else if (n.kind === 'hard' && n.check?.stage) gate(n.check.stage, 'rework');
-      else if (n.check?.kind === 'soft') begin({ kind: 'task', x: n.x, y: (loopY?.y0 ?? n.y + 200) + 60, link: n.id, seed: fixSeed(n) });
+      else if (n.check?.kind === 'soft') begin({ kind: 'task', x: n.x, y: n.y + 280, link: n.id, seed: fixSeed(n) }); // under the stage it watches, in its block
     },
     ask: n => { if (n.check) act(() => api.askCheck(line.id, n.check!.id), tr('已经发给负责人，它判断完会出现在这里')); },
     send: (n, chain) => { act(() => api.sendNode(line.id, n.id, !!chain), sentWord(n.id, n.to ?? 'lead')); },
@@ -731,19 +848,19 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   };
   const onDragStop = (_e: unknown, _n: FNode, all: FNode[]) => {
     dragging.current = false;
+    setInto(null);
     const real = all.filter(n => n.id !== NEW);
     const ghost = all.find(n => n.id === NEW);
     if (ghost) setDraft(d => d && { ...d, x: Math.round(ghost.position.x), y: Math.round(ghost.position.y) });
     if (!real.length) return;
     const at: Spots = Object.fromEntries(real.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)]]));
     const was = Object.fromEntries(Object.entries(before.current).filter(([id]) => at[id]));
-    if (Object.keys(was).some(id => was[id][0] !== at[id][0] || was[id][1] !== at[id][1])) remember(tr('移动'), async () => { await place(was); });
+    if (Object.keys(was).some(id => was[id][0] !== at[id][0] || was[id][1] !== at[id][1])) remember(tr('移动'), keep());
     place(at);
   };
   const tidy = () => {
-    if (!confirm(tr('按回路规整：工序、卡口、巡检、软限制和硬边界放回各自的泳道，修补单放到卡口下面？你的任务、备注和画的线不动。'))) return;
-    const was = spots(v?.nodes ?? []);
-    remember(tr('按回路规整'), async () => { await place(was); });
+    if (!confirm(tr('按分块规整：每个分块里的资料卡、工序、卡口和巡检归位，修补单、任务和备注排到它们下面。连线保持原样。'))) return;
+    remember(tr('按分块规整'), keep());
     act(() => api.tidyCanvas(line.id)).then(() => setTimeout(() => fit(), 60));
   };
   const runAll = () => act(() => api.runChecks(line.id), tr('查完了'));
@@ -814,7 +931,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     null,
     { icon: 'target', label: tr('适应窗口'), run: () => fit(), key: 'F' },
     { icon: 'lens', label: tr('缩放到 100%'), run: () => zoomTo('one'), key: '0' },
-    { icon: 'wand', label: tr('按回路规整'), run: tidy },
+    { icon: 'wand', label: tr('按分块规整'), run: tidy },
     { icon: prefs.lines ? 'check' : 'eye', label: prefs.lines ? tr('收起次要的连线') : tr('显示全部连线'), run: () => setPrefs({ lines: !prefs.lines }) },
     { icon: 'sliders', label: tr('画布设置…'), run: () => go('/settings/loop') },
     null,
@@ -840,10 +957,11 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     [tr('视角')]: report ? tr('前后对比') : filter === 'todo' ? tr('阻断与预警') : filter === 'hard' ? tr('硬卡口') : filter === 'soft' ? tr('软巡检') : null,
     [tr('在找')]: q.trim() || null,
   });
-  const want = useRef<string | null>(wanted.node);
-  useEffect(() => { wanted.node = null; }, []);
+  const want = useRef<string | null>(wanted.node), wantBlock = useRef<FlowPart | null>(wanted.block);
+  useEffect(() => { wanted.node = null; wanted.block = null; }, []);
   const bring = () => {
-    const id = want.current;
+    const id = want.current, block = wantBlock.current;
+    if (block && !id && frames.length && ready) { wantBlock.current = null; setTimeout(() => showBlock(block), 80); }
     if (!id || !v?.nodes.some(n => n.id === id)) return;
     want.current = null;
     pick(id);
@@ -901,6 +1019,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
 
   const views: [Filter | 'report', string, number?][] = [['all', tr('全部回路')], ['todo', tr('阻断与预警'), todo], ['hard', tr('硬卡口')], ['soft', tr('软巡检')], ['report', tr('前后对比')]];
   return createPortal(
+    <MoreCtx.Provider value={more}>
     <div className="cv" role="dialog" aria-modal="true" aria-label={tr('#{0} 的研究回路', line.seq)}>
       <header className="cv-top">
         <a className="cv-back" href={href(back)} onClick={e => follow(e, back)} title={tr('回到项目页')}><Icon n="left" size={15} /><span>#{line.seq}</span><b>{line.title}</b></a>
@@ -935,7 +1054,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
             {close => (
               <>
                 <Row close={close} it={{ icon: 'target', label: tr('适应窗口'), run: () => fit(), key: 'F' }} />
-                <Row close={close} it={{ icon: 'wand', label: tr('按回路规整'), run: tidy, off: busy || !v }} />
+                <Row close={close} it={{ icon: 'wand', label: tr('按分块规整'), run: tidy, off: busy || !v }} />
                 <Row close={close} it={{ icon: 'doc', label: tr('前后对比'), run: () => setReport(true), off: !v }} />
                 <hr />
                 <label className="cv-mi"><input type="checkbox" checked={prefs.lines} onChange={e => setPrefs({ lines: e.target.checked })} /><span>{tr('显示全部连线')}</span></label>
@@ -983,7 +1102,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
 
       <div className="cv-body">
         <div className={`cv-flow${lit ? ' has-dim' : ''}${cs.cvMarch ? '' : ' still'}`} ref={wrap} onMouseMove={e => { pointer.current = { x: e.clientX, y: e.clientY }; }} onMouseLeave={() => { pointer.current = null; }} onDoubleClick={e => { if ((e.target as HTMLElement).classList.contains('react-flow__pane')) here(e.clientX, e.clientY, 'task'); }}>
-          <OpsCtx.Provider value={ops}><BoxCtx.Provider value={cs.cvAvoid ? boxes : NONE}>
+          <OpsCtx.Provider value={ops}><BoxCtx.Provider value={cs.cvAvoid ? boxes : NONE}><FrameCtx.Provider value={frameOf}>
             <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodes} onEdgesChange={onEdgesChange}
               connectionMode={ConnectionMode.Loose} colorMode={dark ? 'dark' : 'light'} minZoom={floor * 0.98} maxZoom={1.8} translateExtent={extent} zoomOnDoubleClick={false} panOnScroll={cs.cvScroll === 'pan'} zoomOnPinch
               snapToGrid={prefs.snap} snapGrid={[+cs.cvGap, +cs.cvGap]} deleteKeyCode={['Backspace', 'Delete']} multiSelectionKeyCode={['Meta', 'Control', 'Shift']} disableKeyboardA11y
@@ -996,6 +1115,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
               onNodeClick={(e, n) => { if (n.id === NEW) return; if (e.metaKey || e.ctrlKey || e.shiftKey) setSel(null); else pick(n.id); }}
               onSelectionStart={() => setSel(null)} onPaneClick={() => { setSel(null); setEditing(null); }} onMoveStart={e => { setCtx(null); if (e) auto.current = false; }}
               onNodeDragStart={(_, _n, all) => { dragging.current = true; setCtx(null); before.current = Object.fromEntries(all.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)]])); }}
+              onNodeDrag={(_, _n, all) => aim(all)}
               onNodeDragStop={(e, n, all) => { setGuides({ x: null, y: null }); onDragStop(e, n, all); }}
               onSelectionDragStart={(_, all) => { dragging.current = true; before.current = Object.fromEntries(all.map(n => [n.id, [Math.round(n.position.x), Math.round(n.position.y)]])); }}
               onSelectionDragStop={(e, all) => onDragStop(e, all[0], all)}
@@ -1010,7 +1130,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
               }}
               onEdgeContextMenu={(e, edge) => { if (!virtual(edge.id)) menuAt(e, edgeItems(edge.id)); }}>
               {cs.cvBg !== 'none' && <Background variant={cs.cvBg === 'lines' ? BackgroundVariant.Lines : BackgroundVariant.Dots} gap={+cs.cvGap} size={cs.cvBg === 'lines' ? 1 : 1.4} />}
-              {v && cs.cvLanes && <Lanes v={v} />}
+              {v && cs.cvLanes && <Blocks v={v} r={r} frames={frames} into={into} onShow={showBlock} onOpen={key => onConsole(line.id, { mod: key })} />}
               {(guides.x != null || guides.y != null) && frame && (
                 <ViewportPortal>
                   {guides.x != null && <i className="cv-guide v" style={{ left: guides.x, top: frame.y - 400, height: frame.height + 800 }} />}
@@ -1027,7 +1147,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                 </Panel>
               )}
             </ReactFlow>
-          </BoxCtx.Provider></OpsCtx.Provider>
+          </FrameCtx.Provider></BoxCtx.Provider></OpsCtx.Provider>
           {v && report && <LoopReport v={v} onPick={pick} onClose={() => setReport(false)} toast={toast} />}
           {loadError && <p className="cv-err" role="alert"><span>{loadError}</span><button className="lnk" onClick={reload}>{tr('重试')}</button></p>}
           {!v && !loadError && <p className="cv-wait muted">{tr('加载中…')}</p>}
@@ -1045,7 +1165,8 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
           {ctx.items.map((it, i) => <Row key={i} it={it} close={() => setCtx(null)} />)}
         </div>
       )}
-    </div>,
+    </div>
+    </MoreCtx.Provider>,
     document.querySelector('.proto') ?? document.body, // the app's root: where the look's colours are
   );
 }

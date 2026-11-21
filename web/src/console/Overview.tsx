@@ -1,4 +1,4 @@
-// The overview panel: the project's stages (each opening the panel that does its work), its parts and the
+// The overview panel: the project's stages (each opening the panel its work is in: the stage says which), its parts and the
 // mill's full sheet folded away underneath. How it is going, deciding and talking to its lead are in 进展.
 
 import type { Line, WsInfo } from '../api';
@@ -15,9 +15,6 @@ interface Props {
   onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; onOpen: (id: string) => void;
 }
 
-export const STAGE_MOD: Record<string, ModId> = {
-  idea: 'survey', hatch: 'survey', team: 'agents', method: 'survey', exp: 'exp', write: 'paper', review: 'paper', ship: 'paper',
-};
 const REAL = tr('工序按顺序走：方法设计在造纸厂，代码和实验在仓库与实验农场，写作在印刷厂，最后经质检所出厂。');
 
 export function Overview(p: Props) {
@@ -72,7 +69,7 @@ export function Overview(p: Props) {
         <ol className="ov-steps" style={{ ['--done' as string]: done, ['--n' as string]: l.stages.length }}>
           {l.stages.map((s, i) => (
             <li key={s.key} className={`ov-step s-${s.status}`} style={{ ['--i' as string]: i }} data-ref={`stage:${s.key}`} data-ref-label={`${tr('工序')} ${s.name}`}>
-              <button onClick={() => p.go(STAGE_MOD[s.key] ?? 'overview')} title={s.note ?? s.out}>
+              <button onClick={() => p.go(s.mod ?? 'overview')} title={s.note ?? s.out}>
                 <span className="ov-dot">{s.status === 'done' ? '✓' : s.status === 'fail' ? '✕' : i + 1}</span>
                 <b>{s.name}</b>
                 <span className="muted small">{s.status === 'run' ? `${s.pct}%` : s.status === 'wait' ? tr('等你') : s.status === 'fail' ? tr('出错') : '\u00a0'}</span>

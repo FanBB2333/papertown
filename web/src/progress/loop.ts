@@ -1,7 +1,8 @@
 // What the research loop's pieces (Canvas.tsx, LoopNodes.tsx, CanvasSide.tsx, LoopCard.tsx, LoopReport.tsx) say
 // about it in common: the words for a gate's state and a sentinel's verdict, a gate's checks, what wants you.
 
-import type { CanvasNode, CanvasView, Check, Gate, GateState, TaskTo } from '../api';
+import type { CanvasNode, CanvasView, Check, Gate, GateState, ProjectCard, TaskTo } from '../api';
+import type { FlowPart } from '../flow';
 import { tr, trx } from '../i18n';
 import { status } from './Checks';
 
@@ -47,8 +48,45 @@ export const side = (n: CanvasNode): 'hard' | 'soft' | 'both' | 'none' =>
     : n.kind === 'soft' || n.kind === 'spec' || n.loop === 'soft' ? 'soft'
       : n.kind === 'stage' || n.kind === 'human' ? 'both' : 'none';
 
+// A block of the loop (a part of the research flow, flow.ts) in a few words, for its header: how its stages stand, the
+// worst of its gates, its sentinels' warnings, its tasks and, in the overview, what waits for you.
+export interface Pill { text: string; tone: 'pass' | 'warn' | 'bad' | 'run' | 'none' }
+export function blockPills(key: FlowPart, ns: CanvasNode[]): Pill[] {
+  const out: Pill[] = [];
+  const stages = ns.filter(n => n.kind === 'stage'), tasks = ns.filter(n => n.kind === 'task');
+  if (stages.length) {
+    const done = stages.filter(s => s.status === 'done').length;
+    out.push({ text: tr('工序 {0}/{1}', done, stages.length), tone: stages.some(s => s.status === 'fail') ? 'bad' : done === stages.length ? 'pass'
+      : stages.some(s => s.status === 'wait') ? 'warn' : stages.some(s => s.status === 'run') ? 'run' : 'none' });
+  }
+  const looks = ns.filter(n => n.kind === 'gate' && n.gate).map(n => gateLook(n.gate!));
+  if (looks.includes('block')) out.push({ text: tr('卡口阻断'), tone: 'bad' });
+  else if (looks.includes('warn')) out.push({ text: tr('卡口告警'), tone: 'warn' });
+  else if (looks.length && looks.every(l => l === 'pass')) out.push({ text: tr('卡口放行'), tone: 'pass' });
+  const off = ns.filter(n => n.kind === 'soft' && n.check?.on && ['warn', 'fail'].includes(status(n.check))).length;
+  if (off) out.push({ text: tr('巡检预警 {0}', off), tone: 'warn' });
+  if (tasks.length) {
+    const open = tasks.filter(t => t.status !== 'done').length, stuck = tasks.filter(t => t.status === 'blocked' || t.stale).length;
+    out.push({ text: stuck ? tr('任务 {0} · {1} 待处理', tasks.length, stuck) : open ? tr('任务 {0} · {1} 未完成', tasks.length, open) : tr('任务 {0} · 已完成', tasks.length),
+      tone: stuck ? 'bad' : open ? 'run' : 'pass' });
+  }
+  const mine = key === 'overview' ? ns.find(n => n.kind === 'human')?.items?.length ?? 0 : 0;
+  if (mine) out.push({ text: tr('{0} 件等你拍板', mine), tone: 'warn' });
+  return out;
+}
+// what the project has in a part of the flow, as the console's overview says it: its repository, jobs, results, paper, agents
+export function partLine(key: FlowPart, r: ProjectCard, v: CanvasView): string {
+  const code = r.repos.code, paper = r.repos.paper, j = r.jobs, c = r.card;
+  if (key === 'overview') return c ? [c.progress != null && `${c.progress}%`, c.milestone].filter(Boolean).join(' · ') : '';
+  if (key === 'code') return code && !code.missing ? [code.name, code.branch, code.dirty ? tr('{0} 处改动', code.dirty) : ''].filter(Boolean).join(' · ') : tr('暂无代码仓库');
+  if (key === 'exp') return [j.running && tr('{0} 在跑', j.running), j.queued && tr('{0} 排队', j.queued), j.done && tr('{0} 个有结果', j.done), j.failed && tr('{0} 失败', j.failed)].filter(Boolean).join(' · ');
+  if (key === 'paper') return paper && !paper.missing ? [paper.main ?? paper.name, paper.pdf ? 'PDF' : tr('还没编译')].filter(Boolean).join(' · ') : tr('暂无论文仓库');
+  if (key === 'agents') return (['lead', 'coder', 'writer'] as const).filter(x => v.agents[x].there).map(x => ROLE[x]).join(' · ') || tr('还没有 agent');
+  return '';
+}
+
 // the line a station shows under its name: what its stage has produced, from the project's card
-export function stationLine(n: CanvasNode, r: import('../api').ProjectCard, v: CanvasView): string {
+export function stationLine(n: CanvasNode, r: ProjectCard, v: CanvasView): string {
   const k = n.ref, paper = r.repos.paper, code = r.repos.code;
   if (n.locked) return tr('等「{0}」卡口清零', trx(n.locked.title));
   if (k === 'exp' && (r.jobs.done || r.jobs.running || r.jobs.queued || r.jobs.failed)) {

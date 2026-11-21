@@ -20,7 +20,8 @@ import { Experiments } from './Experiments';
 import { Icon, type IconName } from './icons';
 import { LeadChat } from './LeadChat';
 import { NewModels } from './NewModels';
-import { Overview, STAGE_MOD } from './Overview';
+import { Overview } from './Overview';
+import { FLOW } from '../flow';
 import { flash, setPlace, usePanelNote } from './page';
 import { Paper } from './Paper';
 import { Survey } from './Survey';
@@ -30,14 +31,9 @@ import '../console.css';
 
 export type ModId = 'overview' | 'survey' | 'code' | 'exp' | 'data' | 'paper' | 'agents' | 'depts' | 'skills' | 'mcp' | 'rag' | 'rules' | 'trace';
 
+// the research flow's parts (flow.ts: the research loop frames its nodes by the same ones), then the town's own panels
 const MODS: { id: ModId; name: string; sub: string; icon: IconName; town?: boolean }[] = [
-  { id: 'overview', name: tr('概览'), sub: tr('项目走到哪一步、在等你做什么'), icon: 'compass' },
-  { id: 'survey', name: tr('调研'), sub: tr('查重结论、空白点、最接近的工作和方法，一页读完'), icon: 'lens' },
-  { id: 'code', name: tr('代码仓库'), sub: tr('项目的代码：浏览、修改、对比改动'), icon: 'code' },
-  { id: 'exp', name: tr('实验'), sub: tr('nvidb 上正在跑的、接下来要跑的任务'), icon: 'flask' },
-  { id: 'data', name: tr('数据'), sub: tr('实验的元数据、结果和数据文件'), icon: 'table' },
-  { id: 'paper', name: tr('论文'), sub: tr('LaTeX 源码和排出的 PDF，左右对照'), icon: 'doc' },
-  { id: 'agents', name: tr('员工'), sub: tr('这个项目的负责人、代码员工和写作员工'), icon: 'people' },
+  ...FLOW,
   { id: 'depts', name: tr('部门'), sub: tr('小镇各部门在做什么：项目、员工和实验'), icon: 'dots', town: true },
   { id: 'skills', name: 'Skills', sub: tr('给全局、项目、对话配 skill'), icon: 'spark', town: true },
   { id: 'mcp', name: 'MCP', sub: tr('小镇接的 MCP server 和它们给的工具'), icon: 'plug', town: true },
@@ -355,7 +351,7 @@ export function Console(p: Props) {
 
 // a research panel's mark: how its stages stand
 function markOf(line: Line | null, m: ModId) {
-  const st = (line?.stages ?? []).filter(s => STAGE_MOD[s.key] === m && s.key !== 'idea').map(s => s.status);
+  const st = (line?.stages ?? []).filter(s => s.mod === m && s.key !== 'idea').map(s => s.status);
   if (m === 'data') return line?.stages.find(s => s.key === 'exp')?.status === 'done' ? 'done' : '';
   if (!st.length) return '';
   return st.includes('run') ? 'run' : st.includes('wait') ? 'wait' : st.every(s => s === 'done') ? 'done' : '';

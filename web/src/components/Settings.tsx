@@ -179,8 +179,8 @@ function LoopSection({ s }: { s: S }) {
         </Row>
       </Card>
       <Card title={tr('画布上显示')}>
-        <Row label={tr('泳道')} desc={tr('软层、主干和回路三条背景带')}>
-          <Toggle label={tr('泳道')} value={s.cvLanes} onChange={set('cvLanes')} />
+        <Row label={tr('分块')} desc={tr('按「研究流程」的各项给节点加上背景框和标题')}>
+          <Toggle label={tr('分块')} value={s.cvLanes} onChange={set('cvLanes')} />
         </Row>
         <Row label={tr('图例')}><Toggle label={tr('图例')} value={s.cvLegend} onChange={set('cvLegend')} /></Row>
         <Row label={tr('小地图')}><Toggle label={tr('小地图')} value={s.cvMap} onChange={set('cvMap')} /></Row>
