@@ -102,8 +102,14 @@ class Handler(socketserver.StreamRequestHandler):
                 elif method == 'agent.get':
                     result = {'type': 'agent_info', 'agent': a}
                 elif method == 'agent.read':
-                    assert p['source'] == 'recent_unwrapped'
-                    result = {'type': 'pane_read', 'read': {'text': '第一行\n处理完成 ✓\n'}}
+                    if p['source'] == 'recent_unwrapped' and a['agent_status'] == 'working':
+                        # Like herdr with a full-screen agent: history scrolls back only while idle.
+                        error = 'agent_not_idle'
+                    elif p['source'] == 'visible':
+                        result = {'type': 'pane_read', 'read': {'text': '屏幕上的画面\n'}}
+                    else:
+                        assert p['source'] == 'recent_unwrapped'
+                        result = {'type': 'pane_read', 'read': {'text': '第一行\n处理完成 ✓\n'}}
                 elif method == 'agent.prompt':
                     if a['agent_status'] == 'blocked':
                         error = 'agent_blocked'
@@ -159,6 +165,10 @@ def test_buckets_seen_text_and_status(setup):
     detail = client.get(url).json()
     assert detail['terminal']['watch']['unread'] and detail['text'] == '第一行\n处理完成 ✓\n'
     assert detail['queued'] == []
+    # A full-screen agent at work: herdr refuses the history read, so the page shows its screen.
+    host.emit(agent_status='working', completion_seq=11)
+    t.refresh()
+    assert client.get(url).json()['text'] == '屏幕上的画面\n'
     assert client.get('/api/herdr').json()['socket'] == host.server_address
     assert client.get('/api/herdr').json()['count'] == 1
     assert not any('focus' in method or 'seen' in method for method, _ in host.calls)

@@ -120,7 +120,14 @@ class Herdr:
         return agent
 
     def read(self, target: str, lines: int = 200) -> str:
-        read = self.call("agent.read", {"target": target, "source": "recent_unwrapped", "lines": lines}).get("read")
+        try:
+            read = self.call("agent.read", {"target": target, "source": "recent_unwrapped", "lines": lines}).get("read")
+        except HerdrError as e:
+            # Full-screen agents keep their history on the alternate screen, which herdr
+            # can only scroll back while they are idle. While they work, show the screen.
+            if e.code != "agent_not_idle":
+                raise
+            read = self.call("agent.read", {"target": target, "source": "visible"}).get("read")
         if not isinstance(read, dict) or not isinstance(read.get("text"), str):
             raise HerdrError("herdr 返回了无效数据")
         return read["text"]

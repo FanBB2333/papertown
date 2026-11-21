@@ -64,7 +64,7 @@ export function TerminalRoom({ terminal, toast }: { terminal: Terminal; toast: (
     {error && <div className="aw-notice" role="alert"><p>{error}</p><button className="btn" onClick={() => reload.current()}>{tr('重试')}</button></div>}
     <pre className="terminal-screen" ref={screen} tabIndex={0} aria-label={tr('终端内容')} onScroll={e => {
       const el = e.currentTarget; bottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    }}>{data ? data.text || tr('终端暂未输出内容。') : tr('加载中…')}</pre>
+    }}>{data ? data.text.replace(/\n(?:[ \t]*\n){2,}/g, '\n\n') || tr('终端暂未输出内容。') : tr('加载中…')}</pre>
     {current.watch.bucket === 'needs' ? <div className="terminal-keys">
       <p>{tr('请根据终端画面选择按键，处理当前对话框。')}</p>
       <div className="btns" role="group" aria-label={tr('终端按键')}>{KEYS.map(([key, name]) => <button className="btn" key={key} disabled={busy || !!error} onClick={() => press(key)}>{tr(name)}</button>)}</div>
