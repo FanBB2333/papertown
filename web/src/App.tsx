@@ -1,5 +1,5 @@
-// The app behind the landing, in two tabs: 进展 (every project at a glance, and talking to each) and
-// 小镇 (each project in detail: the console's panels, the 2D map or the 3D walk), with the chat,
+// The app behind the landing, in three tabs: progress, agents and the town. The town shows
+// each project in detail: the console panels, the 2D map or the 3D walk, with the chat,
 // building rooms and settings over them. Hash params open a state directly: #open=<building>[&line=<id>], #chat, #3d.
 
 import { typing } from './components/walk';
@@ -15,6 +15,8 @@ import { Console } from './console/Console';
 import { setPlace } from './console/page';
 import { Icon } from './console/icons';
 import { Progress } from './progress/Progress';
+import { Agents } from './agents/Agents';
+import { useOverview } from './agents/overview';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { follow, go, href, path, PATHS, type Route, type View } from './route';
 import { getSettings, useSettings } from './settings';
@@ -39,8 +41,9 @@ function useToasts() {
   return { toasts, push };
 }
 
-const TABS: ['cards' | 'town', string, string][] = [
+const TABS: ['cards' | 'agents' | 'town', string, string][] = [
   ['cards', tr('进展'), tr('每个项目的进展、风险和要你决定的事，也能和负责人对话')],
+  ['agents', tr('员工'), tr('查看员工状态、处理请求并参与对话')],
   ['town', tr('小镇'), tr('每个项目的细节：中控屏的面板，或者在小镇里走动')],
 ];
 
@@ -96,6 +99,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const mapApi = useRef<MapApi | null>(null);
   const hash3d = useRef(hp.has('3d') || (getSettings().start === '3d' && !hp.has('open') && view === 'world'));
   const st = useSettings();
+  const { data: overview } = useOverview();
   const openSettings = useCallback(() => { cameIn.current = true; go('/settings'); }, []);
   const closeSettings = useCallback(() => {
     if (cameIn.current) history.back();
@@ -294,8 +298,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     if (view === 'console') return;
     const l = route.view === 'cards' && route.seq ? lines.find(x => x.seq === route.seq) : undefined;
     const canvas = route.view === 'cards' && route.sub === 'canvas' && !!l;
-    setPlace(l ? { id: l.id, seq: l.seq, title: l.title } : null, canvas ? 'canvas' : view === 'cards' ? 'progress' : 'town',
-      canvas ? tr('研究回路') : view === 'cards' ? tr('进展') : tr('小镇地图'));
+    setPlace(l ? { id: l.id, seq: l.seq, title: l.title } : null, canvas ? 'canvas' : view === 'cards' ? 'progress' : view === 'agents' ? 'agents' : 'town',
+      canvas ? tr('研究回路') : view === 'cards' ? tr('进展') : view === 'agents' ? tr('员工') : tr('小镇地图'));
   }, [view, route, lines]);
 
   // commands from the macOS app's menus (macos/)
@@ -303,7 +307,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     const on = (e: Event) => {
       const d = (e as CustomEvent<{ type?: string; view?: string; text?: string }>).detail ?? {};
       if (d.type === 'settings') openSettings();
-      else if (d.type === 'view' && (d.view === 'cards' || d.view === 'console' || d.view === 'world')) go(d.view === 'console' ? boardAt.current : PATHS[d.view]);
+      else if (d.type === 'view' && (d.view === 'cards' || d.view === 'agents' || d.view === 'console' || d.view === 'world')) go(d.view === 'console' ? boardAt.current : PATHS[d.view]);
       else if (d.type === 'toast' && d.text) push(d.text);
     };
     addEventListener('papertown:command', on);
@@ -362,6 +366,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
       )}
       <Progress active={view === 'cards' && !covered} seq={route.view === 'cards' ? route.seq : undefined} sub={route.view === 'cards' ? route.sub : undefined} page={route.view === 'cards' ? route.page : undefined} toast={push} onOpen={openProject}
         decide={decide} />
+      {view === 'agents' && <Agents id={route.agent} active={!covered && !settingsOpen} lines={lines} toast={push} />}
       {consoleUp && (
         <Console active={view === 'console' && !covered} at={route.view === 'console' ? route : undefined} onPlace={onPlace}
           lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
@@ -372,7 +377,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
         <a className="brand" href={href('/')} onClick={e => follow(e, '/')} title={tr('回到首页')}><Logo /><b>Papertown</b></a>
         <nav className="seg" ref={tabs} aria-label={tr('视图')}>
           {TABS.map(([t, name, tip]) => {
-            const on = (t === 'cards') === (view === 'cards'), to = t === 'cards' ? PATHS.cards : townAt.current;
+            const on = t === 'town' ? view === 'console' || view === 'world' : view === t, to = t === 'town' ? townAt.current : PATHS[t];
             return <a key={t} href={href(to)} className={on ? 'on' : ''} aria-current={on ? 'page' : undefined} title={tip} onClick={e => follow(e, to)}>{name}</a>;
           })}
         </nav>
@@ -388,6 +393,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           <span>{tr('本周')} <b>${hud.bank.week.toFixed(2)}</b></span>
         </div>}
         <div className="hud-r">
+          {!!overview?.counts.needs && <a className="chip warn aw-count" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('等你 {0}', overview.counts.needs)}</a>}
           {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? tr('没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板。仓库和印刷厂的 pi 用 pi 自己的设置') : hud.model}>
             {!online ? tr('连接断开') : DEMO ? tr('静态演示') : hud.offline ? tr('离线模式') : hud.provider}</span>}
           {DEMO && <RepoLink />}

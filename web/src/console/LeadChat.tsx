@@ -3,8 +3,9 @@
 // one; what it waits on you for, pinned above the message box.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, type Agent, type AssistantConv, type Report, type SayMode, type StartOpts } from '../api';
+import { api, type Agent, type AssistantConv, type Report, type StartOpts } from '../api';
 import { fold, PaseoLog, PaseoPick, usePaseoTalk } from '../components/AgentRoom';
+import { Compose } from '../agents/Compose';
 import { AGENT_STATUS } from '../components/MillRoom';
 import { tr, trx } from '../i18n';
 import { Earlier, History } from './Convs';
@@ -75,38 +76,19 @@ function Talk({ agent: initial, asks, head, toast, onAnswered }: {
 }) {
   const t = usePaseoTalk(initial);
   const rows = useMemo(() => fold(t.items ?? [], i => i.kind === 'tool'), [t.items]);
-  const [text, setText] = useState('');
-  const [mode, setMode] = useState<SayMode>('steer');
-  const scroll = useRef<HTMLDivElement>(null);
-  const box = useRef<HTMLTextAreaElement>(null);
+  const scroll = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
-  const working = t.agent.status === 'working', typed = !!text.trim();
+  const working = t.agent.status === 'working';
 
   useLayoutEffect(() => {
     const el = scroll.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [rows, t.sent.length, t.asks.length, working]);
-  useLayoutEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
-  }, [text]);
-
-  function send() {
-    const s = text.trim();
-    if (!s) return;
-    stick.current = true;
-    api.say(t.agent.id, s, working ? mode : undefined).then(event => {
-      if (event.data.delivered) t.wrote(s);
-      setText(current => current.trim() === s ? '' : current);
-    }).catch(e => toast((e as Error).message));
-  }
   return (
     <>
       {head(t.agent)}
       <div className="as-mid">
-        <div className="as-log lc-log" ref={scroll} onScroll={e => {
+        <div className="as-log lc-log" ref={el => { scroll.current = el; t.readRef.current = el; }} onScroll={e => {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}>
@@ -123,26 +105,8 @@ function Talk({ agent: initial, asks, head, toast, onAnswered }: {
           {asks.length > 2 && <p className="muted small">{tr('还有 {0} 件等你回答', asks.length - 2)}</p>}
         </div>
       )}
-      <div className="as-foot">
-        <div className="as-box" onMouseDown={e => { if (e.target === e.currentTarget) { e.preventDefault(); box.current?.focus(); } }}>
-          <textarea ref={box} rows={1} value={text}
-            placeholder={!working ? tr('问它项目的事，或者交代它一件事') : mode === 'steer' ? tr('插话，它做完这一步就会看到') : tr('排队，等它做完手上的事')}
-            onChange={e => setText(e.target.value)} onKeyDown={enterSends(send)} />
-          <div className="as-tools">
-            {working && (
-              <div className="seg mini" role="radiogroup" aria-label={tr('它在忙时，消息怎么交给它')}>
-                <button role="radio" aria-checked={mode === 'steer'} className={mode === 'steer' ? 'on' : ''} onClick={() => setMode('steer')}
-                  title={tr('插进它手上的事：做完当前这一步就会看到')}>{tr('插话')}</button>
-                <button role="radio" aria-checked={mode === 'queue'} className={mode === 'queue' ? 'on' : ''} onClick={() => setMode('queue')}
-                  title={tr('等它把手上的事做完再交给它')}>{tr('排队')}</button>
-              </div>
-            )}
-            {working && !typed
-              ? <button className="as-send stop" title={tr('打断它手上的事')} onClick={() => api.abort(t.agent.id).catch(e => toast((e as Error).message))}><Icon n="stop" size={14} /></button>
-              : <button className="as-send" disabled={!typed} title={tr('发送（Enter）')} onClick={send}><Icon n="send" size={16} /></button>}
-          </div>
-        </div>
-      </div>
+      <Compose agent={t.agent} queued={t.queued} permission={t.asks.length > 0} toast={toast} onChanged={t.reload}
+        onSent={(event, text) => { stick.current = true; if (event.data.delivered) t.wrote(text); }} />
     </>
   );
 }

@@ -51,7 +51,7 @@ const lines = await get('/api/lines');
 for (const u of ['/api/messages?limit=120', '/api/trace?limit=80', '/api/papers/fresh', '/api/departments', '/api/skills', '/api/skim', '/api/skim?fresh=1',
   '/api/skim/resolve', '/api/mcp', '/api/rag', '/api/gpus', '/api/gpus?fresh=1', '/api/paseo', '/api/paseo/conversations', '/api/llm',
   '/api/agents?role=coder', '/api/agents?role=writer', '/api/agents?role=monitor', '/api/agents?role=lead', '/api/agents?role=',
-  '/api/cards', '/api/paseo/news', '/api/reports', '/api/bounds', '/api/assistant']) await get(u);
+  '/api/agents/overview', '/api/cards', '/api/paseo/news', '/api/reports', '/api/bounds', '/api/assistant']) await get(u);
 await get('/api/library?limit=5000', 'library_all');
 
 for (const pl of world.placements) { await get(`/api/buildings/${pl.id}`); await get(`/api/buildings/${pl.type}`); }
@@ -102,6 +102,7 @@ for (const id of jobs) await get(`/api/jobs/${id}?tail=400`);
 for (const role of ['coder', 'writer', 'monitor', 'lead']) {
   for (const row of saved.get(demoKey('/api/agents', `?role=${role}`))?.roster ?? []) if (row.agent) agents.set(row.agent.id, row.agent);
 }
+for (const g of saved.get(demoKey('/api/agents/overview'))?.groups ?? []) for (const a of g.agents) agents.set(a.id, a);
 for (const a of agents.values()) {
   await get(`/api/agents/${a.id}?after=0`);
   await get(`/api/agents/${a.id}/timeline`);

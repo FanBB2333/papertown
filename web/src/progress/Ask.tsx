@@ -5,14 +5,15 @@
 
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, type AssistantConv, type ProjectCard, type Report } from '../api';
-import { Text } from '../components/AgentRoom';
+import { api, type Agent, type AssistantConv, type ProjectCard, type Report } from '../api';
+import { Compose } from '../agents/Compose';
+import { Text, usePaseoTalk } from '../components/AgentRoom';
 import { StatusTag } from '../components/MillRoom';
 import { Earlier } from '../console/Convs';
 import { Icon } from '../console/icons';
 import { useLead } from '../console/Lead';
 import { AskCard, LeadChat } from '../console/LeadChat';
-import { ago, enterSends } from '../console/util';
+import { ago } from '../console/util';
 import { tr, trx } from '../i18n';
 import { follow, go, href } from '../route';
 import { pagesPath } from './Pages';
@@ -98,16 +99,10 @@ export function AskPage({ r, rows, toast }: { r: ProjectCard; rows: ProjectCard[
 export function ChatBox({ r, toast }: { r: ProjectCard; toast: (t: string) => void }) {
   const { line } = r;
   const [lv, again] = useLead(line.id);
-  const [text, setText] = useState('');
   const lead = lv?.agent?.started ? lv.agent : null;
   const asks = lv?.asks ?? [];
   const reports = latest(lv?.reports, 3);
   const page = askPath(line.seq);
-  async function send() {
-    const s = text.trim();
-    if (!s || !lead) return;
-    try { await api.say(lead.id, s); setText(''); go(page); } catch (e) { toast((e as Error).message); }
-  }
   return (
     <section className="psec pj-ask">
       <header className="psec-h">
@@ -117,14 +112,7 @@ export function ChatBox({ r, toast }: { r: ProjectCard; toast: (t: string) => vo
       {asks.slice(0, 2).map(q => <AskCard key={q.id} q={q} toast={toast} onDone={again} />)}
       {asks.length > 2 && <a className="small" href={href(page)} onClick={e => follow(e, page)}>{tr('还有 {0} 件等你回答', asks.length - 2)}</a>}
       {lead ? (
-        <form className="ak-comp mini" onSubmit={e => { e.preventDefault(); send(); }}>
-          <textarea rows={2} value={text} maxLength={4000} placeholder={tr('问负责人项目的事，或者交代它一件事…')}
-            onChange={e => setText(e.target.value)} onKeyDown={enterSends(send)} />
-          <div className="ak-comp-row">
-            <span className="small muted">{lead.model ?? tr('项目负责人')}</span>
-            <button className="ak-send" type="submit" disabled={!text.trim()} aria-label={tr('发送')}><Icon n="send" size={15} /></button>
-          </div>
-        </form>
+        <QuickCompose agent={lead} page={page} toast={toast} />
       ) : lv && <p className="muted small">{tr('还没有负责人。打开对话就能给这个项目配一个。')}</p>}
       {reports.length > 0 && (
         <ul className="pj-recent">
@@ -138,4 +126,10 @@ export function ChatBox({ r, toast }: { r: ProjectCard; toast: (t: string) => vo
       )}
     </section>
   );
+}
+
+// The project teaser sends through the same modes, then opens the full conversation.
+function QuickCompose({ agent, page, toast }: { agent: Agent; page: string; toast: (s: string) => void }) {
+  const t = usePaseoTalk(agent);
+  return <Compose agent={t.agent} queued={t.queued} permission={t.asks.length > 0} toast={toast} onChanged={t.reload} onSent={() => go(page)} />;
 }

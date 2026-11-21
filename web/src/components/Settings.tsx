@@ -371,6 +371,7 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
 }
 
 function Agents() {
+  const s = useSettings();
   const [paseo, setPaseo] = useState<PaseoInfo | null | 'err'>(null);
   const [pi, setPi] = useState<Roster['available'] | null>(null);
   const [n, setN] = useState(0);
@@ -383,6 +384,11 @@ function Agents() {
   const info = paseo && paseo !== 'err' ? paseo : null, st = info?.status;
   return (
     <>
+      <Card title={tr('对话')}>
+        <Row label={tr('默认发送方式')} desc={tr('员工工作时使用此方式发送消息，⌘/Ctrl+Enter 始终排队。')}>
+          <Pick label={tr('默认发送方式')} value={s.agentSend} options={[['steer', tr('插话')], ['queue', tr('排队')], ['interrupt', tr('打断并发送')]]} onChange={set('agentSend')} />
+        </Row>
+      </Card>
       <Card title="Paseo">
         <Row label={tr('连接')} desc={tr('托管 Claude Code、Codex、OpenCode 等 agent 的本机守护进程')}>
           <Badge variant={st?.ok ? 'success' : paseo === null ? 'neutral' : 'warning'}>{paseo === null ? tr('检查中…') : st?.ok ? tr('已连接{0}', st.version ? ` · ${st.version}` : '') : tr('未连接')}</Badge>

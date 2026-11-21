@@ -7,14 +7,14 @@
 import { useSyncExternalStore } from 'react';
 import { DEMO } from './demo';
 
-export type View = 'cards' | 'console' | 'world';
-export interface Route { view: View | 'landing' | 'settings'; seq?: number; mod?: string; sub?: 'ask' | 'pages' | 'canvas'; page?: string }
+export type View = 'cards' | 'agents' | 'console' | 'world';
+export interface Route { view: View | 'landing' | 'settings'; seq?: number; mod?: string; sub?: 'ask' | 'pages' | 'canvas'; page?: string; agent?: string }
 
-export const PATHS: Record<View, string> = { cards: '/progress', console: '/console', world: '/town' };
+export const PATHS: Record<View, string> = { cards: '/progress', agents: '/agents', console: '/console', world: '/town' };
 
 function read(): string {
-  if (DEMO) return location.hash.startsWith('#/') ? location.hash.slice(1).split('?')[0] : '/';
-  return location.pathname.replace(/\/+$/, '') || '/';
+  if (DEMO) return location.hash.startsWith('#/') ? location.hash.slice(1) : '/';
+  return (location.pathname.replace(/\/+$/, '') || '/') + location.search;
 }
 
 // the old status page is part of 进展 now
@@ -58,11 +58,12 @@ export function usePath(): string {
 }
 
 export function parse(p: string): Route {
-  const [, a, b, c, d] = p.split('/');
+  const [, a, b, c, d] = p.split('?')[0].split('/');
   if (!a) return { view: 'landing' };
   const seq = b && /^\d+$/.test(b) ? Number(b) : undefined;
   if (a === 'progress') return { view: 'cards', seq, sub: seq != null && (c === 'ask' || c === 'pages') ? c : seq != null && (c === 'loop' || c === 'canvas') ? 'canvas' : undefined, page: c === 'pages' ? d || undefined : undefined };
   if (a === 'console') return { view: 'console', seq, mod: c || undefined };
+  if (a === 'agents') return { view: 'agents', agent: b ? decodeURIComponent(b) : undefined };
   if (a === 'town') return { view: 'world' };
   if (a === 'settings') return { view: 'settings', mod: b || undefined };
   return { view: 'cards' };

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { api, type Agent, type CanvasNode } from '../api';
 import { fold, ImportCard, PaseoLog, PaseoPick, usePaseoTalk } from '../components/AgentRoom';
 import { AGENT_STATUS } from '../components/MillRoom';
-import { enterSends } from '../console/util';
+import { Compose } from '../agents/Compose';
 import { tr } from '../i18n';
 import type { Act } from './Checks';
 
@@ -24,10 +24,8 @@ export function NodeConversation({ node, lineId, busy, act }: { node: CanvasNode
 
 function Talk({ initial }: { initial: Agent }) {
   const talk = usePaseoTalk(initial);
-  const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [mode, setMode] = useState<'steer' | 'queue'>('queue');
   const { agent, items, asks, sent } = talk;
   const working = agent.status === 'working';
   const rows = useMemo(() => fold(items ?? [], item => item.kind === 'tool'), [items]);
@@ -36,38 +34,19 @@ function Talk({ initial }: { initial: Agent }) {
     setBusy(true); setError('');
     try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
-  const send = () => {
-    const message = text.trim();
-    if (!message) return;
-    void run(async () => {
-      const event = await api.say(agent.id, message, working ? mode : undefined);
-      if (event.data.delivered) talk.wrote(message);
-      setText('');
-    });
-  };
   return <>
     <div className="cv-row">
       <span className={`dot s-${agent.status}`} /><span>{AGENT_STATUS[agent.status]} · {agent.model}</span>
       <button className="btn" disabled={busy} onClick={() => run(() => api.openInPaseo(agent.id))}>Paseo ↗</button>
-      {working && <button className="btn" disabled={busy} onClick={() => run(() => api.abort(agent.id))}>{tr('打断')}</button>}
     </div>
     {agent.cwd && <p className="small muted path">{agent.cwd}</p>}
     {(error || talk.err) && <p role="alert" className="warn-box">{error || talk.err}</p>}
-    <div className="transcript node-transcript">
+    <div className="transcript node-transcript" ref={talk.readRef}>
       {items === null && <p>{tr('加载中…')}</p>}
       <PaseoLog rows={rows} sent={sent} asks={asks} working={working}
         onPermit={(id, allow) => run(async () => { await api.permit(agent.id, id, allow); talk.answered(id); })} />
-      {talk.queued.map(event => <div className="note" key={event.id}><b>{tr('排队')}</b><p>{String(event.data.text)}</p>
-        {event.data.error && <p className="err">{String(event.data.error)}</p>}</div>)}
     </div>
-    <div className="cv-form">
-      <textarea aria-label={tr('消息')} rows={3} value={text} disabled={busy} onChange={e => setText(e.target.value)} onKeyDown={enterSends(send)} />
-      <div className="cv-row">
-        {working && <select aria-label={tr('发送方式')} value={mode} onChange={e => setMode(e.target.value as typeof mode)}>
-          <option value="queue">{tr('排队')}</option><option value="steer">{tr('插话')}</option>
-        </select>}
-        <button className="btn pri" disabled={busy || !text.trim() || !!agent.down} onClick={send}>{tr('发送')}</button>
-      </div>
-    </div>
+    <Compose agent={agent} queued={talk.queued} permission={asks.length > 0} toast={setError} onChanged={talk.reload}
+      onSent={(event, text) => { if (event.data.delivered) talk.wrote(text); }} />
   </>;
 }

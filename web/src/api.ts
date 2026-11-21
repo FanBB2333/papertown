@@ -67,6 +67,19 @@ export interface Sheet {
 export type AgentRole = 'coder' | 'writer' | 'monitor' | 'assistant' | 'lead';
 export type AgentStatus = 'stopped' | 'starting' | 'idle' | 'working' | 'error' | 'watching' | 'offline'; // offline: in Paseo, while Paseo cannot be reached
 
+export type Bucket = 'needs' | 'failed' | 'review' | 'working' | 'idle' | 'off';
+export interface Watch {
+  bucket: Bucket; why: string | null; since: string | null; turn: string | null;
+  doing: { kind: string; text: string } | null; queued: number; unread: boolean;
+  permissions: (PaseoPermission & { kind: string })[]; asks: Report[];
+}
+export interface AgentTask { id: string; title: string; status: string }
+export interface Loose { id: string; title: string | null; provider: string; model: string | null; status: string; cwd: string | null; updated: string }
+export interface Overview {
+  paseo: { ok: boolean; note: string; live: boolean }; counts: Record<Bucket, number>;
+  groups: { line: ProjectRef | null; agents: Agent[]; loose: Loose[] }[];
+}
+
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act'; data: any }
 
 export interface ModelRef { provider: string; id: string; name: string; reasoning: boolean; contextWindow: number | null }
@@ -85,6 +98,7 @@ export interface Agent {
   runtime: 'pi' | 'paseo'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
   down?: string | null; // why it cannot be reached now (its status is then offline)
   node_id?: string | null; workspace_id?: string | null;
+  watch?: Watch; task?: AgentTask | null;
 }
 
 export interface PaseoModel { id: string; name: string; thinking: string[]; default_thinking: string | null }
@@ -223,7 +237,7 @@ export interface PaseoConversation {
   updated: string; last_user: string | null; linked: string | null;
 }
 export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
-export interface PaseoPermission { id: string; name: string; title: string | null; arg: string }
+export interface PaseoPermission { id: string; name: string; title: string | null; arg: string; kind?: string }
 export interface StartOpts { runtime?: 'pi' | 'paseo'; provider?: string; model?: string; thinking?: string }
 
 export interface AssistantView { agent: Agent; asks: AgentEvent[]; acts: AgentEvent[]; actions: Record<string, { what: string; args: string }> }
@@ -252,7 +266,7 @@ export interface Department {
   lines: (ProjectRef & { pct: number })[]; agents: DeptAgent[]; jobs: Pick<Job, 'id' | 'name' | 'status' | 'progress' | 'line_id' | 'backend'>[];
   gpus: { total: number; idle: number; running: number } | null; worker: WorkerRef | null;
 }
-export type SayMode = 'steer' | 'queue';
+export type SayMode = 'steer' | 'queue' | 'interrupt';
 export interface RosterRow { line: ProjectRef; agent: Agent | null }
 export interface Roster { roster: RosterRow[]; available: { ok: boolean; note: string; pi: string | null; tmux: string | null } }
 
@@ -418,6 +432,10 @@ export const api = {
   gpus: (fresh = false) => call<GpuStatus>('GET', `/api/gpus${fresh ? '?fresh=1' : ''}`),
   cancelJob: (id: string) => call<Job>('POST', `/api/jobs/${id}/cancel`),
   roster: (role: AgentRole) => call<Roster>('GET', `/api/agents?role=${role}`),
+  overview: () => call<Overview>('GET', '/api/agents/overview', undefined, asIs),
+  seen: (id: string) => call<unknown>('POST', `/api/agents/${encodeURIComponent(id)}/seen`),
+  queueAct: (id: string, eventId: number, what: 'now' | 'drop') =>
+    call<unknown>('POST', `/api/agents/${encodeURIComponent(id)}/queue/${eventId}`, { what }),
   agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`, undefined, said),
   openAgent: (lineId: string, role: AgentRole) => call<Agent>('POST', '/api/agents', { line_id: lineId, role }),
   startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
@@ -535,7 +553,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);

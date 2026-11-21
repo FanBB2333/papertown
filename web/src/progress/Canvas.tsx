@@ -24,6 +24,7 @@
 // that shows all of it keeps showing all of it as the window (or the inspector beside it) changes its size. Loaded
 // on demand, with the graph library.
 
+import { query } from '../route';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Popover } from '@cloudflare/kumo';
@@ -997,7 +998,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     [tr('视角')]: report ? tr('前后对比') : filter === 'todo' ? tr('阻断与预警') : filter === 'hard' ? tr('硬卡口') : filter === 'soft' ? tr('软巡检') : null,
     [tr('在找')]: q.trim() || null,
   });
-  const want = useRef<string | null>(wanted.node), wantBlock = useRef<FlowPart | null>(wanted.block);
+  const want = useRef<string | null>(wanted.node ?? query().get('node')), wantBlock = useRef<FlowPart | null>(wanted.block);
   useEffect(() => { wanted.node = null; wanted.block = null; }, []);
   const bring = () => {
     const id = want.current, block = wantBlock.current;

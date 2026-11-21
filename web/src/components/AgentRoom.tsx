@@ -2,7 +2,7 @@
 // tmux terminal), then its conversation. The assistant and the lead's chat reuse the hooks and pieces here.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { api, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type SayMode, type StartOpts } from '../api';
+import { api, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
 import { Select, type Opt } from './Select';
@@ -10,7 +10,10 @@ import { FileLinks } from './Sheet';
 import { ConvSkills } from './SkillRoom';
 import { History } from '../console/Convs';
 import { LeadAside } from '../console/Lead';
-import { ago, enterSends } from '../console/util';
+import { Compose } from '../agents/Compose';
+import { useReadReceipt, useTalkPoll } from '../agents/live';
+import { agentName, isWorking, TurnTime, WatchStatus } from '../agents/watch';
+import { ago } from '../console/util';
 import { tr, trx } from '../i18n';
 
 interface Props extends RoomActions {
@@ -320,8 +323,7 @@ function Aside({ agent, role, line, onOpen, toast, children }: { agent: Agent; r
   );
 }
 
-// A Paseo agent's conversation, polled faster while it works or right after you wrote. What you sent
-// shows until the timeline has it; `own` finds your words in a message as it went out.
+// A Paseo conversation follows live events and keeps a slow poll for missed updates.
 export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t) {
   const [agent, setAgent] = useState(initial);
   const [items, setItems] = useState<PaseoItem[] | null>(null);
@@ -329,42 +331,26 @@ export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t
   const [queued, setQueued] = useState<AgentEvent[]>([]);
   const [err, setErr] = useState('');
   const [sent, setSent] = useState<{ text: string; had: number }[]>([]);
-  const status = useRef(initial.status);
-  const nudge = useRef(0);
-  const mine = useRef(own);
-  const latest = useRef<PaseoItem[]>([]);
+  const mine = useRef(own), latest = useRef<PaseoItem[]>([]), alive = useRef(true);
   mine.current = own;
-  status.current = agent.status;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const times = (list: PaseoItem[], t: string) => list.filter(i => i.kind === 'user' && mine.current(i.text ?? '').trim() === t).length;
-
-  useEffect(() => {
-    let alive = true, t = 0;
-    const tick = async () => {
-      try {
-        const d = await api.timeline(initial.id);
-        if (!alive) return;
-        setAgent(d.agent);
-        setItems(d.items);
-        latest.current = d.items;
-        setAsks(d.paseo?.permissions ?? []);
-        setQueued(d.queued);
-        setSent(xs => xs.filter(x => times(d.items, x.text) <= x.had));
-        setErr('');
-      } catch (e) {
-        if (alive) setErr((e as Error).message);
-      }
-      if (alive) t = window.setTimeout(tick, status.current === 'working' || Date.now() - nudge.current < 20000 ? 2000 : 7000);
-    };
-    tick();
-    return () => { alive = false; clearTimeout(t); };
-  }, [initial.id]);
+  const reload = useTalkPoll(agent, async () => {
+    try {
+      const d = await api.timeline(initial.id);
+      if (!alive.current) return;
+      setAgent(d.agent); setItems(d.items); latest.current = d.items;
+      setAsks(d.agent.watch?.permissions ?? d.paseo?.permissions ?? []); setQueued(d.queued);
+      setSent(xs => xs.filter(x => times(d.items, x.text) <= x.had)); setErr('');
+    } catch (e) { if (alive.current) setErr((e as Error).message); }
+  });
   useEffect(() => listen(e => { if (e.type === 'agent' && e.agent?.id === initial.id) setAgent(e.agent); }), [initial.id]);
-
+  const readRef = useReadReceipt(initial.id, items === null ? null : JSON.stringify(items));
   const texts = useMemo(() => sent.map(x => x.text), [sent]);
   return {
-    agent, items, asks, queued, err, sent: texts,
-    wrote: (t: string) => { nudge.current = Date.now(); setSent(xs => [...xs, { text: t, had: times(latest.current, t) + xs.filter(x => x.text === t).length }]); },
-    answered: (id: string) => { nudge.current = Date.now(); setAsks(xs => xs.filter(x => x.id !== id)); },
+    agent, items, asks, queued, err, sent: texts, reload, readRef,
+    wrote: (t: string) => { setSent(xs => [...xs, { text: t, had: times(latest.current, t) + xs.filter(x => x.text === t).length }]); reload(); },
+    answered: (id: string) => { setAsks(xs => xs.filter(x => x.id !== id)); reload(); },
   };
 }
 
@@ -398,14 +384,21 @@ export function PaseoLog({ rows, sent, asks, working, onPermit, children }: {
   );
 }
 
-function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent; line?: Line; role: AgentRole } & RoomActions) {
-  const { agent, items, asks, err, sent, wrote, answered } = usePaseoTalk(initial);
+type ChatProps = { agent: Agent; line?: Line; role: AgentRole; toast: (t: string) => void; onOpen?: RoomActions['onOpen'] };
+
+// The standalone page supplies its own context column.
+export function Conversation({ agent, toast }: { agent: Agent; toast: (t: string) => void }) {
+  return agent.runtime === 'paseo'
+    ? <PaseoChat key={agent.ext_id ?? agent.id} agent={agent} role={agent.role} toast={toast} />
+    : <AgentChat key={agent.id} agent={agent} role={agent.role} toast={toast} />;
+}
+
+function PaseoChat({ agent: initial, line, role, toast, onOpen }: ChatProps) {
+  const { agent, items, asks, queued, err, sent, wrote, answered, reload, readRef } = usePaseoTalk(initial);
   const [full, setFull] = useState(false);
-  const [text, setText] = useState('');
   const [hist, setHist] = useState(false);
-  const [mode, setMode] = useState<SayMode>('steer');
-  const working = agent.status === 'working';
-  const scroll = useRef<HTMLDivElement>(null);
+  const working = isWorking(agent);
+  const scroll = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
   const r = ROLE[role];
 
@@ -414,29 +407,17 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
     if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [items?.length, sent.length, full]);
 
-  const run = (fn: () => Promise<unknown>) => fn().catch(e => toast((e as Error).message));
-  function send() {
-    const t = text.trim();
-    if (!t) return;
-    stick.current = true;
-    run(async () => {
-      const event = await api.say(agent.id, t, working ? mode : undefined);
-      if (event.data.delivered) wrote(t);
-      setText(current => current.trim() === t ? '' : current);
-    });
-  }
-
+  const run = (fn: () => Promise<unknown>) => fn().then(() => reload()).catch(e => toast((e as Error).message));
   const rows = useMemo(() => fold(items ?? [], i => i.kind === 'tool'), [items]);
   return (
     <>
       <section className="room-main chat-main paseo-main">
         <header className="chat-head">
           <div className="chat-who">
-            <span className={`dot s-${agent.status}`} />
-            <div><b>{r.name}{line ? ` · #${line.seq}` : ''}</b><span className="muted small">{AGENT_STATUS[agent.status]} · {agent.model ?? 'Paseo'}</span></div>
+            <WatchStatus agent={agent} />
+            <div><b>{agentName(agent)}{line ? ` · #${line.seq}` : ''}</b><span className="muted small">{agent.model ?? 'Paseo'}</span><TurnTime agent={agent} /></div>
           </div>
           <div className="btns">
-            {working && <button className="btn" onClick={() => run(() => api.abort(agent.id))}>{tr('打断')}</button>}
             <button className={`btn as-hist${hist ? ' on' : ''}`} aria-expanded={hist} onClick={() => setHist(h => !h)}>{tr('之前的对话')}</button>
             <button className="btn" title={tr('新对话：用同一个模型重新开始')} onClick={() => run(() => api.newConv(agent.id))}>{tr('新对话')}</button>
             <button className="btn" disabled={!agent.web} title={agent.web ? tr('Paseo 自己的界面：命令、模型切换、权限审批') : tr('Paseo 的网页端没开')} onClick={() => setFull(f => !f)}>{full ? tr('精简视图') : tr('完整界面')}</button>
@@ -448,7 +429,7 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
           ? <FullPaseo src={agent.web} title={`Paseo · ${r.place}`} />
           : (
             <>
-              <div className="transcript" ref={scroll} onScroll={e => {
+              <div className="transcript" ref={el => { scroll.current = el; readRef.current = el; }} onScroll={e => {
                 const el = e.currentTarget;
                 stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
               }}>
@@ -457,31 +438,19 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
                 <PaseoLog rows={rows} sent={sent} asks={asks} working={working}
                   onPermit={(id, allow) => run(async () => { await api.permit(agent.id, id, allow); answered(id); })} />
               </div>
-              <div className="chat-compose">
-                <textarea value={text} rows={2} placeholder={!working ? tr('对{0}说点什么，Enter 发送', r.name) : mode === 'steer' ? tr('插话，它做完这一步就会看到') : tr('排队，等它做完手上的事')}
-                  onChange={e => setText(e.target.value)}
-                  onKeyDown={enterSends(send)} />
-                {working && (
-                  <div className="seg mini" role="radiogroup" aria-label={tr('它在忙时，消息怎么交给它')}>
-                    <button role="radio" aria-checked={mode === 'steer'} className={mode === 'steer' ? 'on' : ''} onClick={() => setMode('steer')}
-                      title={tr('插进它手上的事：做完当前这一步就会看到')}>{tr('插话')}</button>
-                    <button role="radio" aria-checked={mode === 'queue'} className={mode === 'queue' ? 'on' : ''} onClick={() => setMode('queue')}
-                      title={tr('等它把手上的事做完再交给它')}>{tr('排队')}</button>
-                  </div>
-                )}
-                <button className="btn pri" disabled={!text.trim()} onClick={send}>{tr('发送')}</button>
-              </div>
+              <Compose agent={agent} queued={queued} permission={asks.length > 0} toast={toast} onChanged={reload}
+                onSent={(event, text) => { stick.current = true; if (event.data.delivered) wrote(text); }} />
             </>
           )}
       </section>
-      <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
+      {onOpen && <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
         <div className="pnl-s">
           <h4>Paseo</h4>
           <p className="muted small">{tr('同一段对话也在 Paseo 的桌面端和手机上。权限审批在这里就能点，命令和模型切换在「完整界面」里。')}</p>
           <div className="btns"><button className="btn" onClick={() => run(() => api.brief(agent.id))}>{tr('发送项目简报')}</button></div>
           {agent.cwd && <p className="muted small path">{tr('目录：')}{agent.cwd}</p>}
         </div>
-      </Aside>
+      </Aside>}
     </>
   );
 }
@@ -561,11 +530,17 @@ export function usePiTalk(initial: Agent) {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [live, setLive] = useState('');
 
-  useEffect(() => {
-    let alive = true;
-    api.agent(initial.id).then(d => { if (alive) { setAgent(d.agent); setEvents(d.events); } }).catch(() => {});
-    return () => { alive = false; };
-  }, [initial.id]);
+  const [err, setErr] = useState('');
+  const [ready, setReady] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const reload = useTalkPoll(agent, async () => {
+    try {
+      const d = await api.agent(initial.id);
+      if (alive.current) { setAgent(d.agent); setEvents(d.events); setReady(true); setErr(''); }
+    } catch (e) { if (alive.current) setErr((e as Error).message); }
+  }, true);
+  const readRef = useReadReceipt(initial.id, ready ? JSON.stringify(events) + live : null);
 
   useEffect(() => listen(e => {
     if (e.type === 'agent' && e.agent?.id === initial.id) setAgent(e.agent);
@@ -579,7 +554,8 @@ export function usePiTalk(initial: Agent) {
     const ends = new Map(events.filter(e => e.kind === 'tool_end').map(e => [e.data.id, e]));
     return events.filter(e => e.kind !== 'tool_end').map(ev => ({ ev, end: ev.kind === 'tool' ? ends.get(ev.data.id) : undefined }) as Item);
   }, [events]);
-  return { agent, items, live };
+  const queued = events.filter(e => e.kind === 'user' && e.data.held && !e.data.delivered && !e.data.dropped);
+  return { agent, items, live, queued, err, reload, readRef };
 }
 
 // a pi conversation's body: its entries and tool trails, the reply streaming in, the dots while it works
@@ -595,10 +571,10 @@ export function PiLog({ rows, live, working }: { rows: (Item | Item[])[]; live: 
   );
 }
 
-function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent; line?: Line; role: AgentRole } & RoomActions) {
-  const { agent, items, live } = usePiTalk(initial);
+function AgentChat({ agent: initial, line, role, toast, onOpen }: ChatProps) {
+  const { agent, items, live, queued, err, reload, readRef } = usePiTalk(initial);
   const [text, setText] = useState('');
-  const scroll = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
   const r = ROLE[role];
   const rows = useMemo(() => fold(items, x => x.ev.kind === 'tool'), [items]);
@@ -608,15 +584,7 @@ function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
     if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [items.length, live]);
 
-  const run = (fn: () => Promise<unknown>) => fn().catch(e => toast((e as Error).message));
-  function send() {
-    const t = text.trim();
-    if (!t) return;
-    setText('');
-    stick.current = true;
-    run(() => api.say(agent.id, t));
-  }
-
+  const run = (fn: () => Promise<unknown>) => fn().then(() => reload()).catch(e => toast((e as Error).message));
   const on = ['idle', 'working', 'starting'].includes(agent.status);
 
   const st = agent.state;
@@ -629,44 +597,38 @@ function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
       <section className="room-main chat-main">
         <header className="chat-head">
           <div className="chat-who">
-            <span className={`dot s-${agent.status}`} />
-            <div><b>{r.name}{line ? ` · #${line.seq}` : ''}</b><span className="muted small">{AGENT_STATUS[agent.status]}{!st && agent.model ? ` · ${agent.model}` : ''}{agent.cost ? ` · $${agent.cost.toFixed(3)}` : ''}</span></div>
+            <WatchStatus agent={agent} />
+            <div><b>{agentName(agent)}{line ? ` · #${line.seq}` : ''}</b><span className="muted small">{AGENT_STATUS[agent.status]}{!st && agent.model ? ` · ${agent.model}` : ''}{agent.cost ? ` · $${agent.cost.toFixed(3)}` : ''}</span><TurnTime agent={agent} /></div>
           </div>
           {st && on && <PiSwitch s={st} send={t => run(() => api.say(agent.id, t))} />}
           <div className="btns">
-            {agent.status === 'working' && <button className="btn" onClick={() => run(() => api.abort(agent.id))}>{tr('打断')}</button>}
+            <button className="btn" onClick={() => run(() => api.newConv(agent.id))}>{tr('新对话')}</button>
             <button className="btn" onClick={() => run(() => api.brief(agent.id))}>{tr('发送项目简报')}</button>
-            {on ? <button className="btn" onClick={() => run(() => api.stopAgent(agent.id))}>{tr('停止')}</button>
+            {on ? <button className="btn" onClick={() => run(() => api.stopAgent(agent.id))}>{tr('关闭会话')}</button>
               : <button className="btn pri" onClick={() => run(() => api.startAgent(agent.id))}>{tr('启动')}</button>}
           </div>
         </header>
-        <div className="transcript" ref={scroll} onScroll={e => {
+        <div className="transcript" ref={el => { scroll.current = el; readRef.current = el; }} onScroll={e => {
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         }}>
+          {err && <p className="note err">{err}</p>}
           {!items.length && !live && <div className="room-empty small-empty"><p>{tr('还没有对话。可以先「发送项目简报」，让它读一遍项目再开始。')}</p></div>}
           <PiLog rows={rows} live={live} working={agent.status === 'working'} />
         </div>
-        <div className="chat-compose">
-          {menu.length > 0 && (
-            <div className="cmd-menu" role="listbox">
-              {menu.map(([n, d, tui]) => (
-                <button key={n} onMouseDown={e => { e.preventDefault(); setText(`/${n} `); }}>
-                  <code>/{n}</code><span>{d}</span>{tui && <em>{tr('终端')}</em>}
-                </button>
-              ))}
-            </div>
-          )}
-          <textarea value={text} rows={2} placeholder={agent.status === 'working' ? tr('它在忙，发出的消息会排在它手上的事之后') : tr('对{0}说点什么，输入 / 用 pi 的命令，Enter 发送', r.name)}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Tab' && menu.length) { e.preventDefault(); setText(`/${menu[0][0]} `); return; }
-              enterSends(send)(e);
-            }} />
-          <button className="btn pri" disabled={!text.trim()} onClick={send}>{tr('发送')}</button>
-        </div>
+        <Compose agent={agent} queued={queued} toast={toast} onChanged={reload} value={text} onChange={setText}
+          placeholder={tr('对{0}说点什么，输入 / 用 pi 的命令，Enter 发送', r.name)}
+          onSent={() => { stick.current = true; }} onKeyDown={e => {
+            if (e.key === 'Tab' && menu.length) { e.preventDefault(); setText(`/${menu[0][0]} `); }
+          }}>
+          {menu.length > 0 && <div className="cmd-menu" role="listbox">
+            {menu.map(([n, d, tui]) => <button key={n} onMouseDown={e => { e.preventDefault(); setText(`/${n} `); }}>
+              <code>/{n}</code><span>{d}</span>{tui && <em>{tr('终端')}</em>}
+            </button>)}
+          </div>}
+        </Compose>
       </section>
-      <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
+      {onOpen && <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
         <div className="pnl-s">
           <h4>{tr('终端')}</h4>
           <p className="muted small">{tr('pi 在后台的 tmux 里运行，接上就能看到同一段对话，在那里输入也会同步到这里。')}</p>
@@ -676,7 +638,7 @@ function AgentChat({ agent: initial, line, role, toast, onOpen }: { agent: Agent
           {agent.cwd && <p className="muted small path">{tr('目录：')}{agent.cwd}</p>}
           {st?.session && <p className="muted small path">{tr('会话：')}{st.session.name ?? st.session.id}</p>}
         </div>
-      </Aside>
+      </Aside>}
     </>
   );
 }

@@ -31,14 +31,14 @@ const STATE: Record<number, string> = { 0: tr('等你'), 1: tr('卡住了'), 2: 
 const moved = (c: ProjectCard) => Math.max(Date.parse(c.line.updated_at) || 0, Date.parse(c.card?.at ?? '') || 0);
 // how far along: what its lead says, else the share of its stages that are done
 const far = (c: ProjectCard) => c.card?.progress ?? Math.round(100 * c.line.stages.filter(x => x.status === 'done').length / Math.max(1, c.line.stages.length));
-const SORTS: Record<PgSort, (a: ProjectCard, b: ProjectCard) => number> = {
+export const SORTS: Record<PgSort, (a: ProjectCard, b: ProjectCard) => number> = {
   need: (a, b) => rank(a) - rank(b) || b.line.seq - a.line.seq,
   recent: (a, b) => moved(b) - moved(a),
   progress: (a, b) => far(b) - far(a) || b.line.seq - a.line.seq,
   number: (a, b) => a.line.seq - b.line.seq,
 };
 // the list in sections, in their own order; the sort still holds inside each
-function grouped(list: ProjectCard[], by: PgGroup): Group[] {
+export function grouped(list: ProjectCard[], by: PgGroup): Group[] {
   if (by === 'none') return [{ key: 'all', name: '', items: list }];
   const found = new Map<string, Group & { at: number }>();
   for (const c of list) {

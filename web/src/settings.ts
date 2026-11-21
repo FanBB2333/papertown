@@ -18,6 +18,7 @@ export interface Settings {
   motion: 'full' | 'calm';
   grain: number;
   start: 'cards' | 'console' | '2d' | '3d';
+  agentSend: 'steer' | 'queue' | 'interrupt';
   smoothMap: boolean;
   zoomSpeed: number;
   mapLabels: 'key' | 'all';
@@ -66,6 +67,7 @@ const inApp = /\bPapertown\//.test(navigator.userAgent);
 export const DEFAULTS: Settings = {
   ui: inApp ? 'macos' : 'cloudflare', mode: 'light', accent: 'blue', wall: 'dawn', wallTint: true, glass: 0.45, motion: 'full', grain: 0.5, start: 'cards',
   smoothMap: true, zoomSpeed: 1, mapLabels: 'key', walkHint: true,
+  agentSend: 'steer',
   sensitivity: 1, invertY: false, fov: 68, hand: true, bob: true, quality: 'high', fullscreen3d: true, tags3d: true, minimap: true,
   edTheme: 'auto', edIcons: 'dots',
   pgView: 'blocks', pgSort: 'need', pgGroup: 'none', pgDensity: 'roomy', pgCard: 'mid', pgText: 'mid', pgWidth: 'mid', pgStages: true, pgDone: true,
