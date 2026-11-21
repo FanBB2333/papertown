@@ -157,8 +157,8 @@ class Run:
             if m.get("then"):
                 ev = self.call("POST", f"/api/agents/{self.id}/queue/{ev['id']}", {"what": m["then"]})
                 events[-1] = ev if m["then"] == "now" else events[-1]
-                if "queued" in e:
-                    out["queued"][-1] = self.poll()["watch"]["queued"]
+                if "queued" in e:  # the count after each message and after each follow-up on it
+                    out["queued"].append(self.poll()["watch"]["queued"])
         sent_at = time.monotonic() - sent
         checks = {}
         if "event" in e:
@@ -250,6 +250,10 @@ def main():
     for t in threads:
         t.join()
     feed = town.agents._feed
+    # Usage statistics give an agent's sessions to its project by the session id Paseo reports.
+    for r in runs:
+        sessions = town.db.q("select session_id from agent_sessions where agent_id = ?", r.id) if r.id else []
+        r.results["session"] = {"ok": bool(sessions), "sessions": len(sessions)}
     report = {"feed_live": bool(feed and feed.live), "flow": [s["key"] for s in steps], "runs": [
         {"agent": f"{r.provider}:{r.model or ''}", "paseo_agent": r.ext, "results": r.results, "permissions_allowed": len(r.permitted), "log": r.log}
         for r in runs]}

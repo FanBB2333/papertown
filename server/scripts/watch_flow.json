@@ -23,7 +23,7 @@
     {"mode": "queue", "text": "只回复一行：QUEUED_{n}，不要执行任何命令。"},
     {"mode": "queue", "text": "只回复一行：DROP_{n}，不要执行任何命令。", "then": "drop"}
    ],
-   "expect": {"event": {"held": true}, "queued": [2, 1], "replies_in_order": ["B_DONE", "QUEUED_{n}"], "never": "DROP_{n}"}
+   "expect": {"event": {"held": true}, "queued": [1, 2, 1], "replies_in_order": ["B_DONE", "QUEUED_{n}"], "never": "DROP_{n}"}
   },
   {
    "key": "send_now",
