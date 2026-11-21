@@ -16,6 +16,13 @@ the user can send a result back with what is wrong, and the node keeps a log of 
 flow, a sentinel watching, the spec and the clamp, the loops back) or none (one the user drew), and can carry a few
 words. Info cards (the progress card, the agents, jobs, code, paper, outputs) are off the canvas until put on.
 
+The order of tasks is kept here, in code, not left to the agents. A line between two tasks is an order line (kind
+"order") unless the user makes it a plain one: the task at its tail comes first. A task sent while one before it is
+not done waits (status "queued") and goes out by itself once they all are; a task that is stuck holds what comes
+after it; when a task is done again, what ran after it is marked to be looked at again ("stale") and holds its own
+followers until the user says it still stands or redoes it. A project can also run one task per working directory at
+a time ("exclusive"). Order lines may not close a ring: a loop is a gate's rework, not a ring of tasks.
+
     data/projects/<project>/canvas.json   nodes (id, kind, x, y and what each kind keeps), edges (kind, label),
                                           what was taken off
 """
@@ -38,14 +45,14 @@ from .pipeline import INDEX, NAMES
 if TYPE_CHECKING:
     from .town import Town
 
-TASK = {"draft": "还没发", "sent": "已经发给它", "done": "完成", "blocked": "卡住了"}
+TASK = {"draft": "还没发", "queued": "排队中", "sent": "已经发给它", "done": "完成", "blocked": "卡住了"}
 TO = ("lead", "coder", "writer")
 STAGE = {"todo": "没开始", "run": "进行中", "wait": "等用户", "done": "完成"}
 NODES_MAX, EDGES_MAX, LOG_MAX, TRAIL_MAX = 300, 800, 40, 12
 KIND = {"stage": "工序", "gate": "硬卡口", "hard": "硬检查", "soft": "软巡检", "spec": "软限制", "clamp": "硬边界",
         "human": "人类拍板", "task": "任务", "note": "备注", "info": "资料卡"}
 EDGES = {"flow": "主推进", "watch": "巡检", "spec": "软限制注入", "clamp": "动作钳制", "hard_loop": "硬打回",
-         "soft_loop": "软纠偏", "escalate": "升级", "member": "卡口的规则"}
+         "soft_loop": "软纠偏", "escalate": "升级", "member": "卡口的规则", "order": "先后顺序"}
 INFO = {"card": "进展", "agent:lead": "项目负责人", "agent:coder": "代码员工", "agent:writer": "写作员工",
         "code": "代码", "runs": "实验任务", "paper": "论文", "outputs": "预期产出"}
 FIXED = {"spec": "软限制规范", "clamp": "硬边界夹", "human": "人类拍板节点"}
@@ -181,15 +188,16 @@ class Canvas:
         d["next"] = n + 1
         return f"{prefix}{n}"
 
-    def _edge(self, d: dict, source: str, target: str, kind: str | None = None, label: str = "") -> None:
+    def _edge(self, d: dict, source: str, target: str, kind: str | None = None, label: str = "") -> dict | None:
         if any({e["source"], e["target"]} == {source, target} for e in d["edges"]):
-            return
+            return None
         e = {"id": self._id(d, "e"), "source": source, "target": target}
         if kind:
             e["kind"] = kind
         if label:
             e["label"] = label
         d["edges"].append(e)
+        return e
 
     def _load(self, line_id: str) -> dict:
         """The canvas as saved: laid out the first time, moved over once from the canvas before the loop, and kept in
@@ -415,6 +423,7 @@ class Canvas:
                     how += f"：{clip(last.get('note') or c['text'], 80)}"
             elif n["kind"] == "task":
                 how = f"给{ROLES[n['to']]['name']}，{TASK[n['status']]}" + (f"，第 {n['round']} 轮" if n.get("loop") == "hard" else "") \
+                    + ("，结果待复核" if n.get("stale") else "") \
                     + (f"：{clip(n['result'] or n['text'], 100)}" if n.get("result") or n.get("text") else "")
             elif n["kind"] == "human":
                 how = f"{len(n['items'])} 件等你拍板" if n["items"] else "没有等你拍板的"
@@ -427,7 +436,7 @@ class Canvas:
             name = clip(n.get("text"), 80) if n["kind"] == "note" else n.get("title")
             out.append(f"- {n['id']} · {KIND[n['kind']]} · {name}" + (f" · {how}" if how else ""))
         out += ["", "连线（圆括号里是线的种类，方括号里是线上写的字）："]
-        out += [f"- {e['source']} — {e['target']}" + (f"（{EDGES[e['kind']]}）" if e.get("kind") else "") + (f" [{e['label']}]" if e.get("label") else "")
+        out += [f"- {e['source']} {'→' if e.get('kind') == 'order' else '—'} {e['target']}" + (f"（{EDGES[e['kind']]}）" if e.get("kind") else "") + (f" [{e['label']}]" if e.get("label") else "")
                 for e in v["edges"]] or ["- 还没有连线"]
         if v["gone"]:
             out += ["", "从回路上拿掉了（用户能在「更多」里放回）：" + "、".join(f"{g['id']}（{g['title']}）" for g in v["gone"])]
@@ -479,6 +488,8 @@ class Canvas:
                 out |= {k: n.get(k) for k in ("title", "text", "to", "status", "sent_at", "done_at", "result", "by", "created_at", "dispatch")}
                 out["agent_id"] = n.get("agent_id")
                 out["agent"] = self.town.agents.public(self.assignee(line_id, n))
+                out |= {"stale": n.get("stale"), "queued_at": n.get("queued_at"), "wait_note": n.get("wait_note"),
+                        "waits": self._waits(line_id, d, n) if n["status"] == "queued" else []}
                 out |= {"log": n.get("log") or [], "loop": n.get("loop"), "stage": n.get("gate"), "round": n.get("round") or 0,
                         "trail": n.get("trail") or [], "from": n.get("from"), "escalated": bool(n.get("escalated")), "converged": bool(n.get("converged"))}
             else:
@@ -491,6 +502,7 @@ class Canvas:
                 "edges": [e for e in d["edges"] if e["source"] in ids and e["target"] in ids], "gone": gone,
                 "spare": [{"id": f"info:{k}", "title": t} for k, t in INFO.items() if f"info:{k}" not in ids],
                 "lanes": LANES, "checks": cv["checks"], "summary": cv["summary"], "tasks": {k: sum(1 for t in on if t["status"] == k) for k in TASK},
+                "rules": {"exclusive": bool(d.get("exclusive"))},
                 "trend": cv["trend"], "found": cv["found"], "rounds": cv["rounds"], "ran": cv["ran"], "lead": cv["lead"],
                 "agents": {r: {"there": bool(a), "status": self.town.agents.shown(a) if a else None, "model": a.get("model") if a else None}
                            for r in TO for a in [self.town.leads.agent(line_id, r)]}}
@@ -550,6 +562,8 @@ class Canvas:
                             "text": f"「{g['name'] if g else t.get('gate')}」硬卡口打回 {t.get('round') or 0} 轮还没清零"})
             elif t.get("status") == "blocked":
                 out.append({"kind": "blocked", "id": t["id"], "text": f"{ROLES[t['to']]['name']}卡在「{clip(t.get('title'), 30)}」：{clip(t.get('result'), 80)}"})
+            if t.get("stale") and t.get("status") in ("done", "blocked"):
+                out.append({"kind": "stale", "id": t["id"], "text": f"「{clip(t.get('title'), 30)}」的结果待复核：{t['stale']}"})
         for c in cv["checks"]:
             if c["kind"] == "soft" and c["on"] and (c["last"] or {}).get("status") == "fail":
                 out.append({"kind": "fail", "id": f"check:{c['id']}", "text": f"软巡检「{c['title']}」判为偏离：{clip(c['last']['note'], 80)}"})
@@ -612,7 +626,7 @@ class Canvas:
                 elif kind == "soft" and src["kind"] == "stage":
                     self._edge(d, node["id"], src["id"], "watch")
                 else:
-                    self._edge(d, src["id"], node["id"])
+                    self._edge(d, src["id"], node["id"], "order" if kind == "task" and self._plain(src) else None)
             self._save(line_id, d)
         if kind == "task" and send:
             self.send(line_id, node["id"])
@@ -620,8 +634,9 @@ class Canvas:
         return {**self.view(line_id), "added": node["id"]}
 
     def set(self, line_id: str, node_id: str, title: str | None = None, text: str | None = None, to: str | None = None,
-            status: str | None = None) -> dict:
-        """Edit a task or a note. (A check's own settings are the checks' to change.)"""
+            status: str | None = None, stale: bool | None = None) -> dict:
+        """Edit a task or a note. (A check's own settings are the checks' to change.) A task marked done lets what
+        waits for it go; one opened again marks what ran after it; `stale` False says its result still stands."""
         with self._lock:
             d = self._load(line_id)
             n = self._node(d, node_id)
@@ -643,9 +658,17 @@ class Canvas:
                 if status is not None:
                     if status not in ("draft", "done"):
                         raise CanvasError("只能标成完成，或者重新打开")
+                    if status == "draft" and n["status"] in ("done", "blocked"):
+                        self._redo(d, n)
+                    unqueued = status == "draft" and n["status"] == "queued"
                     n |= {"status": status, "done_at": now() if status == "done" else None, "by": "你" if status == "done" else "",
                           "result": n.get("result") if status == "done" else ""}
-                    _log(n, "marked" if status == "done" else "reopened")
+                    for k in ("queued_at", "wait_note", "back", "stale"):
+                        n.pop(k, None)
+                    _log(n, "marked" if status == "done" else "unqueued" if unqueued else "reopened")
+                if stale is False and n.get("stale"):  # you looked at it: it still stands
+                    n.pop("stale")
+                    _log(n, "kept")
             elif n["kind"] == "note":
                 if text is not None:
                     if not text.strip():
@@ -654,6 +677,7 @@ class Canvas:
             else:
                 raise CanvasError("这个节点在它自己的设置里改")
             self._save(line_id, d)
+        self._advance(line_id)
         self._changed(line_id)
         return self.view(line_id)
 
@@ -693,6 +717,7 @@ class Canvas:
             d["nodes"] = [x for x in d["nodes"] if x["id"] != node_id]
             d["edges"] = [e for e in d["edges"] if node_id not in (e["source"], e["target"])]
             self._save(line_id, d)
+        self._advance(line_id)
         self._changed(line_id)
         return self.view(line_id)
 
@@ -723,16 +748,54 @@ class Canvas:
         return self.view(line_id)
 
     def connect(self, line_id: str, source: str, target: str) -> dict:
+        """A line of the user's own. Between two tasks it is an order line (the first before the second), unless that
+        would close a ring: then it is a plain one."""
         with self._lock:
             d = self._load(line_id)
-            self._node(d, source)
-            self._node(d, target)
+            a, b = self._node(d, source), self._node(d, target)
             if source == target:
                 raise CanvasError("节点不能连到自己")
             if len(d["edges"]) >= EDGES_MAX:
                 raise CanvasError("连线太多了")
-            self._edge(d, source, target)
+            order = self._plain(a) and self._plain(b) and not self._loops(d, source, target)
+            self._edge(d, source, target, "order" if order else None)
             self._save(line_id, d)
+        self._advance(line_id)
+        self._changed(line_id)
+        return self.view(line_id)
+
+    def order(self, line_id: str, edge_id: str, on: bool | None = None, flip: bool = False) -> dict:
+        """Make a line between two tasks an order line or a plain one again, or turn an order line round."""
+        with self._lock:
+            d = self._load(line_id)
+            e = next((x for x in d["edges"] if x["id"] == edge_id), None)
+            if not e:
+                raise CanvasError("回路上没有这条线")
+            if e.get("kind") not in (None, "order"):
+                raise CanvasError("这条线由回路生成，种类不可修改")
+            want = e.get("kind") == "order" if on is None else bool(on)
+            source, target = (e["target"], e["source"]) if flip else (e["source"], e["target"])
+            e.pop("kind", None)
+            if want:
+                by = {n["id"]: n for n in d["nodes"]}
+                if not (self._plain(by.get(source)) and self._plain(by.get(target))):
+                    raise CanvasError("先后顺序只能设在两个任务之间，修补单的先后由卡口决定")
+                if self._loops(d, source, target):
+                    raise CanvasError("先后顺序不能连成环。需要反复执行的工作请交给硬卡口的修补单")
+                e["kind"] = "order"
+            e |= {"source": source, "target": target}
+            self._save(line_id, d)
+        self._advance(line_id)
+        self._changed(line_id)
+        return self.view(line_id)
+
+    def rules(self, line_id: str, exclusive: bool) -> dict:
+        """The project's rule for tasks that share a working directory: one at a time, or as they come."""
+        with self._lock:
+            d = self._load(line_id)
+            d["exclusive"] = bool(exclusive)
+            self._save(line_id, d)
+        self._advance(line_id)
         self._changed(line_id)
         return self.view(line_id)
 
@@ -757,6 +820,7 @@ class Canvas:
             d = self._load(line_id)
             d["edges"] = [e for e in d["edges"] if e["id"] != edge_id]
             self._save(line_id, d)
+        self._advance(line_id)
         self._changed(line_id)
         return self.view(line_id)
 
@@ -884,7 +948,7 @@ class Canvas:
                     if g["policy"]["auto"] or force == stage:
                         send.append(t["id"])
                     continue
-                if t["status"] in ("draft", "sent"):
+                if t["status"] in ("draft", "queued", "sent"):
                     if t["text"] != text:
                         t |= {"title": title, "text": text}
                         changed = True
@@ -944,15 +1008,19 @@ class Canvas:
     # tasks: to an agent, and back
 
     def _around(self, line_id: str, d: dict, node: dict) -> list[str]:
-        """What a task is wired to, in words, for the agent that gets it."""
+        """What a task is wired to, in words, for the agent that gets it. An order line says which side of it the other
+        task is on, and a task before it that is done hands over its result."""
         v = self.view(line_id)
         by = {n["id"]: n for n in v["nodes"]}
-        near = {(e["target"] if e["source"] == node["id"] else e["source"]): e.get("label") for e in d["edges"] if node["id"] in (e["source"], e["target"])}
+        now_ = {n["id"]: n for n in d["nodes"] if n["kind"] == "task"}  # the tasks as they stand in this change, saved or not
+        near = {(e["target"] if e["source"] == node["id"] else e["source"]): e for e in d["edges"] if node["id"] in (e["source"], e["target"])}
         out = []
-        for nid, label in near.items():
-            n = by.get(nid)
+        for nid, e in near.items():
+            n, label = by.get(nid), e.get("label")
             if not n:
                 continue
+            if nid in now_:
+                n = n | {k: now_[nid].get(k) for k in ("status", "result", "stale")}
             what = ""
             if n["kind"] == "stage":
                 what = f"工序「{n['title']}」（{STAGE.get(n['status'], n['status'])}）"
@@ -968,6 +1036,12 @@ class Canvas:
                     + (f"；负责人的判断：{clip(last.get('note'), 300)}" if c["kind"] == "soft" and last.get("note") else "")
             elif n["kind"] == "task":
                 what = f"任务 {n['id']}「{n['title']}」（给{ROLES[n['to']]['name']}，{TASK[n['status']]}）"
+                if e.get("kind") == "order" and e["target"] == node["id"]:
+                    what = "前序" + what + "：它的产出在工作目录里" \
+                        + (f"，它交回的结果是「{clip(n['result'], 400)}」" if n["status"] == "done" and n.get("result") else "") \
+                        + ("（这份结果待用户复核）" if n.get("stale") else "")
+                elif e.get("kind") == "order":
+                    what = "后续" + what + "：你完成后才会派发给它，把它需要的产出留在工作目录里"
             elif n["kind"] == "note":
                 what = f"备注：{clip(n.get('text'), 300)}"
             elif n["kind"] == "info":
@@ -977,6 +1051,154 @@ class Canvas:
             if what:
                 out.append(what + (f"［线上写着：{label}］" if label else ""))
         return out
+
+    # the order of tasks, kept in code: order lines, and what they hold back
+
+    @staticmethod
+    def _plain(n: dict | None) -> bool:
+        """A task whose turn the user decides: a gate's rework ticket goes by its gate."""
+        return bool(n) and n["kind"] == "task" and n.get("loop") != "hard"
+
+    @staticmethod
+    def _before(d: dict, n: dict) -> list[dict]:
+        """The tasks that order lines put before this one."""
+        by = {x["id"]: x for x in d["nodes"] if x["kind"] == "task"}
+        return [by[e["source"]] for e in d["edges"] if e.get("kind") == "order" and e["target"] == n["id"] and e["source"] in by]
+
+    @staticmethod
+    def _after(d: dict, n: dict) -> list[dict]:
+        by = {x["id"]: x for x in d["nodes"] if x["kind"] == "task"}
+        return [by[e["target"]] for e in d["edges"] if e.get("kind") == "order" and e["source"] == n["id"] and e["target"] in by]
+
+    def _chain(self, d: dict, n: dict) -> list[dict]:
+        """Every task after this one along the order lines, nearest first."""
+        seen, todo, out = {n["id"]}, [n], []
+        while todo:
+            for t in self._after(d, todo.pop(0)):
+                if t["id"] not in seen:
+                    seen.add(t["id"])
+                    todo.append(t)
+                    out.append(t)
+        return out
+
+    @staticmethod
+    def _loops(d: dict, source: str, target: str) -> bool:
+        """Would an order line from source to target close a ring?"""
+        seen, todo = set(), [target]
+        while todo:
+            x = todo.pop()
+            if x == source:
+                return True
+            if x not in seen:
+                seen.add(x)
+                todo += [e["target"] for e in d["edges"] if e.get("kind") == "order" and e["source"] == x]
+        return False
+
+    def _waits(self, line_id: str, d: dict, n: dict) -> list[dict]:
+        """Why a task cannot go out yet: the tasks before it that are not done, or done on a result that is to be
+        looked at again; then, when the project runs one task per working directory, the task at work in its own."""
+        out = [{"kind": "after", "id": u["id"], "title": u["title"], "status": u["status"], "stale": bool(u.get("stale"))}
+               for u in self._before(d, n) if u["status"] != "done" or u.get("stale")]
+        if out or not d.get("exclusive"):
+            return out
+        cwd = (self.assignee(line_id, n) or {}).get("cwd")
+        for t in d["nodes"]:
+            if cwd and t["kind"] == "task" and t["id"] != n["id"] and t["status"] == "sent" and (self.assignee(line_id, t) or {}).get("cwd") == cwd:
+                return [{"kind": "dir", "id": t["id"], "title": t["title"], "status": "sent", "stale": False}]
+        return []
+
+    def _redo(self, d: dict, n: dict) -> None:
+        """A task that is being done again: what ran after it did so on a result that no longer stands. Each of those
+        is marked to be looked at again, and holds what follows it until the user says it still stands or redoes it."""
+        why = f"前序任务 {n['id']}「{clip(n['title'], 30)}」已重做"
+        for t in self._chain(d, n):
+            if t["status"] in ("sent", "done", "blocked") and not t.get("stale"):
+                t["stale"] = why
+                _log(t, "stale", why, by="Papertown")
+
+    def _deliver(self, line_id: str, d: dict, n: dict) -> None:
+        """Hand a task to its agent now: the <task> message with what the node is wired to, or what the user sent back."""
+        a = self.assignee(line_id, n)
+        if not a:
+            raise CanvasError(f"这个项目的{ROLES[n['to']]['name']}还没有启动：先在「员工」面板里启动它，任务会留在回路上")
+        back = n.get("back")
+        again = n["status"] not in ("draft", "queued") or any(x["kind"] in ("sent", "resent") for x in n.get("log") or [])
+        if back:
+            body = [f'<task id="{n["id"]}">', f"用户看了你对研究回路上「{n['title']}」这件事交回的结果，退回来了：", "", back]
+            if n.get("result"):
+                body += ["", f"你上次回的是：{clip(n['result'], 600)}"]
+        else:
+            if n.get("loop") == "hard":
+                head = f"Papertown 的研究回路把这件事打回给你（第 {n.get('round') or 1} 轮修补单）：「{n['title']}」"
+            elif n.get("loop") == "soft":
+                head = ("用户改了研究回路上这件事，按新的来：" if again else "研究回路上的软巡检发现了偏差，用户派你纠偏：") + f"「{n['title']}」"
+            else:
+                head = ("用户改了研究回路上这件事，按新的来：" if again else "用户在研究回路上给你派了一件事：") + f"「{n['title']}」"
+            body = [f'<task id="{n["id"]}">', head]
+            if n.get("text"):
+                body += ["", n["text"]]
+            around = self._around(line_id, d, n)
+            if around:
+                body += ["", "它在回路上连着这些（连着检查或卡口的，做完要让它通过）：", *[f"- {x}" for x in around]]
+        dispatch = secrets.token_hex(8)
+        body += ["", self._reply_instructions(a, n, dispatch), "</task>"]
+        self.town.agents.say(a["id"], "\n".join(body), "queue", origin="papertown")
+        n |= {"status": "sent", "sent_at": now(), "done_at": None, "by": "", "dispatch": dispatch}
+        if back:
+            n["escalated"] = False
+            _log(n, "back", back)
+        else:
+            n["result"] = ""
+            _log(n, "resent" if again else "sent", by=f"给{ROLES[n['to']]['name']}")
+        for k in ("back", "queued_at", "wait_note", "stale"):
+            n.pop(k, None)
+
+    def _dispatch(self, line_id: str, d: dict, n: dict) -> bool:
+        """Send a task, or put it in the queue when its turn has not come. True when it went out."""
+        waits = [] if n["status"] == "sent" else self._waits(line_id, d, n)  # one at work already hears a change at once
+        if not waits:
+            self._deliver(line_id, d, n)
+            return True
+        if not self.assignee(line_id, n):
+            raise CanvasError(f"这个项目的{ROLES[n['to']]['name']}还没有启动：先在「员工」面板里启动它，任务会留在回路上")
+        self._enqueue(n, waits)
+        return False
+
+    @staticmethod
+    def _enqueue(n: dict, waits: list[dict]) -> None:
+        """Into the queue, with what it waits for on its log. (_advance sends it once nothing holds it.)"""
+        n |= {"status": "queued", "queued_at": now(), "done_at": None, "by": ""}
+        _log(n, "queued", "等待前序任务完成" if not waits else "等待" + "、".join(f"{w['id']}「{clip(w['title'], 20)}」" for w in waits)
+             + ("释放工作目录" if waits[0]["kind"] == "dir" else "完成" if not any(w["stale"] for w in waits) else "完成并复核"), by="Papertown")
+
+    def _advance(self, line_id: str) -> bool:
+        """Send every queued task whose turn has come, the longest waiting first. One that cannot be delivered stays
+        in the queue with the reason, and is tried again the next time anything on the canvas moves."""
+        if not self._path(line_id).exists():
+            return False
+        moved, failed = False, []
+        with self._lock:
+            d = self._load(line_id)
+            for n in sorted((x for x in d["nodes"] if x["kind"] == "task" and x["status"] == "queued"), key=lambda x: x.get("queued_at") or ""):
+                if self._waits(line_id, d, n):
+                    continue
+                try:
+                    self._deliver(line_id, d, n)
+                except (CanvasError, AgentError) as e:
+                    if n.get("wait_note") == str(e):
+                        continue
+                    n["wait_note"] = str(e)
+                    failed.append((n["title"], str(e)))
+                else:
+                    _log(n, "relay", by="Papertown")
+                    n["log"][-2:] = n["log"][-2:][::-1]  # its turn came, then it went out
+                moved = True
+                self._save(line_id, d)  # the next one's message reads the canvas as it now stands
+        for title, why in failed:
+            self.town.message(line_id, "system", None, "text", {"text": f"研究回路上的任务「{title}」已轮到，但派发失败：{why}"})
+        if moved:
+            self._changed(line_id)
+        return moved
 
     @staticmethod
     def _assignee_id(line_id: str, node: dict) -> str:
@@ -1044,48 +1266,44 @@ class Canvas:
             raise CanvasError("这个节点的 Agent 还没有启动")
         return a
 
-    def _reply_instructions(self, a: dict, n: dict) -> str:
+    def _reply_instructions(self, a: dict, n: dict, token: str) -> str:
         pt = shlex.quote(str(self.town.agents.pt(a))) if a["runtime"] == "paseo" else ".papertown/pt"
-        dispatch = f' --dispatch {n["dispatch"]}'
+        dispatch = f' --dispatch {token}'
         return (f'做完运行 `{pt} task {n["id"]} done "结果"{dispatch}`，卡住运行 `{pt} task {n["id"]} blocked "原因"{dispatch}`。'
                 '回报 blocked 后如已自行解决，可使用同一 --dispatch 回报 done。'
                 '只有成功回报后，画布才会更新；普通对话回复不会关闭任务。'
                 f'\n向同项目另一个任务传递信息：`{pt} tell task:<节点编号> "信息"`；信息会进入对方会话，不会自动派发或完成任务。')
 
-    def send(self, line_id: str, node_id: str) -> dict:
-        """Deliver a task to its agent; sending it again tells the agent it has changed."""
+    def send(self, line_id: str, node_id: str, chain: bool = False) -> dict:
+        """Dispatch a task: it goes to its agent now, or waits in the queue until the tasks before it are done (and its
+        working directory is free, when the project asks for that). Sending one at work tells the agent it has changed;
+        sending one that was done marks what ran after it. `chain` also queues every draft task after it."""
         with self._lock:
             d = self._load(line_id)
             n = self._node(d, node_id)
             if n["kind"] != "task":
                 raise CanvasError("只有任务能发给 agent")
-            a = self.assignee(line_id, n)
-            if not a:
+            if not self.assignee(line_id, n):
                 raise CanvasError(f"这个项目的{ROLES[n['to']]['name']}还没有启动：先在「员工」面板里启动它，任务会留在回路上")
-            again = n["status"] != "draft" or any(x["kind"] in ("sent", "resent") for x in n.get("log") or [])
-            around = self._around(line_id, d, n)
-            if n.get("loop") == "hard":
-                head = f"Papertown 的研究回路把这件事打回给你（第 {n.get('round') or 1} 轮修补单）：「{n['title']}」"
-            elif n.get("loop") == "soft":
-                head = ("用户改了研究回路上这件事，按新的来：" if again else "研究回路上的软巡检发现了偏差，用户派你纠偏：") + f"「{n['title']}」"
-            else:
-                head = ("用户改了研究回路上这件事，按新的来：" if again else "用户在研究回路上给你派了一件事：") + f"「{n['title']}」"
-            body = [f'<task id="{n["id"]}">', head]
-            if n.get("text"):
-                body += ["", n["text"]]
-            if around:
-                body += ["", "它在回路上连着这些（连着检查或卡口的，做完要让它通过）：", *[f"- {x}" for x in around]]
-            n["dispatch"] = secrets.token_hex(8)
-            body += ["", self._reply_instructions(a, n), "</task>"]
-            self.town.agents.say(a["id"], "\n".join(body), "queue", origin="papertown")
-            n |= {"status": "sent", "sent_at": now(), "done_at": None, "result": "", "by": ""}
-            _log(n, "resent" if again else "sent", by=f"给{ROLES[n['to']]['name']}")
+            rest = [t for t in self._chain(d, n) if t["status"] == "draft"] if chain else []
+            lost = next((t for t in rest if not self.assignee(line_id, t)), None)
+            if lost:
+                raise CanvasError(f"后续任务 {lost['id']}「{clip(lost['title'], 30)}」的{ROLES[lost['to']]['name']}尚未启动。请先启动它或为该任务安排 Agent，再派发整条链")
+            if n["status"] in ("done", "blocked"):
+                self._redo(d, n)
+            for t in rest:  # queued first, so the message to this one says what follows it is waiting
+                self._enqueue(t, self._waits(line_id, d, t))
+            if n["status"] != "queued":
+                n.pop("back", None)
+                self._dispatch(line_id, d, n)
             self._save(line_id, d)
+        self._advance(line_id)
         self._changed(line_id)
         return self.view(line_id)
 
     def back(self, line_id: str, node_id: str, text: str) -> dict:
-        """Send a task back: the agent hears what is wrong with what it returned, and the task is under way again."""
+        """Send a task back: the agent hears what is wrong with what it returned, and the task is under way again
+        (or queued, when something it comes after is being redone too). What ran after it is marked."""
         text = str(text or "").strip()
         if not text:
             raise CanvasError("写上哪里不行、要怎么改")
@@ -1094,17 +1312,11 @@ class Canvas:
             n = self._node(d, node_id)
             if n["kind"] != "task" or n["status"] not in ("done", "blocked"):
                 raise CanvasError("只有交回了结果的任务能退回")
-            a = self.assignee(line_id, n)
-            if not a:
+            if not self.assignee(line_id, n):
                 raise CanvasError(f"这个项目的{ROLES[n['to']]['name']}还没有启动")
-            body = [f'<task id="{n["id"]}">', f"用户看了你对研究回路上「{n['title']}」这件事交回的结果，退回来了：", "", text[:4000]]
-            if n.get("result"):
-                body += ["", f"你上次回的是：{clip(n['result'], 600)}"]
-            n["dispatch"] = secrets.token_hex(8)
-            body += ["", self._reply_instructions(a, n), "</task>"]
-            self.town.agents.say(a["id"], "\n".join(body), "queue", origin="papertown")
-            n |= {"status": "sent", "sent_at": now(), "done_at": None, "by": "", "escalated": False}
-            _log(n, "back", text)
+            self._redo(d, n)
+            n["back"] = text[:4000]
+            self._dispatch(line_id, d, n)
             self._save(line_id, d)
         self._changed(line_id)
         return self.view(line_id)
@@ -1137,12 +1349,15 @@ class Canvas:
                 raise CanvasError("这个任务没有在执行中，请等待重新派发" if n["status"] != "blocked" else "该任务已回报 blocked，问题解决后请回报 done")
             n |= {"status": status, "done_at": now(), "result": text[:4000], "by": self.town.leads._who(a)}
             _log(n, status, text, by=n["by"])
+            held = [t for t in self._chain(d, n) if t["status"] == "queued"] if status == "blocked" else []
             self._save(lid, d)
-        self.town.leads.report(agent_id, f"研究回路上的{'修补单' if n.get('loop') == 'hard' else '任务'}「{n['title']}」{TASK[status]}：{text}",
+        self.town.leads.report(agent_id, f"研究回路上的{'修补单' if n.get('loop') == 'hard' else '任务'}「{n['title']}」{TASK[status]}：{text}"
+                               + (f"。后续任务{'、'.join('「' + clip(t['title'], 20) + '」' for t in held)}将等待它解决。" if held else ""),
                                key=status == "blocked")
         if n.get("loop") == "hard" and status == "done":
             self.town.checks.run(lid, force=True)
             self.loop(lid)
+        self._advance(lid)  # the tasks that waited for this one, or for its working directory
         self._changed(lid)
         return {"text": f"记下了：「{n['title']}」{TASK[status]}。用户在研究回路和汇报里会看到。"}
 
@@ -1158,11 +1373,12 @@ class Canvas:
         out = []
         for n in mine:
             what = f"第 {n.get('round') or 1} 轮修补单" if n.get("loop") == "hard" else "纠偏任务" if n.get("loop") == "soft" else "任务"
-            out.append(f"- {n['id']}「{n['title']}」（{what}，给{ROLES[n['to']]['name']}，{TASK[n['status']]}）" + (f"：{clip(n.get('text'), 400)}" if n.get("text") else ""))
+            turn = "，还没有轮到，轮到时会发给你，现在先不要动手" if n["status"] == "queued" else ""
+            out.append(f"- {n['id']}「{n['title']}」（{what}，给{ROLES[n['to']]['name']}，{TASK[n['status']]}{turn}）" + (f"：{clip(n.get('text'), 400)}" if n.get("text") else ""))
             out += [f"    连着：{x}" for x in self._around(a["line_id"], d, n)]
             if n.get("result"):
                 out.append(f"    结果：{clip(n['result'], 300)}")
-            if n.get("dispatch"):
+            if n.get("dispatch") and n["status"] != "queued":
                 out.append(f"    回报时带上 --dispatch {n['dispatch']}")
         return "\n".join(["研究回路上的任务（做完用 `pt task <编号> done \"结果\"`，卡住用 blocked）：", *out])
 

@@ -160,6 +160,15 @@ class NodeSetIn(BaseModel):
     text: str | None = Field(default=None, max_length=4000)
     to: str | None = None
     status: str | None = None
+    stale: bool | None = None  # False: its result still stands
+
+
+class SendIn(BaseModel):
+    chain: bool = False  # also queue every draft task after it
+
+
+class RulesIn(BaseModel):
+    exclusive: bool
 
 
 class MoveIn(BaseModel):
@@ -172,7 +181,9 @@ class EdgeIn(BaseModel):
 
 
 class EdgeSetIn(BaseModel):
-    label: str = Field(default="", max_length=80)
+    label: str | None = Field(default=None, max_length=80)
+    order: bool | None = None  # an order line between two tasks, or a plain one
+    flip: bool = False
 
 
 class BackIn(BaseModel):
@@ -898,15 +909,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.put("/api/lines/{line_id}/canvas/nodes/{node_id}")
     def canvas_set(line_id: str, node_id: str, body: NodeSetIn):
-        return canvas(town.canvas.set, line_id, node_id, body.title, body.text, body.to, body.status)
+        return canvas(town.canvas.set, line_id, node_id, body.title, body.text, body.to, body.status, body.stale)
 
     @app.delete("/api/lines/{line_id}/canvas/nodes/{node_id}")
     def canvas_remove(line_id: str, node_id: str):
         return canvas(town.canvas.remove, line_id, node_id)
 
     @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/send")
-    def canvas_send(line_id: str, node_id: str):
-        return canvas(town.canvas.send, line_id, node_id)
+    def canvas_send(line_id: str, node_id: str, body: SendIn | None = None):
+        return canvas(town.canvas.send, line_id, node_id, bool(body and body.chain))
 
     @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/agent")
     def canvas_bind(line_id: str, node_id: str, body: NodeAgentIn):
@@ -930,7 +941,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.put("/api/lines/{line_id}/canvas/edges/{edge_id}")
     def canvas_label(line_id: str, edge_id: str, body: EdgeSetIn):
-        return canvas(town.canvas.label, line_id, edge_id, body.label)
+        view = None
+        if body.order is not None or body.flip:
+            view = canvas(town.canvas.order, line_id, edge_id, body.order, body.flip)
+        if body.label is not None or view is None:
+            view = canvas(town.canvas.label, line_id, edge_id, body.label or "")
+        return view
+
+    @app.put("/api/lines/{line_id}/canvas/rules")
+    def canvas_rules(line_id: str, body: RulesIn):
+        return canvas(town.canvas.rules, line_id, body.exclusive)
 
     @app.delete("/api/lines/{line_id}/canvas/edges/{edge_id}")
     def canvas_disconnect(line_id: str, edge_id: str):
