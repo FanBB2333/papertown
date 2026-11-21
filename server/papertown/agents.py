@@ -13,12 +13,14 @@ import shutil
 import subprocess
 import threading
 import time
+from copy import deepcopy
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .db import now, read_json, write_json
-from .paseo import Paseo, PaseoError
+from .paseo import Feed, Paseo, PaseoError
 
 if TYPE_CHECKING:
     from .town import Town
@@ -238,6 +240,14 @@ class Agents:
         self._watch_thread: threading.Thread | None = None
         self._halt = threading.Event()
         self._paseo_up: bool | None = None  # whether the Paseo daemon answered when the watcher last looked
+        self._paseo_note = ""
+        self._snapshots: dict[str, dict] = {}
+        self._doing: dict[str, dict] = {}
+        self._says: dict[str, dict] = {}
+        self._buckets: dict[str, tuple[tuple, str]] = {}
+        self._turns: dict[str, str] = {}
+        self._watch_lock = threading.RLock()
+        self._feed: Feed | None = None
 
     def available(self) -> dict:
         missing = [n for n, p in (("pi", self.pi), ("tmux", self.tmux)) if not p]
@@ -260,7 +270,14 @@ class Agents:
         or when the agent is not in Paseo."""
         if not a or a.get("runtime") != "paseo":
             return ""
-        st = self.paseo.status()
+        if self._paseo_up is False:
+            return self._paseo_note or "连不上 Paseo"
+        if self._feed and self._feed.live:
+            return ""
+        try:
+            st = self.paseo.status()
+        except PaseoError as e:
+            return str(e)
         return "" if st["ok"] else st["note"] or "连不上 Paseo"
 
     def shown(self, a: dict) -> str:
@@ -276,11 +293,125 @@ class Agents:
         out["runtime"] = rt = a.get("runtime") or "pi"
         out["started"] = bool(a.get("runtime"))
         out["attach"] = _attach(a["tmux"]) if rt == "pi" and a.get("tmux") else None
-        out["web"] = self.paseo.url(a["ext_id"]) if rt == "paseo" and a.get("ext_id") else None
+        out["web"] = self.paseo.url(a["ext_id"]) if rt == "paseo" and a.get("ext_id") and not out["down"] else None
         out["state"] = self._state.get(a["id"]) if rt == "pi" else None
         out["name"] = ROLES[a["role"]]["name"]
         out["last"] = self.db.one("select * from agent_events where agent_id = ? and kind in ('assistant', 'note', 'user') order by id desc limit 1", a["id"])
+        out["watch"] = self.watch_of(a)
+        out["task"] = None
+        if a.get("node_id") and a.get("line_id"):
+            # Read the atomic canvas file directly. Publishing must not acquire the canvas lock or migrate it.
+            canvas = read_json(self.town.canvas._path(a["line_id"]), {})
+            task = next((n for n in canvas.get("nodes", []) if n.get("id") == a["node_id"] and n.get("kind") == "task"), None)
+            if task:
+                out["task"] = {k: task.get(k) for k in ("id", "title", "status")}
         return out
+
+    @staticmethod
+    def _after(at: str | None, seen: str | None) -> bool:
+        """Compare instants rather than ISO spellings with different offsets or precision."""
+        if not at:
+            return False
+        if not seen:
+            return True
+        return datetime.fromisoformat(at.replace("Z", "+00:00")) > datetime.fromisoformat(seen.replace("Z", "+00:00"))
+
+    def watch_of(self, a: dict) -> dict:
+        """Combine lifecycle, attention and local questions into the shared watch contract."""
+        ext = a.get("ext_id")
+        with self._watch_lock:
+            snap = self._snapshots.get(ext, {})
+            doing = self._doing.get(ext, {}).get("doing")
+            say = self._says.get(ext)
+        permissions = [{k: p.get(k) for k in ("id", "name", "title", "arg", "kind")} for p in snap.get("permissions", [])]
+        asks = self.db.q("select * from reports where agent_id = ? and kind = 'ask' and json_extract(data, '$.open') = 1 order by id", a["id"])
+        queued = self.db.val("select count(*) from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1", a["id"])
+        turn = snap.get("turn_started") if a.get("runtime") == "paseo" else self._turns.get(a["id"])
+        finished = snap.get("attention_at") if snap.get("attention") and snap.get("attention_reason") == "finished" else None
+        if a.get("runtime") != "paseo":
+            last = self.db.one("select * from agent_events where agent_id = ? and kind = 'assistant' order by id desc limit 1", a["id"])
+            finished = last["ts"] if last else None
+            say = {"kind": "say", "text": (last["data"].get("text") or "")[:200]} if last else None
+            tool = self.db.one("select * from agent_events t where agent_id = ? and kind = 'tool' and not exists"
+                               " (select 1 from agent_events e where e.agent_id = t.agent_id and e.kind = 'tool_end'"
+                               " and e.id > t.id and json_extract(e.data, '$.id') = json_extract(t.data, '$.id')) order by id desc limit 1", a["id"])
+            if tool:
+                args = tool["data"].get("args") or {}
+                arg = next((args[k] for k in ("command", "path", "filePath", "query", "url") if args.get(k)), "") if isinstance(args, dict) else args
+                doing = {"kind": "tool", "text": f"{tool['data'].get('name') or ''} {arg}".strip()}
+        unread = a["status"] == "idle" and self._after(finished, a.get("seen_at"))
+        bucket, why, since = "idle", None, a["updated_at"]
+        if not a.get("runtime") or a["status"] in ("stopped", "offline") or (a.get("runtime") == "paseo" and (not ext or self.down(a))):
+            bucket, unread = "off", False
+        elif permissions:
+            bucket, why = "needs", "question" if permissions[0]["kind"] in ("question", "plan") else "permission"
+            since = snap.get("attention_at") or since
+        elif asks:
+            bucket, why, since = "needs", "ask", asks[0]["ts"]
+        elif a["status"] == "error":
+            bucket, why = "failed", "error"
+        elif unread:
+            bucket, why, since = "review", "finished", finished
+        elif a["status"] in ("working", "starting"):
+            bucket, since = "working", turn or since
+        if bucket == "needs" and permissions:
+            p = permissions[0]
+            doing = {"kind": why, "text": " ".join(str(x) for x in (p["title"] or p["name"], p["arg"]) if x)[:200]}
+        elif bucket == "needs" and asks:
+            doing = {"kind": "ask", "text": asks[0]["data"]["question"][:200]}
+        elif bucket != "working" or not doing:
+            doing = say
+        key = (ext, a.get("runtime"), bucket, why)
+        with self._watch_lock:
+            previous = self._buckets.get(a["id"])
+            if previous and previous[0] == key:
+                since = previous[1]
+            elif previous and bucket in ("off", "idle"):
+                since = now()
+            self._buckets[a["id"]] = (key, since)
+        return {"bucket": bucket, "why": why, "since": since, "turn": turn if a["status"] in ("working", "starting") else None,
+                "doing": doing, "queued": queued, "unread": unread, "permissions": permissions, "asks": asks}
+
+    def seen(self, agent_id: str) -> dict:
+        if not self.get(agent_id):
+            raise AgentError("没有这个员工")
+        self.db.update("agents", {"id": agent_id}, seen_at=datetime.now(timezone.utc).isoformat())
+        self._publish(agent_id)
+        return self.public(self.get(agent_id))
+
+    def overview(self) -> dict:
+        """Group started agents and unowned conversations by project, including during an outage."""
+        try:
+            status = self.paseo.status()
+            conversations = self.paseo.conversations() if status["ok"] else []
+        except PaseoError as e:
+            status, conversations = {"ok": False, "note": str(e)}, []
+        self._paseo_up, self._paseo_note = status["ok"], status.get("note") or ""
+        rows = self.db.q("select * from agents")
+        counts = dict.fromkeys(("needs", "failed", "review", "working", "idle", "off"), 0)
+        lines = self.db.q("select id, seq, title, status, stage from lines where status != 'dropped' order by seq desc")
+        groups = []
+        attached = {a["ext_id"] for a in rows if a.get("ext_id")}
+        for line in [None, *lines]:
+            lid = line["id"] if line else None
+            agents = [self.public(a) for a in rows if a["line_id"] == lid and a.get("runtime")]
+            for a in agents:
+                counts[a["watch"]["bucket"]] += 1
+            agents.sort(key=lambda a: a["watch"]["since"] or "", reverse=True)
+            agents.sort(key=lambda a: list(counts).index(a["watch"]["bucket"]))
+            roots = [Path(a["cwd"]).resolve() for a in rows if lid and a["line_id"] == lid and a.get("cwd")]
+            loose = []
+            for conv in conversations:
+                labels = conv.get("labels") or {}
+                if not lid or conv["id"] in attached or labels.get("papertown.agent") or labels.get("papertown.role") == "assistant" or not conv.get("cwd"):
+                    continue
+                if any(Path(conv["cwd"]).resolve().is_relative_to(root) for root in roots):
+                    loose.append({k: conv.get(k) for k in ("id", "title", "provider", "model", "status", "cwd", "updated")}
+                                 | {"status": PASEO_STATUS.get(conv.get("status"), conv.get("status"))})
+            if agents or loose:
+                groups.append({"line": line, "agents": agents, "loose": loose})
+        return {"paseo": {"ok": status["ok"], "note": self._paseo_note, "live": bool(self._feed and self._feed.live)},
+                "counts": counts, "groups": groups}
 
     def ensure(self, line_id: str, role: str, node_id: str | None = None) -> dict:
         if role not in ROLES or role == "assistant":
@@ -352,7 +483,8 @@ class Agents:
         self.town.bus.publish("agent", agent=self.public(self.get(agent_id)))
 
     def record(self, agent_id: str, kind: str, data: dict) -> dict:
-        row = {"agent_id": agent_id, "ts": now(), "kind": kind, "data": data}
+        # Replies and read markers can arrive within the same second.
+        row = {"agent_id": agent_id, "ts": datetime.now(timezone.utc).isoformat(), "kind": kind, "data": data}
         row["id"] = self.db.insert("agent_events", row)
         self.town.bus.publish("agent_event", event=row)
         return row
@@ -726,14 +858,17 @@ class Agents:
         except PaseoError as e:
             raise AgentError(str(e)) from e
         snap = t["agent"]
-        status = PASEO_STATUS.get(snap["status"], "error")
-        model = model_label(snap["provider"], snap.get("model"))
         with self._delivery_lock:
             current = self._paseo_agent(agent_id)
             if current["ext_id"] != a["ext_id"]:
                 raise AgentError("会话已切换，请重新读取对话")
-            if self._versions.get(agent_id, 0) == version and (status != a["status"] or model != a["model"]):
-                self._set(agent_id, status=status, model=model)
+            if self._versions.get(agent_id, 0) == version:
+                if "doing" in t:
+                    self._activity(a["ext_id"], t["doing"], snap.get("updated") or now())
+                last = next((item for item in reversed(t["items"]) if item.get("kind") == "assistant"), None)
+                if last:
+                    self._says[a["ext_id"]] = {"kind": "say", "text": last["text"][:200]}
+                self._apply_snapshot(current, snap)
             queued = self.db.q("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1 order by id", agent_id)
             return {"agent": self.public(self.get(agent_id)), "paseo": snap, "items": t["items"], "queued": queued}
 
@@ -759,17 +894,21 @@ class Agents:
         if self._watch_thread or not self.db.val("select 1 from agents where runtime = 'paseo' and ext_id is not null"):
             return
         self._halt.clear()
+        self._feed = Feed(self.paseo, self._feed_line)
         self._watch_thread = threading.Thread(target=self._watch_paseo, daemon=True, name="paseo-watch")
         self._watch_thread.start()
 
     def shutdown(self) -> None:
         self._halt.set()
+        if self._feed:
+            self._feed.close()
+            self._feed = None
         if self._watch_thread:
             self._watch_thread.join(timeout=2)
         self._watch_thread = None
 
     def _watch_paseo(self) -> None:
-        while not self._halt.wait(6):
+        while not self._halt.wait(20 if self._feed and self._feed.live else 6):
             try:
                 self.sync_paseo()
             except Exception as e:  # noqa: BLE001 - the watcher must outlive any one bad reading; the trace says what it was
@@ -780,7 +919,8 @@ class Agents:
         rows = self.db.q("select * from agents where runtime = 'paseo' and ext_id is not null")
         if not rows:
             return
-        up = self.paseo.status()["ok"]
+        status = self.paseo.status()
+        up, self._paseo_note = status["ok"], status.get("note") or ""
         if up != self._paseo_up:
             self._paseo_up = up
             for a in rows:
@@ -795,14 +935,71 @@ class Agents:
                 if a["ext_id"] != previous["ext_id"] or self._versions.get(a["id"], 0) != versions[a["id"]]:
                     continue
                 x = live.get(a["ext_id"])
-                status = PASEO_STATUS.get(x["status"], "error") if x else "stopped"
-                model = model_label(x["provider"], x.get("model")) if x else a["model"]
-                if status != a["status"] or model != a["model"]:
-                    self._set(a["id"], status=status, model=model)
-                    if not x:
-                        self.record(a["id"], "note", {"text": "Paseo 里找不到这个 agent 了（可能被删除或归档）。"})
-                if status == "idle":
-                    self.release(a["id"])
+                self._apply_snapshot(a, x or {"id": a["ext_id"], "status": "stopped"})
+
+    def _activity(self, ext_id: str, doing: dict | None, at: str) -> bool:
+        with self._watch_lock:
+            changed = self._doing.get(ext_id, {}).get("doing") != doing
+            self._doing[ext_id] = {"doing": doing, "at": at}
+            if doing and doing.get("kind") == "say":
+                self._says[ext_id] = doing
+            return changed
+
+    def _apply_snapshot(self, a: dict | None, snap: dict) -> None:
+        """Apply native status and release one held message under the caller's delivery lock."""
+        ext = snap["id"]
+        if "doing" in snap:
+            self._activity(ext, snap["doing"], snap.get("updated") or now())
+        with self._watch_lock:
+            previous = self._snapshots.get(ext, {})
+            merged = previous | deepcopy(snap)
+            # CLI listings omit attention details. Keep known values, but never a finished turn's permission or clock.
+            if snap["status"] not in ("running", "permission"):
+                merged["turn_started"] = None
+                if "permissions" not in snap:
+                    merged["permissions"] = []
+            self._snapshots[ext] = merged
+        if not a:
+            return
+        status = "stopped" if snap["status"] == "stopped" or snap.get("archived") else PASEO_STATUS.get(snap["status"], "error")
+        model = model_label(snap["provider"], snap.get("model")) if "provider" in snap else a["model"]
+        if status != a["status"] or model != a["model"]:
+            self._set(a["id"], status=status, model=model)
+            if status == "stopped" and a["status"] != "stopped":
+                self.record(a["id"], "note", {"text": "Paseo 里找不到这个 agent 了（可能被删除或归档）。"})
+        elif merged != previous:
+            self._versions[a["id"]] = self._versions.get(a["id"], 0) + 1
+            self._publish(a["id"])
+        if status == "idle" and not merged.get("permissions"):
+            self.release(a["id"])
+
+    @_serialized
+    def _feed_line(self, line: dict) -> None:
+        """Consume parsed NDJSON. Tests can drive this without launching the SDK."""
+        kind = line.get("t")
+        if kind in ("ready", "beat"):
+            self._paseo_up, self._paseo_note = True, ""
+            return
+        ext = (line.get("agent") or {}).get("id") if kind == "agent" else line.get("id")
+        if not ext:
+            return
+        a = self.db.one("select * from agents where runtime = 'paseo' and ext_id = ?", ext)
+        if kind == "agent":
+            previous = self._snapshots.get(ext, {})
+            if previous and all(k in previous and previous[k] == value for k, value in line["agent"].items()):
+                return
+            self._apply_snapshot(a, line["agent"])
+        elif kind == "gone":
+            with self._watch_lock:
+                self._snapshots.pop(ext, None)
+                self._doing.pop(ext, None)
+                self._says.pop(ext, None)
+            self._apply_snapshot(a, {"id": ext, "status": "stopped"})
+        elif kind == "doing" and self._activity(ext, line.get("doing"), line.get("at") or now()) and a:
+            self._versions[a["id"]] = self._versions.get(a["id"], 0) + 1
+            self._publish(a["id"])
+        elif kind == "live" and a:  # its conversation has something new: a page showing it reads it again
+            self.town.bus.publish("agent_live", agent_id=a["id"])
 
     @_serialized
     def retire(self, agent_id: str, why: str) -> None:
@@ -841,6 +1038,43 @@ class Agents:
         self.amend(row["id"], row["data"] | {"delivered": True, "held": False, "error": None})
         self._set(agent_id, status="working")
 
+    def _held(self, agent_id: str, event_id: int) -> tuple[dict, dict]:
+        a = self._chat(agent_id)
+        row = self.db.one("select * from agent_events where agent_id = ? and id = ? and kind = 'user'"
+                          " and json_extract(data, '$.held') = 1", agent_id, event_id)
+        if not row:
+            raise AgentError("未找到该排队消息")
+        return a, row
+
+    @_serialized
+    def queue_now(self, agent_id: str, event_id: int) -> dict:
+        """Deliver a held event once, preserving its identity and session ownership."""
+        a, row = self._held(agent_id, event_id)
+        if a.get("runtime") == "pi":
+            self._queue(agent_id, {"kind": "queue_now", "mid": row["data"]["mid"]})
+            event = self.amend(event_id, row["data"] | {"held": False, "steered": True})
+            self._publish(agent_id)
+            return event
+        if not a.get("ext_id") or row["data"].get("ext_id") != a["ext_id"]:
+            raise AgentError("目标会话已改变，消息未发送")
+        try:
+            self.paseo.send(a["ext_id"], row["data"]["text"])
+        except PaseoError as e:
+            self.amend(event_id, row["data"] | {"error": str(e)})
+            raise AgentError(str(e)) from e
+        event = self.amend(event_id, row["data"] | {"held": False, "delivered": True, "steered": a["status"] == "working", "error": None})
+        self._set(agent_id, status="working")
+        return event
+
+    @_serialized
+    def queue_drop(self, agent_id: str, event_id: int) -> dict:
+        a, row = self._held(agent_id, event_id)
+        if a.get("runtime") == "pi":
+            self._queue(agent_id, {"kind": "queue_drop", "mid": row["data"]["mid"]})
+        event = self.amend(event_id, row["data"] | {"held": False, "dropped": True})
+        self._publish(agent_id)
+        return event
+
     def stop(self, agent_id: str) -> dict:
         a = self.get(agent_id)
         if not a:
@@ -862,13 +1096,22 @@ class Agents:
 
     def say(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
         """A message to the agent. While it works, `mode` "steer" puts it into the current turn and "queue"
-        holds it until the turn ends; without one, pi queues and Paseo steers. A message to a Paseo session holds
+        holds it until the turn ends. The default is steer. A message to a Paseo session holds
         only the delivery lock; one that may have to start pi also holds the canvas lock, taken first."""
         if (self.get(agent_id) or {}).get("runtime") == "paseo":
             with self._delivery_lock:
                 if (self.get(agent_id) or {}).get("runtime") == "paseo":  # still, now that the order is ours
-                    return self._say(agent_id, text, mode, origin)
-        return self._say_held(agent_id, text, mode, origin)
+                    event = self._say(agent_id, text, mode, origin)
+                else:
+                    event = None
+            if event is not None:
+                if origin == "web":
+                    self.seen(agent_id)
+                return event
+        event = self._say_held(agent_id, text, mode, origin)
+        if origin == "web":
+            self.seen(agent_id)
+        return event
 
     @_session_change
     def _say_held(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
@@ -881,8 +1124,8 @@ class Agents:
         text = text.strip()
         if not text:
             raise AgentError("消息是空的")
-        if mode not in (None, "queue", "steer"):
-            raise AgentError("发送模式只能是 queue 或 steer")
+        if mode not in (None, "queue", "steer", "interrupt"):
+            raise AgentError("发送模式只能是 steer、queue 或 interrupt")
         if a.get("runtime") == "paseo":
             if not a.get("ext_id"):
                 raise AgentError("先在 Paseo 里启动它")
@@ -890,22 +1133,34 @@ class Agents:
                 self.title(agent_id, text)
             busy = a["status"] == "working"
             if busy and mode == "queue":  # Paseo has no queue of its own: the watcher sends it once the agent is idle
-                return self.record(agent_id, "user", {"text": text, "origin": origin, "ext_id": a["ext_id"], "delivered": False, "queued": True, "held": True})
+                event = self.record(agent_id, "user", {"text": text, "origin": origin, "ext_id": a["ext_id"], "delivered": False, "queued": True, "held": True})
+                self._publish(agent_id)
+                return event
             try:
-                self.paseo.send(a["ext_id"], text)
+                if mode == "interrupt":
+                    self.paseo.send(a["ext_id"], text, behavior="interrupt")
+                else:
+                    self.paseo.send(a["ext_id"], text)
             except PaseoError as e:
                 raise AgentError(str(e)) from e
             self._set(agent_id, status="working")
-            return self.record(agent_id, "user", {"text": text, "origin": origin, "ext_id": a["ext_id"], "delivered": True, "steered": busy})
+            return self.record(agent_id, "user", {"text": text, "origin": origin, "ext_id": a["ext_id"], "delivered": True,
+                                                   "steered": busy and mode != "interrupt", **({"interrupted": True} if busy and mode == "interrupt" else {})})
         if text.startswith("/") and len(text) > 1 and not text[1:2].isspace():
             return self._command(a, text)
         running = self.alive(a)
         if not running and not (self.pi and self.tmux):
             raise AgentError(self.available()["note"])
-        mid = self._queue(agent_id, {"text": text, "mode": mode})
-        ev = self.record(agent_id, "user", {"text": text, "origin": origin, "mid": mid, "delivered": False})
+        cut = mode == "interrupt" and a["status"] == "working"  # an idle agent has nothing to stop
+        if cut:
+            self.abort(agent_id)
+        mid = self._queue(agent_id, {"text": text, "mode": "queue" if mode == "interrupt" else mode or "steer"})
+        ev = self.record(agent_id, "user", {"text": text, "origin": origin, "mid": mid, "delivered": False,
+                                           "held": a["status"] == "working" and mode in ("queue", "interrupt"),
+                                           **({"interrupted": True} if cut else {})})
         if not running:
             self.start(agent_id)
+        self._publish(agent_id)
         return ev
 
     def _command(self, a: dict, text: str) -> dict:
@@ -986,18 +1241,20 @@ class Agents:
             raise AgentError("bridge 身份不对")
         return a
 
+    @_serialized
     def ingest(self, agent_id: str, events: list[dict]) -> None:
         """Events from a pi agent's bridge."""
         for e in events:
             t = e.get("t")
             if t == "hello":
                 before = self.get(agent_id)["status"]
-                self._set(agent_id, status="idle" if e.get("idle", True) else "working", model=e.get("model"))
+                self._set(agent_id, runtime="pi", status="idle" if e.get("idle", True) else "working", model=e.get("model"))
                 if before in ("starting", "stopped", "error"):  # the bridge also says hello after a reconnect
                     self.record(agent_id, "note", {"text": f"pi 已连上（{e.get('model') or '默认模型'}）。"})
             elif t == "input":
                 self.record(agent_id, "user", {"text": e.get("text", ""), "origin": "terminal" if e.get("source") == "interactive" else e.get("source")})
             elif t == "start":
+                self._turns[agent_id] = now()
                 self._set(agent_id, status="working")
             elif t == "delta":
                 self.town.bus.publish("agent_delta", agent_id=agent_id, text=e.get("text", ""))
@@ -1011,13 +1268,19 @@ class Agents:
             elif t == "tool_end":
                 self.record(agent_id, "tool_end", {k: e.get(k) for k in ("id", "name", "error", "result", "ms")})
             elif t == "settled":
+                self._turns.pop(agent_id, None)
                 self._set(agent_id, status="idle")
-            elif t == "delivered":
+            elif t in ("queued", "delivered"):
                 for mid in e.get("ids") or []:
                     row = self.db.one("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.mid') = ?"
                                       " order by id desc limit 1", agent_id, mid)
                     if row:
-                        self.amend(row["id"], row["data"] | {"delivered": True, "queued": bool(e.get("queued")), "steered": bool(e.get("steered"))})
+                        if t == "queued":
+                            if not row["data"].get("dropped") and not row["data"].get("steered"):
+                                self.amend(row["id"], row["data"] | {"held": True, "queued": True})
+                        else:
+                            self.amend(row["id"], row["data"] | {"held": False, "delivered": True,
+                                                                  "queued": bool(e.get("queued")), "steered": bool(e.get("steered"))})
             elif t == "note":
                 self.record(agent_id, "note", {"text": e.get("text", ""), "error": bool(e.get("error"))})
             elif t == "state":
@@ -1026,7 +1289,10 @@ class Agents:
                 m = cur.get("model")
                 self._set(agent_id, **({"model": f"{m['provider']}/{m['id']}"} if m else {}))
             elif t == "bye":
+                self._turns.pop(agent_id, None)
                 self._set(agent_id, status="stopped")
+        if events:
+            self._publish(agent_id)
 
     def _charge(self, agent_id: str, model: str, usage: dict) -> None:
         a = self.get(agent_id)

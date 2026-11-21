@@ -237,7 +237,18 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		},
 	});
 
-	function deliver(m: { id: number; kind?: string; text?: string; name?: string; args?: string; mode?: string | null }) {
+	type Input = { id: number; kind?: string; text?: string; name?: string; args?: string; mode?: string | null; mid?: number };
+	// Keep follow-ups here until the turn ends, so the server can retract or steer them by ID.
+	const pending: Input[] = [];
+	function deliver(m: Input) {
+		if (m.kind === "queue_now" || m.kind === "queue_drop") {
+			const index = pending.findIndex(item => item.id === m.mid);
+			if (index >= 0) {
+				const [held] = pending.splice(index, 1);
+				if (m.kind === "queue_now") deliver({ ...held, mode: "steer" });
+			}
+			return;
+		}
 		if (m.kind === "abort") {
 			ctx?.abort();
 			send({ t: "delivered", ids: [m.id] });
@@ -251,6 +262,11 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		if (!m.text) return;
 		const idle = ctx?.isIdle() ?? true;
 		const steer = m.mode === "steer";
+		if (!idle && !steer) {
+			pending.push(m);
+			send({ t: "queued", ids: [m.id] });
+			return;
+		}
 		void pi.sendUserMessage(m.text, idle ? undefined : { deliverAs: steer ? "steer" : "followUp" });
 		send({ t: "delivered", ids: [m.id], queued: !idle && !steer, steered: !idle && steer });
 	}
@@ -338,6 +354,8 @@ export default function papertownBridge(pi: ExtensionAPI) {
 		flushDelta();
 		send({ t: "settled", aborted: e.aborted });
 		state();
+		const next = pending.shift();
+		if (next) deliver(next);
 	});
 
 	// changes made in the terminal show up in the app too

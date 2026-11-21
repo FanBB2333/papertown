@@ -2,17 +2,20 @@
 //
 //   node link.mjs list                    agents on this machine (newest first)
 //   node link.mjs timeline <id> [limit]   one agent's conversation, trimmed for the room
+//   node link.mjs watch                   live snapshots and activity as NDJSON
 //
 // PASEO_WS overrides the endpoint (default ws://127.0.0.1:6767/ws), PASEO_PASSWORD sets
 // the daemon password if it has one.
 
 import { createPaseoClient } from "@getpaseo/client";
-import { agentOf, itemOf, listAgents } from "./protocol.mjs";
+import { agentOf, doingOf, itemOf, listAgents } from "./protocol.mjs";
+import { watchAgents } from "./watch.mjs";
 
 const [cmd, id, limit] = process.argv.slice(2);
 const client = createPaseoClient({
   url: process.env.PASEO_WS || "ws://127.0.0.1:6767/ws",
   ...(process.env.PASEO_PASSWORD ? { password: process.env.PASEO_PASSWORD } : {}),
+  reconnect: { enabled: false },
 });
 
 
@@ -26,9 +29,11 @@ try {
     await a.refresh();
     const cur = a.current();
     if (!cur) throw new Error("Paseo agent no longer exists");
-    console.log(JSON.stringify({ agent: agentOf(cur), items: page.entries.map(itemOf).filter(Boolean) }));
+    console.log(JSON.stringify({ agent: agentOf(cur), items: page.entries.map(itemOf).filter(Boolean), doing: doingOf(page.entries) }));
+  } else if (cmd === "watch") {
+    await watchAgents(client, line => console.log(JSON.stringify(line)));
   } else {
-    console.error("usage: node link.mjs list | timeline <id> [limit]");
+    console.error("usage: node link.mjs list | timeline <id> [limit] | watch");
     process.exitCode = 2;
   }
 } catch (e) {

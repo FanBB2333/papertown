@@ -8,14 +8,43 @@ export function agentOf(a) {
     status: a.status, thinking: a.effectiveThinkingOptionId ?? null, mode: a.currentModeId ?? null,
     labels: a.labels ?? {}, created: a.createdAt, updated: a.updatedAt, last_user: a.lastUserMessageAt ?? null,
     archived: !!a.archivedAt, attention: !!a.requiresAttention,
-    permissions: (a.pendingPermissions ?? []).map((p) => ({ id: p.id, name: p.name, title: p.title ?? null, arg: clip(String(toolArg(p.detail ?? p.input ?? {})), 300) })),
+    attention_reason: a.attentionReason ?? null, attention_at: a.attentionTimestamp ?? null,
+    turn_started: a.activeTurn?.startedAt ?? null,
+    permissions: (a.pendingPermissions ?? []).map((p) => ({ id: p.id, name: p.name, title: p.title ?? null, arg: clip(String(toolArg(p.detail ?? p.input ?? {})), 300), kind: p.kind ?? null })),
     usage: a.lastUsage ? { input: a.lastUsage.inputTokens ?? 0, output: a.lastUsage.outputTokens ?? 0, cost: a.lastUsage.totalCostUsd ?? 0 } : null,
   };
 }
 
 // what a tool call was about, in one short line
 function toolArg(d = {}) {
-  return d.command ?? d.filePath ?? d.query ?? d.url ?? (d.filePaths ?? []).join(", ");
+  return d.command ?? d.filePath ?? d.query ?? d.url ?? d.text ?? (d.filePaths ?? []).join(", ");
+}
+
+// Keep only current tool calls and the last reply, so a long watch uses bounded history.
+export class Activity {
+  tools = new Map();
+  say = null;
+
+  add(entry) {
+    const item = entry.item;
+    if (item?.type === "tool_call") {
+      this.tools.delete(item.callId);
+      if (item.status === "running") this.tools.set(item.callId, item);
+    } else if (item?.type === "assistant_message") {
+      this.say = { kind: "say", text: [...item.text].slice(0, 200).join("") };
+    }
+  }
+
+  current() {
+    const tool = [...this.tools.values()].at(-1);
+    return tool ? { kind: "tool", text: `${tool.name} ${String(toolArg(tool.detail))}`.trim() } : this.say;
+  }
+}
+
+export function doingOf(entries) {
+  const activity = new Activity();
+  for (const entry of entries) activity.add(entry);
+  return activity.current();
 }
 
 // a timeline entry as the room shows it, or null for what stays in Paseo

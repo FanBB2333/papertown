@@ -18,6 +18,7 @@ class Sessions(FakeLink):
     def __init__(self):
         super().__init__()
         self.sent, self.projects, self.workspaces = [], [], []
+        self.behaviors = []
 
     def project(self, path):
         self.projects.append(path)
@@ -31,8 +32,9 @@ class Sessions(FakeLink):
         super().label(agent_id, labels)
         next(c for c in self.convs if c['id'] == agent_id)['labels'] = labels
 
-    def send(self, agent_id, text):
+    def send(self, agent_id, text, behavior="steer"):
         self.sent.append((agent_id, text))
+        self.behaviors.append(behavior)
         next(c for c in self.convs if c['id'] == agent_id)['status'] = 'running'
 
     def timeline(self, agent_id, limit):

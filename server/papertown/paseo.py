@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -14,7 +15,7 @@ import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlsplit, urlunsplit
 
 APP_CLI = "/Applications/Paseo.app/Contents/Resources/bin/paseo"
@@ -82,8 +83,8 @@ class Paseo:
             raise PaseoError(f"paseo {args[0]} 失败：{failed[-1].strip()}")
         return result
 
-    def _link(self, *args: str, timeout: float = 30) -> Any:
-        """Run paseo_link/link.mjs (the SDK) and parse its JSON."""
+    def _link_command(self, *args: str) -> tuple[list[str], dict[str, str]]:
+        """Use the same SDK runtime, endpoint and credentials for reads and the feed."""
         node = _node()
         if not self.bin or not node:
             raise PaseoError("本机没有找到 Paseo 或 node")
@@ -100,8 +101,13 @@ class Paseo:
         if address.scheme not in ("ws", "wss", "tcp") or not address.hostname or address.path not in ("", "/ws"):
             raise PaseoError("Paseo SDK 需要 TCP/WebSocket 端点，请把 PAPERTOWN_PASEO_HOST 设为主机:端口")
         env["PASEO_WS"] = urlunsplit(("ws" if address.scheme == "tcp" else address.scheme, address.netloc, "/ws", "", ""))
+        return [*node, str(LINK / "link.mjs"), *args], env
+
+    def _link(self, *args: str, timeout: float = 30) -> Any:
+        """Run paseo_link/link.mjs (the SDK) and parse its JSON."""
+        cmd, env = self._link_command(*args)
         try:
-            r = subprocess.run([*node, str(LINK / "link.mjs"), *args], capture_output=True, text=True, timeout=timeout, cwd=LINK, env=env)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=LINK, env=env)
         except subprocess.TimeoutExpired:
             raise PaseoError("读取 Paseo 超时") from None
         except OSError as e:
@@ -218,11 +224,11 @@ class Paseo:
             self._cache.pop("conversations", None)
         return r
 
-    def send(self, agent_id: str, text: str) -> None:
+    def send(self, agent_id: str, text: str, behavior: str = "steer") -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
             f.write(text)
         try:
-            self._cli("send", agent_id, "--no-wait", "--prompt-file", f.name, "--behavior", "steer", timeout=60)
+            self._cli("send", agent_id, "--no-wait", "--prompt-file", f.name, "--behavior", behavior, timeout=60)
         finally:
             os.unlink(f.name)
 
@@ -237,3 +243,83 @@ class Paseo:
 
     def list(self, labels: dict[str, str]) -> list[dict]:
         return self._cli("ls", "--all", "--global", *_pairs("--label", labels)) or []
+
+
+class Feed:
+    """Read a single SDK watch process and restart it after failures, without blocking requests."""
+
+    def __init__(self, paseo: Paseo, callback: Callable[[dict], None]):
+        self.paseo, self.callback = paseo, callback
+        self._halt = threading.Event()
+        self._lock = threading.Lock()
+        self._process: subprocess.Popen | None = None
+        self._beat: float | None = None
+        self._thread = threading.Thread(target=self._run, daemon=True, name="paseo-feed")
+        self._thread.start()
+
+    @property
+    def live(self) -> bool:
+        return not self._halt.is_set() and self._beat is not None and time.monotonic() - self._beat < 40
+
+    def _line(self, line: str) -> None:
+        """Ignore malformed output without losing the rest of a healthy stream."""
+        try:
+            data = json.loads(line)
+        except ValueError:
+            return
+        if not isinstance(data, dict):
+            return
+        if data.get("t") in ("ready", "beat"):
+            self._beat = time.monotonic()
+        self.callback(data)
+
+    def _run(self) -> None:
+        delay = 1
+        while not self._halt.is_set():
+            process = None
+            started = time.monotonic()
+            try:
+                cmd, env = self.paseo._link_command("watch")
+                with self._lock:
+                    if self._halt.is_set():
+                        return
+                    process = self._process = subprocess.Popen(cmd, cwd=LINK, env=env, stdout=subprocess.PIPE,
+                                                               stderr=subprocess.DEVNULL, text=True, encoding="utf-8")
+                for line in process.stdout:
+                    if self._halt.is_set():
+                        break
+                    try:
+                        self._line(line)
+                    except Exception:
+                        logging.getLogger(__name__).exception("Paseo feed callback failed")
+                if self.live and time.monotonic() - started >= 40:
+                    delay = 1
+            except (OSError, PaseoError):
+                pass
+            finally:
+                self._beat = None
+                if process:
+                    self._stop(process)
+                    process.stdout.close()
+                with self._lock:
+                    self._process = None
+            if self._halt.wait(delay):
+                return
+            delay = min(delay * 2, 30)
+
+    @staticmethod
+    def _stop(process: subprocess.Popen) -> None:
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2)
+
+    def close(self) -> None:
+        self._halt.set()
+        with self._lock:
+            if self._process:
+                self._stop(self._process)
+        self._thread.join(timeout=2)

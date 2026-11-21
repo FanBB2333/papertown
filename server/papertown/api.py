@@ -279,7 +279,11 @@ class SaveIn(BaseModel):
 
 class SayIn(BaseModel):
     text: str = Field(min_length=1, max_length=20000)
-    mode: Literal["steer", "queue"] | None = None
+    mode: Literal["steer", "queue", "interrupt"] | None = None
+
+
+class QueueIn(BaseModel):
+    what: Literal["now", "drop"]
 
 
 class JobIn(BaseModel):
@@ -658,6 +662,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         a = agents(town.agents.ensure, body.line_id, body.role)
         return town.agents.public(a)
 
+    @app.get("/api/agents/overview")
+    def agent_overview():
+        return town.agents.overview()
+
     @app.get("/api/agents/{agent_id}")
     def agent(agent_id: str, after: int = 0):
         a = town.agents.get(agent_id)
@@ -772,6 +780,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/agents/{agent_id}/say")
     def agent_say(agent_id: str, body: SayIn):
         return agents(town.agents.say, agent_id, body.text, body.mode)
+
+    @app.post("/api/agents/{agent_id}/seen")
+    def agent_seen(agent_id: str):
+        return agents(town.agents.seen, found(agent_id))
+
+    @app.post("/api/agents/{agent_id}/queue/{event_id}")
+    def agent_queue(agent_id: str, event_id: int, body: QueueIn):
+        action = town.agents.queue_now if body.what == "now" else town.agents.queue_drop
+        return agents(action, found(agent_id), event_id)
 
     @app.post("/api/agents/{agent_id}/brief")
     def agent_brief(agent_id: str):

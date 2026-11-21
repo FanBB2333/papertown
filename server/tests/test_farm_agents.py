@@ -221,7 +221,7 @@ class FakeLink:
                               "labels": kw["labels"], "cwd": str(kw["cwd"]), "workspace_id": kw.get("workspace_id"), "updated": f"2026-11-0{len(self.made)}T00:00:00Z", "last_user": None})
         return {"agentId": ext}
 
-    def send(self, agent_id, text):
+    def send(self, agent_id, text, behavior="steer"):
         pass
 
     def interrupt(self, agent_id):
@@ -263,7 +263,7 @@ def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
         assert link.labels["conv-1"]["papertown.agent"] == a["id"]
 
         sent = []
-        town.agents.paseo.send = lambda ext, text: sent.append(text)
+        town.agents.paseo.send = lambda ext, text, behavior="steer": sent.append(text)
         c.post(f"/api/agents/{a['id']}/brief")
         pt = Path(re.search(r"`(\S+/pt) brief`", sent[0]).group(1))
         assert pt.parent.parent == Path(town.agents._workdir(first, "coder"))
