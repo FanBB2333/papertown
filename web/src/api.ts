@@ -37,6 +37,29 @@ export interface Line {
   linked?: Linked | null;
 }
 
+export type UsageProviderId = 'claude' | 'codex' | 'antigravity';
+export type UsageBudget = number | null;
+export type UsageState = 'none' | 'ok' | 'near' | 'over';
+export interface UsageTokens { input: number; cache_write: number; cache_write_1h: number; cache_read: number; output: number }
+export interface UsageWindow {
+  id: string; key: string; label: string; group: string | null; used: number; left: number; resets_at: string | null;
+}
+export interface UsageProvider {
+  id: UsageProviderId; label: string; plan: string | null; status: 'available' | 'unavailable' | 'stale';
+  error: string | null; notes: string[]; fetched_at: string | null; windows: UsageWindow[];
+  balances: { id: string; label: string; unit: string; used?: number; remaining?: number; limit?: number }[];
+  week: { cost: number; projects: number; tokens: UsageTokens; unpriced: string[] };
+}
+export interface UsageView { polled_at: string | null; next_at: string | null; providers: UsageProvider[]; logs: boolean; log_error: string | null }
+export interface LineUsage {
+  budget: UsageBudget; spent: number; state: UsageState; since: string | null; week: number; logs: boolean;
+  providers: { id: UsageProviderId; cost: number; tokens: UsageTokens }[];
+  models: { provider: UsageProviderId; model: string; cost: number; tokens: UsageTokens; priced: boolean }[];
+  sessions: { session: string; provider: UsageProviderId; owner: { kind: 'agent' | 'terminal' | 'dir'; id: string; name: string };
+    cwd: string; cost: number; tokens: UsageTokens; last_at: string }[];
+}
+export interface UsageSettings { default_budget: UsageBudget; poll: number; logs: boolean }
+
 export interface Commit { hash: string; when: string; author: string; subject: string }
 export interface LinkedCode {
   path: string; name: string; missing?: boolean; branch?: string; remote?: string | null; commits?: Commit[]; dirty?: number;
@@ -85,6 +108,7 @@ export interface Overview {
 export interface Terminal {
   id: string; terminal_id: string; pane_id: string; workspace_id: string | null; tab_id: string | null;
   name: string | null; kind: string | null; title: string; cwd: string | null; watch: Watch;
+  agent_session?: { kind: string; value: string } | null;
 }
 export interface TerminalQueue { id: number; terminal_id: string; text: string; created_at: string; state: 'queued' | 'sending' | 'sent' | 'failed' | 'dropped' }
 export interface TerminalDetail { terminal: Terminal; text: string; queued: TerminalQueue[] }
@@ -107,7 +131,7 @@ export interface Agent {
   model: string | null; cost: number; attach: string | null; name: string; last: AgentEvent | null; updated_at: string;
   runtime: 'pi' | 'paseo'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
   down?: string | null; // why it cannot be reached now (its status is then offline)
-  node_id?: string | null; workspace_id?: string | null;
+  node_id?: string | null; workspace_id?: string | null; session_id?: string | null;
   watch?: Watch; task?: AgentTask | null;
 }
 
@@ -125,7 +149,7 @@ export type PaseoDefaults = Record<'assistant' | 'lead', PaseoDefault>;
 export interface ModelNews { key: string; provider: string; label: string; model: string; name: string; thinking: string[]; default_thinking: string | null; at: string }
 
 export interface Report {
-  id: number; line_id: string; agent_id: string; ts: string; kind: 'report' | 'ask';
+  id: number; line_id: string; agent_id: string | null; ts: string; kind: 'report' | 'ask' | 'usage';
   data: { text?: string; key?: boolean; who?: string; question?: string; choices?: string[]; open?: boolean; answer?: string;
     answered_at?: string; by?: string; act?: { action: string } | null; result?: string };
 }
@@ -145,7 +169,7 @@ export interface CardRepo {
 }
 export interface MemoryCounts { sessions: number; notes: number; messages: number; at: string | null }
 export interface ProjectCard {
-  line: { id: string; seq: number; title: string; status: string; linked: boolean; updated_at: string;
+  line: { id: string; seq: number; title: string; status: string; linked: boolean; updated_at: string; usage_state?: UsageState;
     stages: { key: string; name: string; status: 'todo' | 'run' | 'wait' | 'done' | 'fail' }[]; stage: { name: string; status: string; pct: number } | null };
   lead: Agent | null; card: Card | null; prev: number | null; pending: { at: string; note: string } | null;
   jobs: Record<string, number>; asks: number;
@@ -387,7 +411,7 @@ const pageLook = () => {
 };
 // localize() keep-predicates: what you and the agents wrote stays as written; only the town's own text is translated
 const said = (v: object) => ['user', 'assistant'].includes((v as { kind?: string }).kind ?? '') || (v as { type?: string }).type === 'agent_delta';
-const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'text' in v);
+const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'text' in v && !('threshold' in v));
 const carded = (v: object) => said(v) || ('summary' in v && 'health' in v);
 const asIs = () => true;
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
@@ -419,7 +443,13 @@ export const api = {
   freshPapers: () => call<{ papers: (PaperCard & { relevance: number })[] }>('GET', '/api/papers/fresh'),
   departments: () => call<Department[]>('GET', '/api/departments'),
   idea: (text: string, budget: number) => call<Line>('POST', '/api/ideas', { text, budget }),
-  hatch: (id: string) => call<Line>('POST', `/api/lines/${id}/hatch`),
+  hatch: (id: string, usage_budget?: UsageBudget) => call<Line>('POST', `/api/lines/${id}/hatch`, { usage_budget }),
+  usage: () => call<UsageView>('GET', '/api/usage'),
+  refreshUsage: () => call<UsageView>('POST', '/api/usage/refresh'),
+  usageSettings: () => call<UsageSettings>('GET', '/api/usage/settings'),
+  setUsageSettings: (body: UsageSettings) => call<UsageSettings>('PUT', '/api/usage/settings', body),
+  lineUsage: (id: string) => call<LineUsage>('GET', `/api/lines/${id}/usage`),
+  setUsageBudget: (id: string, body: UsageBudget) => call<LineUsage>('PUT', `/api/lines/${id}/usage_budget`, { usd: body }),
   adjust: (id: string, text: string) => call<Line>('POST', `/api/lines/${id}/adjust`, { text }),
   resume: (id: string) => call<Line>('POST', `/api/lines/${id}/resume`),
   ask: (text: string, building: string) => call<{ ok: boolean }>('POST', '/api/chat', { text, building }),
@@ -570,7 +600,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'terminal', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'terminal', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas', 'usage'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);

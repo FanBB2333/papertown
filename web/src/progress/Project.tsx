@@ -8,6 +8,7 @@ import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
+import { ProjectUsage } from '../usage/Usage';
 import { follow, href, PATHS } from '../route';
 import { askPath, ChatBox } from './Ask';
 import { LoopCard } from './LoopCard';
@@ -71,6 +72,7 @@ export function Project({ r, defs, toast, onChange, onConsole, decide }: {
 
       <div className="pj-grid">
         <div className="pj-main">
+          <ProjectUsage lineId={line.id} />
           <section className={`psec pj-card${card ? ` h-${card.health}` : ''}`} id="card">
             <header className="psec-h">
               <h3><Icon n="cards" size={16} />{tr('进展')}</h3>

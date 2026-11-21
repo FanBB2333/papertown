@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from .db import now
 from .herdr import Feed, Herdr, HerdrError
+from .project_dirs import owner, project_roots
 
 if TYPE_CHECKING:
     from .town import Town
@@ -164,6 +165,7 @@ class Terminals:
         return {"id": f"herdr:{terminal_id}", "terminal_id": terminal_id, "pane_id": a["pane_id"],
                 "workspace_id": a.get("workspace_id"), "tab_id": a.get("tab_id"), "name": a.get("name"),
                 "kind": a.get("agent") or a.get("display_agent"), "title": title,
+                "agent_session": a.get("agent_session"),
                 "cwd": a.get("foreground_cwd") or a.get("cwd"), "watch": watch}
 
     def all(self) -> list[dict]:
@@ -171,21 +173,11 @@ class Terminals:
             return [self._public(a) for a in self._raw.values()]
 
     def grouped(self, lines: list[dict], agents: list[dict]) -> tuple[dict[str, list[dict]], list[dict]]:
-        roots = []
+        roots = project_roots(self.town, lines, agents)
         groups: dict[str, list[dict]] = {line["id"]: [] for line in lines}
-        for line in lines:
-            lid = line["id"]
-            linked = self.town.linked.of(lid) or {}
-            dirs = [linked.get("code") or self.town.s.projects_dir / lid / "code",
-                    linked.get("paper") or self.town.s.press_dir / lid]
-            dirs += [a["cwd"] for a in agents if a.get("line_id") == lid and a.get("cwd")]
-            roots.extend((Path(d).expanduser().resolve(), lid) for d in dirs)
-        # Nested projects belong to the most specific directory, with stable project order for ties.
-        roots.sort(key=lambda pair: len(pair[0].parts), reverse=True)
         others = []
         for terminal in self.all():
-            cwd = Path(terminal["cwd"]).expanduser().resolve() if terminal["cwd"] else None
-            lid = next((lid for root, lid in roots if cwd and cwd.is_relative_to(root)), None)
+            lid = owner(terminal["cwd"], roots)
             (groups[lid] if lid else others).append(terminal)
         return groups, others
 

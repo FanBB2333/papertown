@@ -6,6 +6,7 @@ import { api, listen, type CardLayout, type Pane, type PaperCard, type PaseoDefa
 import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { tr } from '../i18n';
+import { UsageMark } from '../usage/Usage';
 import { follow, go, href } from '../route';
 import { setSettings, useSettings, type PgGroup, type PgSort, type Settings as S } from '../settings';
 import { AskPage } from './Ask';
@@ -78,7 +79,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
     const off = listen(e => {
       if (e.type === 'card' && e.card) setRows(rs => rs && rs.map(r => (r.line.id === e.card.line.id ? e.card : r)));
       else if (e.type === 'card_layout' && e.layout) setLayout(e.layout);
-      else if (['line', 'job', 'report', 'memory'].includes(e.type) || (e.type === 'agent' && e.agent?.role === 'lead')) {
+      else if (['line', 'job', 'report', 'memory', 'usage'].includes(e.type) || (e.type === 'agent' && e.agent?.role === 'lead')) {
         clearTimeout(again.current);
         again.current = window.setTimeout(load, 1500);
       }
@@ -208,6 +209,7 @@ function ProjectBox({ r, i, panes, defs, toast, onChange }: {
       <header className="pc-head">
         <span className="pc-name"><span className="pc-seq">#{line.seq}</span>{o.title}</span>
         <StatusTag status={line.status} />
+        <UsageMark state={line.usage_state} />
       </header>
       <Stages r={r} />
       <div className="pc-panes">

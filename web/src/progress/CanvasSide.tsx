@@ -313,7 +313,7 @@ function BoundsDetail({ n, onRules }: { n: CanvasNode; onRules: () => void }) {
           ))}
         </ul>
       ) : <p className="small muted">{spec ? tr('工作边界里还没有写给 agent 的要求：它们只按项目简报做。') : tr('还没有绑定动作的边界：Papertown 不拦任何动作。')}</p>}
-      {!spec && b && b.budget > 0 && <p className="small">{tr('单线预算 ${0}，已用 ${1}', b.budget, Math.round(b.spent * 100) / 100)}</p>}
+      {!spec && b && b.budget > 0 && <p className="small">{tr('小镇 API 预算 ${0}，已用 ${1}', b.budget, Math.round(b.spent * 100) / 100)}</p>}
       <div className="cv-row"><button className="btn" onClick={onRules}><Icon n="shield" size={13} />{tr('在中控屏里改工作边界')}</button></div>
     </>
   );

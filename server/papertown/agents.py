@@ -501,12 +501,13 @@ class Agents:
 
     def detach(self, agent_id: str) -> None:
         """Set an agent's Paseo conversation aside (it stays in Paseo); the next start makes another."""
-        self._set(agent_id, runtime=None, ext_id=None, status="stopped", model=None)
+        self._set(agent_id, runtime=None, ext_id=None, session_id=None, status="stopped", model=None)
 
     def attach(self, agent_id: str, conv: dict) -> None:
         """Take a Paseo conversation (back) as the agent's own."""
         self._set(agent_id, runtime="paseo", ext_id=conv["id"], model=model_label(conv["provider"], conv.get("model")),
                   cwd=conv["cwd"], workspace_id=conv.get("workspace_id"), status=PASEO_STATUS.get(conv["status"], "error"))
+        self._remember_session(self.get(agent_id), conv)
         self.watch()
 
     def _chat(self, agent_id: str) -> dict:
@@ -803,7 +804,7 @@ class Agents:
                 env={"PAPERTOWN_URL": self.s.url, "PAPERTOWN_AGENT": a["id"], "PAPERTOWN_AGENT_TOKEN": a["token"], "PAPERTOWN_AGENT_ROLE": a["role"]})
         except PaseoError as e:
             raise AgentError(str(e)) from e
-        self._set(a["id"], runtime="paseo", ext_id=r["agentId"], status="working", model=model_label(provider, model))
+        self._set(a["id"], runtime="paseo", ext_id=r["agentId"], session_id=None, status="working", model=model_label(provider, model))
         sent = "说明" if a["role"] == "assistant" else "项目简报"
         self.record(a["id"], "note", {"text": f"在 Paseo 里启动了 {provider}{f' · {model}' if model else ''}，并发了{sent}。"})
         self.watch()
@@ -843,6 +844,7 @@ class Agents:
         self._tools(a)
         self._set(a["id"], runtime="paseo", ext_id=ext_id, model=model_label(conv["provider"], conv.get("model")),
                   cwd=conv["cwd"], workspace_id=conv.get("workspace_id"), status=PASEO_STATUS.get(conv["status"], "error"))
+        self._remember_session(self.get(a["id"]), conv)
         self.record(a["id"], "note", {"text": f"导入了 Paseo 里的对话「{conv.get('title') or ext_id[:8]}」。点侧栏的「发送项目简报」，它就知道这个项目和怎么用 Papertown。"})
         self.watch()
         return self.public(self.get(a["id"]))
@@ -949,6 +951,18 @@ class Agents:
                 self._says[ext_id] = doing
             return changed
 
+    def _remember_session(self, a: dict, snap: dict) -> None:
+        """Preserve every provider session, including sessions from imported snapshots."""
+        if "session_id" in snap:
+            session_id = snap["session_id"]
+            with self.db.lock:
+                if session_id:
+                    self.db.conn.execute("insert into agent_sessions values (?, ?, ?, ?) on conflict(session_id) do update set "
+                                         "agent_id=excluded.agent_id, line_id=excluded.line_id, provider=excluded.provider",
+                                         (session_id, a["id"], a["line_id"], snap.get("provider") or (a.get("model") or "").split("/")[0]))
+                self.db.conn.execute("update agents set session_id = ? where id = ?", (session_id, a["id"]))
+                self.db.conn.commit()
+
     def _apply_snapshot(self, a: dict | None, snap: dict) -> None:
         """Apply native status and release one held message under the caller's delivery lock."""
         ext = snap["id"]
@@ -965,6 +979,7 @@ class Agents:
             self._snapshots[ext] = merged
         if not a:
             return
+        self._remember_session(a, snap)
         status = "stopped" if snap["status"] == "stopped" or snap.get("archived") else PASEO_STATUS.get(snap["status"], "error")
         model = model_label(snap["provider"], snap.get("model")) if "provider" in snap else a["model"]
         if status != a["status"] or model != a["model"]:

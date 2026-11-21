@@ -80,7 +80,7 @@ export function MillRoom(p: Props) {
           <div><b>{count(['running', 'hatching'])}</b><span>{tr('在跑')}</span></div>
           <div><b>{count(['waiting', 'paused', 'failed'])}</b><span>{tr('等你')}</span></div>
           <div><b>{count(['done'])}</b><span>{tr('已出厂')}</span></div>
-          <div><b>${spent.toFixed(2)}</b><span>{tr('总花费')}</span></div>
+          <div><b>${spent.toFixed(2)}</b><span>{tr('小镇 API 总花费')}</span></div>
         </div>
         <div className="plist">
           {lines.map((l, i) => {
@@ -94,7 +94,7 @@ export function MillRoom(p: Props) {
                 </div>
                 <div className="proj-meta">
                   <span>{l.current?.name ?? (l.status === 'done' ? tr('已出厂') : STATUS[l.status])}</span>
-                  <span>{l.linked ? l.linked.code?.name ?? l.linked.paper?.name : `$${l.spent.toFixed(2)} / $${l.budget.toFixed(2)}`}</span>
+                  <span>{l.linked ? l.linked.code?.name ?? l.linked.paper?.name : tr('小镇 API：${0} / ${1}', l.spent.toFixed(2), l.budget.toFixed(2))}</span>
                 </div>
                 <div className="crew">
                   <span className={`crew-a s-${coder?.status ?? 'none'}`}>{tr('代码员工 ·')} {coder ? AGENT_STATUS[coder.status] : '—'}</span>

@@ -128,3 +128,10 @@ test('watch uses one client, subscribes owned timelines, throttles and exits on 
   }
   assert.deepEqual(released.sort(), ['list', 'owned', 'updates']);
 });
+
+test('preserves provider session identity from persistence, including session changes', () => {
+  assert.equal(agentOf({ persistence: { provider: 'claude', sessionId: 'old-session' } }).session_id, 'old-session');
+  assert.equal(agentOf({ persistence: { provider: 'codex', sessionId: 'new-session' } }).session_id, 'new-session');
+  assert.equal(agentOf({ persistence: null }).session_id, null);
+  assert.equal(agentOf({}).session_id, null);
+});

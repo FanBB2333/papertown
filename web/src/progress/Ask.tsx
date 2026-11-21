@@ -21,7 +21,7 @@ import './ask.css';
 
 export const askPath = (seq: number) => `/progress/${seq}/ask`;
 
-const latest = (rs: Report[] | undefined, n: number) => (rs ?? []).filter(x => x.kind === 'report').slice(-n).reverse();
+const latest = (rs: Report[] | undefined, n: number) => (rs ?? []).filter(x => x.kind === 'report' || x.kind === 'usage').slice(-n).reverse();
 const oneLine = (s?: string) => (s ?? '').replace(/[*`#>]/g, '').replace(/\s*\n+\s*(?:[-•]\s+)?/g, ' ');
 
 export function AskPage({ r, rows, toast }: { r: ProjectCard; rows: ProjectCard[]; toast: (t: string) => void }) {

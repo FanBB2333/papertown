@@ -272,10 +272,11 @@ class Leads:
         locks = self.town.canvas.locks(line_id)
         if locks:
             out += ["硬卡口：" + "；".join(locks)]
-        reps = [r for r in self.reports(line_id, 12) if r["kind"] == "report"][-3:]
+        reps = [r for r in self.reports(line_id, 12) if r["kind"] in ("report", "usage")][-3:]
         if reps:
             out += ["", "最近的汇报："]
             out += [f"- {_ago(r['ts'])}{'【关键】' if r['data'].get('key') else ''}：{clip(r['data']['text'], 200)}" for r in reps]
+        out += self.town.usage.brief(line_id)
         return "\n".join(out)
 
     def _jobs(self, line_id: str) -> list[dict]:

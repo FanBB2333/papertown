@@ -4,7 +4,7 @@ const clip = (s, n) => (s && s.length > n ? `${s.slice(0, n)}…` : s ?? "");
 export function agentOf(a) {
   return {
     id: a.id, title: a.title ?? null, provider: a.provider, model: a.model ?? null, cwd: a.cwd,
-    workspace_id: a.workspaceId ?? null,
+    workspace_id: a.workspaceId ?? null, session_id: a.persistence?.sessionId ?? null,
     status: a.status, thinking: a.effectiveThinkingOptionId ?? null, mode: a.currentModeId ?? null,
     labels: a.labels ?? {}, created: a.createdAt, updated: a.updatedAt, last_user: a.lastUserMessageAt ?? null,
     archived: !!a.archivedAt, attention: !!a.requiresAttention,

@@ -17,6 +17,7 @@ import { layer } from '../kumo';
 import '../settings.css';
 import { LANG, LANGS, setLang, tr } from '../i18n';
 import { go } from '../route';
+import { UsageSettings } from '../usage/Settings';
 
 // each section: its address, name, what is in it, icon, and the colour of its tile in the macOS look
 type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'access' | 'demo' | 'keys';
@@ -398,6 +399,7 @@ function Agents() {
           <Pick label={tr('默认发送方式')} value={s.agentSend} options={[['steer', tr('插话')], ['queue', tr('排队')], ['interrupt', tr('打断并发送')]]} onChange={set('agentSend')} />
         </Row>
       </Card>
+      <UsageSettings />
       <Card title="Paseo">
         <Row label={tr('连接')} desc={tr('托管 Claude Code、Codex、OpenCode 等 agent 的本机守护进程')}>
           <Badge variant={st?.ok ? 'success' : paseo === null ? 'neutral' : 'warning'}>{paseo === null ? tr('检查中…') : st?.ok ? tr('已连接{0}', st.version ? ` · ${st.version}` : '') : tr('未连接')}</Badge>

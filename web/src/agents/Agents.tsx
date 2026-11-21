@@ -12,6 +12,7 @@ import { refreshOverview, useOverview } from './overview';
 import { agentName, BUCKETS, bucketOf, kindName, WatchStatus } from './watch';
 import { TerminalContext, TerminalRoom } from './Terminal';
 import './agents.css';
+import { UsageStrip } from '../usage/Usage';
 
 type Group = Overview['groups'][number] & { other?: boolean };
 type Row = Agent | Terminal;
@@ -84,6 +85,7 @@ export function Agents({ id, active, lines, toast }: { id?: string; active: bool
     : <AgentRow key={a.id} agent={a} selected={id === a.id} filter={filter} project={sort === 'urgent' ? g.line : undefined} toast={toast} />;
   return <div className={`aw${id ? ' aw-selected' : ''}`} ref={root} hidden={!active}>
     <aside className="aw-list" aria-label={tr('员工列表')}>
+      <UsageStrip active={active} />
       <header className="aw-top">
         <h1>{tr('员工')}</h1>
         <div className="aw-filters" aria-label={tr('按状态筛选')}>

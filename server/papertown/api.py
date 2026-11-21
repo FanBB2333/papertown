@@ -26,6 +26,7 @@ from .canvas import CanvasError
 from .cards import CardError
 from .checks import CheckError
 from .paseo_models import ModelError
+from .usage import UsageError
 from .paseo import PaseoError
 from .leads import LeadError
 from .config import SERVER_DIR, Settings
@@ -61,6 +62,16 @@ class BoundsIn(BaseModel):
 class LeadIn(BaseModel):
     supervise: bool | None = None
     every: int | None = Field(default=None, ge=10, le=1440)
+
+
+class HatchIn(BaseModel):
+    usage_budget: float | None = Field(default=None, strict=True, gt=0, allow_inf_nan=False)
+
+
+class UsageSettingsIn(BaseModel):
+    default_budget: float | None = Field(default=None, strict=True, gt=0, allow_inf_nan=False)
+    poll: float | None = None
+    logs: bool | None = None
 
 
 class AnswerIn(BaseModel):
@@ -489,8 +500,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return guard(town.pipeline.submit_idea, body.text, body.budget)
 
     @app.post("/api/lines/{line_id}/hatch")
-    def hatch(line_id: str):
-        return guard(town.pipeline.hatch, line_id)
+    def hatch(line_id: str, body: HatchIn | None = None):
+        return mapped(LineError, UsageError)(town.pipeline.hatch, line_id, body.usage_budget if body else None)
+
+    @app.get("/api/usage")
+    def usage():
+        return town.usage.snapshot()
+
+    @app.post("/api/usage/refresh")
+    def refresh_usage():
+        return town.usage.poll(force=True)
+
+    @app.get("/api/usage/settings")
+    def usage_settings():
+        return town.usage.settings()
+
+    @app.put("/api/usage/settings")
+    def set_usage_settings(body: UsageSettingsIn):
+        return mapped(UsageError)(town.usage.set_settings, body.model_dump(exclude_unset=True))
+
+    @app.get("/api/lines/{line_id}/usage")
+    def line_usage(line_id: str):
+        return mapped(UsageError)(town.usage.line, line_id)
+
+    @app.put("/api/lines/{line_id}/usage_budget")
+    def usage_budget(line_id: str, body: dict):
+        if set(body) != {"usd"}:
+            raise HTTPException(400, "请提供 usd 美元金额或 null")
+        return mapped(UsageError)(town.usage.set_budget, line_id, body["usd"])
 
     @app.post("/api/lines/{line_id}/adjust")
     def adjust(line_id: str, body: AdjustIn):

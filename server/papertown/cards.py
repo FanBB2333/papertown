@@ -174,7 +174,8 @@ class Cards:
         return {
             "line": {"id": lid, "seq": line["seq"], "title": line["title"], "status": line["status"], "linked": bool(line["linked"]),
                      "stages": [{"key": s["key"], "name": s["name"], "status": s["status"]} for s in stages],
-                     "stage": cur and {"name": cur["name"], "status": cur["status"], "pct": cur["pct"]}, "updated_at": line["updated_at"]},
+                     "stage": cur and {"name": cur["name"], "status": cur["status"], "pct": cur["pct"]}, "updated_at": line["updated_at"],
+                     "usage_state": self.town.usage.marker(lid)},
             "lead": self.town.agents.public(self.town.agents.get(f"lead-{lid}")),
             "card": card, "prev": (d.get("prev") or {}).get("progress"), "pending": d.get("pending"),
             "jobs": dict(Counter(j.get("status") for j in jobs)),

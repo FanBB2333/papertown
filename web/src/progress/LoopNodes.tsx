@@ -176,7 +176,7 @@ function SpecNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
 
 function ClampNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   const rules = n.rules ?? [], b = n.budget;
-  const what = rules.length ? rules.slice(0, 2).map(r => clip(r.text, 16)).join(' · ') : b?.budget ? tr('单线预算 ≤${0}', b.budget) : tr('还没有绑定动作的边界');
+  const what = rules.length ? rules.slice(0, 2).map(r => clip(r.text, 16)).join(' · ') : b?.budget ? tr('小镇 API 预算 ≤${0}', b.budget) : tr('还没有绑定动作的边界');
   return (
     <div className={`cv-n cv-clamp${selected ? ' on' : ''}`} {...refOf(n)}>
       <header><i /><span>HARD CLAMP · {tr('代码硬边界')}</span></header>

@@ -10,6 +10,7 @@ from pathlib import Path
 from . import samples
 from .agents import Agents
 from .terminals import Terminals
+from .usage import Usage
 from .assistant import Assistant
 from .bank import Bank
 from .bounds import Bounds
@@ -88,6 +89,7 @@ class Town:
         self.mcp = McpHub(self)
         self.pipeline = Pipeline(self)
         self.linked = Linked(self)
+        self.usage = Usage(self)
         self.workspace = Workspace(self)
         self.skim = Skim(self)
         self._register_tools()
@@ -107,8 +109,10 @@ class Town:
         self.leads.start()
         self.checks.start()
         self.paseo_models.start()
+        self.usage.start()
 
     def stop(self) -> None:
+        self.usage.stop()
         self.terminals.shutdown()
         self.agents.shutdown()
         self.paseo_models.stop()
@@ -218,6 +222,7 @@ class Town:
         agent = self.agents.get(f"{role}-{line_id}") if role in ("coder", "writer") else None
         if agent:
             out += self.skim.brief(agent)
+        out += self.usage.brief(line_id)
         return "\n".join(out)
 
     @staticmethod

@@ -187,10 +187,11 @@ class Pipeline:
                   cost=round(res.cost, 4), steps=res.steps, degraded=res.degraded, skills=res.skills)
         self._publish(line_id)
 
-    def hatch(self, line_id: str) -> dict:
+    def hatch(self, line_id: str, usage_budget: float | None = None) -> dict:
         ln = self.line(line_id)
         if ln["status"] != "waiting":
             raise LineError("这颗蛋现在不能孵化")
+        self.town.usage.set_budget(line_id, usage_budget)
         report = self.item(line_id, "hatch") or {}
         plan = self.town.market.compile_team(ln["idea"], report, ln["budget"])
         self.town.trace("SCRIPT", "market.compile_team", plan["reason"], 0, line_id=line_id)

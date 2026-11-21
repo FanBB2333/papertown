@@ -6,6 +6,7 @@ import type { Pane, PaseoDefaults, ProjectCard } from '../api';
 import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { tr } from '../i18n';
+import { UsageMark } from '../usage/Usage';
 import { AskButton, CardPane, opens, PANES, Stages, UpdateButton, useCardActs, Who } from './parts';
 
 export interface Group { key: string; name: string; items: ProjectCard[] }
@@ -61,7 +62,7 @@ function ProjectRow({ r, i, cols, defs, toast, onChange }: { r: ProjectCard; i: 
         <span className="pc-seq">#{line.seq}</span>
         <div className="pr-t">
           {o.title}
-          <span className="pr-sub"><StatusTag status={line.status} /><Who r={r} /></span>
+          <span className="pr-sub"><StatusTag status={line.status} /><UsageMark state={line.usage_state} /><Who r={r} /></span>
         </div>
       </div>
       <div className="pr-stage" role="cell"><Stages r={r} /></div>

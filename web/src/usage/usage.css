@@ -1,0 +1,34 @@
+/* Surface and status tokens follow Cloudflare, macOS, paper and their dark palettes. */
+.usage-strip { flex: 0 1 auto; min-height: 80px; max-height: 48%; overflow-y: auto; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--panel); font-size: 13px; }
+.usage-strip > .usage-provider { padding: 7px 0; }
+.usage-strip > .usage-provider small { line-height: 1.3; }
+.usage-between { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.usage-between > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.usage-between > :last-child { flex-shrink: 0; }
+.usage-toggle { display: flex; gap: 10px; align-items: center; padding: 0; background: transparent; border: 0; color: var(--ink); font: 600 15px var(--font); cursor: pointer; }
+.usage-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.usage-provider { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.usage-provider:last-child { border-bottom: 0; }
+.usage-provider p { margin: 6px 0; }
+.usage-window { margin-top: 8px; }
+.usage-window-compact { margin-top: 5px; }
+.usage-meter { display: grid; grid-template-columns: minmax(36px, 1fr) auto; gap: 8px; align-items: center; }
+.usage-window small, .usage-provider > small, .usage-project > small { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.usage-strip .usage-between { flex-wrap: wrap; gap: 4px 8px; }
+.usage-bar { height: 5px; margin-top: 6px; overflow: hidden; border-radius: 4px; background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.usage-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--usage-color, var(--brand)); }
+.usage-near { --usage-color: var(--warn); }
+.usage-over { --usage-color: var(--bad); }
+.usage-mark { display: inline-block; flex-shrink: 0; font-size: 12px; color: var(--usage-color); border: 1px solid currentColor; border-radius: var(--radius); padding: 1px 5px; white-space: nowrap; }
+.usage-error, .usage-provider > small.usage-error { color: var(--warn); overflow-wrap: anywhere; }
+.usage-project { padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.usage-project h2 { margin: 0; font-size: 16px; }
+.usage-project .usage-between { flex-wrap: wrap; }
+.usage-tokens { font-size: 13px; line-height: 1.7; color: var(--muted); }
+.usage-fields { display: grid; gap: 12px; margin: 16px 0; }
+.usage-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 16px; }
+.usage-dialog { max-height: 90dvh; overflow-y: auto; }
+@media (max-height: 700px) { .usage-strip { max-height: 36%; } }
+.usage-model { padding: 8px 0 0 14px; border-left: 2px solid var(--line); margin-top: 8px; }
+.usage-path { overflow-wrap: anywhere; }
+.usage-project h3 { font-size: 14px; margin: 18px 0 6px; }

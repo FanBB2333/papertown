@@ -60,8 +60,8 @@ export function Overview(p: Props) {
           <h3>{tr('研究进度')}</h3>
           <span className="muted small">{tr('{0}/{1} 站完成', done, l.stages.length)}</span>
           {!l.linked && (
-            <span className="ov-spend small" title={tr('预算')}>
-              {tr('已花 {0} / {1}', money(l.spent), money(l.budget))}
+            <span className="ov-spend small" title={tr('小镇 API 预算')}>
+              {tr('小镇 API 用量：{0} / 预算 {1}', money(l.spent), money(l.budget))}
               <i className="bar"><i style={{ width: `${Math.min(100, (100 * l.spent) / Math.max(l.budget, 1e-9))}%` }} /></i>
             </span>
           )}

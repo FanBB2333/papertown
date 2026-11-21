@@ -17,6 +17,7 @@ def make_settings(tmp: Path, **kw) -> Settings:
                 compile_tex=False, samples=False, pi_bin=str(tmp / "no-pi"), nvidb_bin=str(tmp / "no-nvidb"), skim_bin=str(tmp / "no-skim"),
                 paseo_bin=str(tmp / "no-paseo"), paseo_url="http://127.0.0.1:9",
                 claude_home=str(tmp / "no-claude"), codex_home=str(tmp / "no-codex"),
+                antigravity_home=str(tmp / "no-antigravity"), agy_bin=str(tmp / "no-agy"), usage_poll=0,
                 herdr_socket=str(tmp / "no-herdr.sock"))
     return Settings(**(base | kw))
 

@@ -98,12 +98,29 @@ create index if not exists jobs_line on jobs(line_id, created_at);
 create index if not exists trace_line on trace(line_id, id);
 create index if not exists messages_line on messages(line_id, id);
 create index if not exists ledger_ts on ledger(ts);
+
+create table if not exists usage_samples(
+  id integer primary key, ts real, provider text, account text, window text, used real,
+  resets_at text, plan text, data text);
+create index if not exists usage_samples_window on usage_samples(provider, account, window, ts);
+create table if not exists usage_tokens(
+  minute integer, bucket_start real, provider text, model text, session_id text, cwd text, line_id text,
+  first_at real, last_at real, input integer, cache_write integer, cache_write_1h integer, cache_read integer, output integer);
+create table if not exists usage_files(path text primary key, offset integer, mtime real, data text);
+create table if not exists agent_sessions(
+  session_id text primary key, agent_id text, line_id text, provider text);
+create table if not exists terminal_sessions(
+  session_id text, provider text, terminal_id text, name text, cwd text,
+  primary key(session_id, provider));
+create table if not exists usage_alerts(
+  line_id text, budget real, threshold integer, primary key(line_id, budget, threshold));
 """
 
 # (table, column, declaration) for columns added to tables after they first shipped
 ADDED = [("agents", "runtime", "text"), ("agents", "ext_id", "text"), ("lines", "hold", "text"), ("lines", "linked", "text")]
 ADDED += [("agents", "node_id", "text"), ("agents", "workspace_id", "text"), ("lines", "paseo_project", "text")]
 ADDED += [("agents", "seen_at", "text")]
+ADDED += [("lines", "usage_budget", "real"), ("agents", "session_id", "text")]
 
 JSON_COLS = {"team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result", "linked"}
 
@@ -157,6 +174,35 @@ class DB:
             for table, col, decl in ADDED:
                 if col not in {r[1] for r in self.conn.execute(f"pragma table_info({table})")}:
                     self.conn.execute(f"alter table {table} add column {col} {decl}")
+            # The unshipped quota-based prototype did not retain session IDs. Rebuild
+            # its derived token cache from logs, while keeping subscription samples.
+            columns = {r[1] for r in self.conn.execute("pragma table_info(usage_tokens)")}
+            if "session_id" in columns and "cache_write_1h" not in columns:
+                # Derived from the logs: rebuild it to price one-hour cache writes.
+                self.conn.executescript("drop table usage_tokens; delete from usage_files;")
+                self.conn.executescript(SCHEMA)
+            if "session_id" not in columns:
+                self.conn.executescript("drop table usage_tokens; delete from usage_files; drop table usage_alerts;")
+                self.conn.executescript(SCHEMA)
+                # Retain only window readings, stripping prototype bookkeeping.
+                keep = {"id", "label", "group", "used", "left", "resets_at", "fetched_at"}
+                for row in self.conn.execute("select id, data from usage_samples").fetchall():
+                    data = json.loads(row["data"] or "{}")
+                    self.conn.execute("update usage_samples set data = ? where id = ?",
+                                      (json.dumps({k: v for k, v in data.items() if k in keep}), row["id"]))
+                saved = self.conn.execute("select v from meta where k = 'usage_state'").fetchone()
+                if saved:
+                    state = json.loads(saved["v"])
+                    for provider in state.get("providers", {}).values():
+                        for account in provider.get("accounts", {}).values():
+                            account["windows"] = [{k: v for k, v in w.items() if k in keep} for w in account.get("windows", [])]
+                    self.conn.execute("update meta set v = ? where k = 'usage_state'", (json.dumps(state),))
+            self.conn.execute("drop table if exists usage_share")
+            self.conn.execute("delete from meta where k = 'usage_baseline'")
+            if next(r[2] for r in self.conn.execute("pragma table_info(lines)") if r[1] == "usage_budget").lower() != "real":
+                self.conn.execute("alter table lines drop column usage_budget")
+                self.conn.execute("alter table lines add column usage_budget real")
+            self.conn.execute("create unique index if not exists usage_tokens_key on usage_tokens(minute, bucket_start, provider, model, session_id, cwd, coalesce(line_id, ''))")
             self.conn.commit()
 
     @property

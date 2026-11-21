@@ -521,7 +521,7 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
             </button>
           )}
           {target.kind === 'idea' && (
-            <Select className="as-budget" value={budget} onChange={setBudget} title={tr('这篇论文的预算')} label={tr('这篇论文的预算')}
+            <Select className="as-budget" value={budget} onChange={setBudget} title={tr('本项目的小镇 API 预算')} label={tr('本项目的小镇 API 预算')}
               options={BUDGETS.map(b => ({ value: b, label: `$${b.toFixed(2)}` }))} />
           )}
           {working && !typed

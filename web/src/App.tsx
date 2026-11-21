@@ -20,6 +20,7 @@ import { useOverview } from './agents/overview';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { follow, go, href, path, PATHS, type Route, type View } from './route';
 import { getSettings, useSettings } from './settings';
+import { HatchDialog } from './usage/Usage';
 import { DEMO } from './demo';
 import { enterFull, holdEscape, leaveFull } from './fullscreen';
 import { tr } from './i18n';
@@ -172,7 +173,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const onAdjust = async (lineId: string, text: string) =>
     (await act(() => api.adjust(lineId, text))) && (push(tr('孵化员按改过的 idea 重新查重了。')), true);
 
-  const hatch = (id: string) => act(() => api.hatch(id));
+  const [hatching, setHatching] = useState<string | null>(null);
+  const hatch = (id: string) => setHatching(id);
   const resume = (id: string) => act(() => api.resume(id));
   const newIdea = () => openDock({ kind: 'idea' });
   const askAt = (_id: string, name: string) => openDock({ kind: 'assistant', draft: tr('关于{0}：', name) });
@@ -204,6 +206,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (hatching) return;
       if (e.key === ',' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e)) {
         e.preventDefault();
         if (settingsOpen) closeSettings();
@@ -217,7 +220,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
-  }, [sheet, chatOpen, settingsOpen, leaveRoom, openSettings, closeSettings]);
+  }, [sheet, chatOpen, settingsOpen, leaveRoom, openSettings, closeSettings, hatching]);
 
   useEffect(() => holdEscape(dim === '3d' && (!!sheet || chatOpen || settingsOpen)), [dim, sheet, chatOpen, settingsOpen]);
 
@@ -390,7 +393,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
         </div>
         {hud && <div className="hud-quiet">
           <span><b>{hud.lines.running}</b> {tr('个项目在跑')}</span>
-          <span>{tr('本周')} <b>${hud.bank.week.toFixed(2)}</b></span>
+          <span>{tr('小镇 API 本周')} <b>${hud.bank.week.toFixed(2)}</b></span>
         </div>}
         <div className="hud-r">
           {!!overview?.counts.needs && <a className="chip warn aw-count" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('等你 {0}', overview.counts.needs)}</a>}
@@ -427,6 +430,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           onOpen={room} onIdea={newIdea} onAsk={askAt} onHatch={hatch} onResume={resume} onAdjust={adjust} toast={push} />
       )}
       {settingsOpen && <SettingsPage section={at.mod} hud={hud ?? null} onClose={closeSettings} />}
+      {hatching && <HatchDialog key={hatching} lineId={hatching} onDone={load} onClose={() => setHatching(null)} />}
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>
       {DEMO && <DemoWelcome />}
     </div>
