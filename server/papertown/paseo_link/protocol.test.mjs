@@ -58,6 +58,20 @@ test('history and live activity agree across tool updates and clipped replies', 
   assert.equal(doingOf([]), null);
 });
 
+test('a reply that streams in as several items reads as one message', () => {
+  const say = (text, messageId) => ({ item: { type: 'assistant_message', text, ...(messageId ? { messageId } : {}) } });
+  const activity = new Activity();
+  for (const entry of [say('A_DONE STEER'), say('_B7DE15'), { item: { type: 'reasoning', text: 'thinking' } }, say('\n')]) activity.add(entry);
+  assert.equal(activity.current().text, 'A_DONE STEER_B7DE15\n');
+  activity.add({ item: { type: 'user_message', text: 'next' } });
+  activity.add(say('B_DONE'));
+  assert.equal(activity.current().text, 'B_DONE');
+  activity.add(say('one', 'm1')); activity.add(say(' two', 'm1')); activity.add(say('three', 'm2'));
+  assert.equal(activity.current().text, 'three');
+  activity.add(say('x'.repeat(300)));
+  assert.equal(activity.current().text.length, 200);
+});
+
 test('watch uses one client, subscribes owned timelines, throttles and exits on disconnect', async () => {
   const lines = [], handlers = new Map(), released = [], timelineIds = [];
   let update, connection = 'connected', ready;

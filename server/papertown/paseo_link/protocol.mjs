@@ -24,14 +24,22 @@ function toolArg(d = {}) {
 export class Activity {
   tools = new Map();
   say = null;
+  open = null; // the reply still coming in: its message id, or true when the provider gives none
 
   add(entry) {
     const item = entry.item;
     if (item?.type === "tool_call") {
+      this.open = null;
       this.tools.delete(item.callId);
       if (item.status === "running") this.tools.set(item.callId, item);
+    } else if (item?.type === "user_message") {
+      this.open = null;
     } else if (item?.type === "assistant_message") {
-      this.say = { kind: "say", text: [...item.text].slice(0, 200).join("") };
+      // A live reply arrives as several items. Later ones continue it until a message or tool call comes between.
+      const id = item.messageId ?? true;
+      const text = this.say && this.open === id ? this.say.text + item.text : item.text;
+      this.say = { kind: "say", text: [...text].slice(0, 200).join("") };
+      this.open = id;
     }
   }
 
