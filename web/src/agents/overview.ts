@@ -26,7 +26,7 @@ function subscribe(f: () => void) {
     dirty = false;
     if (!pending) void refreshOverview();
     off = listen(e => {
-      if (!['agent', 'agent_event', 'report'].includes(e.type)) return;
+      if (!['agent', 'agent_event', 'terminal', 'report'].includes(e.type)) return;
       clearTimeout(timer);
       timer = window.setTimeout(refreshOverview, 300);
     });
@@ -54,5 +54,5 @@ export const feedLive = () => !!state.data?.paseo.live;
 
 export function markSeen(id: string) {
   // A failed read receipt must not turn a successful message into a send failure.
-  void api.seen(id).catch(() => {});
+  void (id.startsWith('herdr:') ? api.terminalSeen(id) : api.seen(id)).catch(() => {});
 }

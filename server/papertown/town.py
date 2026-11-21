@@ -9,6 +9,7 @@ from pathlib import Path
 
 from . import samples
 from .agents import Agents
+from .terminals import Terminals
 from .assistant import Assistant
 from .bank import Bank
 from .bounds import Bounds
@@ -71,6 +72,7 @@ class Town:
         self.world = World(self)
         self.farm = Farm(self)
         self.agents = Agents(self)
+        self.terminals = Terminals(self)
         self.bounds = Bounds(self)
         self.leads = Leads(self)
         self.checks = Checks(self)
@@ -99,6 +101,7 @@ class Town:
         self.mcp.start()
         samples.maybe_seed(self)
         self.linked.sync()
+        self.terminals.start()
         self.nvidb.start()
         self.relay.start()
         self.leads.start()
@@ -106,6 +109,7 @@ class Town:
         self.paseo_models.start()
 
     def stop(self) -> None:
+        self.terminals.shutdown()
         self.agents.shutdown()
         self.paseo_models.stop()
         self.leads.stop()

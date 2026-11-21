@@ -390,6 +390,9 @@ class Agents:
         rows = self.db.q("select * from agents")
         counts = dict.fromkeys(("needs", "failed", "review", "working", "idle", "off"), 0)
         lines = self.db.q("select id, seq, title, status, stage from lines where status != 'dropped' order by seq desc")
+        terminals, others = self.town.terminals.grouped(lines, rows)
+        for terminal in [*others, *(t for group in terminals.values() for t in group)]:
+            counts[terminal["watch"]["bucket"]] += 1
         groups = []
         attached = {a["ext_id"] for a in rows if a.get("ext_id")}
         for line in [None, *lines]:
@@ -408,10 +411,11 @@ class Agents:
                 if any(Path(conv["cwd"]).resolve().is_relative_to(root) for root in roots):
                     loose.append({k: conv.get(k) for k in ("id", "title", "provider", "model", "status", "cwd", "updated")}
                                  | {"status": PASEO_STATUS.get(conv.get("status"), conv.get("status"))})
-            if agents or loose:
-                groups.append({"line": line, "agents": agents, "loose": loose})
+            group_terminals = terminals.get(lid, [])
+            if agents or loose or group_terminals:
+                groups.append({"line": line, "agents": agents, "loose": loose, "terminals": group_terminals})
         return {"paseo": {"ok": status["ok"], "note": self._paseo_note, "live": bool(self._feed and self._feed.live)},
-                "counts": counts, "groups": groups}
+                "herdr": self.town.terminals.status(), "counts": counts, "groups": groups, "others": others}
 
     def ensure(self, line_id: str, role: str, node_id: str | None = None) -> dict:
         if role not in ROLES or role == "assistant":

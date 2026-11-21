@@ -174,3 +174,60 @@ cd server
 | 打断并发送 | 任务：前台执行 90 秒的命令后回复 C_DONE。运行中打断并发送 INTERRUPTED_{n} | 事件 `interrupted` 为真，60 秒内回复 INTERRUPTED_{n}，没有 C_DONE |
 | 停止 | 任务：前台执行 90 秒的命令后回复 D_DONE。运行中停止 | 30 秒内回到空闲，没有 D_DONE |
 
+## 9. herdr 接入
+
+[herdr](https://github.com/herdrdev/herdr) 是终端复用器，持有用户手动开的 Claude Code、Codex 等终端会话，并通过读屏幕和 agent 自己上报的 hook 判断状态。Paseo 托管 Papertown 启动的 agent，herdr 补上用户在终端里自己开的那部分。两者并存。
+
+### 9.1 对接方式
+
+herdr 的服务在 `~/.config/herdr/herdr.sock` 提供 JSON API（协议 22）。Papertown 直接连这个 socket，不经 CLI：
+
+| 用途 | 方法 |
+| --- | --- |
+| 列出 agent 和状态 | `agent.list`：`agent_status`（`idle` / `working` / `blocked` / `done` / `unknown`）、`completion_seq`、`cwd`、`foreground_cwd`、`title`、`terminal_id`、`pane_id` |
+| 实时变化 | `events.subscribe`，订阅 `pane.agent_status_changed`、`pane.agent_detected`、`pane.closed`、`pane.exited` |
+| 看对话 | `agent.read`，`source: recent_unwrapped`，得到终端里的文字 |
+| 发消息 | `agent.prompt`。agent 停在批准或提问对话框时，herdr 以 `agent_blocked` 拒绝 |
+| 打断、按键 | `agent.send_keys`，例如 `esc`、`enter`、`1` |
+
+Papertown 只读写 herdr 已有的会话，不启动 herdr 服务，不新建窗格，不安装 herdr 的 hook。herdr 没在运行时，员工页照常工作，只是没有终端会话。
+
+### 9.2 状态
+
+| herdr | 分桶 | 说明 |
+| --- | --- | --- |
+| `blocked` | 等你（`why: terminal`） | 终端里出现了批准或提问的对话框 |
+| `working` | 工作中 | |
+| `idle`、`done`，且有 Papertown 未看过的完成 | 待查看 | 以 `completion_seq` 判断：大于 Papertown 记下的已读序号即未读 |
+| `idle`、`done`，已看过 | 待命 | |
+| `unknown` | 待命（`why: unknown`） | 有 agent，但 herdr 判断不出状态 |
+
+herdr 自己的已读状态由聚焦操作改变，会影响用户的 herdr 界面，所以 Papertown 用 `terminal_id` 和 `completion_seq` 另记一份。`doing` 取终端标题（Claude Code、Codex 会把当前任务写进标题）。
+
+### 9.3 发送
+
+| 方式 | 做法 |
+| --- | --- |
+| 插话 | agent 工作中时直接 `agent.prompt`，怎么处理由终端里的 agent 决定（Claude Code 和 Codex 会把它排进当前这一轮） |
+| 排队 | Papertown 保存，状态变为 `idle` 或 `done` 后发出 |
+| 打断并发送 | 发 `esc`，等它离开 `working`（至多 10 秒），再发消息 |
+| 停止 | 发 `esc` |
+
+处于「等你」时，输入框换成一排按键（Enter、Esc、↑、↓、1、2、3、y、n），对着上方的终端画面处理对话框。
+
+### 9.4 归属和页面
+
+- 终端会话按工作目录归到项目：目录落在某个项目的代码目录、论文目录或它的员工工作目录里，就列在这个项目下，标记「终端」。其余的列在「其他终端」组。
+- 选中一个终端会话，中栏显示终端文字（每 2 秒刷新，空闲时 10 秒，状态事件到达时立即刷新）和上面的输入框，右栏显示 herdr 的工作区、窗格、目录和 agent 种类。
+- 终端会话不是项目员工：它没有 `pt` 命令，不接派发的任务。
+
+### 9.5 接口
+
+- `GET /api/agents/overview` 增加 `herdr: {ok, note, live}`，每组增加 `terminals: [Terminal]`，另有 `others: [Terminal]`。`counts` 包括终端会话。
+- `Terminal`：`{id: "herdr:<terminal_id>", terminal_id, pane_id, workspace_id, name, kind, title, cwd, watch}`，`watch` 与员工相同。
+- `GET /api/terminals/{id}`：会话信息、终端文字、排队的消息。
+- `POST /api/terminals/{id}/say`：`{text, mode: steer | queue | interrupt}`。
+- `POST /api/terminals/{id}/keys`：`{keys: [...]}`，只接受上面那一排按键和 `ctrl+c`。
+- `POST /api/terminals/{id}/queue/{queue id}`：`{what: now | drop}`。
+- `POST /api/terminals/{id}/seen`。
+- 总线事件 `terminal`：`{id}`，某个终端会话变了。

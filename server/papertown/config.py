@@ -74,6 +74,9 @@ class Settings:
     paseo_bin: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_BIN"))
     paseo_url: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_URL", "http://127.0.0.1:6767"))
     paseo_host: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_HOST"))
+    # Read existing herdr terminals over its socket; never start the host.
+    herdr: bool = field(default_factory=lambda: _env("PAPERTOWN_HERDR", "1") != "0")
+    herdr_socket: str = field(default_factory=lambda: _env("PAPERTOWN_HERDR_SOCKET", "~/.config/herdr/herdr.sock"))
     # where the bridge extension inside each pi reaches this server; `serve` sets it
     url: str = field(default_factory=lambda: _env("PAPERTOWN_URL", "http://127.0.0.1:8000"))
     # offline demo: put the sample papers on the lines the first time the town starts empty

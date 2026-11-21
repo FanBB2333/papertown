@@ -17,6 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
+from .herdr import HerdrError
 from .ask import AskError
 from .assistant import ID as ASSISTANT, ActError
 from .auth import COOKIE, DAYS, Auth, AuthError, Gate
@@ -286,6 +287,10 @@ class QueueIn(BaseModel):
     what: Literal["now", "drop"]
 
 
+class TerminalKeysIn(BaseModel):
+    keys: list[str] = Field(min_length=1, max_length=32)
+
+
 class JobIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     command: str = Field(min_length=1, max_length=4000)
@@ -389,6 +394,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     town = Town(settings)
     authed, guard, ws, farm = mapped(AuthError), mapped(LineError), mapped(WsError), mapped(FarmError)
     agents, assistant = mapped(AgentError), mapped(AgentError, ActError)
+    terminals = mapped(HerdrError)
     leads = mapped(LeadError, AgentError, CardError)
     checks = mapped(CheckError, AgentError, LeadError)
     canvas = mapped(CanvasError, CheckError, AgentError, LeadError)
@@ -649,6 +655,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/jobs/{job_id}/cancel")
     def job_cancel(job_id: str):
         return farm(town.farm.cancel, job_id)
+
+    @app.get("/api/herdr")
+    def herdr_info():
+        return town.terminals.info()
+
+    @app.get("/api/terminals/{id}")
+    def terminal(id: str):
+        return terminals(town.terminals.detail, id)
+
+    @app.post("/api/terminals/{id}/say")
+    def terminal_say(id: str, body: SayIn):
+        return terminals(town.terminals.say, id, body.text, body.mode)
+
+    @app.post("/api/terminals/{id}/keys")
+    def terminal_keys(id: str, body: TerminalKeysIn):
+        return terminals(town.terminals.keys, id, body.keys)
+
+    @app.post("/api/terminals/{id}/queue/{queue_id}")
+    def terminal_queue(id: str, queue_id: int, body: QueueIn):
+        return terminals(town.terminals.queue, id, queue_id, body.what)
+
+    @app.post("/api/terminals/{id}/seen")
+    def terminal_seen(id: str):
+        return terminals(town.terminals.seen, id)
 
     # agents
     @app.get("/api/agents")

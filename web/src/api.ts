@@ -77,8 +77,18 @@ export interface AgentTask { id: string; title: string; status: string }
 export interface Loose { id: string; title: string | null; provider: string; model: string | null; status: string; cwd: string | null; updated: string }
 export interface Overview {
   paseo: { ok: boolean; note: string; live: boolean }; counts: Record<Bucket, number>;
-  groups: { line: ProjectRef | null; agents: Agent[]; loose: Loose[] }[];
+  herdr: { ok: boolean; note: string; live: boolean };
+  groups: { line: ProjectRef | null; agents: Agent[]; loose: Loose[]; terminals: Terminal[] }[];
+  others: Terminal[];
 }
+
+export interface Terminal {
+  id: string; terminal_id: string; pane_id: string; workspace_id: string | null; tab_id: string | null;
+  name: string | null; kind: string | null; title: string; cwd: string | null; watch: Watch;
+}
+export interface TerminalQueue { id: number; terminal_id: string; text: string; created_at: string; state: 'queued' | 'sending' | 'sent' | 'failed' | 'dropped' }
+export interface TerminalDetail { terminal: Terminal; text: string; queued: TerminalQueue[] }
+export interface HerdrInfo { ok: boolean; note: string; live: boolean; socket: string; count: number; installed: boolean; enabled: boolean }
 
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act'; data: any }
 
@@ -433,6 +443,13 @@ export const api = {
   cancelJob: (id: string) => call<Job>('POST', `/api/jobs/${id}/cancel`),
   roster: (role: AgentRole) => call<Roster>('GET', `/api/agents?role=${role}`),
   overview: () => call<Overview>('GET', '/api/agents/overview', undefined, asIs),
+  herdr: () => call<HerdrInfo>('GET', '/api/herdr', undefined, asIs),
+  terminal: (id: string) => call<TerminalDetail>('GET', `/api/terminals/${encodeURIComponent(id)}`, undefined, asIs),
+  terminalSay: (id: string, text: string, mode?: SayMode) => call<unknown>('POST', `/api/terminals/${encodeURIComponent(id)}/say`, { text, mode }, asIs),
+  terminalKeys: (id: string, keys: string[]) => call<unknown>('POST', `/api/terminals/${encodeURIComponent(id)}/keys`, { keys }, asIs),
+  terminalSeen: (id: string) => call<Terminal>('POST', `/api/terminals/${encodeURIComponent(id)}/seen`, undefined, asIs),
+  terminalQueue: (id: string, queueId: number, what: 'now' | 'drop') =>
+    call<TerminalQueue>('POST', `/api/terminals/${encodeURIComponent(id)}/queue/${queueId}`, { what }, asIs),
   seen: (id: string) => call<unknown>('POST', `/api/agents/${encodeURIComponent(id)}/seen`),
   queueAct: (id: string, eventId: number, what: 'now' | 'drop') =>
     call<unknown>('POST', `/api/agents/${encodeURIComponent(id)}/queue/${eventId}`, { what }),
@@ -538,7 +555,7 @@ export const linkedPdfUrl = (lineId: string) => `/api/lines/${lineId}/linked/pdf
 // v changes the URL so the viewer loads the PDF again
 export const paperPdfUrl = (lineId: string, v = 0) => (DEMO ? demoFile(lineId, 'main.pdf') : `/api/lines/${lineId}/ws/paper/pdf?v=${v}`);
 
-export type ServerEvent = { id: number; type: string; ts: string; [k: string]: any };
+export type ServerEvent = { id: number | string; type: string; ts: string; [k: string]: any };
 
 const listeners = new Set<(e: ServerEvent) => void>();
 
@@ -553,7 +570,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'terminal', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);

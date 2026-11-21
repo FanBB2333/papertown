@@ -3,7 +3,7 @@ import { api, type Agent, type AgentEvent, type SayMode } from '../api';
 import { tr } from '../i18n';
 import { useSettings } from '../settings';
 import { markSeen } from './overview';
-import { isWorking } from './watch';
+import { isWorking, type Watched } from './watch';
 import './agents.css';
 
 const MODES: [SayMode, string, string, string][] = [
@@ -12,12 +12,20 @@ const MODES: [SayMode, string, string, string][] = [
   ['interrupt', tr('打断并发送'), tr('停止当前任务并发送新指令'), tr('停止当前这一轮，立即发送这条消息。')],
 ];
 
-export function Compose({ agent, queued = [], permission = false, toast, onSent, onChanged, value, onChange, onKeyDown, children, placeholder, prepare, inputRef }: {
-  agent: Agent; queued?: AgentEvent[]; permission?: boolean; toast: (s: string) => void;
+export interface ComposeAdapter {
+  send: (text: string, mode?: SayMode) => Promise<void>;
+  queue: (id: number, what: 'now' | 'drop') => Promise<void>;
+  stop: () => Promise<void>;
+  steerHint: string;
+}
+
+export function Compose({ agent, queued = [], permission = false, toast, onSent, onChanged, value, onChange, onKeyDown, children, placeholder, prepare, inputRef, adapter }: {
+  agent: Watched & Pick<Agent, 'id'>; queued?: AgentEvent[]; permission?: boolean; toast: (s: string) => void;
   onSent?: (event: AgentEvent, text: string) => void; onChanged?: () => void;
   value?: string; onChange?: (s: string) => void; onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   children?: React.ReactNode; placeholder?: string;
   prepare?: (text: string) => Promise<string>; inputRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
+  adapter?: ComposeAdapter;
 }) {
   const settings = useSettings();
   const [mode, setMode] = useState<SayMode>(settings.agentSend);
@@ -26,7 +34,7 @@ export function Compose({ agent, queued = [], permission = false, toast, onSent,
   const pending = useRef(false), box = useRef<HTMLTextAreaElement | null>(null);
   const hint = useId(), text = value ?? draft, setText = onChange ?? setDraft;
   const current = useRef(text); current.current = text;
-  const working = isWorking(agent) || permission, off = !!agent.down || ['offline', 'stopped'].includes(agent.status);
+  const working = isWorking(agent) || permission, off = !!agent.down || ['offline', 'stopped'].includes(agent.status ?? '');
   const choice = MODES.find(x => x[0] === mode) ?? MODES[0];
   useEffect(() => setMode(settings.agentSend), [settings.agentSend]);
   useLayoutEffect(() => {
@@ -44,15 +52,17 @@ export function Compose({ agent, queued = [], permission = false, toast, onSent,
     const s = text.trim();
     if (!s || off) return;
     void run(async () => {
-      const event = await api.say(agent.id, prepare ? await prepare(s) : s, how);
+      const message = prepare ? await prepare(s) : s;
+      const event = adapter ? await adapter.send(message, how) : await api.say(agent.id, message, how);
       markSeen(agent.id);
-      onSent?.(event, s);
+      if (event) onSent?.(event, s);
       if (current.current.trim() === s) setText('');
     });
   }
   function queue(event: AgentEvent, what: 'now' | 'drop') {
     void run(async () => {
-      await api.queueAct(agent.id, event.id, what);
+      if (adapter) await adapter.queue(event.id, what);
+      else await api.queueAct(agent.id, event.id, what);
       if (what === 'drop') {
         setText([current.current, String(event.data.text ?? '')].filter(Boolean).join('\n'));
         box.current?.focus();
@@ -79,15 +89,15 @@ export function Compose({ agent, queued = [], permission = false, toast, onSent,
         }} />
       <div className="ac-tools">
         {working && <div className="seg mini" role="radiogroup" aria-label={tr('发送方式')}>
-          {MODES.map(([m, name, , tip]) => <button key={m} role="radio" aria-checked={mode === m} className={mode === m ? 'on' : ''} title={tip} onClick={() => setMode(m)}>{name}</button>)}
+          {MODES.map(([m, name, , tip]) => <button key={m} role="radio" aria-checked={mode === m} className={mode === m ? 'on' : ''} title={m === 'steer' && adapter ? adapter.steerHint : tip} onClick={() => setMode(m)}>{name}</button>)}
         </div>}
         <div className="btns">
-          {working && <button className="btn" disabled={busy || off} onClick={() => run(async () => { await api.abort(agent.id); })}>{tr('停止')}</button>}
+          {working && <button className="btn" disabled={busy || off} onClick={() => run(async () => { if (adapter) await adapter.stop(); else await api.abort(agent.id); })}>{tr('停止')}</button>}
           <button className="btn pri" disabled={busy || off || !text.trim()} onClick={() => send()}>{tr('发送')}</button>
         </div>
       </div>
     </div>
-    <p id={hint} className="ac-hint">{working ? choice[3] : tr('Enter 发送，Shift+Enter 换行。')}</p>
+    <p id={hint} className="ac-hint">{working ? mode === 'steer' && adapter ? adapter.steerHint : choice[3] : tr('Enter 发送，Shift+Enter 换行。')}</p>
     {(permission || !!agent.watch?.permissions.length) && <p className="ac-permission">{tr('插话会先拒绝当前权限请求，再发送消息。请优先使用权限卡片上的「允许」或「拒绝」。')}</p>}
   </div>;
 }

@@ -5,7 +5,7 @@ import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Select, 
 import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, listen, type AuthState, type Hud, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
+import { api, listen, type AuthState, type Hud, type HerdrInfo, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { Logo } from '../art';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
@@ -34,7 +34,7 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
   ]],
   [tr('模型与员工'), [
     ['model', tr('模型'), tr('小镇员工用的大模型'), CpuIcon, '#ff9500'],
-    ['agents', tr('员工 Agent'), tr('Paseo 和本机 pi'), RobotIcon, '#a2845e'],
+    ['agents', tr('员工 Agent'), tr('Paseo、herdr 和本机 pi'), RobotIcon, '#a2845e'],
   ]],
   [tr('系统'), [
     ['access', tr('访问与登录'), tr('手机和其他设备的访问密码'), LockKeyIcon, '#8e8e93'],
@@ -373,12 +373,21 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
 function Agents() {
   const s = useSettings();
   const [paseo, setPaseo] = useState<PaseoInfo | null | 'err'>(null);
+  const [herdr, setHerdr] = useState<HerdrInfo | null>(null);
+  const [herdrError, setHerdrError] = useState('');
   const [pi, setPi] = useState<Roster['available'] | null>(null);
   const [n, setN] = useState(0);
   const [reading, setReading] = useState(false);
   useEffect(() => {
     api.paseo().then(setPaseo).catch(() => setPaseo('err'));
     api.roster('coder').then(r => setPi(r.available)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    const read = () => api.herdr().then(h => { if (alive) { setHerdr(h); setHerdrError(''); } }, e => { if (alive) setHerdrError((e as Error).message); });
+    void read();
+    const timer = setInterval(read, 10000);
+    return () => { alive = false; clearInterval(timer); };
   }, []);
   const again = () => { setReading(true); api.paseo(true).then(i => { setPaseo(i); setN(x => x + 1); }).catch(() => setPaseo('err')).finally(() => setReading(false)); };
   const info = paseo && paseo !== 'err' ? paseo : null, st = info?.status;
@@ -411,6 +420,16 @@ function Agents() {
             </div>
           </>
         )}
+      </Card>
+      <Card title={tr('herdr')}>
+        <Row label={tr('状态')} desc={tr('读取和操作已有的终端 agent 会话')}>
+          <Badge variant={herdr?.ok ? 'success' : 'neutral'}>{herdr?.ok ? tr('运行中') : herdr ? tr(herdr.note) : herdrError ? tr('未连接') : tr('检查中…')}</Badge>
+        </Row>
+        {herdrError && <Warn>{herdrError}</Warn>}
+        {herdr && <>
+          <Row label={tr('Socket 路径')}><Note>{herdr.socket}</Note></Row>
+          <Row label={tr('终端 Agent 数量')}><span>{herdr.count}</span></Row>
+        </>}
       </Card>
       <Card title={tr('本机 pi')}>
         <Row label={tr('状态')} desc={tr('跑在 tmux 里的后台终端 agent')}>

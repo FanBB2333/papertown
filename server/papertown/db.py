@@ -79,6 +79,10 @@ create table if not exists agents(
   id text primary key, line_id text, role text, status text, tmux text, cwd text, token text,
   model text, cost real default 0, created_at text, updated_at text);
 create table if not exists agent_events(id integer primary key autoincrement, agent_id text, ts text, kind text, data text);
+create table if not exists terminal_seen(terminal_id text primary key, seq integer, at text);
+create table if not exists terminal_queue(
+  id integer primary key autoincrement, terminal_id text, text text, created_at text, state text);
+create index if not exists terminal_queue_terminal on terminal_queue(terminal_id, state, id);
 
 -- reports from a project's agents, and the questions they ask you (leads.py)
 create table if not exists reports(id integer primary key autoincrement, line_id text, agent_id text, ts text, kind text, data text);
