@@ -173,6 +173,7 @@ class RulesIn(BaseModel):
 
 class MoveIn(BaseModel):
     at: dict[str, list[float]]
+    blocks: dict[str, list[float]] | None = None
 
 
 class EdgeIn(BaseModel):
@@ -933,7 +934,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/lines/{line_id}/canvas/move")
     def canvas_move(line_id: str, body: MoveIn):
-        return canvas(town.canvas.move, line_id, body.at)
+        return canvas(town.canvas.move, line_id, body.at, body.blocks)
 
     @app.post("/api/lines/{line_id}/canvas/edges")
     def canvas_connect(line_id: str, body: EdgeIn):

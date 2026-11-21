@@ -27,6 +27,10 @@ STAGES = [
 ]
 INDEX = {k: i for i, (k, *_) in enumerate(STAGES)}
 NAMES = {k: name for k, name, *_ in STAGES}
+# The parts of a project's research flow. The console lists them in this order (web: console/Console.tsx, MODS) and
+# the research loop frames its nodes by them (canvas.py); STAGE_MOD says which part a stage's work is in.
+MODULES = [("overview", "概览"), ("survey", "调研"), ("code", "代码仓库"), ("exp", "实验"), ("data", "数据"), ("paper", "论文"), ("agents", "员工")]
+STAGE_MOD = {"idea": "survey", "hatch": "survey", "team": "agents", "method": "survey", "exp": "exp", "write": "paper", "review": "paper", "ship": "paper"}
 MAX_REVISIONS = 1
 
 
@@ -65,7 +69,7 @@ class Pipeline:
         out_stages = []
         for r in rows:
             ids = r["workers"] or []
-            out_stages.append({"key": r["key"], "name": NAMES[r["key"]], "status": r["status"], "pct": r["pct"],
+            out_stages.append({"key": r["key"], "name": NAMES[r["key"]], "mod": STAGE_MOD[r["key"]], "status": r["status"], "pct": r["pct"],
                                "building": r["building"], "out": STAGES[r["idx"]][3], "note": r["note"],
                                "workers": [{"id": i, "role": workers[i]["role"], "level": workers[i]["level"],
                                             "title": title(workers[i])} for i in ids if i in workers],

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -115,6 +116,46 @@ def repo_info(root: Path, *, timeout: float = 15) -> dict:
         d["branch"] = _git(root, "rev-parse", "--abbrev-ref", "HEAD", timeout=timeout).strip() or None
         d["dirty"] = len(_git(root, "status", "--porcelain", timeout=timeout).splitlines())
     return d
+
+
+CODE_EXT = (".py", ".sh", ".ipynb", ".jl", ".r", ".m", ".lua", ".ts", ".js")
+
+
+def _script(command: object, root: Path | None, paths: set[str]) -> tuple[str | None, str | None]:
+    """What a job's command runs (`python tools/eval.py …`, `bash run.sh`, `python -m pkg.mod`): the file's path in the
+    code repository when it is there, and the script or module as the command names it. This ties a run's result to
+    the code that produced it. The command may be a whole script and may have run in a copy of the repository
+    elsewhere, so a path is matched by its tail; a file that is only sourced (an environment) is not what ran."""
+    if not command:
+        return None, None
+    try:
+        words = shlex.split(str(command), comments=True)
+    except ValueError:
+        words = str(command).split()
+
+    def find(t: str) -> str | None:
+        parts = [x for x in t.strip("\"';").removeprefix("./").split("/") if x]
+        for k in range(len(parts)):  # the whole path, then ever shorter tails of it
+            tail = "/".join(parts[k:])
+            if tail in paths:
+                return tail
+            ends = [x for x in paths if x.endswith("/" + tail)]
+            if len(ends) == 1:
+                return ends[0]
+            if not t.startswith("/"):
+                break
+        return None
+
+    named = None
+    for i, w in enumerate(words[:600]):
+        module = i > 0 and words[i - 1] == "-m"
+        if i > 0 and words[i - 1] in ("source", ".") or not module and not w.lower().endswith(CODE_EXT):
+            continue
+        hit = next((x for t in ([w.replace(".", "/") + ".py", w.replace(".", "/") + "/__main__.py"] if module else [w]) if (x := find(t))), None) if root else None
+        if hit:
+            return hit, w
+        named = named or w
+    return None, named
 
 
 class Workspace:
@@ -243,6 +284,9 @@ class Workspace:
                 "seeds": exp.get("seeds"), "gpu_hours": exp.get("gpu_hours"), "backend": exp.get("backend")}
         results = {k: exp.get(k) for k in ("metrics", "rows", "simulated", "analysis", "concerns")} if exp.get("rows") else None
         runs = []
+        root = self.root(line_id, "code")
+        listed = list_files(root)["files"] if root else []
+        paths = {f["path"] for f in listed}
         for j in self.town.linked.jobs(line_id) + self.town.farm.list(line_id):
             nv = j if "gpu_ids" in j else None
             state = j.get("state") or j.get("status")
@@ -252,12 +296,11 @@ class Workspace:
                          "where": f"{j['node']}:{','.join(map(str, j['gpu_ids']))}" if nv and j.get("node") else j.get("backend"),
                          "started_at": j.get("started_at"), "finished_at": j.get("finished_at") or j.get("ended_at"),
                          "elapsed_s": j.get("elapsed_s"), "exit_code": j.get("exit_code"), "vram_mb": j.get("vram_mb"),
-                         "result": j.get("result")})
+                         "result": j.get("result"), **dict(zip(("script", "entry"), _script(j.get("command"), root, paths)))})
         runs.sort(key=lambda r: r.get("finished_at") or "", reverse=True)
         files = []
-        root = self.root(line_id, "code")
         if root:
-            for f in list_files(root)["files"]:
+            for f in listed:
                 parts = [x.lower() for x in Path(f["path"]).parts[:-1]]
                 ext = Path(f["path"]).suffix.lower()
                 if ext in DATA_EXT and (ext != ".json" or any(x in DATA_DIRS for x in parts)):

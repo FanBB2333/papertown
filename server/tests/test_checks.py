@@ -116,13 +116,14 @@ def test_the_research_loop_gates_its_stages_and_sends_rework_back(tmp_path):
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
         wait_for(town, lid, {"waiting"})
 
-        # the first layout: the spine of stages and their gates, the sentinels watching stages above, the spec, the clamp
-        # and the human gate; a gate stands for its stage's hard checks, which have no nodes of their own
+        # the first layout: the stages and their gates, the sentinels watching stages above them, the spec, the clamp and
+        # the human gate, each in its block; a gate stands for its stage's hard checks, which have no nodes of their own
         v = c.get(f"/api/lines/{lid}/canvas").json()
         ids = {n["id"]: n for n in v["nodes"]}
         assert {"stage:idea", "stage:ship", "gate:hatch", "gate:exp", "gate:write", "gate:review", "gate:ship", "check:design",
                 "spec", "clamp", "human"} <= ids.keys() and "check:words" not in ids and "gate:method" not in ids
-        assert ids["check:design"]["kind"] == "soft" and [x["key"] for x in v["lanes"]] == ["soft", "spine", "loop"]
+        assert ids["check:design"]["kind"] == "soft" and [x["key"] for x in v["blocks"]] == ["overview", "survey", "code", "exp", "data", "paper", "agents"]
+        assert [ids[k]["mod"] for k in ("gate:write", "check:design", "stage:team", "human")] == ["paper", "exp", "agents", "overview"]
         g = ids["gate:write"]["gate"]
         assert g["name"] == "写作排版" and {"words", "hyphens", "semicolons"} <= set(g["checks"]) and g["locks"] == "质检"
         kinds = {(e["source"], e["target"]): e.get("kind") for e in v["edges"]}
@@ -143,8 +144,11 @@ def test_the_research_loop_gates_its_stages_and_sends_rework_back(tmp_path):
         assert "check:pdf" not in {n["id"] for n in v["nodes"]} and "gate:ship" in {n["id"] for n in v["nodes"]}
         v = c.delete(f"/api/lines/{lid}/canvas/nodes/stage:idea").json()
         assert "stage:idea" not in {n["id"] for n in v["nodes"]} and not any("stage:idea" in (e["source"], e["target"]) for e in v["edges"])
+        # a card comes off and goes back on, in its block
+        v = c.delete(f"/api/lines/{lid}/canvas/nodes/info:runs").json()
+        assert [x["id"] for x in v["spare"]] == ["info:runs"]
         v = c.post(f"/api/lines/{lid}/canvas/nodes/info:runs/restore").json()
-        assert v["added"] == "info:runs" and "info:runs" not in {x["id"] for x in v["spare"]}
+        assert v["added"] == "info:runs" and not v["spare"] and next(n for n in v["nodes"] if n["id"] == "info:runs")["mod"] == "exp"
 
         # a soft check of the user's own, drawn from a sentinel: wired to nothing but that node, so due whatever the stage
         v = c.post(f"/api/lines/{lid}/canvas/nodes", json={"kind": "soft", "x": 10, "y": 20, "title": "要有消融", "text": "每个模块都有消融吗？",
@@ -257,13 +261,15 @@ def test_the_research_loop_gates_its_stages_and_sends_rework_back(tmp_path):
         assert page["kind"] == "report" and page["title"].startswith("研究回路汇报")
         assert "- gate:write · 硬卡口 · 写作排版 · " in c.get(f"/api/lines/{lid}/canvas/outline").json()["text"]
 
-        # 按回路规整 puts the spine back in its lanes; the user's task stays where it was
+        # 按分块规整 puts each block back: the stages in their row, the correction in the grid under them, in its block
         c.post(f"/api/lines/{lid}/canvas/move", json={"at": {"stage:exp": [5, 5], tid: [40, 1300]}})
         v = c.post(f"/api/lines/{lid}/canvas/tidy").json()
         at = {n["id"]: (n["x"], n["y"]) for n in v["nodes"]}
-        assert at["stage:exp"] == (1490, 380) and at["stage:method"] == (1196, 380) and at["gate:write"] == (588, 640) and at[tid] == (40, 1300)
+        assert at["stage:method"][1] < at["stage:exp"][1] == at["gate:exp"][1] and at["info:results"][0] < at["stage:exp"][0] < at["gate:exp"][0]
+        assert at[tid][0] == at["info:runs"][0] and at["stage:exp"][1] + 96 < at[tid][1] < at["gate:write"][1]
 
-        # a canvas from before the loop: its own layout, the tasks moved to the loop lane, a line to a hard check now to the gate
+        # a canvas from before the loop: the loop's layout with each block's cards, the task in the block of what it is
+        # wired to, a line to a hard check now to the gate; the file as it was is kept
         (town.s.projects_dir / lid / "canvas.json").write_text(json.dumps({
             "nodes": [{"id": "stage:exp", "kind": "stage", "ref": "exp", "x": 0, "y": 0}, {"id": "check:words", "kind": "hard", "ref": "words", "x": 0, "y": 0},
                       {"id": "info:card", "kind": "info", "ref": "card", "x": 0, "y": 0},
@@ -271,5 +277,7 @@ def test_the_research_loop_gates_its_stages_and_sends_rework_back(tmp_path):
             "edges": [{"id": "e1", "source": "t9", "target": "check:words", "label": "改这个"}], "gone": ["info:card"], "next": 10}))
         v = c.get(f"/api/lines/{lid}/canvas").json()
         ids = {n["id"]: n for n in v["nodes"]}
-        assert "gate:write" in ids and "info:card" not in ids and (ids["t9"]["x"], ids["t9"]["y"]) == (0, 980) and not v["gone"]
+        assert "gate:write" in ids and ids["info:card"]["mod"] == "overview" and not v["gone"] and not v["spare"]
+        assert ids["t9"]["mod"] == "paper" and ids["t9"]["x"] == ids["info:paper"]["x"] and ids["t9"]["y"] > ids["gate:write"]["y"] + 96
+        assert json.loads((town.s.projects_dir / lid / "canvas.before-blocks.json").read_text())["nodes"][3]["title"] == "旧任务"
         assert next(e for e in v["edges"] if {e["source"], e["target"]} == {"t9", "gate:write"})["label"] == "改这个"

@@ -1,20 +1,29 @@
 """A project's research loop (研究回路), full-window in 进展: a free graph of the loop's nodes and the lines between them.
 
-The loop has three lanes, which are where things start and where 「按回路规整」 puts them back; nothing holds a node
-in its lane. Along the top, the soft layer: the soft spec (what the agents are told: the work boundaries' musts and
-the rules no code enforces), the hard clamp (the boundaries bound to actions Papertown stops or asks you about), and
-the soft sentinels (soft checks, checks.py: questions the lead judges, each watching a stage). In the middle the
-spine: the stages in order, and after a stage its hard gate, the stage's hard checks as one node (it opens into a
-node per check). A gate whose blocking check fails locks the stage after it and sends a rework ticket back to the
-stage's agent, round after round up to the stage's limit; past it the gate comes to the human gate. Along the bottom
-the loop back: rework tickets, the corrections sent from a sentinel, the tasks and notes the user adds, and the human
-gate, where what needs your decision collects (escalated gates, stuck tasks, sentinels judged off course, questions).
+The loop is framed by the parts of the project's research flow, the same ones the console lists (pipeline.MODULES:
+概览, 调研, 代码仓库, 实验, 数据, 论文, 员工). Each part is a block: a frame round the nodes that belong to it, which
+is where they start and where 「按分块规整」 puts them back; nothing holds a node in its place. The blocks stand in
+four rows, the same for every project: the overview and the agents, the survey, the code with the experiments and the
+data, the paper. Every row is the whole width, and a block is as tall as what is in it: it grows and shrinks with its
+nodes, and the rows under it make room (_fit, at every save). A stage belongs to
+its part of the flow (pipeline.STAGE_MOD) and takes with it its hard gate (the stage's hard checks as one node, which
+opens into a node per check), the soft sentinels that watch it (soft checks, checks.py: questions the lead judges)
+and the rework and corrections they send back. The overview holds what bears on the whole project: the soft spec (what
+the agents are told: the work boundaries' musts and the rules no code enforces), the hard clamp (the boundaries bound
+to actions Papertown stops or asks you about) and the human gate, where what needs your decision collects (escalated
+gates, stuck tasks, sentinels judged off course, questions). A task or a note is in the block the user put it in, and
+changes block when it is dropped in another frame. In a block: the cards that show what the project has there (info
+cards: the progress card and the outputs, the agents, the related work and the method, the code, the jobs and the
+results, the datasets, the paper), beside them the stages and their gates in order with the sentinels over the stages
+they watch, and under them the rework tickets, tasks and notes. A gate
+whose blocking check fails locks the stage after it and sends a rework ticket back to the stage's agent, round after
+round up to the stage's limit; past it the gate comes to the human gate.
 
 A task node is a job for the lead, the coder or the writer: sending it delivers a <task> message with what the node
 is wired to, and the agent closes it with `pt task <id> done|blocked "…"`, which also goes to the user as a report;
 the user can send a result back with what is wrong, and the node keeps a log of all of it. A line has a kind (the
 flow, a sentinel watching, the spec and the clamp, the loops back) or none (one the user drew), and can carry a few
-words. Info cards (the progress card, the agents, jobs, code, paper, outputs) are off the canvas until put on.
+words. An info card taken off the canvas can be put back.
 
 The order of tasks is kept here, in code, not left to the agents. A line between two tasks is an order line (kind
 "order") unless the user makes it a plain one: the task at its tail comes first. A task sent while one before it is
@@ -33,6 +42,7 @@ import html
 import json
 import shlex
 import secrets
+import shutil
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -40,7 +50,7 @@ from typing import TYPE_CHECKING
 from .agents import ROLES, AgentError
 from .checks import BAD, GATE, HARD_IDS, STATUS as CHECK_STATUS, CheckError, clip
 from .db import now, write_json
-from .pipeline import INDEX, NAMES
+from .pipeline import INDEX, MODULES, NAMES, STAGE_MOD
 
 if TYPE_CHECKING:
     from .town import Town
@@ -53,18 +63,31 @@ KIND = {"stage": "工序", "gate": "硬卡口", "hard": "硬检查", "soft": "�
         "human": "人类拍板", "task": "任务", "note": "备注", "info": "资料卡"}
 EDGES = {"flow": "主推进", "watch": "巡检", "spec": "软限制注入", "clamp": "动作钳制", "hard_loop": "硬打回",
          "soft_loop": "软纠偏", "escalate": "升级", "member": "卡口的规则", "order": "先后顺序"}
-INFO = {"card": "进展", "agent:lead": "项目负责人", "agent:coder": "代码员工", "agent:writer": "写作员工",
-        "code": "代码", "runs": "实验任务", "paper": "论文", "outputs": "预期产出"}
+# the cards that show the project live, in the order they stand in their block
+INFO = {"card": "进展", "outputs": "预期产出", "agent:lead": "项目负责人", "agent:coder": "代码员工", "agent:writer": "写作员工",
+        "survey": "相关工作", "method": "方法", "code": "代码", "runs": "实验任务", "results": "实验结果", "datasets": "数据集",
+        "paper": "论文"}
 FIXED = {"spec": "软限制规范", "clamp": "硬边界夹", "human": "人类拍板节点"}
-# the first layout (see _first_layout): sizes, the lanes and the spine's two rows
+# sizes, for where things go. A card is drawn as big as INFO_SIZE says (by the first part of its ref), whatever it holds
 WIDTH = {"stage": 230, "gate": 250, "hard": 210, "soft": 290, "spec": 270, "clamp": 270, "human": 300, "task": 290, "note": 200, "info": 250}
-HEIGHT = {"stage": 92, "gate": 96, "hard": 76, "soft": 96, "spec": 92, "clamp": 92, "human": 104, "task": 108, "note": 80, "info": 130}
-GAP, SPLIT = 64, INDEX["write"]
-LANES = [{"key": "soft", "title": "SOFT LAYER · 软限制与软巡检（Prompt 引导 · 负责人语义校准）", "y0": -64, "y1": 250},
-         {"key": "spine", "title": "RESEARCH SPINE & HARD GATES · 工序主干与代码硬卡口", "y0": 290, "y1": 880},
-         {"key": "loop", "title": "LOOPBACK & ESCALATION · 自动打回、纠偏任务与人类拍板", "y0": 920, "y1": 1200}]
-ROW_Y, ROW_B_X, SOFT_Y, SOFT_X, LOOP_Y = {"a": 380, "b": 640}, 294, 40, 310, 980
-AT = {"spec": (0, -10), "clamp": (0, 110)}
+HEIGHT = {"stage": 92, "gate": 96, "hard": 76, "soft": 96, "spec": 92, "clamp": 92, "human": 104, "task": 108, "note": 80, "info": 190}
+INFO_SIZE = {"card": (300, 208), "outputs": (250, 208), "agent": (210, 76), "survey": (300, 190), "method": (280, 190)}
+# The blocks (see _layout): the research flow's parts, in four rows from the top down, every row as wide as the
+# widest and as tall as what is in it (_fit). PAD and HEAD are a frame's margin round its nodes and the room its header
+# takes (the page draws the frames, Canvas.tsx, with the same two), BGAP the gap between two frames; in a block, GAP
+# between a stage and its gate, ROW_GAP between its rows, CELL a task's place in the grid under them. MIN_W: a block
+# with no stage of its own still has room for two tasks side by side.
+BLOCKS = dict(MODULES)
+BLOCK_ROWS = [["overview", "agents"], ["survey"], ["code", "exp", "data"], ["paper"]]
+GAP, PAD, HEAD, BGAP, ROW_GAP = 64, 28, 64, 56, 44
+SOFT_H, CELL = HEIGHT["soft"] + ROW_GAP, (WIDTH["task"] + 30, HEIGHT["task"] + 30)
+MIN_W, MIN_H = {"code": 2 * CELL[0] - 30, "data": 2 * CELL[0] - 30}, HEIGHT["gate"]
+STACKED = {"agents"}  # a block whose cards stand over its stages; in the others they stand to the left of them
+AT = {"spec": (0, 0), "clamp": (0, 116), "human": (WIDTH["spec"] + 24, 52)}  # the fixed three, beside the overview's cards
+INFO_MOD = {"card": "overview", "outputs": "overview", "agent:lead": "agents", "agent:coder": "agents", "agent:writer": "agents",
+            "survey": "survey", "method": "survey", "code": "code", "runs": "exp", "results": "exp", "datasets": "data", "paper": "paper"}
+LINKS = [("info:code", "info:results", "跑出")]  # lines the first layout draws between cards
+TO_MOD = {"lead": "overview", "coder": "code", "writer": "paper"}  # where a task with nothing else to go by starts
 # who works at a stage, and who a gate's rework goes back to
 STATION = {"team": "lead", "method": "lead", "exp": "coder", "write": "writer", "review": "lead", "ship": "writer"}
 REWORK = {"idea": "lead", "hatch": "lead", "team": "lead", "method": "lead", "exp": "coder", "write": "writer", "review": "writer", "ship": "writer"}
@@ -89,65 +112,201 @@ def _over(c: dict, value: float | None) -> int:
     return int(value) if value is not None and value > (c.get("max") or 0) else 0
 
 
-def _spine(checks: list[tuple[str, str, str]]) -> dict[str, list[str]]:
-    """The spine's nodes in order, on two rows: each stage, and after it its gate when it has hard checks."""
-    gated = {stage for _, kind, stage in checks if kind == "hard" and stage in INDEX}
-    rows: dict[str, list[str]] = {"a": [], "b": []}
-    for k in INDEX:
-        row = rows["a" if INDEX[k] < SPLIT else "b"]
-        row.append(f"stage:{k}")
-        if k in gated:
-            row.append(f"gate:{k}")
-    return rows
-
-
 def _kind_of(nid: str) -> str:
     return nid.split(":", 1)[0] if ":" in nid else nid
 
 
-def _first_layout(checks: list[tuple[str, str, str]]) -> tuple[list[dict], list[tuple[str, str, str]]]:
-    """Where everything starts, lane by lane. The spine: the stages and their gates in order along two rows, joined
-    by the flow. The soft layer above it: the spec and the clamp on the left, wired to the stages they bear on, and
-    each sentinel above the stage it watches. The loop lane below: the human gate, which the last review reports to.
-    Hard checks without a stage sit on their own left of the spine. It is only a start: from here it is the user's."""
-    nodes: list[dict] = []
-    edges: list[tuple[str, str, str]] = []
-    at: dict[str, dict] = {}
-    rows = _spine(checks)
+def _mod(n: dict, stage_of: dict[str, str]) -> str:
+    """The block a node belongs to. A stage is in its part of the flow and takes its gate, its checks and what they
+    send back with it; the fixed three and a check without a stage are in the overview; an info card is with what it
+    shows; a task or a note is where the user put it. `stage_of`: each check's stage."""
+    k = n["kind"]
+    if k in ("stage", "gate"):
+        return STAGE_MOD.get(n["ref"], "overview")
+    if k in ("hard", "soft"):
+        return STAGE_MOD.get(stage_of.get(n["ref"], ""), "overview")
+    if k == "info":
+        return INFO_MOD.get(n["ref"], "overview")
+    if k == "task" and n.get("loop") == "hard":
+        return STAGE_MOD.get(n.get("gate"), "overview")
+    if k == "task" and n.get("loop") == "soft" and n.get("from") in stage_of:
+        return STAGE_MOD.get(stage_of[n["from"]], "overview")
+    return n["mod"] if k in ("task", "note") and n.get("mod") in BLOCKS else "overview"
+
+
+def _size(n: dict) -> tuple[int, int]:
+    if n["kind"] == "info":
+        return INFO_SIZE.get(str(n.get("ref") or "").split(":")[0], (WIDTH["info"], HEIGHT["info"]))
+    return WIDTH[n["kind"]], HEIGHT[n["kind"]]
+
+
+def _frames(d: dict) -> dict[str, tuple[float, float, float, float]]:
+    """Each block's frame (x0, y0, x1, y1): round its slot, which is round its nodes (_fit)."""
+    return {m: (s["x"] - PAD, s["y"] - HEAD, s["x"] + s["w"] + PAD, s["y"] + s["h"] + PAD) for m, s in d["blocks"].items()}
+
+
+def _block_at(frames: dict[str, tuple], x: float, y: float) -> str:
+    """The block a task or a note put at a point joins: the one whose frame the point is in, or the nearest. Under a
+    frame, down to where the next one's nodes start, is still the upper block's: where its next row of tasks goes."""
+    def far(f: tuple) -> float:
+        top, bottom = f[1] + HEAD - 16, f[3] + BGAP + HEAD - 16
+        return max(f[0] - x, 0, x - f[2]) ** 2 + max(top - y, 0, y - bottom) ** 2
+    return min(frames, key=lambda m: far(frames[m]))
+
+
+def _rows(need: dict[str, tuple[int, int]]) -> dict[str, dict]:
+    """Each block's slot from the room its nodes need (w, h). The rows stand one under the other and are equally
+    wide: what a row has to spare is shared out among its blocks. A row is as tall as its tallest block."""
+    span = 2 * PAD + BGAP
+    wide = max(sum(need[m][0] for m in row) + span * (len(row) - 1) for row in BLOCK_ROWS)
+    slots: dict[str, dict] = {}
+    y = 0
+    for row in BLOCK_ROWS:
+        each, rest = divmod(wide - sum(need[m][0] for m in row) - span * (len(row) - 1), len(row))
+        h, x = max(need[m][1] for m in row), 0
+        for i, m in enumerate(row):
+            w = need[m][0] + each + (1 if i < rest else 0)
+            slots[m] = {"x": x, "y": y, "w": w, "h": h}
+            x += w + span
+        y += h + HEAD + PAD + BGAP
+    return slots
+
+
+def _fit(d: dict, stage_of: dict[str, str]) -> None:
+    """The blocks round their nodes as they now are. A block is as big as its nodes need, measured from its corner (a
+    node put left of or above the corner takes the corner there); the rows are laid out again from that (_rows), and
+    each block's nodes go with their block. So a block grows and shrinks with what is in it, and what is under or
+    beside it makes room."""
+    by: dict[str, list[dict]] = {m: [] for m in BLOCKS}
+    for n in d["nodes"]:
+        by[_mod(n, stage_of)].append(n)
+    was = d.get("blocks") or {}
+    corner: dict[str, tuple[int, int]] = {}
+    need: dict[str, tuple[int, int]] = {}
+    for m, ns in by.items():
+        xs, ys = [n["x"] for n in ns] + [was[m]["x"]] * (m in was), [n["y"] for n in ns] + [was[m]["y"]] * (m in was)
+        x0, y0 = min(xs, default=0), min(ys, default=0)
+        corner[m] = (x0, y0)
+        need[m] = (max([MIN_W.get(m, WIDTH["task"])] + [n["x"] + _size(n)[0] - x0 for n in ns]),
+                   max([MIN_H] + [n["y"] + _size(n)[1] - y0 for n in ns]))
+    d["blocks"] = _rows(need)
+    for m, ns in by.items():
+        dx, dy = d["blocks"][m]["x"] - corner[m][0], d["blocks"][m]["y"] - corner[m][1]
+        if dx or dy:
+            for n in ns:
+                n["x"], n["y"] = n["x"] + dx, n["y"] + dy
+
+
+def _clear(d: dict, x: float, y: float, kind: str) -> tuple[int, int]:
+    """From here, the first place to the right that no node is in."""
+    w, h = WIDTH[kind], HEIGHT[kind]
+    for _ in range(60):
+        if not any(x < n["x"] + _size(n)[0] + 10 and n["x"] < x + w + 10 and y < n["y"] + _size(n)[1] + 10 and n["y"] < y + h + 10
+                   for n in d["nodes"]):
+            break
+        x += w + 30
+    return round(x), round(y)
+
+
+def _layout(checks: list[tuple[str, str, str]], own: list[dict] | tuple = (), opened: set[str] | frozenset = frozenset(),
+            cards: list[str] | tuple = tuple(INFO)) \
+        -> tuple[list[dict], list[tuple[str, str, str]], dict[str, dict], dict[str, tuple[int, int]]]:
+    """Where everything starts, block by block. The blocks stand in four rows, each the whole width: what the project
+    is and who works on it (the overview, the agents), what is known (the survey), what is run (the code, the
+    experiments, the data), what is written (the paper). In a block: the cards that show what the project has there
+    on the left, to their right the stages and their gates in order with the sentinels over the stages they watch and
+    an open gate's checks in a row under it, and below all that a grid for `own` (the user's tasks and notes, each
+    saying its block in "mod"; they are placed in the order given). The agents' cards stand over their stage, which
+    is then next to the row it sits between in the flow. The overview has the spec, the clamp and the human gate
+    beside its cards, and the checks without a stage under them. The flow joins the stages and gates in order,
+    across the blocks. `cards`: the cards on the canvas.
+    Returns the loop's own nodes, the first lines, each block's slot, and where every node (and `own`) goes. It is
+    only a start: from here it is the user's."""
+    hard = {cid: stage for cid, kind, stage in checks if kind == "hard"}
+    gated = {s for s in hard.values() if s in INDEX}
+    spine: dict[str, list[str]] = {m: [] for m in BLOCKS}
     order: list[str] = []
-    for row, x in (("a", 0), ("b", ROW_B_X)):
-        for nid in rows[row]:
-            kind = _kind_of(nid)
-            n = {"id": nid, "kind": kind, "ref": nid.split(":", 1)[1], "x": x, "y": ROW_Y[row]}
-            nodes.append(n)
-            at[nid] = n
-            order.append(nid)
-            x += WIDTH[kind] + GAP
-    edges += [(a, b, "flow") for a, b in zip(order, order[1:])]
-    loose = [cid for cid, kind, stage in checks if kind == "hard" and stage not in INDEX]
-    for j, cid in enumerate(loose):
-        nodes.append({"id": f"check:{cid}", "kind": "hard", "ref": cid, "x": -WIDTH["hard"] - GAP, "y": ROW_Y["a"] + j * (HEIGHT["hard"] + 16)})
-    # the sentinels: each wants to sit over its stage; going left to right, one pushes the next along
-    want = []
+    for k in INDEX:
+        ids = [f"stage:{k}"] + ([f"gate:{k}"] if k in gated else [])
+        spine[STAGE_MOD[k]] += ids
+        order += ids
+    watch: dict[str, list[tuple[str, str]]] = {m: [] for m in BLOCKS}
     for cid, kind, stage in checks:
-        if kind != "soft":
-            continue
-        s = at.get(f"stage:{stage}")
-        want.append((s["x"] + WIDTH["stage"] / 2 if s else 0, cid, stage))
-    x = SOFT_X
-    for centre, cid, stage in sorted(want, key=lambda w: w[0]):
-        x = max(x, round(centre - WIDTH["soft"] / 2))
-        nodes.append({"id": f"check:{cid}", "kind": "soft", "ref": cid, "x": x, "y": SOFT_Y})
-        if f"stage:{stage}" in at:
-            edges.append((f"check:{cid}", f"stage:{stage}", "watch"))
-        x += WIDTH["soft"] + 24
-    nodes.append({"id": "spec", "kind": "spec", "x": AT["spec"][0], "y": AT["spec"][1]})
-    nodes.append({"id": "clamp", "kind": "clamp", "x": AT["clamp"][0], "y": AT["clamp"][1]})
-    edges += [("spec", f"stage:{k}", "spec") for k in ("method", "write")] + [("clamp", "stage:exp", "clamp")]
-    right = max(n["x"] + WIDTH[n["kind"]] for n in nodes)
-    nodes.append({"id": "human", "kind": "human", "x": right - WIDTH["human"], "y": LOOP_Y})
-    edges.append(("stage:review", "human", "escalate"))
-    return nodes, edges
+        if kind == "soft":
+            watch[STAGE_MOD.get(stage, "overview")].append((cid, stage))
+    loose = [cid for cid, stage in hard.items() if stage not in INDEX]
+    under = {stage: [cid for cid, s in hard.items() if s == stage] for stage in opened if stage in gated}
+    shown = {m: [r for r in INFO if r in cards and INFO_MOD[r] == m] for m in BLOCKS}
+
+    def run(n: int, w: int, gap: int) -> int:
+        return n * (w + gap) - gap if n else 0
+
+    local: dict[str, dict[str, tuple[int, int, int, int]]] = {m: {} for m in BLOCKS}  # in a block: id → x, y, w, h from its corner
+    need: dict[str, tuple[int, int]] = {}
+    for m in BLOCKS:
+        p = local[m]
+
+        def put(nid: str, x: float, y: float, kind: str, ref: str = "") -> None:
+            p[nid] = (round(x), round(y), *_size({"kind": kind, "ref": ref}))
+
+        x = 0
+        for r in shown[m]:
+            put(f"info:{r}", x, 0, "info", r)
+            x += p[f"info:{r}"][2] + 24
+        cards_w, cards_h = max(0, x - 24), max((p[f"info:{r}"][3] for r in shown[m]), default=0)
+        if m == "overview":
+            fx = cards_w + GAP if shown[m] else 0
+            for k, (dx, dy) in AT.items():
+                put(k, fx + dx, dy, k)
+            y = max(cards_h, AT["clamp"][1] + HEIGHT["clamp"])
+            for ids, kind, gap in ((loose, "hard", 14), ([cid for cid, _ in watch[m]], "soft", 24)):
+                for j, cid in enumerate(ids):
+                    put(f"check:{cid}", j * (WIDTH[kind] + gap), y + 24, kind)
+                y += 24 + HEIGHT[kind] if ids else 0
+        else:
+            ids = spine[m]
+            beside = bool(shown[m]) and m not in STACKED
+            fx = cards_w + GAP if beside else 0
+            fy = cards_h + ROW_GAP if shown[m] and not beside and (ids or watch[m]) else 0
+            fw = max([sum(WIDTH[_kind_of(i)] for i in ids) + GAP * max(0, len(ids) - 1), run(len(watch[m]), WIDTH["soft"], 24),
+                      *(run(len(under.get(i[5:], [])), WIDTH["hard"], 14) for i in ids if i.startswith("gate:"))])
+            top = fy + (SOFT_H if watch[m] else 0)
+            x = fx
+            for nid in ids:
+                put(nid, x, top, _kind_of(nid))
+                x += WIDTH[_kind_of(nid)] + GAP
+            # the sentinels: each wants to sit over its stage; going left to right, one pushes the next along
+            want = sorted((p[f"stage:{stage}"][0] + WIDTH["stage"] / 2 if f"stage:{stage}" in p else fx, cid) for cid, stage in watch[m])
+            x = fx
+            for j, (centre, cid) in enumerate(want):
+                x = max(x, round(centre - WIDTH["soft"] / 2))
+                put(f"check:{cid}", x, fy, "soft")
+                x += WIDTH["soft"] + 24
+            for nid in ids:
+                mine = under.get(nid[5:], []) if nid.startswith("gate:") else []
+                total = run(len(mine), WIDTH["hard"], 14)
+                x0 = min(max(round(p[nid][0] + WIDTH["gate"] / 2 - total / 2), fx), fx + fw - total)
+                for j, cid in enumerate(mine):
+                    put(f"check:{cid}", x0 + j * (WIDTH["hard"] + 14), top + HEIGHT["gate"] + 34, "hard")
+            y = max([0] + [b[1] + b[3] for b in p.values()])
+        wide = max([MIN_W.get(m, WIDTH["task"])] + [b[0] + b[2] for b in p.values()])
+        cols = max(1, (wide + 30) // CELL[0])
+        for j, n in enumerate([n for n in own if n.get("mod") == m]):
+            put(n["id"], (j % cols) * CELL[0], (y + ROW_GAP if y else 0) + (j // cols) * CELL[1], n.get("kind") or "task")
+        need[m] = (wide, max([MIN_H] + [b[1] + b[3] for b in p.values()]))
+
+    slots = _rows(need)
+    at = {nid: (slots[m]["x"] + b[0], slots[m]["y"] + b[1]) for m in BLOCKS for nid, b in local[m].items()}
+    nodes = [{"id": nid, "kind": _kind_of(nid), "ref": nid.split(":", 1)[1], "x": at[nid][0], "y": at[nid][1]} for nid in order]
+    nodes += [{"id": f"check:{cid}", "kind": "hard", "ref": cid, "x": at[f"check:{cid}"][0], "y": at[f"check:{cid}"][1]} for cid in loose]
+    nodes += [{"id": f"check:{cid}", "kind": "soft", "ref": cid, "x": at[f"check:{cid}"][0], "y": at[f"check:{cid}"][1]}
+              for cid, kind, _ in checks if kind == "soft"]
+    nodes += [{"id": k, "kind": k, "x": at[k][0], "y": at[k][1]} for k in AT]
+    nodes += [{"id": f"info:{r}", "kind": "info", "ref": r, "x": at[f"info:{r}"][0], "y": at[f"info:{r}"][1]} for m in BLOCKS for r in shown[m]]
+    edges = [(a, b, "flow") for a, b in zip(order, order[1:])]
+    edges += [(f"check:{cid}", f"stage:{stage}", "watch") for cid, kind, stage in checks if kind == "soft" and stage in INDEX]
+    edges += [("spec", f"stage:{k}", "spec") for k in ("method", "write")] + [("clamp", "stage:exp", "clamp"), ("stage:review", "human", "escalate")]
+    return nodes, edges, slots, at
 
 
 class Canvas:
@@ -173,6 +332,8 @@ class Canvas:
         return data
 
     def _save(self, line_id: str, d: dict) -> None:
+        """Written with the blocks fitted round their nodes as they now are."""
+        _fit(d, self._stage_of(line_id))
         p = self._path(line_id)
         p.parent.mkdir(parents=True, exist_ok=True)
         write_json(p, d)
@@ -200,24 +361,32 @@ class Canvas:
         return e
 
     def _load(self, line_id: str) -> dict:
-        """The canvas as saved: laid out the first time, moved over once from the canvas before the loop, and kept in
-        step with the project's checks (a new check gets its node, a check that is gone loses it)."""
+        """The canvas as saved: laid out the first time, moved over once from an older layout (the canvas before the
+        loop, the loop in three lanes; the file as it was is kept beside it), and kept in step with the project's
+        checks (a new check gets its node, a check that is gone loses it)."""
         with self._lock:
             d = self._read(line_id)
             checks = self._checks(line_id)
             if d is None:
-                nodes, edges = _first_layout(checks)
-                d = {"v": 2, "nodes": nodes, "edges": [], "gone": [], "next": 1}
+                nodes, edges, slots, _ = _layout(checks)
+                d = {"v": 3, "nodes": nodes, "edges": [], "gone": [], "next": 1, "blocks": slots}
                 for a, b, kind in edges:
                     self._edge(d, a, b, kind)
+                for a, b, label in LINKS:
+                    self._edge(d, a, b, None, label)
                 self._save(line_id, d)
                 return d
             d.setdefault("edges", [])
             d.setdefault("gone", [])
             d.setdefault("next", 1)
             changed = False
-            if d.get("v") != 2:
-                self._migrate(d, checks)
+            if d.get("v") != 3:
+                old = self._path(line_id).with_name("canvas.before-blocks.json")
+                if not old.exists():
+                    shutil.copyfile(self._path(line_id), old)
+                if d.get("v") != 2:
+                    self._migrate(d, checks)
+                self._to_blocks(d, checks)
                 changed = True
             changed |= self._sync(d, checks)
             ids = {n["id"] for n in d["nodes"]}
@@ -228,15 +397,13 @@ class Canvas:
             return d
 
     def _migrate(self, d: dict, checks: list[tuple[str, str, str]]) -> None:
-        """A canvas from before the loop: the loop's own layout, with the tasks and notes moved to the loop lane and
-        the lines the user drew to them kept (a line to a hard check goes to its gate; info cards come off)."""
+        """A canvas from before the loop: the loop's own nodes, with the user's tasks and notes and the lines drawn to
+        them kept (a line to a hard check goes to its gate; info cards come off). _to_blocks then places it all."""
         stage_of = {cid: stage for cid, kind, stage in checks if kind == "hard"}
         mine = [n for n in d["nodes"] if n["kind"] in ("task", "note")]
         gone = [g for g in d["gone"] if not g.startswith("info:")]
-        nodes, edges = _first_layout(checks)
+        nodes, edges, _, _ = _layout(checks)
         nodes = [n for n in nodes if n["id"] not in gone]
-        for i, n in enumerate(mine):
-            n["x"], n["y"] = (i % 4) * (WIDTH["task"] + 30), LOOP_Y + (i // 4) * (HEIGHT["task"] + 30)
         own = {n["id"] for n in mine}
         kept = {n["id"] for n in nodes} | own
 
@@ -254,12 +421,79 @@ class Canvas:
             if a in kept and b in kept and a != b:
                 self._edge(d, a, b, None, e.get("label") or "")
 
+    def _to_blocks(self, d: dict, checks: list[tuple[str, str, str]]) -> None:
+        """A loop laid out in three lanes: every node goes to its block. A task or a note joins the block of what it
+        is wired to (a stage, a gate or a check first, then a task that has one), or the block of whom it is for;
+        each block gets its cards, and everything is laid out afresh; the lines stay."""
+        stage_of = {cid: stage for cid, _, stage in checks}
+        by = {n["id"]: n for n in d["nodes"]}
+        loose = [n for n in d["nodes"] if n["kind"] in ("task", "note") and not n.get("loop") and n.get("mod") not in BLOCKS]
+        rank = {"stage": 0, "gate": 0, "hard": 0, "soft": 0, "task": 1, "info": 2}
+
+        def settle() -> None:
+            for _ in range(3):
+                for n in loose:
+                    if "mod" in n:
+                        continue
+                    near = [by[b] for e in d["edges"] for a, b in ((e["source"], e["target"]), (e["target"], e["source"])) if a == n["id"] and b in by]
+                    near = sorted((x for x in near if x not in loose or "mod" in x), key=lambda x: rank.get(x["kind"], 3))
+                    if near and rank.get(near[0]["kind"], 3) < 3:
+                        n["mod"] = _mod(near[0], stage_of)
+
+        settle()
+        for n in loose:
+            if n["kind"] == "task":
+                n.setdefault("mod", TO_MOD.get(n.get("to"), "overview"))
+        settle()  # a note wired to a task that had nothing to go by
+        for n in loose:
+            n.setdefault("mod", "overview")
+        d["nodes"] = [n for n in d["nodes"] if n["kind"] != "info" or n.get("ref") in INFO]
+        d["nodes"] += [{"id": f"info:{r}", "kind": "info", "ref": r, "x": 0, "y": 0} for r in INFO if f"info:{r}" not in by]
+        for a, b, label in LINKS:
+            self._edge(d, a, b, None, label)
+        d["v"] = 3
+        self._arrange(d, checks)
+
+    def _arrange(self, d: dict, checks: list[tuple[str, str, str]]) -> None:
+        """Every node where its block starts it (see _layout), and the first layout's lines drawn again. In a block's
+        grid: the rework tickets and corrections, then the tasks in the order their lines set, then the notes."""
+        stage_of = {cid: stage for cid, _, stage in checks}
+        before: dict[str, list[str]] = {}
+        for e in d["edges"]:
+            if e.get("kind") == "order":
+                before.setdefault(e["target"], []).append(e["source"])
+        depth: dict[str, int] = {}
+
+        def deep(nid: str) -> int:
+            if nid not in depth:
+                depth[nid] = 0  # an order line cannot close a ring, and this keeps a bad file from looping
+                depth[nid] = 1 + max((deep(x) for x in before.get(nid, [])), default=-1)
+            return depth[nid]
+
+        kinds = {"task": 2, "note": 3}
+        own = [(0 if n.get("loop") == "hard" else 1 if n.get("loop") == "soft" else kinds[n["kind"]], deep(n["id"]), i, n)
+               for i, n in enumerate(d["nodes"]) if n["kind"] in kinds]
+        opened = {n["ref"] for n in d["nodes"] if n["kind"] == "gate" and n.get("open")}
+        _, edges, slots, at = _layout(checks, [{"id": n["id"], "mod": _mod(n, stage_of), "kind": n["kind"]} for *_, n in sorted(own, key=lambda o: o[:3])],
+                                      opened, [n["ref"] for n in d["nodes"] if n["kind"] == "info"])
+        for n in d["nodes"]:
+            if n["id"] in at:
+                n["x"], n["y"] = at[n["id"]]
+        d["blocks"] = slots
+        have = {n["id"] for n in d["nodes"]}
+        for a, b, kind in edges:
+            if a in have and b in have:
+                self._edge(d, a, b, kind)
+
     def _sync(self, d: dict, checks: list[tuple[str, str, str]]) -> bool:
         """Nodes for what the project has now: a gate for each stage with hard checks, a node for each sentinel, for
         each hard check without a stage and for each check of an open gate, and the fixed three."""
         hard = {cid: stage for cid, kind, stage in checks if kind == "hard"}
         soft = {cid: stage for cid, kind, stage in checks if kind == "soft"}
+        stage_of = hard | soft
         gated = {s for s in hard.values() if s in INDEX}
+        if not d.get("blocks"):
+            d["blocks"] = _layout(checks)[2]
         have = {n["id"]: n for n in d["nodes"]}
         opened = {n["ref"] for n in d["nodes"] if n["kind"] == "gate" and n.get("open")}
 
@@ -289,24 +523,27 @@ class Canvas:
 
         for stage in sorted(gated, key=INDEX.get):
             s = have.get(f"stage:{stage}")
-            put({"id": f"gate:{stage}", "kind": "gate", "ref": stage, "x": (s["x"] if s else 0) + WIDTH["stage"] + GAP // 2,
-                 "y": (s["y"] if s else ROW_Y["a"]) + HEIGHT["stage"] + 40}, (f"stage:{stage}", f"gate:{stage}", "flow"))
-        for cid, stage in soft.items():
+            if f"gate:{stage}" in have or f"gate:{stage}" in d["gone"]:
+                continue
             s = have.get(f"stage:{stage}")
-            n = sum(1 for x in d["nodes"] if x["kind"] == "soft")
-            put({"id": f"check:{cid}", "kind": "soft", "ref": cid, "x": (s["x"] if s else SOFT_X) + (n % 3) * 30, "y": SOFT_Y + 120 + (n % 3) * 20},
-                (f"check:{cid}", f"stage:{stage}", "watch"))
-        loose = [cid for cid, stage in hard.items() if stage not in INDEX]
-        for j, cid in enumerate(loose):
-            put({"id": f"check:{cid}", "kind": "hard", "ref": cid, "x": -WIDTH["hard"] - GAP, "y": ROW_Y["a"] + j * (HEIGHT["hard"] + 16)})
+            x, y = _clear(d, s["x"] + WIDTH["stage"] + GAP // 2, s["y"] + HEIGHT["stage"] + 40, "gate") if s else self._place(d, stage_of, STAGE_MOD[stage], "gate")
+            put({"id": f"gate:{stage}", "kind": "gate", "ref": stage, "x": x, "y": y}, (f"stage:{stage}", f"gate:{stage}", "flow"))
+        for cid, stage in soft.items():  # over the stage it watches; without one, in the overview
+            if f"check:{cid}" in have or f"check:{cid}" in d["gone"]:
+                continue
+            s = have.get(f"stage:{stage}")
+            x, y = _clear(d, s["x"], s["y"] - SOFT_H, "soft") if s else self._place(d, stage_of, "overview", "soft")
+            put({"id": f"check:{cid}", "kind": "soft", "ref": cid, "x": x, "y": y}, (f"check:{cid}", f"stage:{stage}", "watch"))
+        for cid in [cid for cid, stage in hard.items() if stage not in INDEX]:
+            if f"check:{cid}" not in have and f"check:{cid}" not in d["gone"]:
+                x, y = self._place(d, stage_of, "overview", "hard")
+                put({"id": f"check:{cid}", "kind": "hard", "ref": cid, "x": x, "y": y})
         for stage in opened & gated:
             self._open_at(d, stage, [cid for cid, s in hard.items() if s == stage], have, put)
         for k in FIXED:
             if k not in have and k not in d["gone"]:
-                n = {"id": k, "kind": k, "x": AT.get(k, (0, LOOP_Y))[0], "y": AT.get(k, (0, LOOP_Y))[1]}
-                if k == "human":
-                    n["x"] = max((x["x"] + WIDTH.get(x["kind"], 200) for x in d["nodes"] if x["kind"] in ("stage", "gate")), default=WIDTH["human"]) - WIDTH["human"]
-                put(n)
+                x, y = self._place(d, stage_of, "overview", k)
+                put({"id": k, "kind": k, "x": x, "y": y})
         return changed
 
     @staticmethod
@@ -376,7 +613,7 @@ class Canvas:
             n = {"id": f"check:{cid}", "kind": "hard", "ref": cid, "x": 0, "y": 0}
         if not n:
             raise CanvasError(f"回路上没有节点「{ref}」（编号见回路的清单）")
-        return {"id": n["id"], "kind": n["kind"], "ref": n.get("ref"), "x": n["x"], "y": n["y"], "w": WIDTH[n["kind"]], "label": self._label(line_id, n)}
+        return {"id": n["id"], "kind": n["kind"], "ref": n.get("ref"), "x": n["x"], "y": n["y"], "w": _size(n)[0], "mod": _mod(n, self._stage_of(line_id)), "label": self._label(line_id, n)}
 
     def _label(self, line_id: str, n: dict) -> str:
         if n["kind"] == "stage":
@@ -399,16 +636,40 @@ class Canvas:
     def edge_between(self, line_id: str, a: str, b: str) -> dict | None:
         return next((e for e in self._load(line_id)["edges"] if {e["source"], e["target"]} == {a, b}), None)
 
-    def spot(self, line_id: str) -> tuple[int, int]:
-        """Somewhere free for a node nobody placed: in the loop lane, after what is there."""
-        nodes = [n for n in self._load(line_id)["nodes"] if n["y"] >= LANES[2]["y0"] - 40 and n["kind"] != "human"]
-        return (max((n["x"] + WIDTH[n["kind"]] for n in nodes), default=-30) + 30, LOOP_Y)
+    def _stage_of(self, line_id: str) -> dict[str, str]:
+        return {cid: stage for cid, _, stage in self._checks(line_id)}
+
+    @staticmethod
+    def _place(d: dict, stage_of: dict[str, str], mod: str, kind: str, near: dict | None = None, ref: str = "") -> tuple[int, int]:
+        """Somewhere free in a block for a node nobody placed: the first free place in the grid under what the block
+        starts with (its cards, its stages and checks), from under `near` when it is said what the node goes with."""
+        ns = [n for n in d["nodes"] if _mod(n, stage_of) == mod]
+        slot, (w, h) = d["blocks"][mod], _size({"kind": kind, "ref": ref})
+        first = [n for n in ns if n["kind"] not in ("task", "note")]
+        top = max(n["y"] + _size(n)[1] for n in first) + ROW_GAP if first else slot["y"]
+        wide = max([MIN_W.get(mod, WIDTH["task"])] + [n["x"] + _size(n)[0] - slot["x"] for n in ns])
+        cols = max(1, (wide + 30) // CELL[0])
+        start = min(cols - 1, max(0, round((near["x"] - slot["x"]) / CELL[0]))) if near else 0
+        for i in range(start, start + 400):
+            x, y = slot["x"] + (i % cols) * CELL[0], top + (i // cols) * CELL[1]
+            if not any(x < n["x"] + _size(n)[0] + 10 and n["x"] < x + w + 10 and y < n["y"] + _size(n)[1] + 10 and n["y"] < y + h + 10 for n in d["nodes"]):
+                break
+        return x, y
+
+    def spot(self, line_id: str, mod: str = "overview", kind: str = "task", near: str | None = None) -> tuple[int, int]:
+        """Somewhere free in a block for a node nobody placed, under the node `near` when one is said."""
+        d = self._load(line_id)
+        return self._place(d, self._stage_of(line_id), mod if mod in BLOCKS else "overview", kind, next((n for n in d["nodes"] if n["id"] == near), None))
 
     def outline(self, line_id: str) -> str:
         """The canvas in words: every node with its id and how it stands, and the lines between them."""
         v = self.view(line_id)
-        out = [f"#{v['seq']}「{clip(v['title'], 40)}」的研究回路（第 {v['rounds']} 轮）。节点（编号 · 种类 · 名字 · 现在怎样）："]
-        for n in v["nodes"]:
+        out = [f"#{v['seq']}「{clip(v['title'], 40)}」的研究回路（第 {v['rounds']} 轮）。节点按研究流程的分块列出（编号 · 种类 · 名字 · 现在怎样）："]
+        said: str | None = None
+        for n in sorted(v["nodes"], key=lambda n: list(BLOCKS).index(n["mod"])):
+            if n["mod"] != said:
+                said = n["mod"]
+                out.append(f"【{BLOCKS[said]}】")
             if n["kind"] == "stage":
                 how = STAGE.get(n["status"], n["status"]) + (f" {n['pct']}%" if n["status"] == "run" else "") + ("，被硬卡口锁住" if n.get("locked") else "")
             elif n["kind"] == "gate":
@@ -435,6 +696,9 @@ class Canvas:
                 how = "实时显示项目的这部分"
             name = clip(n.get("text"), 80) if n["kind"] == "note" else n.get("title")
             out.append(f"- {n['id']} · {KIND[n['kind']]} · {name}" + (f" · {how}" if how else ""))
+        empty = [t for m, t in MODULES if not any(n["mod"] == m for n in v["nodes"])]
+        if empty:
+            out.append("还没有节点的分块：" + "、".join(empty))
         out += ["", "连线（圆括号里是线的种类，方括号里是线上写的字）："]
         out += [f"- {e['source']} {'→' if e.get('kind') == 'order' else '—'} {e['target']}" + (f"（{EDGES[e['kind']]}）" if e.get("kind") else "") + (f" [{e['label']}]" if e.get("label") else "")
                 for e in v["edges"]] or ["- 还没有连线"]
@@ -459,9 +723,10 @@ class Canvas:
         gates = {n["ref"]: self._gate(n, cv, stages, tasks) for n in d["nodes"] if n["kind"] == "gate"}
         locked = {g["next"]: g for g in gates.values() if g["state"] == "block" and g["next"] and not g["waived"]}
         bounds = self._bounds(line_id)
+        stage_of = {c["id"]: c.get("stage") or "" for c in cv["checks"]}
         nodes = []
         for n in d["nodes"]:
-            out = {"id": n["id"], "kind": n["kind"], "x": n["x"], "y": n["y"]}
+            out = {"id": n["id"], "kind": n["kind"], "x": n["x"], "y": n["y"], "mod": _mod(n, stage_of)}
             if n["kind"] == "stage":
                 s = stages.get(n["ref"])
                 if not s:
@@ -483,7 +748,7 @@ class Canvas:
             elif n["kind"] == "info":
                 if n["ref"] not in INFO:
                     continue
-                out |= {"ref": n["ref"], "title": INFO[n["ref"]]}
+                out |= {"ref": n["ref"], "title": INFO[n["ref"]], "w": _size(n)[0], "h": _size(n)[1]}
             elif n["kind"] == "task":
                 out |= {k: n.get(k) for k in ("title", "text", "to", "status", "sent_at", "done_at", "result", "by", "created_at", "dispatch")}
                 out["agent_id"] = n.get("agent_id")
@@ -501,7 +766,7 @@ class Canvas:
         return {"line_id": line_id, "seq": ln["seq"], "title": ln["title"], "nodes": nodes,
                 "edges": [e for e in d["edges"] if e["source"] in ids and e["target"] in ids], "gone": gone,
                 "spare": [{"id": f"info:{k}", "title": t} for k, t in INFO.items() if f"info:{k}" not in ids],
-                "lanes": LANES, "checks": cv["checks"], "summary": cv["summary"], "tasks": {k: sum(1 for t in on if t["status"] == k) for k in TASK},
+                "blocks": [{"key": m, "title": t, **d["blocks"][m]} for m, t in MODULES], "rows": BLOCK_ROWS, "checks": cv["checks"], "summary": cv["summary"], "tasks": {k: sum(1 for t in on if t["status"] == k) for k in TASK},
                 "rules": {"exclusive": bool(d.get("exclusive"))},
                 "trend": cv["trend"], "found": cv["found"], "rounds": cv["rounds"], "ran": cv["ran"], "lead": cv["lead"],
                 "agents": {r: {"there": bool(a), "status": self.town.agents.shown(a) if a else None, "model": a.get("model") if a else None}
@@ -576,10 +841,11 @@ class Canvas:
     # editing
 
     def add(self, line_id: str, kind: str, x: float, y: float, title: str = "", text: str = "", to: str = "lead",
-            prio: str = "P1", link: str | None = None, send: bool = False) -> dict:
+            prio: str = "P1", link: str | None = None, send: bool = False, mod: str | None = None) -> dict:
         """A new node where the user put it, wired to the node it was drawn from: a task (sent at once when asked),
         a check of the user's own, or a note. A task drawn from a sentinel is a correction: it goes back to the
-        stage the sentinel watches."""
+        stage the sentinel watches. A task or a note joins the block whose frame it lands in, or the nearest (`mod`
+        says so outright)."""
         self._line(line_id)
         title, text = clip(title, 60), str(text or "").strip()
         with self._lock:
@@ -617,6 +883,8 @@ class Canvas:
             else:
                 raise CanvasError("节点可以是任务（task）、硬检查（hard）、软巡检（soft）或备注（note）")
             node |= {"x": round(float(x)), "y": round(float(y))}
+            if kind in ("task", "note") and not node.get("loop"):
+                node["mod"] = mod if mod in BLOCKS else _block_at(_frames(d), node["x"] + WIDTH[kind] / 2, node["y"] + HEIGHT[kind] / 2)
             d["nodes"].append(node)
             if src:
                 if node.get("loop") == "soft":
@@ -681,14 +949,35 @@ class Canvas:
         self._changed(line_id)
         return self.view(line_id)
 
-    def move(self, line_id: str, at: dict[str, list[float]]) -> dict:
+    def move(self, line_id: str, at: dict[str, list[float]], blocks: dict[str, list[float]] | None = None) -> dict:
+        """Nodes where the user dragged them. A task or a note dropped in another block's frame joins that block (the
+        answer says which, in "mods"). The blocks are then fitted round their nodes again: the answer says each
+        block's slot ("blocks") and every node that went somewhere other than where it was or was put ("at"), such as
+        the rows under a block that grew. `blocks` puts a whole layout back (each slot's x, y, w, h, with every node in
+        `at`): then every task and note is of the block it is in."""
+        mods: dict[str, str] = {}
         with self._lock:
             d = self._load(line_id)
+            stage_of = self._stage_of(line_id)
+            put: dict[str, tuple[int, int]] = {}
             for n in d["nodes"]:
                 if n["id"] in at and len(at[n["id"]]) == 2:
                     n["x"], n["y"] = round(float(at[n["id"]][0])), round(float(at[n["id"]][1]))
+                    put[n["id"]] = (n["x"], n["y"])
+            was = {n["id"]: put.get(n["id"], (n["x"], n["y"])) for n in d["nodes"]}
+            for m, to in (blocks or {}).items():
+                if m in BLOCKS and len(to) == 4:
+                    d["blocks"][m] = dict(zip("xywh", (round(float(v)) for v in to)))
+            frames = _frames(d)
+            for n in d["nodes"]:
+                if n["kind"] in ("task", "note") and not n.get("loop") and (blocks or n["id"] in put):
+                    m = _block_at(frames, n["x"] + WIDTH[n["kind"]] / 2, n["y"] + HEIGHT[n["kind"]] / 2)
+                    if m != _mod(n, stage_of):
+                        n["mod"] = mods[n["id"]] = m
             self._save(line_id, d)
-        return {"ok": True}
+            went = {n["id"]: [n["x"], n["y"]] for n in d["nodes"] if (n["x"], n["y"]) != was[n["id"]]}
+            slots = {m: [b["x"], b["y"], b["w"], b["h"]] for m, b in d["blocks"].items()}
+        return {"ok": True, "mods": mods, "blocks": slots, "at": went}
 
     def remove(self, line_id: str, node_id: str) -> dict:
         """Take a node off the canvas. A check of the user's own goes with it; a built-in one is turned off. A stage,
@@ -729,7 +1018,7 @@ class Canvas:
             if kind == "info" and ref in INFO:
                 if any(n["id"] == node_id for n in d["nodes"]):
                     raise CanvasError("这张资料卡已经在回路上了")
-                x, y = self.spot(line_id)
+                x, y = self._place(d, self._stage_of(line_id), INFO_MOD[ref], "info", ref=ref)
                 d["nodes"].append({"id": node_id, "kind": "info", "ref": ref, "x": x, "y": y})
                 self._save(line_id, d)
                 self._changed(line_id)
@@ -737,10 +1026,11 @@ class Canvas:
             if node_id not in d["gone"]:
                 raise CanvasError("这个节点没有被移走")
             d["gone"].remove(node_id)
-            first, _ = _first_layout(self._checks(line_id))
+            first, _, slots, _ = _layout(self._checks(line_id))
             at = next((n for n in first if n["id"] == node_id), None)
-            if kind in ("stage", "gate") and at:
-                d["nodes"].append(at)
+            if kind != "check" and at:  # where the first layout has it in its block, in the block as it now stands
+                m = _mod(at, {})
+                d["nodes"].append(at | {"x": at["x"] - slots[m]["x"] + d["blocks"][m]["x"], "y": at["y"] - slots[m]["y"] + d["blocks"][m]["y"]})
             self._save(line_id, d)
             if kind == "check":
                 self.town.checks.set(line_id, ref, on=True)  # the next load gives it its node back
@@ -825,30 +1115,12 @@ class Canvas:
         return self.view(line_id)
 
     def tidy(self, line_id: str) -> dict:
-        """按回路规整: the stages, gates, checks and the fixed three back in their lanes as at first, each gate's rework
-        ticket under it, and the lines of the first layout drawn again; the user's tasks, notes and lines stay."""
+        """按分块规整: every block as it starts. Its cards, its stages, gates and checks and the fixed three in their
+        places, an open gate's checks under it, and each block's rework, tasks and notes in a grid under them; the
+        lines of the first layout are drawn again, and the user's lines stay."""
         with self._lock:
             d = self._load(line_id)
-            nodes, edges = _first_layout(self._checks(line_id))
-            at = {n["id"]: n for n in nodes}
-            for n in d["nodes"]:
-                if n["id"] in at:
-                    n["x"], n["y"] = at[n["id"]]["x"], at[n["id"]]["y"]
-            for n in d["nodes"]:
-                if n["kind"] == "task" and n.get("loop") == "hard" and f"gate:{n.get('gate')}" in at:
-                    g = at[f"gate:{n['gate']}"]
-                    n["x"], n["y"] = g["x"] - (WIDTH["task"] - WIDTH["gate"]) // 2, LOOP_Y
-            have = {n["id"]: n for n in d["nodes"]}
-            for g in [n for n in d["nodes"] if n["kind"] == "gate" and n.get("open")]:
-                mine = [n for n in d["nodes"] if n["kind"] == "hard" and any(
-                    e["source"] == g["id"] and e["target"] == n["id"] for e in d["edges"])]
-                w = WIDTH["hard"] + 14
-                x0 = g["x"] + WIDTH["gate"] / 2 - len(mine) * w / 2
-                for j, n in enumerate(mine):
-                    n["x"], n["y"] = round(x0 + j * w), g["y"] + HEIGHT["gate"] + 34
-            for a, b, kind in edges:
-                if a in have and b in have:
-                    self._edge(d, a, b, kind)
+            self._arrange(d, self._checks(line_id))
             self._save(line_id, d)
         self._changed(line_id)
         return self.view(line_id)
@@ -939,7 +1211,7 @@ class Canvas:
                     t = {"id": self._id(d, "t"), "kind": "task", "loop": "hard", "gate": stage, "round": 1, "trail": [g["now"]],
                          "title": title, "text": text, "to": REWORK.get(stage, "lead"), "status": "draft", "created_at": now(),
                          "sent_at": None, "done_at": None, "result": "", "by": "", "log": [],
-                         "x": gn["x"] - (WIDTH["task"] - WIDTH["gate"]) // 2, "y": LOOP_Y}
+                         **dict(zip("xy", self._place(d, self._stage_of(line_id), STAGE_MOD.get(stage, "overview"), "task", gn)))}
                     _log(t, "made", f"「{g['name']}」硬卡口阻断，Papertown 写了第 1 轮修补单", by="Papertown")
                     d["nodes"].append(t)
                     self._edge(d, gn["id"], t["id"], "hard_loop")

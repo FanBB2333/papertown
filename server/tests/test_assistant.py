@@ -85,7 +85,8 @@ def test_the_assistant_reads_the_page_and_asks_before_it_acts(tmp_path):
         assert act("canvas.link", a=tid, b="exp", label="结果进主表").json()["text"].endswith("连上了，线上写着「结果进主表」")
         v = c.get(f"/api/lines/{lid}/canvas").json()
         task = next(n for n in v["nodes"] if n["id"] == tid)
-        assert (task["title"], task["x"], task["y"]) == ("补三个消融", 40, 900)
+        exp = next(b for b in v["blocks"] if b["key"] == "exp")  # a correction stays in its sentinel's block, which reaches to where it was put
+        assert (task["title"], task["mod"]) == ("补三个消融", "exp") and (task["x"], exp["y"] <= task["y"]) == (exp["x"], True)
         hy = next(x for x in c.get(f"/api/lines/{lid}/checks").json()["checks"] if x["id"] == "hyphens")
         assert (hy["max"], hy["gate"]) == (20, "block")
         assert next(n for n in v["nodes"] if n["id"] == "gate:write")["gate"]["policy"] == {"auto": True, "rounds": 3}

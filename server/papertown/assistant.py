@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from .agents import PAGE_GUIDE, ROLES, AgentError
-from .canvas import CanvasError
+from .canvas import TO_MOD, CanvasError
 from .checks import CheckError
 from .db import now
 from .leads import LeadError, clip
@@ -51,7 +51,7 @@ ACTIONS: dict[str, tuple[str, str]] = {
                    "或 note（备注：text）；near 写一个节点的编号，新节点放在它旁边并连上", "line kind [title] [text] [to] [prio] [near] [send]"),
     "canvas.edit": ("改研究回路上的一个节点：任务的 title、text、to；备注的 text；软巡检的问题（text）；检查开不开（on=true/false）、最多允许几处（max）、"
                     "硬检查没过时阻断还是只告警（gate=block|warn）；硬卡口（gate:<工序>）的修补单是否自动发出（auto=true/false）、最多打回几轮（rounds）、"
-                    "是否展开成每条规则一个节点（open=true/false）；x、y 是把它挪到回路上的哪里",
+                    "是否展开成每条规则一个节点（open=true/false）；x、y 是把它挪到回路上的哪里（节点留在它的分块里，分块跟着它变大，任务和备注挪进别的分块就归入那个分块）",
                     "line node [title] [text] [to] [on] [max] [gate] [auto] [rounds] [open] [x] [y]"),
     "canvas.link": ("把研究回路上的两个节点连起来，label 是写在线上的字（已经连着的只改字）；cut=true 是断开它们", "line a b [label] [cut]"),
     "canvas.send": ("把研究回路上的一个任务发给它的 agent（改过的任务是再发一次）", "line node"),
@@ -118,7 +118,7 @@ GUIDE = """# Papertown · 小助手
 
 ## 研究回路
 
-- 每个项目有一张研究回路（「进展」里项目页上打开，`/progress/<编号>/loop`）：一张自由的图，分三条泳道。上面是软层：软限制规范（工作边界里写给 agent 的要求）、硬边界夹（绑定了动作、Papertown 会拦下或先问用户的边界）和软巡检（负责人判断的问题，每个盯着一道工序）。中间是主干：工序按顺序连着，工序后面是它的硬卡口（这道工序的硬检查合成一个节点，可以展开成每条规则一个节点）；阻断级的规则没过，卡口就锁住下一道工序，并给这道工序的员工写一张修补单打回去，一轮一轮直到清零，超过轮数就交给人类拍板节点。下面是回路：修补单、软巡检派出的纠偏任务、用户派的任务和备注，以及人类拍板节点（超轮次的卡口、卡住的任务、判为偏离的软巡检、agent 问用户的问题）。用户在回路上叫你时，`<page>` 里写着「研究回路」和他选中的节点。
+- 每个项目有一张研究回路（「进展」里项目页上打开，`/progress/<编号>/loop`）：一张自由的图，按研究流程分块，和中控屏左侧「研究流程」的各项一一对应：概览、调研、代码仓库、实验、数据、论文、员工（`canvas.outline` 按分块列出节点）。分块从上到下排成四行，每一行占满整个宽度，高度跟着里面的内容走：概览和员工，调研，代码仓库、实验和数据，论文。每个分块里有实时显示项目这一块的资料卡（进展、预期产出、三位员工、相关工作、方法、代码、实验任务、实验结果、数据集、论文）。工序在它所属的分块里按顺序连着，工序后面是它的硬卡口（这道工序的硬检查合成一个节点，可以展开成每条规则一个节点）；阻断级的规则没过，卡口就锁住下一道工序，并给这道工序的员工写一张修补单打回去，一轮一轮直到清零，超过轮数就交给人类拍板节点。软巡检（负责人判断的问题，每个盯着一道工序）在它盯着的工序上面，修补单和软巡检派出的纠偏任务在工序下面，都和工序在同一个分块。概览里是对整个项目起作用的：软限制规范（工作边界里写给 agent 的要求）、硬边界夹（绑定了动作、Papertown 会拦下或先问用户的边界）和人类拍板节点（超轮次的卡口、卡住的任务、判为偏离的软巡检、agent 问用户的问题）。用户派的任务和备注放在哪个分块就属于哪个分块；你用 `canvas.add` 加任务时，写了 near 就放在那个节点所在的分块，没写就按交给谁来放（负责人在概览、代码员工在代码仓库、写作员工在论文）。用户在回路上叫你时，`<page>` 里写着「研究回路」和他选中的节点。
 - 回路现在的样子用 {get} 读 `/api/lines/<项目>/canvas/outline`：每个节点的编号、种类、名字和状态，以及所有连线和线的种类。节点编号就是动作里的 node、near、a、b：工序是 `stage:exp`，硬卡口是 `gate:write`，检查是 `check:words`，软限制、硬边界、人类拍板是 `spec`、`clamp`、`human`，任务和备注是 `t3`、`n4` 这样的。前后对比的汇报在 `/api/lines/<项目>/canvas/report`（markdown 和 html）。
 - 用户问「为什么写作卡口还没放行」这类问题，读 outline 和 `/api/lines/<项目>/checks` 回答：哪几条规则阻断、还有几处、在哪个文件哪一行、修补单到了第几轮。
 - 用户让你在回路上加、改、连、删东西，用 {do}：`canvas.add` 加节点（给 agent 派任务就是加一个 task 节点，send=true 直接发出去；它连着哪些节点，agent 就会一起收到那些节点的内容，所以用 near 连到相关的检查或工序上）、`canvas.edit` 改节点或挪位置、`canvas.link` 连线和写线上的字、`canvas.send` 发任务、`canvas.remove` 删节点。改完他的研究回路会立刻更新；说一句你改了什么、新节点的编号。
@@ -604,8 +604,9 @@ class Assistant:
                 raise ActError("kind 写 task、soft、hard 或 note")
 
             def add() -> str:
-                x, y = (near["x"] + near["w"] + 70, near["y"] + 50) if near else cv.spot(lid)
-                v = cv.add(lid, kind, x, y, title, text, to, str(a.get("prio") or "P1"), near["id"] if near else None, send)
+                home = near["mod"] if near else TO_MOD[to] if kind == "task" else "overview"  # with nothing to go by: whom it is for
+                x, y = cv.spot(lid, home, kind if kind in ("task", "note") else "soft", near["id"] if near else None)
+                v = cv.add(lid, kind, x, y, title, text, to, str(a.get("prio") or "P1"), near["id"] if near else None, send, home)
                 return f"加上了，编号 {v['added']}" + ("，也发给它了" if send else "")
             return (f"在{where}上加{what}「{title or clip(text, 40)}」" + (f"，连着「{near['label']}」" if near else "") + ("，并发出去" if send else ""), safely(add))
         if name == "canvas.link":
