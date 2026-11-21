@@ -147,9 +147,30 @@ agent 工作中时，一条消息有三种交法，在所有对话入口用同�
 | 第一轮完成后进入「待查看」，标记已读后变为「待命」 | 通过 | 通过 | 通过 |
 | 插话 | 在同一轮内生效 | 在同一轮内生效，两条命令之间收到 | 取消当前命令后从头执行，即退化为打断后重做 |
 | 排队：本轮结束后才送达，撤回的一条未发出 | 通过 | 通过 | 通过 |
-| 打断并发送 | 未测到：它把 `sleep 90` 转入后台并结束本轮，消息按空闲时的普通消息送达 | 2.4 秒内停下并回复 | 16.8 秒内停下并回复 |
-| 停止 | 同上，未测到 | 通过 | 通过 |
+| 打断并发送 | 1.2 秒内停下并回复 | 2.4 秒内停下并回复 | 16.8 秒内停下并回复 |
+| 停止 | 通过 | 通过 | 通过 |
 
 - 实时流全程在线，状态和正在执行的命令在页面上即时更新。
 - 流式回复的各段由 `Activity` 拼成一条。Paseo 报告空闲的时刻比最后一段回复早约半秒，这期间列表显示的是不完整的句子，随后补全。
 - Claude Code 的会话里，插话消息有时不出现在 Paseo 的对话记录中，回复本身照常按插话修改。
+- Claude Code 会把 `sleep 90` 这类命令转入后台并结束本轮，这时打断和停止无从测起。标准流程因此用 `python3 -c "import time; time.sleep(90)"` 并要求在前台执行，Claude Code 的打断和停止按这个流程补测通过。
+
+标准流程和预期结果归档在 `server/scripts/watch_flow.json`，用 `server/scripts/verify_watch.py` 对真实 agent 运行（需要 Paseo 守护进程已在运行，脚本不会启动它）：
+
+```bash
+cd server
+.venv/bin/python scripts/verify_watch.py --agent claude:claude-sonnet-5-5:low --agent codex:gpt-6-luna:low \
+    --agent antigravity:gemini-3.8-flash-low [--steps interrupt,stop] [--clean]
+```
+
+每一步发出的消息和预期见下表，`{n}` 是每次运行随机生成的标记。
+
+| 步骤 | 发出 | 预期 |
+| --- | --- | --- |
+| 第一轮 | 启动时的项目简报 | 进入「待查看」（`finished`），标记已读后为「待命」 |
+| 插话 | 任务：三次 `sleep 10` 后回复 A_DONE。运行中插话：改成「A_DONE STEER_{n}」 | 事件 `delivered`、`steered` 为真，最后的回复含 A_DONE STEER_{n} |
+| 排队与撤回 | 任务：两次 `sleep 8` 后回复 B_DONE。运行中排队 QUEUED_{n} 和 DROP_{n}，撤回后者 | 事件 `held` 为真，排队数先 2 后 1，B_DONE 的回复在 QUEUED_{n} 之前，DROP_{n} 从未出现 |
+| 立即发送 | 任务：两次 `sleep 8` 后回复 E_DONE。运行中排队「E_DONE NOW_{n}」并改为现在发 | 事件 `delivered` 为真、`held` 为假，最后的回复含 E_DONE NOW_{n} |
+| 打断并发送 | 任务：前台执行 90 秒的命令后回复 C_DONE。运行中打断并发送 INTERRUPTED_{n} | 事件 `interrupted` 为真，60 秒内回复 INTERRUPTED_{n}，没有 C_DONE |
+| 停止 | 任务：前台执行 90 秒的命令后回复 D_DONE。运行中停止 | 30 秒内回到空闲，没有 D_DONE |
+

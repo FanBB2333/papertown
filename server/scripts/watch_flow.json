@@ -1,0 +1,50 @@
+{
+ "about": "The standard flow for watching and steering a live agent. verify_watch.py runs it against real agents in Paseo. {n} is a fresh marker per run, so a reply proves which message it answers.",
+ "long": "python3 -c \"import time; time.sleep(90)\"",
+ "steps": [
+  {
+   "key": "first",
+   "name": "第一轮完成后待查看，已读后待命",
+   "send": [],
+   "expect": {"settled": "review", "why": "finished", "after_seen": "idle"}
+  },
+  {
+   "key": "steer",
+   "name": "插话进入正在运行的一轮",
+   "task": "请用 shell 依次执行三条命令，每条单独执行一次：`sleep 10`。三条都结束后，只回复一行：A_DONE",
+   "send": [{"mode": "steer", "text": "补充一点：最后那一行回复改成「A_DONE STEER_{n}」，其余照旧。"}],
+   "expect": {"event": {"delivered": true, "steered": true}, "reply": "A_DONE STEER_{n}"}
+  },
+  {
+   "key": "queue",
+   "name": "排队在本轮结束后送达，撤回的一条不发出",
+   "task": "请用 shell 执行两条命令，每条单独执行一次：`sleep 8`。都结束后，只回复一行：B_DONE",
+   "send": [
+    {"mode": "queue", "text": "只回复一行：QUEUED_{n}，不要执行任何命令。"},
+    {"mode": "queue", "text": "只回复一行：DROP_{n}，不要执行任何命令。", "then": "drop"}
+   ],
+   "expect": {"event": {"held": true}, "queued": [2, 1], "replies_in_order": ["B_DONE", "QUEUED_{n}"], "never": "DROP_{n}"}
+  },
+  {
+   "key": "send_now",
+   "name": "排队的消息改为立即发送",
+   "task": "请用 shell 执行两条命令，每条单独执行一次：`sleep 8`。都结束后，只回复一行：E_DONE",
+   "send": [{"mode": "queue", "text": "补充一点：最后那一行回复改成「E_DONE NOW_{n}」，其余照旧。", "then": "now"}],
+   "expect": {"event": {"delivered": true, "held": false}, "reply": "E_DONE NOW_{n}"}
+  },
+  {
+   "key": "interrupt",
+   "name": "打断并发送",
+   "task": "请在前台执行这条命令，等它结束，不要放到后台：`{long}`。结束后，只回复一行：C_DONE",
+   "send": [{"mode": "interrupt", "text": "停下刚才的命令，不要再执行任何命令。只回复一行：INTERRUPTED_{n}"}],
+   "expect": {"event": {"interrupted": true}, "reply": "INTERRUPTED_{n}", "within": 60, "never": "C_DONE"}
+  },
+  {
+   "key": "stop",
+   "name": "停止",
+   "task": "请在前台执行这条命令，等它结束，不要放到后台：`{long}`。结束后，只回复一行：D_DONE",
+   "send": [{"stop": true}],
+   "expect": {"settled_within": 30, "never": "D_DONE"}
+  }
+ ]
+}
