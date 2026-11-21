@@ -146,9 +146,11 @@ export interface CheckEdit { on?: boolean; params?: Record<string, number>; titl
 // the soft spec, the hard clamp and the sentinels (soft checks) above, rework tickets, corrections, tasks, notes and
 // the human gate below
 export type CanvasKind = 'stage' | 'gate' | 'hard' | 'soft' | 'spec' | 'clamp' | 'human' | 'task' | 'note' | 'info';
-export type TaskStatus = 'draft' | 'sent' | 'done' | 'blocked';
+export type TaskStatus = 'draft' | 'queued' | 'sent' | 'done' | 'blocked'; // queued: dispatched, waiting for its turn
+// why a queued task has not gone out: a task before it (not done, or done on a result to be looked at again), or the one at work in its directory
+export interface TaskWait { kind: 'after' | 'dir'; id: string; title: string; status: TaskStatus; stale: boolean }
 export type TaskTo = 'lead' | 'coder' | 'writer';
-export interface TaskLog { ts: string; kind: 'made' | 'bound' | 'sent' | 'resent' | 'done' | 'blocked' | 'back' | 'marked' | 'reopened' | 'round' | 'escalated' | 'converged'; text: string; by: string }
+export interface TaskLog { ts: string; kind: 'made' | 'bound' | 'sent' | 'resent' | 'done' | 'blocked' | 'back' | 'marked' | 'reopened' | 'round' | 'escalated' | 'converged' | 'queued' | 'unqueued' | 'relay' | 'stale' | 'kept'; text: string; by: string }
 export type GateState = 'pass' | 'warn' | 'block' | 'none' | 'off';
 export interface Gate {
   stage: string; name: string; state: GateState; checks: string[]; pass: number; total: number; blocking: { id: string; title: string }[];
@@ -156,7 +158,7 @@ export interface Gate {
   escalated: boolean; open: boolean; waived: boolean; reached: boolean; next: string | null; locks: string | null;
 }
 export interface BoundRule { id: string; kind: 'must' | 'never' | 'ask'; text: string; from: string; action: string | null }
-export interface HumanItem { kind: 'escalated' | 'blocked' | 'fail' | 'ask' | 'line'; id: string; text: string; gate?: string }
+export interface HumanItem { kind: 'escalated' | 'blocked' | 'stale' | 'fail' | 'ask' | 'line'; id: string; text: string; gate?: string }
 export interface CanvasNode {
   id: string; kind: CanvasKind; x: number; y: number; title?: string; text?: string;
   ref?: string; status?: string; pct?: number; // a stage: its key, state and progress; a task: its state; an info card: what it shows
@@ -165,17 +167,19 @@ export interface CanvasNode {
   rules?: BoundRule[]; budget?: { budget: number; spent: number }; items?: HumanItem[];
   to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string; log?: TaskLog[];
   agent_id?: string | null; agent?: Agent | null;
+  // a task's turn: what it waits for while queued, why it could not be delivered, and why its result is to be looked at again
+  waits?: TaskWait[]; wait_note?: string | null; queued_at?: string | null; stale?: string | null;
   // a task on the loop: a rework ticket (the stage whose gate sent it back, its round, the counts so far) or a correction (the sentinel it came from)
   loop?: 'hard' | 'soft' | null; stage?: string | null; round?: number; trail?: number[]; from?: string | null; escalated?: boolean; converged?: boolean;
 }
-export type EdgeKind = 'flow' | 'watch' | 'spec' | 'clamp' | 'hard_loop' | 'soft_loop' | 'escalate' | 'member';
+export type EdgeKind = 'flow' | 'watch' | 'spec' | 'clamp' | 'hard_loop' | 'soft_loop' | 'escalate' | 'member' | 'order'; // order: between two tasks, the first before the second
 export interface CanvasEdge { id: string; source: string; target: string; label?: string; kind?: EdgeKind }
 export interface CanvasView {
   line_id: string; seq: number; title: string; nodes: CanvasNode[]; edges: CanvasEdge[]; gone: { id: string; title: string }[];
   spare: { id: string; title: string }[]; lanes: { key: 'soft' | 'spine' | 'loop'; title: string; y0: number; y1: number }[]; checks: Check[];
   summary: { hard: CheckCounts; soft: CheckCounts }; tasks: Record<TaskStatus, number>;
   trend: { ts: string; pass: number; fail: number; total: number; found: number }[]; found: { first: number | null; now: number | null };
-  rounds: number; ran: string | null;
+  rounds: number; ran: string | null; rules: { exclusive: boolean }; // exclusive: one task per working directory at a time
   lead: boolean; agents: Record<TaskTo, { there: boolean; status: string | null; model: string | null }>; added?: string;
 }
 export interface NewNode { kind: 'task' | 'hard' | 'soft' | 'note'; x: number; y: number; title?: string; text?: string; to?: TaskTo; prio?: string; link?: string | null; send?: boolean }
@@ -476,14 +480,16 @@ export const api = {
   askCheck: (lineId: string, id: string) => call<{ ok: boolean }>('POST', `/api/lines/${lineId}/checks/${id}/ask`),
   canvas: (lineId: string) => call<CanvasView>('GET', `/api/lines/${lineId}/canvas`, undefined, kept),
   addNode: (lineId: string, b: NewNode) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes`, b, kept),
-  setNode: (lineId: string, id: string, b: { title?: string; text?: string; to?: TaskTo; status?: 'draft' | 'done' }) =>
+  setNode: (lineId: string, id: string, b: { title?: string; text?: string; to?: TaskTo; status?: 'draft' | 'done'; stale?: false }) =>
     call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}`, b, kept),
   dropNode: (lineId: string, id: string) => call<CanvasView>('DELETE', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}`, undefined, kept),
-  sendNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/send`, undefined, kept),
+  sendNode: (lineId: string, id: string, chain = false) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/send`, { chain }, kept),
   bindNode: (lineId: string, id: string, options: StartOpts & { ext_id?: string }) =>
     call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/agent`, options, kept),
   backNode: (lineId: string, id: string, text: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/back`, { text }, kept),
   labelEdge: (lineId: string, id: string, label: string) => call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/edges/${encodeURIComponent(id)}`, { label }, kept),
+  orderEdge: (lineId: string, id: string, b: { order?: boolean; flip?: boolean }) => call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/edges/${encodeURIComponent(id)}`, b, kept),
+  setLoopRules: (lineId: string, exclusive: boolean) => call<CanvasView>('PUT', `/api/lines/${lineId}/canvas/rules`, { exclusive }, kept),
   restoreNode: (lineId: string, id: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/nodes/${encodeURIComponent(id)}/restore`, undefined, kept),
   moveNodes: (lineId: string, at: Record<string, [number, number]>) => call<{ ok: boolean }>('POST', `/api/lines/${lineId}/canvas/move`, { at }),
   connect: (lineId: string, source: string, target: string) => call<CanvasView>('POST', `/api/lines/${lineId}/canvas/edges`, { source, target }, kept),

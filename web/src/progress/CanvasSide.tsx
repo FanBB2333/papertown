@@ -21,13 +21,30 @@ import { NodeConversation } from './NodeConversation';
 export type Kind = NewNode['kind'];
 export interface Draft { kind: Kind; x: number; y: number; link: string | null; seed?: { title?: string; text?: string; to?: TaskTo } }
 
-export const TASK: Record<TaskStatus, string> = { draft: tr('还没发'), sent: tr('在做'), done: tr('完成'), blocked: tr('卡住了') };
+export const TASK: Record<TaskStatus, string> = { draft: tr('还没发'), queued: tr('排队中'), sent: tr('在做'), done: tr('完成'), blocked: tr('卡住了') };
+// the order lines round a task: the tasks before it, the ones after it, and every draft further down the chain
+export const orderOf = (v: CanvasView, id: string) => {
+  const by = new Map(v.nodes.map(n => [n.id, n])), lines = v.edges.filter(e => e.kind === 'order');
+  const pick = (ids: string[]) => ids.map(x => by.get(x)).filter((x): x is CanvasNode => !!x);
+  const seen = new Set([id]), todo = [id], down: string[] = [];
+  while (todo.length) {
+    const at = todo.shift()!;
+    for (const e of lines) if (e.source === at && !seen.has(e.target)) { seen.add(e.target); todo.push(e.target); down.push(e.target); }
+  }
+  return { before: pick(lines.filter(e => e.target === id).map(e => e.source)), after: pick(lines.filter(e => e.source === id).map(e => e.target)), drafts: pick(down).filter(n => n.status === 'draft') };
+};
+// what to say once a task was dispatched: it went out, or it waits its turn
+export const sentWord = (id: string, to: TaskTo) => (x: unknown) => {
+  const view = x as CanvasView | undefined, n = view?.nodes?.find(k => k.id === id), queued = view?.nodes?.filter(k => k.kind === 'task' && k.status === 'queued').length ?? 0;
+  return n?.status === 'queued' ? tr('已排队，轮到时自动派发') : queued ? tr('已发给{0}，后续 {1} 个任务将按顺序接力', WHO[to], queued) : tr('发给{0}了', WHO[to]);
+};
 export const WHO: Record<TaskTo, string> = { lead: tr('项目负责人'), coder: tr('代码员工'), writer: tr('写作员工') };
 export const KIND: Record<Kind, string> = { task: tr('派任务'), soft: tr('软检查'), hard: tr('硬检查'), note: tr('备注') };
 const LOG: Record<TaskLog['kind'], string> = {
   bound: tr('绑定了 Paseo 会话'),
   made: tr('建了这个任务'), sent: tr('发出'), resent: tr('改了再发'), done: tr('交回：完成'), blocked: tr('交回：卡住了'), back: tr('退回重做'),
   marked: tr('标成完成'), reopened: tr('重新打开'), round: tr('又打回一轮'), escalated: tr('交给你拍板'), converged: tr('卡口放行，收敛'),
+  queued: tr('进入排队'), unqueued: tr('取消排队'), relay: tr('轮到后自动派发'), stale: tr('结果待复核'), kept: tr('确认结果仍然有效'),
 };
 export const clip = (s: string | undefined, n: number) => { const t = (s ?? '').trim(); return t.length > n ? `${t.slice(0, n)}…` : t; };
 export const label = (n: CanvasNode) => (n.kind === 'note' ? clip(n.text, 26) : n.kind === 'hard' || n.kind === 'soft' ? trx(n.title ?? '')
@@ -306,7 +323,7 @@ function HumanDetail({ n, v, busy, act, line, onPick }: { n: CanvasNode; v: Canv
   const items = n.items ?? [], ask = `/progress/${line.seq}/ask`, home = `/progress/${line.seq}`;
   return (
     <>
-      <p className="cg-what">{tr('软硬检测的异常最后升级到这里：超过轮数还没清零的硬卡口、卡住的任务、判为偏离的软巡检、agent 问你的问题。')}</p>
+      <p className="cg-what">{tr('软硬检测的异常最后升级到这里：超过轮数还没清零的硬卡口、卡住的任务、前序重做后待复核的结果、判为偏离的软巡检、agent 问你的问题。')}</p>
       {!items.length && <p className="small muted">{tr('现在没有等你拍板的事。')}</p>}
       <ul className="gp-human">
         {items.map(x => (
@@ -318,7 +335,8 @@ function HumanDetail({ n, v, busy, act, line, onPick }: { n: CanvasNode; v: Canv
                 <button className="btn" disabled={busy} onClick={() => act(() => api.gateAct(line.id, x.gate!, 'waive'), tr('先放行了'))}>{tr('先放行')}</button>
                 <button className="lnk" onClick={() => onPick(`gate:${x.gate}`)}>{tr('看卡口')}</button>
               </>}
-              {(x.kind === 'blocked' || x.kind === 'fail') && <button className="lnk" onClick={() => onPick(x.id)}>{x.kind === 'blocked' ? tr('看任务') : tr('看巡检')}</button>}
+              {x.kind === 'stale' && <button className="btn" disabled={busy} onClick={() => act(() => api.setNode(line.id, x.id, { stale: false }), tr('已确认结果有效'))}>{tr('结果仍然有效')}</button>}
+              {(x.kind === 'blocked' || x.kind === 'stale' || x.kind === 'fail') && <button className="lnk" onClick={() => onPick(x.id)}>{x.kind === 'fail' ? tr('看巡检') : tr('看任务')}</button>}
               {x.kind === 'ask' && <a className="lnk" href={href(ask)} onClick={e => follow(e, ask)}>{tr('去回答')}</a>}
               {x.kind === 'line' && <a className="lnk" href={href(home)} onClick={e => follow(e, home)}>{tr('回项目页处理')}</a>}
             </div>
@@ -380,8 +398,14 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
   const st = (n.status ?? 'draft') as TaskStatus, who = n.agent_id ? { there: !!n.agent?.started, status: n.agent?.status } : v.agents[to], ask = `/progress/${line.seq}/ask`;
   const dirty = title.trim() !== (n.title ?? '') || text.trim() !== (n.text ?? '') || to !== n.to;
   const save = () => api.setNode(line.id, n.id, { title: title.trim(), text: text.trim(), to });
-  const send = () => act(async () => { if (dirty) await save(); return api.sendNode(line.id, n.id); }, tr('发给{0}了', WHO[to]));
+  const send = (chain = false) => act(async () => { if (dirty) await save(); return api.sendNode(line.id, n.id, chain); }, sentWord(n.id, to));
   const returned = (st === 'done' || st === 'blocked') && !!n.result;
+  const { before, after, drafts } = orderOf(v, n.id), waits = n.waits ?? [], dirWait = waits.some(w => w.kind === 'dir');
+  const near = (x: CanvasNode) => (
+    <button key={x.id} className="cv-near" onClick={() => onPick(x.id)} title={x.title}>
+      <span>{x.id}「{clip(x.title, 14)}」</span><i className={`cg-pill t-${x.status}`}>{x.stale ? tr('待复核') : TASK[(x.status ?? 'draft') as TaskStatus]}</i>
+    </button>
+  );
   const gate = n.loop === 'hard' ? v.nodes.find(x => x.id === `gate:${n.stage}`) : null, from = n.loop === 'soft' ? v.nodes.find(x => x.id === `check:${n.from}`) : null;
   return (
     <>
@@ -408,6 +432,41 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
           : to === 'lead' ? <a className="lnk" href={href(ask)} onClick={e => follow(e, ask)}>{tr('打开对话')}</a>
             : <button className="lnk" onClick={onAgents}>{tr('打开对话')}</button>}
       </p>
+      {(before.length > 0 || after.length > 0) && (
+        <div className="cv-order">
+          {before.length > 0 && <p><b>{tr('前序')}</b>{before.map(near)}</p>}
+          {after.length > 0 && <p><b>{tr('后续')}</b>{after.map(near)}</p>}
+          <p className="small muted">{tr('前序全部完成后，这个任务才会派发。它完成后，已排队的后续任务自动接力。')}</p>
+        </div>
+      )}
+      {st === 'queued' && (
+        <div className="cv-turn">
+          <p><Icon n="clock" size={13} /><b>{tr('排队中')}</b><span className="muted">{dirWait ? tr('等待工作目录空闲') : waits.length ? tr('等待前序完成') : tr('轮到时自动派发')}</span></p>
+          {waits.length > 0 && (
+            <ul>{waits.map(w => (
+              <li key={w.id}>
+                <button className="lnk" onClick={() => onPick(w.id)}>{w.id}「{clip(w.title, 18)}」</button>
+                <span className="muted">{w.kind === 'dir' ? tr('正在使用同一个工作目录') : w.stale ? tr('已完成，结果待复核') : TASK[w.status]}</span>
+              </li>
+            ))}</ul>
+          )}
+          {n.wait_note && <p className="small cv-turn-err">{tr('轮到时派发失败：{0}', trx(n.wait_note))}</p>}
+          <div className="cv-row">
+            <button className="btn" disabled={busy} onClick={() => act(() => api.setNode(line.id, n.id, { status: 'draft' }), tr('已取消排队'))}>{tr('取消排队')}</button>
+            {n.wait_note && <button className="btn" disabled={busy} onClick={() => act(() => api.sendNode(line.id, n.id), sentWord(n.id, to))}>{tr('重试')}</button>}
+            {dirWait && <button className="btn" disabled={busy} onClick={() => act(() => api.setLoopRules(line.id, false), tr('已允许同目录任务同时运行'))}>{tr('允许同目录任务同时运行')}</button>}
+          </div>
+        </div>
+      )}
+      {n.stale && (
+        <div className="cv-turn stale">
+          <p><Icon n="refresh" size={13} /><b>{tr('结果待复核')}</b></p>
+          <p className="small">{tr('{0}。这份结果依据的是旧产出，后续任务将等待你确认。需要重做时，可退回或重新派发。', trx(n.stale))}</p>
+          <div className="cv-row">
+            <button className="btn pri" disabled={busy} onClick={() => act(() => api.setNode(line.id, n.id, { stale: false }), tr('已确认结果有效'))}>{tr('结果仍然有效')}</button>
+          </div>
+        </div>
+      )}
       {returned && (
         <blockquote className={`cg-verdict ${st === 'done' ? 's-pass' : 's-fail'}`}>
           <p>{n.result}</p>
@@ -446,9 +505,16 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
         </label>
       </div>
       <div className="cv-row">
-        <button className={`btn${returned && !dirty ? '' : ' pri'}`} disabled={busy || !who.there || !title.trim()} onClick={send}>
-          <Icon n="send" size={13} />{st === 'draft' ? tr('发给{0}', WHO[to]) : dirty ? tr('改了，再发一次') : tr('再发一次')}
-        </button>
+        {st === 'queued'
+          ? <button className="btn" disabled><Icon n="clock" size={13} />{tr('已排队，轮到时自动派发')}</button>
+          : <button className={`btn${returned && !dirty ? '' : ' pri'}`} disabled={busy || !who.there || !title.trim()} onClick={() => send()}>
+            <Icon n="send" size={13} />{st === 'draft' ? tr('发给{0}', WHO[to]) : dirty ? tr('改了，再发一次') : tr('再发一次')}
+          </button>}
+        {drafts.length > 0 && st !== 'done' && (
+          <button className="btn" disabled={busy || !who.there || !title.trim()} onClick={() => send(true)} title={tr('这个任务先派发，后续任务进入排队，前一个完成后自动派发下一个')}>
+            <Icon n="right" size={13} />{tr('连同后续 {0} 个按顺序派发', drafts.length)}
+          </button>
+        )}
         {dirty && <button className="btn" disabled={busy || !title.trim()} onClick={() => act(save, tr('保存了'))}>{tr('只保存')}</button>}
         {st === 'sent' && <button className="btn" disabled={busy} onClick={() => act(() => api.setNode(line.id, n.id, { status: 'done' }))}>{tr('标成完成')}</button>}
       </div>

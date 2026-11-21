@@ -24,7 +24,8 @@ export type FNode = Node<{ n: CanvasNode }>;
 export interface Ops {
   busy: boolean; agents: CanvasView['agents'] | null; editing: string | null; r: ProjectCard; v: CanvasView | null;
   edit: (edgeId: string | null) => void; relabel: (edgeId: string, text: string) => void; cut: (edgeId: string) => void;
-  fix: (n: CanvasNode) => void; ask: (n: CanvasNode) => void; send: (n: CanvasNode) => void; gate: (stage: string, what: 'open' | 'close' | 'rework') => void;
+  order: (edgeId: string, b: { order?: boolean; flip?: boolean }) => void; // make a line between two tasks an order line or a plain one, or turn it round
+  fix: (n: CanvasNode) => void; ask: (n: CanvasNode) => void; send: (n: CanvasNode, chain?: boolean) => void; gate: (stage: string, what: 'open' | 'close' | 'rework') => void;
   beside: (n: CanvasNode, k: Kind) => void; dup: (n: CanvasNode) => void; drop: (n: CanvasNode) => void;
 }
 export const OpsCtx = createContext<Ops | null>(null);
@@ -208,21 +209,24 @@ function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   const who = n.agent_id ? { there: !!n.agent?.started, status: n.agent?.status } : role;
   const when = st === 'sent' ? n.sent_at : st === 'draft' ? null : n.done_at;
   const head = n.loop === 'hard' ? tr('硬打回修补单 · 第 {0} 轮', n.round || 1) : n.loop === 'soft' ? tr('软纠偏任务单') : tr('任务');
+  const wait = n.waits?.[0];
   const trail = n.trail ?? [];
   return (
-    <div className={`cv-n cv-task t-${st} l-${n.loop ?? 'plain'}${n.converged ? ' conv' : ''}${n.escalated ? ' esc' : ''}${selected ? ' on' : ''}`} {...refOf(n)}>
+    <div className={`cv-n cv-task t-${st} l-${n.loop ?? 'plain'}${n.converged ? ' conv' : ''}${n.escalated ? ' esc' : ''}${n.stale ? ' stale' : ''}${selected ? ' on' : ''}`} {...refOf(n)}>
       <header>
         {n.loop === 'hard' ? <Icon n="refresh" size={11} /> : n.loop === 'soft' ? <Icon n="spark" size={11} /> : <i className={`dot s-${who?.there ? who.status : 'stopped'}`} />}
         <span>{head} · {n.id} · {WHO[n.to ?? 'lead']}</span>
         <em>{n.converged ? tr('已收敛') : n.escalated ? tr('等你拍板') : TASK[st]}</em>
       </header>
       <b>{n.title}</b>
+      {st === 'queued' && <p className="turn"><Icon n="clock" size={11} />{n.wait_note ? tr('派发失败，将自动重试') : wait?.kind === 'dir' ? tr('等待 {0} 释放工作目录', wait.id) : wait ? tr('等待 {0} {1}', (n.waits ?? []).map(w => w.id).join('、'), wait.stale ? tr('复核') : tr('完成')) : tr('轮到时自动派发')}</p>}
+      {n.stale && <p className="turn again"><Icon n="refresh" size={11} />{tr('前序已重做，结果待复核')}</p>}
       {n.loop === 'hard' && trail.length > 0
         ? <p>{tr('收敛进度：{0}', trail.map(x => tr('{0} 处', x)).join(' → '))}</p>
         : n.text && <p className="two">{clip(n.text, 96)}</p>}
       {n.result && <p className="res">{clip(n.result, 60)}</p>}
       {when && <small>{st === 'sent' ? tr('{0}发出', ago(when)) : ago(when)}{(n.log?.length ?? 0) > 2 && ` · ${tr('{0} 条记录', n.log?.length ?? 0)}`}</small>}
-      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated ? tr('等你拍板') : TASK[st]} />
+      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated ? tr('等你拍板') : n.stale ? tr('待复核') : TASK[st]} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );

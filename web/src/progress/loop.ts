@@ -36,7 +36,7 @@ export const drop = (a: number | null, b: number | null) => (a && b != null && a
 export const needs = (n: CanvasNode) => {
   if (n.kind === 'gate') return !!n.gate && ['block', 'warn'].includes(gateLook(n.gate));
   if (n.check) return n.check.on && (['fail', 'warn'].includes(status(n.check)) || !!n.check.due);
-  if (n.kind === 'task') return n.status !== 'done';
+  if (n.kind === 'task') return n.status !== 'done' || !!n.stale; // a result to be looked at again is yours to settle
   if (n.kind === 'stage') return n.status === 'wait' || !!n.locked;
   if (n.kind === 'human') return !!n.items?.length;
   return false;

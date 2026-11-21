@@ -757,3 +757,39 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .node-conversation .path { overflow-wrap: anywhere; }
 .node-conversation .hire-card { padding: 12px; }
 .node-conversation .cv-row { flex-wrap: wrap; }
+
+/* ---------- the order of tasks: order lines, a task waiting its turn, a result to be looked at again ---------- */
+.cv .react-flow__edge.w-order .react-flow__edge-path { --c: color-mix(in srgb, var(--ink) 42%, var(--line)); stroke: var(--c); stroke-width: calc(2.2px * var(--k, 1)); stroke-dasharray: none; animation: none; }
+.w-order .cv-arrow { fill: color-mix(in srgb, var(--ink) 42%, var(--line)); }
+.cv .react-flow__edge.w-order.t-sent .react-flow__edge-path { --c: var(--brand); } .w-order.t-sent .cv-arrow { fill: var(--brand); }
+.cv .react-flow__edge.w-order.t-done .react-flow__edge-path { --c: var(--lp-pass); } .w-order.t-done .cv-arrow { fill: var(--lp-pass); }
+.cv .react-flow__edge.w-order.t-blocked .react-flow__edge-path { --c: var(--lp-hard); } .w-order.t-blocked .cv-arrow { fill: var(--lp-hard); }
+.cv .react-flow__edge.w-order.stale .react-flow__edge-path { --c: var(--lp-amber); stroke-dasharray: calc(7px * var(--k, 1)) calc(4px * var(--k, 1)); } .w-order.stale .cv-arrow { fill: var(--lp-amber); }
+.cv-el.tag.t-bad { --c: var(--lp-hard); } .cv-el.tag.t-wait { --c: var(--muted); }
+.cv-el button.on { color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent); }
+.cv-task.t-queued { --c: var(--lp-amber); border-style: dashed; border-left-style: solid; }
+.cv-task.stale { outline: 1.5px dashed var(--lp-amber); outline-offset: 2px; }
+.cv-task p.turn { display: flex; align-items: center; gap: 4px; color: color-mix(in srgb, var(--lp-amber) 80%, var(--ink)); }
+.cv-task p.turn svg { flex: none; }
+.cg-pill.t-queued, .cv-tdot.t-queued { --c: var(--lp-amber); }
+.lg-order { position: relative; display: inline-block; width: 22px; height: 0; border-top: 2px solid color-mix(in srgb, var(--ink) 42%, var(--line)); }
+.lg-order::after { content: ''; position: absolute; right: -1px; top: -5px; border: 4px solid transparent; border-left: 6px solid color-mix(in srgb, var(--ink) 42%, var(--line)); border-right: 0; }
+/* in the task's panel */
+.cv-order { display: flex; flex-direction: column; gap: 5px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; }
+.cv-order p { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0; font-size: 12.5px; }
+.cv-order p b { flex: none; width: 34px; font-weight: 600; color: var(--muted); }
+.cv-near { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 4px 2px 8px; border: 1px solid var(--line); border-radius: 99px; background: none; font: inherit; font-size: 12px; color: var(--ink); cursor: pointer; }
+.cv-near:hover { border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); }
+.cv-near span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-near .cg-pill { flex: none; font-style: normal; }
+.cv-turn { --c: var(--lp-amber); display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--c) 40%, var(--line)); border-radius: 9px; background: color-mix(in srgb, var(--c) 8%, transparent); font-size: 12.5px; }
+.cv-turn > p { display: flex; align-items: center; gap: 6px; margin: 0; }
+.cv-turn > p b { color: color-mix(in srgb, var(--c) 80%, var(--ink)); }
+.cv-turn > p.small { display: block; line-height: 1.5; }
+.cv-turn ul { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; }
+.cv-turn li { display: flex; align-items: baseline; gap: 8px; }
+.cv-turn li .lnk { margin: 0; text-align: left; }
+.cv-turn .cv-turn-err { color: var(--bad); }
+.cv-turn .cv-row { margin: 0; }
+.cv-flow .cv-task p.turn { gap: calc(4px * var(--t)); }
+.cv-flow .cv-task p.turn svg { width: calc(11px * var(--ks) * var(--t)); height: calc(11px * var(--ks) * var(--t)); }

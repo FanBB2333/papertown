@@ -18,7 +18,7 @@ export const status = (c: Check): CheckStatus => c.last?.status ?? (c.kind === '
 const count = (unit: string | undefined, n: number) =>
   unit === '篇' ? tr('{0} 篇', n) : unit === '个' ? tr('{0} 个任务', n) : unit === '个词' ? tr('{0} 个词', n) : unit === '项' ? tr('{0} 项不满足', n) : tr('{0} 处', n);
 
-export type Act = (fn: () => Promise<unknown>, done?: string) => Promise<void>;
+export type Act = (fn: () => Promise<unknown>, done?: string | ((x: unknown) => string | undefined)) => Promise<void>; // done: what to say once it worked, from what came back if need be
 
 // how many hard checks passed after each round that changed something
 export function Trend({ points }: { points: CanvasView['trend'] }) {

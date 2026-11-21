@@ -35,7 +35,7 @@ import { Icon, type IconName } from '../console/icons';
 import { tr, trx } from '../i18n';
 import { setSettings, useSettings } from '../settings';
 import { follow, go, href } from '../route';
-import { Inspector, KIND, label, Mark, NewForm, WHO, type Draft, type Kind } from './CanvasSide';
+import { clip, Inspector, KIND, label, Mark, NewForm, orderOf, sentWord, WHO, type Draft, type Kind } from './CanvasSide';
 import { status, type Act } from './Checks';
 import { LoopReport } from './LoopReport';
 import { LoopSummary, SIZE, useCanvas, wanted } from './LoopCard';
@@ -44,7 +44,7 @@ import { around, crosses, halfway, rounded, type Box, type Pt } from './avoid';
 import { gateLook, needs, side } from './loop';
 import type { ConsoleTarget } from './Project';
 
-type FEdge = Edge<{ bow: boolean; arrow: boolean; tee: boolean; step: boolean; hidden: boolean; label: string; tag: string; tone: string }>;
+type FEdge = Edge<{ bow: boolean; arrow: boolean; tee: boolean; step: boolean; hidden: boolean; label: string; tag: string; tone: string; order?: boolean; can?: boolean }>; // order: an order line; can: between two tasks, so it can be one
 type Filter = 'all' | 'todo' | 'hard' | 'soft';
 type Item = { icon: IconName; label: string; run: () => void; danger?: boolean; off?: boolean; key?: string } | null;
 type Spots = Record<string, [number, number]>;
@@ -166,6 +166,8 @@ function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
           ) : (
             <div className={`cv-el nodrag nopan${selected ? ' on' : ''}${!text && data?.tag ? ` tag t-${data.tone}` : ''}`} style={at} onDoubleClick={() => o.edit(id)}>
               {(text || data?.tag) && <span>{!text && (data?.tone === 'lock' || data?.tone === 'hard') && <Icon n="lock" size={10} />}{text || data?.tag}</span>}
+              {selected && data?.can && <button className={data.order ? 'on' : ''} title={data.order ? tr('改为普通连线，只提供上下文') : tr('设为顺序线，前一个完成后才派发后一个')} aria-label={data.order ? tr('改为普通连线，只提供上下文') : tr('设为顺序线，前一个完成后才派发后一个')} aria-pressed={!!data.order} onClick={() => o.order(id, { order: !data.order })}><Icon n="right" size={12} /></button>}
+              {selected && data?.order && <button title={tr('调换先后')} aria-label={tr('调换先后')} onClick={() => o.order(id, { flip: true })}><Icon n="refresh" size={12} /></button>}
               {selected && <button title={tr('在线上写几个字')} aria-label={tr('在线上写几个字')} onClick={() => o.edit(id)}><Icon n="compose" size={12} /></button>}
               {selected && <button className="danger" title={tr('断开这条线')} aria-label={tr('断开这条线')} onClick={() => o.cut(id)}><Icon n="close" size={12} /></button>}
             </div>
@@ -221,6 +223,11 @@ function look(e: CanvasEdge, a: CanvasNode, b: CanvasNode): { cls: string; arrow
       const t = task ?? b;
       return { ...none, cls: `w-soft t-${t.status}${t.status === 'done' ? ' old' : ''}`, arrow: true, bow: true, tag: a.kind === 'soft' ? tr('! 软巡检纠偏') : '', tone: 'soft' };
     }
+    case 'order': { // the first before the second: how the first stands says whether the second may go
+      const held = b.status === 'queued', stuck = a.status === 'blocked', again = !!a.stale;
+      const tag = !held ? '' : stuck ? tr('前序受阻') : again ? tr('前序待复核') : tr('等待前序');
+      return { ...none, cls: `w-order t-${a.status}${again ? ' stale' : ''}${held ? ' held' : ''}`, arrow: true, tag, tone: stuck ? 'bad' : again ? 'soft' : 'wait' };
+    }
     default: {
       const cls = a.kind === 'note' || b.kind === 'note' ? 'w-note' : task ? `w-task t-${task.status}` : a.kind === 'info' || b.kind === 'info' ? 'w-info' : 'w-link';
       return { ...none, cls };
@@ -228,6 +235,7 @@ function look(e: CanvasEdge, a: CanvasNode, b: CanvasNode): { cls: string; arrow
   }
 }
 
+const ordered = (n: CanvasNode) => n.kind === 'task' && n.loop !== 'hard'; // a task whose turn you decide: a rework ticket goes by its gate
 const VIEW_LINES: Record<Filter, string[]> = { all: [], todo: [], hard: ['clamp'], soft: ['watch', 'spec'] };
 
 function toEdges(v: CanvasView, draft: Draft | null, lit: Set<string> | null, focus: string | null, shown: Shown, prev: FEdge[]): FEdge[] {
@@ -247,7 +255,7 @@ function toEdges(v: CanvasView, draft: Draft | null, lit: Set<string> | null, fo
     const mine = [a.id, b.id].some(id => id === shown.hot || id === shown.sel);
     const hidden = l.quiet && !shown.all && !mine && !VIEW_LINES[shown.filter].includes(e.kind ?? '');
     return [{ id: e.id, source: e.source, target: e.target, type: 'wire', className: `${l.cls}${on ? '' : ' dim'}${hidden ? ' quiet' : ''}`, selected: !hidden && chosen.has(e.id),
-      data: { bow: l.bow || twin, arrow: l.arrow, tee: l.tee, step: l.step, hidden, label: e.label ?? '', tag: l.tag, tone: l.tone } }];
+      data: { bow: l.bow || twin, arrow: l.arrow, tee: l.tee, step: l.step, hidden, label: e.label ?? '', tag: l.tag, tone: l.tone, order: e.kind === 'order', can: (!e.kind || e.kind === 'order') && ordered(a) && ordered(b) } }];
   });
   if (draft?.link && by.has(draft.link)) out.push({ id: NEW, source: draft.link, target: NEW, type: 'wire', className: 'w-task t-draft', selectable: false, data: blank });
   return out;
@@ -277,6 +285,7 @@ function Legend({ onClose }: { onClose: () => void }) {
       <header><b>{tr('图例')}</b><button className="ib" title={tr('收起')} aria-label={tr('收起')} onClick={onClose}><Icon n="close" size={12} /></button></header>
       <p><span><i className="cv-dia" />{tr('卡口：用代码查')}</span><span><i className="cv-ring2" />{tr('巡检：负责人判断')}</span></p>
       <p><span><i className="lg c-pass" />{tr('通过')}</span><span><i className="lg c-warn" />{tr('要留意')}</span><span><i className="lg c-bad" />{tr('没过，打回重改')}</span><span><i className="lg c-wait" />{tr('还没查，或在等前面')}</span></p>
+      <p><span><i className="lg-order" />{tr('顺序线：前一个任务完成后，才派发后一个')}</span></p>
       <p className="more">{tr('节点和线用同一套颜色。其余的线平时收着，鼠标移到节点上或点开它就能看到。')}</p>
     </Panel>
   );
@@ -453,7 +462,8 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     try {
       const x = await fn();
       if (x && typeof x === 'object' && 'nodes' in x) setV(x as CanvasView); else reload();
-      if (done) toast(done);
+      const said = typeof done === 'function' ? done(x) : done;
+      if (said) toast(said);
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   };
   // ---------- what the keyboard and the menus share ----------
@@ -652,7 +662,8 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       if (x.added) setSel(x.added);
       const id = x.added;
       if (id && !b.send) remember(tr('新建节点'), () => api.dropNode(line.id, id));
-      toast(b.kind === 'task' && b.send ? tr('加上了，也发给它了') : tr('加上了'));
+      const made = x.nodes.find(n => n.id === id);
+      toast(b.kind === 'task' && b.send ? (made?.status === 'queued' ? tr('已加上并排队，轮到时自动派发') : tr('加上了，也发给它了')) : tr('加上了'));
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
   // one node of your own to delete asks first; what Papertown put on the loop is only taken off, and can come back
@@ -669,8 +680,10 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     const e = v?.edges.find(x => x.id === edgeId);
     if (!e || virtual(edgeId)) return;
     act(() => api.disconnect(line.id, edgeId));
-    if (!e.kind) remember(tr('断开连线'), async () => { // only a line of your own comes back as it was
-      const x = await api.connect(line.id, e.source, e.target), back = x.edges.find(y => y.source === e.source && y.target === e.target);
+    if (!e.kind || e.kind === 'order') remember(tr('断开连线'), async () => { // only a line of your own comes back as it was
+      let x = await api.connect(line.id, e.source, e.target);
+      const back = x.edges.find(y => y.source === e.source && y.target === e.target);
+      if (back && (back.kind === 'order') !== (e.kind === 'order')) x = await api.orderEdge(line.id, back.id, { order: e.kind === 'order' });
       return e.label && back ? api.labelEdge(line.id, back.id, e.label) : x;
     });
   };
@@ -678,6 +691,11 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     act(() => api.gateAct(line.id, stage, what), what === 'rework' ? tr('修补单发出去了') : undefined).then(() => { if (what !== 'rework') setTimeout(() => fit(), 80); });
   const ops: Ops = {
     busy, agents: v?.agents ?? null, r, v, editing, edit: setEditing, cut, gate,
+    order: (edgeId, b) => {
+      const was = v?.edges.find(e => e.id === edgeId);
+      act(() => api.orderEdge(line.id, edgeId, b), b.flip ? tr('已调换先后') : b.order ? tr('已设为顺序线：前一个完成后才派发后一个') : tr('已改为普通连线'));
+      if (was) remember(b.flip ? tr('调换先后') : tr('改连线种类'), () => api.orderEdge(line.id, edgeId, b.flip ? { flip: true } : { order: was.kind === 'order' }));
+    },
     relabel: (edgeId, text) => {
       setEditing(null);
       const was = v?.edges.find(e => e.id === edgeId)?.label ?? '';
@@ -689,7 +707,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       else if (n.check?.kind === 'soft') begin({ kind: 'task', x: n.x, y: (loopY?.y0 ?? n.y + 200) + 60, link: n.id, seed: fixSeed(n) });
     },
     ask: n => { if (n.check) act(() => api.askCheck(line.id, n.check!.id), tr('已经发给负责人，它判断完会出现在这里')); },
-    send: n => { act(() => api.sendNode(line.id, n.id), tr('发给{0}了', WHO[n.to ?? 'lead'])); },
+    send: (n, chain) => { act(() => api.sendNode(line.id, n.id, !!chain), sentWord(n.id, n.to ?? 'lead')); },
     beside: (n, k) => beside(n, k),
     dup: n => dup([n]),
     drop,
@@ -701,6 +719,8 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     act(async () => {
       const had = new Set(v?.edges.map(e => e.id)), x = await api.connect(line.id, source, target), e = x.edges.find(y => !had.has(y.id));
       if (e) remember(tr('连线'), () => api.disconnect(line.id, e.id));
+      const a = x.nodes.find(n => n.id === e?.source), b = x.nodes.find(n => n.id === e?.target);
+      if (e && a && b && ordered(a) && ordered(b)) toast(e.kind === 'order' ? tr('顺序线：「{0}」完成后才派发「{1}」。选中这条线可改为普通连线', clip(label(a), 12), clip(label(b), 12)) : tr('这条线会让先后顺序连成环，已作为普通连线保留'));
       return x;
     });
   };
@@ -760,7 +780,10 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       ...(soft && c.on && ['fail', 'warn'].includes(status(c)) ? [{ icon: 'wand', label: tr('派人纠偏'), run: () => ops.fix(n) } as Item] : []),
       ...(soft && c.on ? [{ icon: 'send', label: tr('让负责人现在查'), run: () => ops.ask(n), off: !v?.lead } as Item] : []),
       ...(c ? [{ icon: c.on ? 'stop' : 'play', label: c.on ? tr('关掉这项检查') : tr('打开这项检查'), run: () => toggle(n) } as Item] : []),
-      ...(n.kind === 'task' ? [{ icon: 'send', label: st === 'draft' ? tr('发给{0}', WHO[n.to ?? 'lead']) : tr('再发一次'), run: () => ops.send(n), off: n.agent_id ? !n.agent?.started : !v?.agents[n.to ?? 'lead'].there } as Item] : []),
+      ...(n.kind === 'task' && st !== 'queued' ? [{ icon: 'send', label: st === 'draft' ? tr('发给{0}', WHO[n.to ?? 'lead']) : tr('再发一次'), run: () => ops.send(n), off: n.agent_id ? !n.agent?.started : !v?.agents[n.to ?? 'lead'].there } as Item] : []),
+      ...(n.kind === 'task' && v && st !== 'done' && orderOf(v, n.id).drafts.length ? [{ icon: 'right', label: tr('连同后续 {0} 个按顺序派发', orderOf(v, n.id).drafts.length), run: () => ops.send(n, true), off: n.agent_id ? !n.agent?.started : !v.agents[n.to ?? 'lead'].there } as Item] : []),
+      ...(n.kind === 'task' && st === 'queued' ? [{ icon: 'stop', label: tr('取消排队'), run: () => setTask(n, 'draft') } as Item] : []),
+      ...(n.kind === 'task' && n.stale ? [{ icon: 'check', label: tr('结果仍然有效'), run: () => act(() => api.setNode(line.id, n.id, { stale: false }), tr('已确认结果有效')) } as Item] : []),
       ...(n.kind === 'task' && st === 'sent' ? [{ icon: 'check', label: tr('标成完成'), run: () => setTask(n, 'done') } as Item] : []),
       ...(n.kind === 'task' && (st === 'done' || st === 'blocked') ? [{ icon: 'refresh', label: tr('重新打开'), run: () => setTask(n, 'draft') } as Item] : []),
     ];
@@ -795,11 +818,15 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     { icon: prefs.lines ? 'check' : 'eye', label: prefs.lines ? tr('收起次要的连线') : tr('显示全部连线'), run: () => setPrefs({ lines: !prefs.lines }) },
     { icon: 'sliders', label: tr('画布设置…'), run: () => go('/settings/loop') },
     null,
+    { icon: v?.rules?.exclusive ? 'check' : 'lock', label: v?.rules?.exclusive ? tr('同一工作目录每次只运行一个任务：已开启') : tr('同一工作目录每次只运行一个任务'), run: () => act(() => api.setLoopRules(line.id, !v?.rules?.exclusive), v?.rules?.exclusive ? tr('同目录任务已允许同时运行') : tr('同目录任务将逐个运行')) },
     { icon: 'refresh', label: tr('立即全检'), run: runAll },
   ];
   const edgeItems = (id: string): Item[] => {
     const e = v?.edges.find(x => x.id === id), a = v?.nodes.find(n => n.id === e?.source), b = v?.nodes.find(n => n.id === e?.target);
+    const can = !!e && !!a && !!b && (!e.kind || e.kind === 'order') && ordered(a) && ordered(b), is = e?.kind === 'order';
     return [
+      ...(can ? [{ icon: is ? 'rows' : 'right', label: is ? tr('改为普通连线（只提供上下文）') : tr('设为顺序线（前一个完成后才派发后一个）'), run: () => ops.order(id, { order: !is }) } as Item] : []),
+      ...(can && is ? [{ icon: 'refresh', label: tr('调换先后'), run: () => ops.order(id, { flip: true }) } as Item, null] : can ? [null] : []),
       { icon: 'compose', label: e?.label ? tr('改线上的字') : tr('在线上写几个字'), run: () => setEditing(id) },
       ...(a ? [{ icon: 'eye', label: tr('看「{0}」', label(a)), run: () => pick(a.id) } as Item] : []),
       ...(b ? [{ icon: 'eye', label: tr('看「{0}」', label(b)), run: () => pick(b.id) } as Item] : []),
