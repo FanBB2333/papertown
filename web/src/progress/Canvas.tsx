@@ -532,6 +532,46 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     if (!fitted.current) { fitted.current = true; fit(0); }
     else if (auto.current || rf.getZoom() < floor - 0.002) fit(200);
   }, [ready, whole, nodes.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ---------- the wheel ----------
+  // Zooming is done here, not by React Flow. ⌘ + wheel (Ctrl elsewhere), a trackpad pinch (which the browser sends
+  // as a wheel with ctrlKey) and, when the setting says the wheel zooms, a plain wheel, zoom the loop about the
+  // pointer. The page takes these over the whole loop, so the browser never zooms the page instead. A step follows
+  // how far the wheel turned but is never more than STEP (about 8%, times the 滚轮缩放速度 setting): a notch of a
+  // mouse wheel, or a fast spin the system speeds up, moves the zoom one small step, not a jump. A plain wheel is left
+  // to React Flow, which pans.
+  const page = useRef<HTMLDivElement>(null);
+  const zooming = useRef({ min: 0.1, max: 1.8, extent, w: 0, h: 0, speed: 1, plain: false });
+  zooming.current = { min: floor * 0.98, max: 1.8, extent, w: box.w, h: box.h, speed: cs.zoomSpeed || 1, plain: cs.cvScroll === 'zoom' };
+  useEffect(() => {
+    const el = page.current;
+    if (!el) return;
+    const STEP = 0.08, PINCH = 0.0139, WHEEL = 0.0014; // the last two as React Flow had them: a slow gesture feels as it did
+    const wheel = (e: WheelEvent) => {
+      const at = e.target instanceof Element ? e.target : null, graph = at?.closest('.react-flow__renderer');
+      const key = e.metaKey || e.ctrlKey, o = zooming.current;
+      if (!key && !(graph && o.plain)) return;
+      e.preventDefault();
+      if (!graph || at?.closest('.nowheel') || !wrap.current) return;
+      e.stopPropagation();
+      const dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 800 : 1);
+      if (!dy) return;
+      const step = Math.min(STEP, Math.abs(dy) * (e.ctrlKey ? PINCH : WHEEL)) * o.speed;
+      const v0 = rf.getViewport(), zoom = Math.max(o.min, Math.min(o.max, v0.zoom * Math.exp(-Math.sign(dy) * step)));
+      if (zoom === v0.zoom) return;
+      const r = wrap.current.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      let x = px - ((px - v0.x) * zoom) / v0.zoom, y = py - ((py - v0.y) * zoom) / v0.zoom;
+      if (o.extent && o.w && o.h) { // inside the same bounds a drag keeps to (d3-zoom's constrain)
+        const [[x0, y0], [x1, y1]] = o.extent;
+        const pull = (lo: number, hi: number) => (hi > lo ? (lo + hi) / 2 : Math.min(0, lo) || Math.max(0, hi));
+        x += pull(-x / zoom - x0, (o.w - x) / zoom - x1) * zoom;
+        y += pull(-y / zoom - y0, (o.h - y) / zoom - y1) * zoom;
+      }
+      auto.current = false;
+      rf.setViewport({ x, y, zoom });
+    };
+    el.addEventListener('wheel', wheel, { passive: false, capture: true });
+    return () => el.removeEventListener('wheel', wheel, { capture: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const act: Act = async (fn, done) => {
     setBusy(true);
@@ -1020,7 +1060,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   const views: [Filter | 'report', string, number?][] = [['all', tr('全部回路')], ['todo', tr('阻断与预警'), todo], ['hard', tr('硬卡口')], ['soft', tr('软巡检')], ['report', tr('前后对比')]];
   return createPortal(
     <MoreCtx.Provider value={more}>
-    <div className="cv" role="dialog" aria-modal="true" aria-label={tr('#{0} 的研究回路', line.seq)}>
+    <div className="cv" ref={page} role="dialog" aria-modal="true" aria-label={tr('#{0} 的研究回路', line.seq)}>
       <header className="cv-top">
         <a className="cv-back" href={href(back)} onClick={e => follow(e, back)} title={tr('回到项目页')}><Icon n="left" size={15} /><span>#{line.seq}</span><b>{line.title}</b></a>
         <h2>{tr('研究回路')}{v && <em className="cv-r">Loop R{v.rounds}</em>}</h2>
@@ -1091,7 +1131,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                   <li>{tr('{0}C 复制、{0}X 剪切、{0}V 粘贴、{0}D 复制一份（任务和备注），别处复制的文字粘贴成备注', MOD)}</li>
                   <li>{tr('Delete 删掉、{0}A 全选、{0}Z 撤销，方向键挪一小步（按住 Shift 挪一大步）', MOD)}</li>
                   <li>{tr('N 新任务、⇧N 新备注、F 适应窗口、0 回到 100%、+ − 缩放')}</li>
-                  <li>{tr('触控板双指移动是平移，双指捏合或按住 {0} 滚动是缩放', MOD.trim())}</li>
+                  <li>{tr('触控板双指移动或滚轮是平移，双指捏合或按住 {0} 滚动是缩放，滚轮每格缩放一小步', MOD.trim())}</li>
                   <li>{tr('按 / 叫出小助手，让它改回路、解释卡口为什么没放行')}</li>
                 </ul>
               </>

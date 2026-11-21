@@ -3252,11 +3252,9 @@
  "Paseo 启动后这里会自己接上。写新 idea 照常可用。": "This reconnects by itself once Paseo starts. Writing a new idea works as usual.",
  "连不上 Paseo，等它启动后再问（写新 idea 照常可用）": "Can't reach Paseo: ask once it's running (writing a new idea works as usual)",
  "修补单在卡口有规则阻断时才派得出去": "A ticket goes out only while a rule blocks the gate",
- "触控板双指移动是平移，双指捏合或按住 {0} 滚动是缩放": "Two-finger swipe on a trackpad pans, pinch or {0}-scroll zooms",
  "平移缩放、网格、吸附、连线和图例": "Panning and zoom, grid, snapping, lines and legend",
  "移动和缩放": "Moving and zooming",
  "触控板双指和滚轮": "Two-finger swipe and scroll wheel",
- "平移：双指移动在画布上走，捏合或按住 ⌘ 滚动缩放。缩放：双指移动直接缩放": "Pan: a two-finger swipe moves around the canvas, and pinch or ⌘-scroll zooms. Zoom: a two-finger swipe zooms",
  "平移": "Pan",
  "缩放": "Zoom",
  "随缩放调整节点": "Fit nodes to the zoom",
@@ -3388,5 +3386,7 @@
  "相关工作": "Related work",
  "实验结果": "Results",
  "{0} 次运行，{1} 次出自仓库里的 {2} 个脚本": "{0} runs, {1} of them from {2} scripts in the repository",
- "当前关联的代码仓库里没有这个文件": "This file is not in the code repository linked here"
+ "当前关联的代码仓库里没有这个文件": "This file is not in the code repository linked here",
+ "触控板双指移动或滚轮是平移，双指捏合或按住 {0} 滚动是缩放，滚轮每格缩放一小步": "Two fingers on the trackpad or the wheel pan; a pinch, or scrolling with {0} held, zooms, one small step per wheel notch",
+ "平移：双指移动或滚轮在画布上走，捏合或按住 ⌘（Windows 上是 Ctrl）滚动缩放。缩放：双指移动或滚轮直接缩放。滚轮每格缩放一小步，快慢跟随「滚轮缩放速度」": "Pan: two fingers or the wheel move across the canvas; pinch, or scroll with ⌘ held (Ctrl on Windows), to zoom. Zoom: two fingers or the wheel zoom directly. A wheel notch zooms one small step, at the pace of “Wheel zoom speed”"
 }

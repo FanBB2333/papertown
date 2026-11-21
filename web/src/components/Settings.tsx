@@ -141,7 +141,7 @@ function LoopSection({ s }: { s: S }) {
   return (
     <>
       <Card title={tr('移动和缩放')}>
-        <Row label={tr('触控板双指和滚轮')} desc={tr('平移：双指移动在画布上走，捏合或按住 ⌘ 滚动缩放。缩放：双指移动直接缩放')}>
+        <Row label={tr('触控板双指和滚轮')} desc={tr('平移：双指移动或滚轮在画布上走，捏合或按住 ⌘（Windows 上是 Ctrl）滚动缩放。缩放：双指移动或滚轮直接缩放。滚轮每格缩放一小步，快慢跟随「滚轮缩放速度」')}>
           <Pick label={tr('触控板双指和滚轮')} value={s.cvScroll} options={[['pan', tr('平移')], ['zoom', tr('缩放')]]} onChange={set('cvScroll')} />
         </Row>
         <Row label={tr('随缩放调整节点')} desc={tr('缩小时字跟着放大、细节收起，远看只留名字和一个数字')}>
