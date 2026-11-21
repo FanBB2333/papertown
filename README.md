@@ -10,6 +10,7 @@ Live demo: [papertown.life](https://papertown.life), a read-only snapshot of an 
 
 - **Progress**: one card per project with its state, decisions waiting for you, running and planned experiments, expected outputs and repositories. The project lead writes the card when you ask for an update. Each project has a page with its decisions, research loop, experiments and a conversation with its lead.
 - **Research loop**: a graph of each project's controls, laid out in the same four rows for every project (overview and agents, survey, code / experiments / data, paper). Hard gates are checked in code, for example paper style rules, novelty similarity, returned results and PDF freshness. A blocking gate locks the next stage and sends a rework ticket until it passes. Soft sentinels are questions the lead judges on a schedule, such as whether the method fits the idea or the claims are supported. Task order is kept in code, and anything the loop cannot resolve goes to a human gate. Design notes: [`docs/research_loop_design.md`](docs/research_loop_design.md).
+- **Agents**: every agent of every project in one list, sorted by what needs you: waiting for your approval or answer, failed, finished and unread, working, idle. Open one to read its conversation and step in while it works: steer the running turn, queue a message for when it ends, or interrupt and replace the task. Design notes: [`docs/agent_watch_design.md`](docs/agent_watch_design.md).
 - **Console**: panels for each project's survey, code (an in-browser editor with git diffs), experiments (GPU queue, timelines, results), data, paper (LaTeX source beside the compiled PDF) and agents.
 - **Town**: the same projects on an isometric map and in a 3D walk, with buildings driven by live state.
 - **Assistant**: a chat box at the bottom of every page that reads what you are looking at and passes instructions to project leads and workers.
@@ -120,7 +121,7 @@ uv run papertown job list
 ```
 assets/   building sprites and their manifest, generated from design/src/sprites.js
 design/   design notes and the offline prototype
-docs/     the full guide (Chinese) and the research loop design
+docs/     the full guide (Chinese) and the design notes
 macos/    the macOS app shell
 server/   FastAPI backend: agents, pipeline, checks, library, TUI, MCP
 web/      React + Vite frontend
