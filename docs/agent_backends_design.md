@@ -1,4 +1,4 @@
-# 员工的终端后端：herdr 与 tmux
+# 员工的终端后端：herdr、tmux 与 headless
 
 ## 1. 要解决的问题
 
@@ -6,6 +6,9 @@ Papertown 的员工（代码员工、写作员工、项目负责人、节点 age
 
 - **herdr**：每个员工一个 herdr 标签页，用户在自己的 herdr 里能看到、能接手。
 - **tmux**：最原生的做法，每个员工一个 tmux 窗口，用户可以 `tmux attach` 进去。
+- **headless**：Papertown 自己在后台托管伪终端，不依赖 tmux 或 herdr，网页就是它的窗口（见第 7 节）。
+
+三种后端遵守同一条交互原则：CLI 一律以真实的交互界面（TUI）运行，网页上的每个操作都换成终端里的真实输入送达。发消息是一次粘贴加回车，停止是 Esc，回答对话框是数字键或方向键加回车。Papertown 不使用反向代理，不改 CLI 的 API 地址，也不用 SDK、`app-server`、`-p`/`exec` 这类结构化接口驱动 agent。读回的只有三样：终端画面、CLI 自己写在本机的会话日志、各 CLI 官方的 hooks、notify 和状态栏回报的元数据（事件名、会话 id、工具名，不含对话内容，见 3.3）。
 
 两种后端都要做到和 Paseo 员工同样的事：启动时带上模型、思考强度、工作目录和项目简报，之后能插话、排队、打断并发送、停止，员工页能看到它在工作、做完了、在等你还是空闲，本机会话日志能按会话 id 算到这个员工头上。
 
@@ -127,8 +130,8 @@ Claude Code 的会话 id 在启动时就写进 `agent_sessions`。Codex 和 Anti
 
 ## 4. 接口
 
-- `GET /api/backends`：`{paseo: {ok, note}, herdr: {ok, note}, tmux: {ok, note}, clis: {claude, codex, antigravity}}`，`clis` 为找到的路径或 null。
-- `POST /api/agents/{id}/start` 的 `runtime` 增加 `herdr`、`tmux`，其余参数不变。
+- `GET /api/backends`：`{paseo: {ok, note}, herdr: {ok, note}, tmux: {ok, note}, headless: {ok, note}, clis: {claude, codex, antigravity}}`，`clis` 为找到的路径或 null。
+- `POST /api/agents/{id}/start` 的 `runtime` 增加 `herdr`、`tmux`、`headless`，其余参数不变。
 - `GET /api/agents/{id}/screen`：`{text, term, prompt}`，`prompt` 为 `{digest, title, body, options: [{index, label, current, key}], hint}` 或 null。
 - `GET /api/agents/{id}/timeline`：终端员工也可用，返回 `{agent, items, queued, paseo: {}, transcript: {ok, note}}`。
 - `POST /api/agents/{id}/prompt`：`{digest, option}`，回答画面上的对话框。画面已变化返回 409。
@@ -163,3 +166,32 @@ Claude Code 的会话 id 在启动时就写进 `agent_sessions`。Codex 和 Anti
 - 不使用 Codex 的新 hooks 和 `--dangerously-bypass-hook-trust`。
 - 不支持把已有的 tmux 窗口或 herdr 终端会话转为员工（herdr 终端会话仍在员工页的「终端」组里直接操作）。
 - pi 仍按原来的方式运行。
+
+## 7. headless：Papertown 自己的后台终端
+
+2026-11-22 新增。headless 指 Papertown 在后台自己管理终端：每个员工仍然有一个真实的终端，CLI 在里面运行它的交互界面，只是这个终端不在 tmux 或 herdr 里，也没有窗口，网页就是查看和操作它的地方。它不是 Claude Code 的 `-p` 或 Codex 的 `exec` 那种无界面模式。
+
+### 7.1 结构
+
+- **守护进程 `server/papertown/ptyd.py`**：一个独立进程持有所有后台终端。每个终端是一个伪终端（`pty.fork`），子进程是新会话的首进程，伪终端是它的控制终端，窗口大小 160×48，`TERM=xterm-256color`。服务端第一次在 headless 里启动员工时拉起它（`python -m papertown.ptyd <socket>`，自行脱离为孤儿进程，不是服务端的子进程），之后它与服务端各自运行：服务端重启时员工照常工作，重启后按句柄里的终端 id 重新找到。连续 10 分钟没有任何终端时它自行退出。同一个套接字只会有一个守护进程（`ptyd.sock.lock` 加锁）。
+- **套接字**：`<数据目录>/ptyd.sock`，路径过长时改放 `$TMPDIR/papertown-<uid>/<哈希>.sock`，权限 600。每次连接一个 JSON 请求、一个 JSON 回答：`ping`、`open`、`list`、`state`、`screen`、`paste`、`keys`、`close`。日志写在 `<数据目录>/ptyd.log`。
+- **屏幕 `server/papertown/vt.py`**：一个精简的终端模拟器，处理 agent CLI 用到的控制序列：光标移动、擦除、插入删除字符和行、滚动区域（Codex 在输入框上方插入历史就靠它）、备用屏幕、宽字符和组合字符、同步输出（读到的是上一帧完整画面）。颜色和字形属性丢弃，读出的文字与 `tmux capture-pane -p -J` 一致：自动折行的行拼回一行，行尾空格去掉。CLI 启动时会询问终端（光标位置、设备属性、窗口大小、前景和背景色），模拟器照 xterm 的格式回答，否则 Codex 读不到光标位置会启动失败。键盘增强协议（kitty、CSI u）的询问不回答，CLI 随之退回普通按键编码。
+- **后端 `HeadlessBackend`（`backends.py`）**：与 `TmuxBackend` 同一套接口。终端的环境变量取服务端的环境，去掉服务端所在终端程序和复用器的变量（`TMUX`、`TERM_PROGRAM`、`GHOSTTY_*`、`CMUX_*` 等），免得 CLI 以为自己在那些程序里。`attach` 为空，员工页的接入方式写「Papertown 后台终端，在此页面查看与操作」。
+
+### 7.2 输入只走键盘
+
+| 网页上的操作 | 终端收到的字节 |
+| --- | --- |
+| 发消息 | CLI 打开了 bracketed paste（三种 CLI 都会打开）时为 `ESC[200~ 正文 ESC[201~`，0.1 秒后再发 `\r`。换行保持为 LF，与 `tmux paste-buffer -p -r` 相同 |
+| 停止、打断 | `ESC` |
+| 方向键 | `ESC[A`、`ESC[B`，CLI 开了应用光标键模式时为 `ESCOA`、`ESCOB` |
+| 回车、Ctrl+C、数字和 y/n | `\r`、`\x03`、字符本身 |
+
+多个按键之间隔 30 毫秒，让 CLI 一次读到一个。状态判断与 tmux 完全相同：hooks、notify、状态栏回报，加上画面是否变化、进程是否退出（守护进程 `waitpid` 到子进程退出后，在画面末尾写一行「进程已退出，退出码 N」，终端保留到关闭为止，失败原因看得见）。关闭终端时向进程组发 SIGHUP，3 秒后仍在的进程组发 SIGKILL。
+
+### 7.3 验证
+
+- `tests/test_backends.py` 的三组终端测试同时跑 tmux 和 headless：启动参数、第一条消息、多行粘贴、插话、排队放行、打断等待与超时、停止、对话框判为等你、关闭后接着会话、服务端重启后重新接上终端、进程退出。每个测试用自己的数据目录和守护进程，结束时停掉。
+- `tests/test_vt.py` 覆盖移动与擦除、折行拼接、宽字符、跨读取的 UTF-8、滚动区域与历史、插入删除、备用屏幕、启动询问的回答、OSC 和 DCS 字符串、同步输出。
+- 本机真实的 Claude Code 2.1.330、Codex 0.169.0、Antigravity 在 headless 终端里以临时主目录启动（不碰用户的配置和信任状态，不发任何消息）：Claude Code 的主题选择、Codex 的登录和更新提示、Antigravity 的登录菜单都完整显示，三者都打开了 bracketed paste，Codex 与 Antigravity 的菜单按方向键后选中项随之移动。
+

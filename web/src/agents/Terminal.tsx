@@ -176,7 +176,7 @@ export function TerminalRoom({ terminal, toast, tools }: { terminal: Terminal; t
   return <TermChat key={id} source={source} toast={toast} tools={tools} />;
 }
 
-// an employee that runs a CLI in a herdr tab or a tmux window
+// an employee that runs a CLI in a herdr tab, a tmux window or a background terminal
 export function HostedRoom({ agent, toast, tools }: { agent: Agent; toast: (s: string) => void; tools?: React.ReactNode }) {
   const id = agent.id;
   const source = useMemo<Source<Agent>>(() => ({
@@ -220,7 +220,7 @@ export function HostedContext({ agent, toast }: { agent: Agent; toast: (s: strin
       <dt>{tr('模型')}</dt><dd>{agent.term?.model || tr('CLI 默认模型')}</dd>
       <dt>{tr('思考强度')}</dt><dd>{agent.term?.thinking || tr('未指定')}</dd>
       <dt>{tr('会话 ID')}</dt><dd className="aw-path">{agent.session_id || tr('未指定')}</dd>
-      <dt>{tr('接入方式')}</dt><dd className="aw-path">{agent.attach || tr('未指定')}</dd>
+      <dt>{tr('接入方式')}</dt><dd className="aw-path">{agent.attach || (agent.runtime === 'headless' ? tr('Papertown 后台终端，在此页面查看与操作') : tr('未指定'))}</dd>
     </dl>
     <button className="btn" disabled={busy || agent.term?.status === 'exited'} onClick={async () => {
       setBusy(true); try { await api.closeTerminal(agent.id); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }

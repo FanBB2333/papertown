@@ -36,10 +36,11 @@ def employee(town, role='coder', node=None):
     return a
 
 
-@pytest.fixture
-def tmux(tmp_path):
+@pytest.fixture(params=['tmux', 'headless'])
+def tmux(tmp_path, request):
+    """An isolated terminal host with the fake CLI: a private tmux server, or Papertown's own background terminals."""
     executable = shutil.which('tmux')
-    if not executable:
+    if not executable and request.param == 'tmux':
         pytest.skip('tmux is not installed')
     fake = tmp_path / 'claude'
     fake.write_text('#!' + sys.executable + '\n' + Path(__file__).with_name('fake_terminal_cli.py').read_text().split('\n', 1)[1])
@@ -62,13 +63,27 @@ def tmux(tmp_path):
     http = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     thread = threading.Thread(target=http.serve_forever, daemon=True); thread.start()
     town.s.url = 'http://127.0.0.1:' + str(http.server_port)
+    hosted.rt = request.param
     try:
         yield town, hosted, bodies
     finally:
         # This socket belongs only to this test. Never run an unqualified tmux command.
-        subprocess.run([executable, '-L', town.s.tmux_socket, 'kill-server'], capture_output=True)
+        if executable:
+            subprocess.run([executable, '-L', town.s.tmux_socket, 'kill-server'], capture_output=True)
+        stop_ptyd(hosted)
         http.shutdown(); http.server_close(); thread.join(2)
         town.agents.shutdown()
+
+
+def stop_ptyd(hosted):
+    """End this test's own background terminal daemon, if it started one."""
+    from papertown.backends import Stopped
+    try:
+        pid = hosted.backends['headless']._call('ping')['pid']
+    except Stopped:
+        return
+    os.kill(pid, 15)
+    eventually(lambda: not hosted.backends['headless'].path.exists())
 
 
 def status(h, aid):
@@ -78,7 +93,7 @@ def status(h, aid):
 def test_tmux_lifecycle_queue_hooks_resume(tmux):
     t, h, bodies = tmux
     a = employee(t); aid = a['id']
-    started = t.agents.start(aid, 'tmux', 'claude', 'fake-model', 'high')
+    started = t.agents.start(aid, h.rt, 'claude', 'fake-model', 'high')
     eventually(lambda: status(h, aid) in ('idle', 'done'))
     home = t.agents.home(a)
     argv = json.loads((home / '.papertown/argv.json').read_text())
@@ -91,7 +106,7 @@ def test_tmux_lifecycle_queue_hooks_resume(tmux):
     assert set(hooks) == {'SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PermissionRequest', 'Notification', 'Stop'}
     sid = t.agents.get(aid)['session_id']
     assert t.db.one('select * from agent_sessions where session_id = ?', sid)['agent_id'] == aid
-    assert t.s.tmux_socket in started['attach']
+    assert t.s.tmux_socket in started['attach'] if h.rt == 'tmux' else started['attach'] is None
     assert 'handle' not in started['term'] and 'token' not in json.dumps(started['term'])
     t.agents.say(aid, 'hello\nworld')
     eventually(lambda: '⏺ reply hello|world' in h.screen(aid)['text'])
@@ -130,7 +145,7 @@ def test_tmux_lifecycle_queue_hooks_resume(tmux):
 def test_tmux_still_dialog_stop_and_queue_actions(tmux):
     t, h, _ = tmux
     aid = employee(t)['id']
-    t.agents.start(aid, 'tmux', 'claude')
+    t.agents.start(aid, h.rt, 'claude')
     eventually(lambda: status(h, aid) in ('idle', 'done'))
     t.agents.say(aid, 'dialog')
     eventually(lambda: status(h, aid) == 'blocked')
@@ -156,7 +171,7 @@ def test_tmux_still_dialog_stop_and_queue_actions(tmux):
 
 def test_tmux_interrupt_timeout_does_not_send(tmux):
     t, h, _ = tmux
-    aid = employee(t)['id']; t.agents.start(aid, 'tmux', 'claude')
+    aid = employee(t)['id']; t.agents.start(aid, h.rt, 'claude')
     eventually(lambda: status(h, aid) in ('idle', 'done'))
     t.agents.say(aid, 'ignore')
     eventually(lambda: 'working timer' in h.screen(aid)['text'])

@@ -1164,7 +1164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/bridge/{agent_id}/rules")
     def bridge_rules(agent_id: str, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
-        return {"text": town.bounds.text(a["role"], a["line_id"], str(town.agents.pt(a)) if a["runtime"] in ("paseo", "herdr", "tmux") else None)}
+        return {"text": town.bounds.text(a["role"], a["line_id"], str(town.agents.pt(a)) if a["runtime"] in ("paseo", "herdr", "tmux", "headless") else None)}
 
     def helper(agent_id: str, token: str | None) -> dict:
         a = bridged(agent_id, token)

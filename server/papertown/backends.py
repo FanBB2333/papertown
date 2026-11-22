@@ -1,9 +1,15 @@
 """Terminal transports. They never start or shut down a terminal host."""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shlex
+import socket
 import subprocess
+import sys
+import tempfile
+import threading
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -232,3 +238,126 @@ class HerdrBackend(TerminalBackend):
 
     def attach(self, handle):
         return f"herdr · {handle['workspace']} / {handle['tab']}"
+
+
+# What a background terminal leaves out of the server's environment: the multiplexer and terminal application the
+# server itself was started from. A CLI that sees them would talk to that application instead of this terminal.
+FOREIGN = ('TMUX', 'TERM_PROGRAM', 'TERM_SESSION_ID', 'ITERM_', 'KITTY_', 'WEZTERM_', 'ALACRITTY_', 'GHOSTTY_',
+           'VTE_VERSION', 'CMUX_', 'HERDR_', 'WINDOWID', 'COLUMNS', 'LINES')
+
+
+def ptyd_socket(data_dir: Path) -> Path:
+    """The daemon's socket beside the data, or in the temporary folder when that path is too long for a socket."""
+    path = Path(data_dir).absolute() / 'ptyd.sock'
+    if len(str(path)) < 100:
+        return path
+    short = Path(tempfile.gettempdir()) / f'papertown-{os.getuid()}'
+    short.mkdir(mode=0o700, exist_ok=True)
+    return short / (hashlib.sha256(str(path).encode()).hexdigest()[:16] + '.sock')
+
+
+class HeadlessBackend(TerminalBackend):
+    """Terminals Papertown keeps itself in the background (ptyd.py): no tmux, no herdr, no window.
+
+    The CLI runs its real interactive interface in a pseudo-terminal. Text goes in as a bracketed paste and an Enter,
+    keys as the bytes a terminal sends, and the screen comes back as text, just as with the tmux backend."""
+
+    def __init__(self, data_dir: Path, cols=160, rows=48):
+        self.data_dir, self.cols, self.rows = Path(data_dir), cols, rows
+        self.path = ptyd_socket(self.data_dir)
+        self._spawn = threading.Lock()
+
+    def _call(self, op, timeout=5, **kw):
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout)
+                s.connect(str(self.path))
+                s.sendall(json.dumps({'op': op, **kw}).encode() + b'\n')
+                data = b''
+                while not data.endswith(b'\n'):
+                    chunk = s.recv(1 << 16)
+                    if not chunk:
+                        break
+                    data += chunk
+        except (FileNotFoundError, ConnectionRefusedError) as e:
+            raise Stopped('后台终端服务未运行') from e
+        except (socket.timeout, OSError) as e:
+            raise BackendError(f'后台终端服务无响应：{e}') from e
+        try:
+            r = json.loads(data)
+        except ValueError:
+            raise BackendError('后台终端服务返回了无效数据') from None
+        if not r.get('ok'):
+            raise (Stopped if r.get('gone') else BackendError)(r.get('message') or '后台终端操作失败')
+        return r
+
+    def ensure(self):
+        """Start the daemon when it is not running. It outlives the server, so agents keep running across restarts."""
+        with self._spawn:
+            try:
+                return self._call('ping')
+            except Stopped:
+                pass
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            subprocess.run([sys.executable, '-m', 'papertown.ptyd', str(self.path), '--log', str(self.data_dir / 'ptyd.log')],
+                           start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, cwd='/', timeout=10, check=False)
+            end = time.monotonic() + 5
+            while True:
+                try:
+                    return self._call('ping')
+                except Stopped:
+                    if time.monotonic() > end:
+                        raise BackendError(f"后台终端服务无法启动，详见 {self.data_dir / 'ptyd.log'}") from None
+                    time.sleep(.05)
+
+    def open(self, spec):
+        self.ensure()
+        env = {k: v for k, v in os.environ.items() if not k.startswith(FOREIGN)}
+        env |= {'TERM': 'xterm-256color', 'COLORTERM': 'truecolor'} | spec['env']
+        r = self._call('open', argv=spec['argv'], cwd=spec['cwd'], env=env, name=spec['name'], cols=self.cols, rows=self.rows)
+        return {'id': r['id'], 'pid': r['pid'], 'session': spec['session'], 'name': spec['name']}
+
+    def state(self, handle):
+        try:
+            r = self._call('state', id=handle['id'])
+        except Stopped:  # the daemon or the terminal is gone, and the CLI with it
+            return {'status': 'exited', 'seq': None, 'since': None}
+        return {'status': None if r['alive'] else 'exited', 'seq': None, 'since': None}
+
+    def alive(self, handle):
+        return self.state(handle)['status'] != 'exited'
+
+    def screen(self, handle):
+        try:
+            return self._call('screen', id=handle['id'])['text']
+        except Stopped as e:
+            raise BackendError('终端会话已退出') from e
+
+    def glance(self, handle):
+        return self.screen(handle)
+
+    def submit(self, handle, text):
+        try:
+            self._call('paste', id=handle['id'], text=text, enter=True)
+        except Stopped as e:
+            raise BackendError('终端会话已退出') from e
+
+    def keys(self, handle, keys):
+        try:
+            self._call('keys', id=handle['id'], keys=keys)
+        except Stopped as e:
+            raise BackendError('终端会话已退出') from e
+
+    def close(self, handle):
+        try:
+            self._call('close', id=handle['id'])
+        except Stopped:
+            pass
+
+    def attach(self, handle):
+        return None
+
+
+class Stopped(BackendError):
+    """The daemon is not running, or no longer holds the terminal."""

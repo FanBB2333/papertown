@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Agent, type CanvasNode } from '../api';
+import { api, type Agent, type CanvasNode, type DefaultRuntime } from '../api';
 import { fold, ImportCard, PaseoLog, PaseoPick, usePaseoTalk } from '../components/AgentRoom';
 import { AGENT_STATUS } from '../components/MillRoom';
 import { HostedRoom, HostedContext } from '../agents/Terminal';
@@ -9,7 +9,7 @@ import { tr } from '../i18n';
 import type { Act } from './Checks';
 
 export function NodeConversation({ node, lineId, busy, act }: { node: CanvasNode; lineId: string; busy: boolean; act: Act }) {
-  const [runtime, setRuntime] = useState<'paseo' | 'herdr' | 'tmux'>('paseo'), [error, setError] = useState('');
+  const [runtime, setRuntime] = useState<DefaultRuntime>('paseo'), [error, setError] = useState('');
   useEffect(() => { api.defaultRuntime().then(d => setRuntime(d.runtime)).catch(e => setError((e as Error).message)); }, []);
   const [configure, setConfigure] = useState(false);
   const agent = node.agent;

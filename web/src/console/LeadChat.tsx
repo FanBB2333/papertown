@@ -3,7 +3,7 @@
 // one; what it waits on you for, pinned above the message box.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, type Agent, type AgentEvent, type AssistantConv, type Report, type StartOpts } from '../api';
+import { api, type Agent, type AgentEvent, type AssistantConv, type Report, type StartOpts, type DefaultRuntime } from '../api';
 import { fold, PaseoLog, PaseoPick, PiLog, usePiTalk, usePaseoTalk } from '../components/AgentRoom';
 import { HostedRoom } from '../agents/Terminal';
 import { TerminalPick } from '../agents/TerminalPick';
@@ -21,7 +21,7 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
   lineId: string; seq: number; layout: Layout; onClose?: () => void; toast: (t: string) => void;
 }) {
   const [v, again] = useLead(lineId);
-  const [runtime, setRuntime] = useState<'paseo' | 'herdr' | 'tmux'>('paseo');
+  const [runtime, setRuntime] = useState<DefaultRuntime>('paseo');
   useEffect(() => { api.defaultRuntime().then(d => setRuntime(d.runtime)).catch(e => toast((e as Error).message)); }, []);
   const [history, setHistory] = useState(false);
   const [busy, setBusy] = useState(false);

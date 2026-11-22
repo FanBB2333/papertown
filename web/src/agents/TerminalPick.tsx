@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { api, type AgentRole, type Backends, type PaseoInfo, type StartOpts } from '../api';
+import { api, type AgentRole, type Backends, type PaseoInfo, type StartOpts, type TermBackend } from '../api';
 import { Select } from '../components/Select';
 import { tr } from '../i18n';
 import { kindName } from './watch';
 
-// hiring a CLI that runs in a herdr tab or a tmux window, drawn like the Paseo card beside it
-export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBackend?: 'herdr' | 'tmux'; busy: boolean; onStart: (o: StartOpts) => void; role?: AgentRole }) {
+// hiring a CLI that runs in a herdr tab, a tmux window or a background terminal, drawn like the Paseo card beside it
+export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBackend?: TermBackend; busy: boolean; onStart: (o: StartOpts) => void; role?: AgentRole }) {
   const [backends, setBackends] = useState<Backends | null>(null), [info, setInfo] = useState<PaseoInfo | null>(null);
-  const [backend, setBackend] = useState<'herdr' | 'tmux'>('tmux'), [provider, setProvider] = useState('');
+  const [backend, setBackend] = useState<TermBackend>('tmux'), [provider, setProvider] = useState('');
   const [model, setModel] = useState(''), [thinking, setThinking] = useState(''), [error, setError] = useState('');
   useEffect(() => {
     let alive = true;
@@ -18,7 +18,7 @@ export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBacke
       const p = pref?.provider && b.clis[pref.provider] ? pref.provider : Object.keys(b.clis).find(k => b.clis[k]) ?? '';
       setProvider(p);
       if (i.status.ok && p === pref?.provider) { setModel(pref.model ?? ''); setThinking(pref.thinking ?? ''); }
-      setBackend(fixedBackend ?? (d.runtime === 'herdr' || d.runtime === 'tmux' ? d.runtime : b.herdr.ok ? 'herdr' : 'tmux'));
+      setBackend(fixedBackend ?? (d.runtime !== 'paseo' ? d.runtime : b.herdr.ok ? 'herdr' : 'tmux'));
     }).catch(e => { if (alive) setError((e as Error).message); });
     return () => { alive = false; };
   }, [role, fixedBackend]);
@@ -27,9 +27,9 @@ export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBacke
   const models = info?.status.ok ? info.providers.find(p => p.id === provider)?.models ?? [] : [];
   const selected = models.find(m => m.id === model);
   const clis = Object.keys(backends.clis).filter(p => backends.clis[p]);
-  const shown = (['herdr', 'tmux'] as const).filter(b => !fixedBackend || fixedBackend === b);
+  const shown = (['herdr', 'tmux', 'headless'] as const).filter(b => !fixedBackend || fixedBackend === b);
   return <>
-    <p className="muted small">{tr('Claude Code、Codex 或 Antigravity 在 herdr 标签页或 tmux 窗口中运行，可随时接入终端查看并操作。')}</p>
+    <p className="muted small">{tr('Claude Code、Codex 或 Antigravity 以真实的终端界面运行，网页操作以模拟键盘输入送达。herdr 与 tmux 可随时接入终端，headless 由 Papertown 在后台托管。')}</p>
     {shown.length > 1 && <div className="seg mini" role="radiogroup" aria-label={tr('终端后端')}>
       {shown.map(b => <button key={b} role="radio" aria-checked={backend === b} className={backend === b ? 'on' : ''} disabled={!backends[b].ok || busy} onClick={() => setBackend(b)}>{b}</button>)}
     </div>}
@@ -48,7 +48,7 @@ export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBacke
       {!info?.status.ok && <p className="muted small">{tr('Paseo 未连接，将使用 CLI 默认模型。')}</p>}
     </>}
     <button className="btn pri" disabled={busy || !provider || !backends[backend].ok} onClick={() => onStart({ runtime: backend, provider, model, thinking })}>
-      {busy ? tr('启动中…') : backend === 'herdr' ? tr('在 herdr 中启动') : tr('在 tmux 中启动')}
+      {busy ? tr('启动中…') : backend === 'herdr' ? tr('在 herdr 中启动') : backend === 'tmux' ? tr('在 tmux 中启动') : tr('在后台终端中启动')}
     </button>
   </>;
 }

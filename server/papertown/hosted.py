@@ -12,13 +12,14 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from .backends import BackendError, HerdrBackend, TmuxBackend, binary
+from .backends import BackendError, HeadlessBackend, HerdrBackend, TmuxBackend, binary
 from .db import now, write_json
 from .herdr import Herdr, HerdrError
 from .terminals import KEYS
 from . import prompts
 
-RUNTIMES = ('herdr', 'tmux')
+RUNTIMES = ('herdr', 'tmux', 'headless')
+IN_RUNTIMES = "runtime in ('herdr', 'tmux', 'headless')"
 
 
 def native(a) -> bool:
@@ -32,7 +33,8 @@ class Hosted:
     def __init__(self, agents):
         self.a, self.town, self.db, self.s = agents, agents.town, agents.db, agents.s
         self.backends = {'tmux': TmuxBackend(agents.tmux, self.s.tmux_socket, agents._tmux),
-                         'herdr': HerdrBackend(Herdr(self.s), self.s.terminal_startup)}
+                         'herdr': HerdrBackend(Herdr(self.s), self.s.terminal_startup),
+                         'headless': HeadlessBackend(self.s.data_dir)}
         self.lock = agents._delivery_lock
         self._halt = threading.Event()
         self._thread = None
@@ -63,7 +65,9 @@ class Hosted:
             herdr = {'ok': False, 'note': str(e)}
         st = self.a.paseo.status()
         return {'paseo': {k: st[k] for k in ('ok', 'note')}, 'herdr': herdr,
-                'tmux': {'ok': bool(self.a.tmux), 'note': '' if self.a.tmux else '本机没有找到 tmux'}, 'clis': self.clis()}
+                'tmux': {'ok': bool(self.a.tmux), 'note': '' if self.a.tmux else '本机没有找到 tmux'},
+                'headless': {'ok': hasattr(os, 'forkpty'), 'note': '' if hasattr(os, 'forkpty') else '本系统不支持伪终端'},
+                'clis': self.clis()}
 
     def public(self, a):
         term = a.get('term') or {}
@@ -259,7 +263,7 @@ class Hosted:
                     candidates.append(sid)
             except (OSError, ValueError, TypeError):
                 continue
-        siblings = self.db.val("select count(*) from agents where id != ? and cwd = ? and runtime in ('tmux', 'herdr') "
+        siblings = self.db.val("select count(*) from agents where id != ? and cwd = ? and " + IN_RUNTIMES + " "
                                "and session_id is null and json_extract(term, '$.provider') = 'codex' "
                                "and json_extract(term, '$.status') != 'exited'", a['id'], a['cwd'])
         if len(set(candidates)) == 1 and not siblings:
@@ -536,12 +540,12 @@ class Hosted:
                 'doing': doing, 'queued': queued, 'unread': unread, 'permissions': [], 'asks': asks}
 
     def reconcile(self):
-        for a in self.db.q("select * from agents where runtime in ('herdr', 'tmux')"):
+        for a in self.db.q("select * from agents where " + IN_RUNTIMES):
             h = (a.get('term') or {}).get('handle')
             if a['runtime'] == 'herdr' and h:
                 self.backends['herdr'].workspaces[h['session']] = h['workspace']
             self.refresh(a['id'])
-        if self.db.val("select 1 from agents where runtime in ('herdr', 'tmux')"):
+        if self.db.val("select 1 from agents where " + IN_RUNTIMES):
             self.watch()
 
     def watch(self):
@@ -553,7 +557,7 @@ class Hosted:
 
     def _run(self):
         while not self._halt.wait(1):
-            for a in self.db.q("select id from agents where runtime in ('herdr', 'tmux')"):
+            for a in self.db.q("select id from agents where " + IN_RUNTIMES):
                 try:
                     self.refresh(a['id'])
                 except Exception as e:

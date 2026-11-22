@@ -125,19 +125,21 @@ export interface PiState {
 export interface Agent {
   id: string; line_id: string | null; role: AgentRole; status: AgentStatus; tmux: string | null; cwd: string | null;
   model: string | null; cost: number; attach: string | null; name: string; last: AgentEvent | null; updated_at: string;
-  runtime: 'pi' | 'paseo' | 'herdr' | 'tmux'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
+  runtime: 'pi' | 'paseo' | TermBackend; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
   down?: string | null; // why it cannot be reached now (its status is then offline)
   node_id?: string | null; workspace_id?: string | null; session_id?: string | null;
   watch?: Watch; task?: AgentTask | null; term?: AgentTerm | null;
 }
 
 export interface AgentTerm {
-  backend: 'herdr' | 'tmux'; provider: string; status: 'starting' | 'idle' | 'working' | 'blocked' | 'done' | 'exited';
+  backend: TermBackend; provider: string; status: 'starting' | 'idle' | 'working' | 'blocked' | 'done' | 'exited';
   seq: number; seen_seq: number; since: string; tool?: string | null; model?: string | null; thinking?: string | null; note?: string | null;
 }
-export type DefaultRuntime = 'paseo' | 'herdr' | 'tmux';
+// where a CLI's real terminal interface runs: a herdr tab, a tmux window, or Papertown's own background terminal
+export type TermBackend = 'herdr' | 'tmux' | 'headless';
+export type DefaultRuntime = 'paseo' | TermBackend;
 export interface Backends {
-  paseo: { ok: boolean; note: string }; herdr: { ok: boolean; note: string }; tmux: { ok: boolean; note: string };
+  paseo: { ok: boolean; note: string }; herdr: { ok: boolean; note: string }; tmux: { ok: boolean; note: string }; headless: { ok: boolean; note: string };
   clis: Record<string, string | null>;
 }
 export interface PaseoModel { id: string; name: string; thinking: string[]; default_thinking: string | null }
@@ -274,7 +276,7 @@ export interface PaseoConversation {
 }
 export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
 export interface PaseoPermission { id: string; name: string; title: string | null; arg: string; kind?: string }
-export interface StartOpts { runtime?: 'pi' | 'paseo' | 'herdr' | 'tmux'; provider?: string; model?: string; thinking?: string }
+export interface StartOpts { runtime?: 'pi' | 'paseo' | TermBackend; provider?: string; model?: string; thinking?: string }
 
 export interface AssistantView { agent: Agent; asks: AgentEvent[]; acts: AgentEvent[]; actions: Record<string, { what: string; args: string }> }
 export interface Focus { ref?: string; label: string; where?: string; text?: string }

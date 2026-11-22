@@ -45,11 +45,11 @@ class PaseoModels:
 
     def runtime(self) -> str:
         value = self._read().get("runtime", self.s.agent_runtime)
-        return value if value in ("paseo", "herdr", "tmux") else "paseo"
+        return value if value in ("paseo", "herdr", "tmux", "headless") else "paseo"
 
     def set_runtime(self, runtime: str) -> dict:
-        if runtime not in ("paseo", "herdr", "tmux"):
-            raise ModelError("默认运行方式只能是 Paseo、herdr 或 tmux")
+        if runtime not in ("paseo", "herdr", "tmux", "headless"):
+            raise ModelError("默认运行方式只能是 Paseo、herdr、tmux 或 headless")
         with self._lock:
             self._write(self._read() | {"runtime": runtime})
         self._publish()

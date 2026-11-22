@@ -292,7 +292,7 @@ def main(a):
     elif a[0] == "hire":
         opts, rest = options(a[1:], many=(), flags=())
         if len(rest) != 1:
-            sys.exit("用法：pt hire coder|writer [--runtime paseo|herdr|tmux] [--cli claude|codex|antigravity] [--model 模型] [--thinking 强度]")
+            sys.exit("用法：pt hire coder|writer [--runtime paseo|herdr|tmux|headless] [--cli claude|codex|antigravity] [--model 模型] [--thinking 强度]")
         print(call("/hire", {"role": rest[0], "runtime": opts.get("runtime"), "provider": opts.get("cli") or opts.get("provider"),
                              "model": opts.get("model"), "thinking": opts.get("thinking")})["text"])
     elif a[0] == "stage":

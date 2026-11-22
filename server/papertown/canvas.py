@@ -1544,7 +1544,7 @@ class Canvas:
         return a
 
     def _reply_instructions(self, a: dict, n: dict, token: str) -> str:
-        pt = shlex.quote(str(self.town.agents.pt(a))) if a["runtime"] in ("paseo", "herdr", "tmux") else ".papertown/pt"
+        pt = shlex.quote(str(self.town.agents.pt(a))) if a["runtime"] in ("paseo", "herdr", "tmux", "headless") else ".papertown/pt"
         dispatch = f' --dispatch {token}'
         return (f'做完运行 `{pt} task {n["id"]} done "结果"{dispatch}`，卡住运行 `{pt} task {n["id"]} blocked "原因"{dispatch}`。'
                 '回报 blocked 后如已自行解决，可使用同一 --dispatch 回报 done。'

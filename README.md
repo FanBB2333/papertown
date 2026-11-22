@@ -44,7 +44,7 @@ Papertown manages research projects. An idea goes through eight stages: novelty 
 - **Three layers of agents.** The **assistant** (one for the town) talks with you and acts for you across projects. The **project lead** (one per active project) runs the project: it starts the coder and the writer, assigns their work, hands in stage outputs, opens and closes stages, reports to you, and asks you questions. The **workers** (a coder and a writer per project) write code, run experiments, and write the paper.
 - **Resident project lead.** The lead starts when the town starts, when a project is created, and when its switch is turned on. The project page shows its state (`running`, `starting`, `blocked` with the reason, `off`, `ended`) and an on/off switch. Switching it off closes its terminal or interrupts its Paseo turn and keeps the conversation, and switching it on resumes the same conversation. A failed start is retried after a minute, or at once when you turn the switch on again.
 - **Hard gates in code.** Hard gates are checked in code, not by the agent: a stage closes only after its required output is handed in and its hard gate passes (for example the novelty similarity, returned experiment results, paper style rules, and PDF freshness). The novelty verdict and similarity scores are computed by code.
-- **Runtimes and CLI.** Agents run in [Paseo](https://paseo.sh), a [herdr](https://github.com/herdrdev/herdr) tab, or a [tmux](https://github.com/tmux/tmux) window, and talk to Papertown through the `pt` command in their working directory.
+- **Runtimes and CLI.** Agents run in [Paseo](https://paseo.sh), a [herdr](https://github.com/herdrdev/herdr) tab, a [tmux](https://github.com/tmux/tmux) window, or a headless terminal that Papertown keeps in the background, and talk to Papertown through the `pt` command in their working directory. In herdr, tmux and headless the CLI runs its real terminal interface, and everything you do on the page reaches it as keystrokes. There is no proxy and no SDK in between.
 
 ### What you can do
 
@@ -79,7 +79,7 @@ Papertown manages research projects. An idea goes through eight stages: novelty 
 
 ## Getting started
 
-You need macOS (Papertown is developed and tested there), Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 22 with [pnpm](https://pnpm.io/), and at least one agent CLI installed and logged in (Claude Code, Codex, or Antigravity), plus a runtime for it: [Paseo](https://paseo.sh), [herdr](https://github.com/herdrdev/herdr), or [tmux](https://github.com/tmux/tmux). Papertown uses the CLI's own login.
+You need macOS (Papertown is developed and tested there), Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 22 with [pnpm](https://pnpm.io/), and at least one agent CLI installed and logged in (Claude Code, Codex, or Antigravity), plus a runtime for it: [Paseo](https://paseo.sh), [herdr](https://github.com/herdrdev/herdr), [tmux](https://github.com/tmux/tmux), or Papertown's built-in headless terminals, which need nothing else. Papertown uses the CLI's own login.
 
 Start the backend:
 
@@ -102,7 +102,7 @@ After `pnpm build`, `papertown serve` serves `web/dist` itself, so the backend a
 
 On the first start of an empty town, five prebuilt sample projects show different stages with their outputs, paper sources, and a placeholder lead conversation. They carry a Sample tag and their lead switches start off. Turning on an unfinished sample's lead hands it to a real agent. `PAPERTOWN_SAMPLES=0` turns automatic seeding off, and samples can also be added from Settings.
 
-Pick the default runtime (`paseo`, `herdr`, or `tmux`) in Settings or with `PAPERTOWN_AGENT_RUNTIME`. Papertown never starts or stops the Paseo or herdr daemon. Start it yourself before using that runtime. If the runtime is unavailable, the lead shows as blocked with the reason. To use Paseo, start its daemon with the web UI enabled and install the SDK once:
+Pick the default runtime (`paseo`, `herdr`, `tmux`, or `headless`) in Settings or with `PAPERTOWN_AGENT_RUNTIME`. Papertown never starts or stops the Paseo or herdr daemon. Start it yourself before using that runtime. If the runtime is unavailable, the lead shows as blocked with the reason. To use Paseo, start its daemon with the web UI enabled and install the SDK once:
 
 ```bash
 paseo daemon start
@@ -181,7 +181,7 @@ Papertown reads its settings from the environment, and agent authentication stay
 
 | Variable | Purpose |
 | --- | --- |
-| `PAPERTOWN_AGENT_RUNTIME` | Default runtime: `paseo`, `herdr` or `tmux` |
+| `PAPERTOWN_AGENT_RUNTIME` | Default runtime: `paseo`, `herdr`, `tmux` or `headless` |
 | `PAPERTOWN_LEAD_RESIDENT` | Resident leads, on by default. `0` turns off automatic startup |
 | `PAPERTOWN_ASSISTANT_MODEL`, `PAPERTOWN_LEAD_MODEL` | Default models of the assistant and the leads, as `provider/model@thinking` |
 | `PAPERTOWN_WORKER_MODEL` | Default model of coders and writers, following the lead default when empty |
@@ -202,7 +202,7 @@ The full guide is in Simplified Chinese: [`docs/guide.zh-CN.md`](docs/guide.zh-C
 - [`docs/resident_lead_design.md`](docs/resident_lead_design.md): resident leads and how a project runs
 - [`docs/research_loop_design.md`](docs/research_loop_design.md): the research loop, hard gates and soft checks
 - [`docs/agent_watch_design.md`](docs/agent_watch_design.md): the Staff page and stepping into a running agent
-- [`docs/agent_backends_design.md`](docs/agent_backends_design.md): terminal runtimes, herdr and tmux
+- [`docs/agent_backends_design.md`](docs/agent_backends_design.md): terminal runtimes: herdr, tmux and headless
 - [`docs/usage_budget_design.md`](docs/usage_budget_design.md): subscription usage and project budgets
 
 Skills the agents use live in `server/skills/` and are picked up while the server runs. The library is a SQLite full-text index seeded with 346 arXiv papers, searched with BM25 and keyword coverage.

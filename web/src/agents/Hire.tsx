@@ -1,7 +1,7 @@
 // Hiring from the employees page: a project, a post, then where the employee runs. Every runtime plugs in here.
 import { Banner, Button, Dialog, Select, Tabs } from '@cloudflare/kumo';
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Agent, type AgentRole, type Backends, type PaseoInfo, type Roster, type StartOpts } from '../api';
+import { api, type Agent, type AgentRole, type Backends, type PaseoInfo, type Roster, type StartOpts, type TermBackend } from '../api';
 import { tr } from '../i18n';
 import { kindName } from './watch';
 
@@ -16,6 +16,7 @@ const RUNTIMES: [Runtime, string, string][] = [
   ['paseo', 'Paseo', tr('对话在 Paseo 中进行，桌面端和手机同步可见。')],
   ['herdr', 'herdr', tr('在 herdr 标签页中运行 CLI，可随时接入终端。')],
   ['tmux', 'tmux', tr('在 tmux 窗口中运行 CLI，可随时接入终端。')],
+  ['headless', 'headless', tr('在 Papertown 托管的后台终端中运行 CLI，网页操作以模拟键盘输入送达。')],
   ['pi', 'pi', tr('本机 pi，使用其自身的模型设置与登录。')],
 ];
 
@@ -34,12 +35,12 @@ export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
       if (!alive) return;
       setRosters({ coder, writer, lead }); setBackends(b); setInfo(i);
       setLine(v => v || coder.roster[0]?.line.id || '');
-      setRuntime(([d.runtime, 'paseo', 'herdr', 'tmux'] as Runtime[]).find(r => r === 'paseo' ? i.status.ok : b[r as 'herdr' | 'tmux'].ok) ?? d.runtime);
+      setRuntime(([d.runtime, 'paseo', 'herdr', 'tmux', 'headless'] as Runtime[]).find(r => r === 'paseo' ? i.status.ok : b[r as TermBackend].ok) ?? d.runtime);
     }).catch(e => { if (alive) setError((e as Error).message); });
     return () => { alive = false; };
   }, []);
 
-  const terminal = runtime === 'herdr' || runtime === 'tmux';
+  const terminal = runtime !== 'paseo' && runtime !== 'pi';
   const row = rosters?.[post].roster.find(r => r.line.id === line), existing = row?.agent?.started ? row.agent : null;
   // why a runtime cannot be chosen now, or '' when it can
   const blocked = (r: Runtime) => !backends || !info || !rosters ? ''
