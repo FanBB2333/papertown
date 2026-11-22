@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from papertown.api import create_app
 
-from .conftest import make_settings, wait_for
+from .conftest import make_settings
 
 IDEA = "用检索增强的方式做仓库级代码补全，比较不同检索粒度对补全质量的影响"
 
@@ -38,7 +38,7 @@ def test_hard_checks_read_the_paper_and_soft_ones_go_to_the_lead(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, lid, {"waiting"})
+
         paper = town.s.press_dir / lid
         paper.mkdir(parents=True, exist_ok=True)
         (paper / "main.tex").write_text(PAPER, encoding="utf-8")
@@ -114,7 +114,7 @@ def test_the_research_loop_gates_its_stages_and_sends_rework_back(tmp_path):
         for name in ("conversations", "status", "create", "send", "interrupt", "list", "project", "workspace"):
             setattr(town.agents.paseo, name, getattr(link, name))
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, lid, {"waiting"})
+
 
         # the first layout: the stages and their gates, the sentinels watching stages above them, the spec, the clamp and
         # the human gate, each in its block; a gate stands for its stage's hard checks, which have no nodes of their own

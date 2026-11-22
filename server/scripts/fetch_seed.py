@@ -1,4 +1,4 @@
-"""Refresh the demo's bundled seed library (papertown/data/seed_papers.jsonl) from the arXiv API.
+"""Refresh the town's bundled seed library (papertown/data/seed_papers.jsonl) from the arXiv API.
 
     uv run python scripts/fetch_seed.py
 

@@ -1,5 +1,5 @@
 """The library: the shared paper store and the main RAG index. BM25 (SQLite FTS5) recalls candidates,
-then embedding cosine or idf-weighted term coverage ranks them; Chinese queries are expanded through a CS glossary.
+then idf-weighted term coverage ranks them; Chinese queries are expanded through a CS glossary.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Callable, Iterable
 
-import numpy as np
 
 from .db import DB, now
 
@@ -95,29 +94,14 @@ def short_authors(a: list[str]) -> str:
     return ", ".join(a[:3]) + (" et al." if len(a) > 3 else "")
 
 
-class Embedder:
-    """Optional: any OpenAI-compatible /embeddings endpoint."""
-
-    def __init__(self, base_url: str, api_key: str, model: str):
-        import openai
-        self.client = openai.OpenAI(base_url=base_url, api_key=api_key)
-        self.model = model
-
-    def __call__(self, texts: list[str]) -> np.ndarray:
-        resp = self.client.embeddings.create(model=self.model, input=texts)
-        v = np.array([d.embedding for d in resp.data], dtype=np.float32)
-        return v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-9)
-
-
-# retrieval options set in the library building: default hits, full-text candidates scored, rank by vectors
-RAG_DEFAULTS = {"top_k": 8, "candidates": 40, "vectors": True}
+# Retrieval limits for BM25 recall and term coverage.
+RAG_DEFAULTS = {"top_k": 8, "candidates": 40}
 RAG_LIMITS = {"top_k": (1, 30), "candidates": (5, 200)}
 
 
 class Library:
-    def __init__(self, db: DB, embedder: Embedder | None, opts_file: Path):
+    def __init__(self, db: DB, opts_file: Path):
         self.db = db
-        self.embedder = embedder
         self._df: Counter | None = None
         self._n = 0
         self._lock = threading.Lock()
@@ -136,18 +120,14 @@ class Library:
             if k in RAG_LIMITS:
                 lo, hi = RAG_LIMITS[k]
                 v = max(lo, min(hi, int(v)))
-            self.opts[k] = bool(v) if k == "vectors" else v
+            self.opts[k] = v
         self.opts_file.parent.mkdir(parents=True, exist_ok=True)
         self.opts_file.write_text(json.dumps(self.opts), encoding="utf-8")
         return self.opts
 
-    @property
-    def vectors(self) -> Embedder | None:
-        return self.embedder if self.opts["vectors"] else None
-
     def stats(self) -> dict:
         by = {r["source"] or "?": r["n"] for r in self.db.q("select source, count(*) n from papers group by source")}
-        return {"papers": self.count(), "sources": by, "vectors": self.db.val("select count(*) from paper_vecs"),
+        return {"papers": self.count(), "sources": by,
                 "terms": len(self._stats()[0])}
 
     def _stats(self) -> tuple[Counter, int]:
@@ -203,16 +183,7 @@ class Library:
                 for p in added:
                     self._df.update(set(tokens(f"{p['title']} {p.get('abstract', '')}")))
                 self._n += len(added)
-        if self.embedder:
-            self._embed(added)
         return added
-
-    def _embed(self, papers: list[dict]) -> None:
-        for i in range(0, len(papers), 32):
-            batch = papers[i:i + 32]
-            vecs = self.embedder([f"{p['title']}\n{p.get('abstract', '')}" for p in batch])
-            for p, v in zip(batch, vecs):
-                self.db.x("insert or replace into paper_vecs(paper_id, vec) values (?, ?)", p["id"], v.tobytes())
 
     def _fts(self, terms: list[str], limit: int, since: str | None = None) -> list[dict]:
         if not terms:
@@ -222,38 +193,25 @@ class Library:
                " where papers_fts match ?" + (" and p.published >= ?" if since else "") + " order by rank limit ?")
         return self.db.q(sql, match, *([since] if since else []), limit)
 
-    def _vector_sims(self, text: str, papers: list[dict]) -> dict[int, float] | None:
-        """Cosine similarity of each paper's stored vector to the text; None without vectors or when the endpoint fails."""
-        if not self.vectors or not papers:
-            return None
-        try:
-            qv = self.vectors([text])[0]
-            rows = self.db.q(f"select * from paper_vecs where paper_id in ({','.join('?' * len(papers))})", *[p["id"] for p in papers])
-            return {r["paper_id"]: float(np.frombuffer(r["vec"], dtype=np.float32) @ qv) for r in rows}
-        except Exception:
-            return None
-
-    def rank(self, papers: list[dict], terms: list[str], sims: dict[int, float] | None = None) -> list[dict]:
-        """Cards for the papers, most similar first: by vector where one was found, else by term coverage."""
+    def rank(self, papers: list[dict], terms: list[str]) -> list[dict]:
+        """Cards for the papers, most similar first: by term coverage."""
         hits = []
         for p in papers:
             cov, matched = self.coverage(terms, f"{p['title']} {p.get('abstract', '')}")
-            hits.append({**self.card(p), "similarity": round(sims.get(p["id"], cov) if sims else cov, 2), "matched": matched})
+            hits.append({**self.card(p), "similarity": round(cov, 2), "matched": matched})
         return sorted(hits, key=lambda h: -h["similarity"])
 
     def search(self, query: str, top_k: int | None = None, since: str | None = None) -> dict:
         q_en, terms = expanded(query)
         cands = self._fts(terms, self.opts["candidates"], since)
-        sims = self._vector_sims(q_en or query, cands)
-        return {"query": query, "expanded": q_en, "terms": terms, "method": "coverage" if sims is None else "embedding",
-                "hits": self.rank(cands, terms, sims)[:top_k or self.opts["top_k"]]}
+        return {"query": query, "expanded": q_en, "terms": terms, "method": "coverage",
+                "hits": self.rank(cands, terms)[:top_k or self.opts["top_k"]]}
 
     def rescore(self, query: str, arxiv_ids: list[str]) -> dict:
         """Score papers against the whole query, so a verdict does not depend on how the agent phrased its searches."""
         q_en, terms = expanded(query)
         papers = self.get(list(dict.fromkeys(arxiv_ids)))
-        sims = self._vector_sims(q_en or query, papers)
-        return {"method": "embedding" if sims else "coverage", "terms": terms, "hits": self.rank(papers, terms, sims)}
+        return {"method": "coverage", "terms": terms, "hits": self.rank(papers, terms)}
 
     @staticmethod
     def card(p: dict) -> dict:

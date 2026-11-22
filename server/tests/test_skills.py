@@ -1,7 +1,8 @@
 import shutil
 
 from papertown.config import SERVER_DIR
-from papertown.tools import ToolCtx
+import pytest
+from papertown.skills import SkillError
 
 
 def test_catalog_is_name_and_description_only(town):
@@ -12,16 +13,11 @@ def test_catalog_is_name_and_description_only(town):
     assert sk.files("references") == ["references/novelty-rubric.md"]
 
 
-def test_references_need_the_skill_loaded_first(town):
-    ctx = ToolCtx(town)
-    _, _, err = town.tools.call(ctx, "read_reference", {"skill": "novelty-check", "path": "references/novelty-rubric.md"})
-    assert err
-    content, _, err = town.tools.call(ctx, "load_skill", {"name": "novelty-check"})
-    assert not err and "verdict.py" in content
-    content, _, err = town.tools.call(ctx, "read_reference", {"skill": "novelty-check", "path": "references/novelty-rubric.md"})
-    assert not err and "已被做过" in content
-    _, _, err = town.tools.call(ctx, "read_reference", {"skill": "novelty-check", "path": "../../pyproject.toml"})
-    assert err
+def test_reference_paths_stay_inside_skill(town):
+    assert "verdict.py" in town.skills.reference("novelty-check", "SKILL.md")
+    assert "已被做过" in town.skills.reference("novelty-check", "references/novelty-rubric.md")
+    with pytest.raises(SkillError):
+        town.skills.reference("novelty-check", "../../pyproject.toml")
 
 
 def test_verdict_script_is_deterministic(town):

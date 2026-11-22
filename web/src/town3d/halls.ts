@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { BUILDINGS } from '@design/sprites.js';
 import { placementName } from '@design/world.js';
-import type { Gpu, GpuNode, GpuStatus, Hud, Job, Line, Placement, Roster, Sheet, Shelf } from '../api';
+import type { Gpu, GpuNode, GpuStatus, Job, Line, Placement, Roster, Sheet, Shelf } from '../api';
 import { tr } from '../i18n';
 import type { World } from './body';
 import { Pen3, ZS, type V3 } from './pen3';
@@ -15,7 +15,6 @@ export interface HallData {
   lines: Line[];
   jobs: Job[];
   gpus: GpuStatus | null;
-  plant: Hud['plant'] | null;
   shelf: Shelf | null;
   roster: Roster | null;
 }
@@ -41,7 +40,7 @@ export interface Hall {
   dispose(): void;
 }
 
-const LAMP = { done: '#62b25c', run: '#f2b233', wait: '#dd5a4b', todo: '#8f877b', fail: '#a8322a' } as const;
+const LAMP = { done: '#62b25c', run: '#f2b233', todo: '#8f877b' } as const;
 const RUNS = new Set(['running', 'linked']);
 const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const hash = (s: string, k = 0) => {
@@ -50,8 +49,8 @@ const hash = (s: string, k = 0) => {
   return ((h >>> 0) % 10000) / 10000;
 };
 const statusName = (s: string) => ({
-  running: tr('进行中'), waiting: tr('等待中'), paused: tr('暂停'), done: tr('已完成'), linked: tr('已关联'),
-  queued: tr('排队中'), failed: tr('失败'), cancelled: tr('已取消'), run: tr('进行中'), wait: tr('等待中'), todo: tr('未开始'), fail: tr('出错'),
+  running: tr('进行中'), done: tr('已完成'), linked: tr('已关联'),
+  queued: tr('排队中'), failed: tr('失败'), cancelled: tr('已取消'), run: tr('进行中'), todo: tr('未开始'),
 } as Record<string, string>)[s] ?? s;
 
 interface Box { x0: number; z0: number; x1: number; z1: number; top: number; drift?: () => [number, number] }
@@ -417,7 +416,7 @@ function stationShape(k: Kit, key: string, x: number, z: number, lamp: string) {
 
 // the paper mill: one production line per project
 function millHall(k: Kit, pl: Placement, data: HallData) {
-  const rank = (l: Line) => (RUNS.has(l.status) ? 0 : l.status === 'waiting' ? 1 : l.status === 'paused' ? 2 : 3);
+  const rank = (l: Line) => (RUNS.has(l.status) ? 0 : l.lead.state === 'blocked' ? 1 : 2);
   const lines = [...data.lines].sort((a, b) => rank(a) - rank(b) || b.seq - a.seq).slice(0, 6);
   const n = Math.max(1, lines.length), STEP = 1.25, X0 = 3.4, GAP = 2.0;
   const W = X0 + STEP * 7 + 1.4, D = Math.max(6, 2.8 + (n - 1) * GAP), H = 2.4;
@@ -775,7 +774,7 @@ function rack(k: Kit, F: ReturnType<typeof faces>, fx: RackFx, x: number, z: num
       const ty = slot(2, '#2f3236'), th = 2 * U - 0.002, util = on ? g.util_percent : 0, mem = on ? g.mem_used_mb / Math.max(1, g.mem_total_mb) : 0;
       plate(F.grille, ix + 0.1, ty, iw - 0.15, th);
       k.sign([`GPU ${g.index}`], { at: [ix + 0.045, ty + th * 0.7, gz + 0.004], w: 0.07, size: 0.0125, bg: '#e8e3d6', back: false });
-      const color = util < 30 ? LAMP.done : util < 80 ? LAMP.run : LAMP.wait;
+      const color = util < 30 ? LAMP.done : util < 80 ? LAMP.run : '#dd5a4b';
       for (let s = 0; s < 10; s++) {
         const m = k.lamp(new THREE.BoxGeometry(0.0055, 0.008, 0.003), on && util >= (s + 0.5) * 10 ? color : ledOff);
         m.position.set(ix + 0.016 + s * 0.0062, ty + th * 0.36, gz + 0.003);
@@ -811,7 +810,7 @@ function rack(k: Kit, F: ReturnType<typeof faces>, fx: RackFx, x: number, z: num
   k.sign([on ? '230V · 72%' : '--'], { at: [ix + 0.05, uy + 0.05, gz + 0.004], w: 0.08, size: 0.011, bg: on ? '#1d3a28' : '#1a1a1a', color: '#9fffb0', back: false });
   led(ix + 0.012, uy + 0.03, on ? '#6fe07a' : ledOff, 0, 0.5, 0.006);
   k.sign([o.name], { at: [x + RW / 2, RH - 0.045, zf + 0.002], w: RW - 0.07, size: 0.024, bg: on ? '#ece6d7' : '#8f887c', back: false });
-  const strip = k.lamp(new THREE.BoxGeometry(RW - 0.06, 0.006, 0.004), on ? (o.util > 80 ? LAMP.wait : o.util > 30 ? LAMP.run : LAMP.done) : '#5a3a34');
+  const strip = k.lamp(new THREE.BoxGeometry(RW - 0.06, 0.006, 0.004), on ? (o.util > 80 ? '#dd5a4b' : o.util > 30 ? LAMP.run : LAMP.done) : '#5a3a34');
   strip.position.set(x + RW / 2, RH - 0.018, zf + 0.003);
   for (const px of [x + 0.04, x + RW - 0.06]) {
     p.block(px, 0.12, zb + 0.03, 0.02, 0.74, 0.02, '#9c3328');
@@ -827,18 +826,8 @@ function rack(k: Kit, F: ReturnType<typeof faces>, fx: RackFx, x: number, z: num
 }
 
 // the power plant: a rack cabinet per machine, the network cabinet and a cooling unit at either end
-function gpuHall(k: Kit, pl: Placement, data: HallData, sim: boolean) {
+function gpuHall(k: Kit, pl: Placement, data: HallData) {
   let nodes: GpuNode[] = data.gpus?.ok ? data.gpus.nodes : [];
-  if (sim) {
-    const n = data.plant?.gpus ?? 4, busy = data.plant?.busy ?? 0;
-    nodes = [{
-      name: 'FakeGPU', state: 'up', enabled: true, last_seen: null, last_error: null,
-      gpus: Array.from({ length: n }, (_, i): Gpu => ({
-        index: i, name: tr('模拟卡'), mem_total_mb: 24576, mem_used_mb: i < busy ? 18000 : 0, free_mb: 0, util_percent: i < busy ? 96 : 0,
-        temperature_c: null, queue_mem_mb: 0, external_mem_mb: 0, reserved_mb: 0, attribution: null, state: i < busy ? 'room' : 'idle', procs: [],
-      })),
-    }];
-  }
   const dark = !nodes.length;
   if (dark) nodes = [0, 1, 2].map(() => ({ name: '—', state: 'down', enabled: false, last_seen: null, last_error: null, gpus: [] }));
   nodes = nodes.slice(0, 8);
@@ -864,7 +853,7 @@ function gpuHall(k: Kit, pl: Placement, data: HallData, sim: boolean) {
     const util = gpus.length ? Math.round(gpus.reduce((a, g) => a + g.util_percent, 0) / gpus.length) : 0;
     const used = gpus.reduce((a, g) => a + g.mem_used_mb, 0), total = gpus.reduce((a, g) => a + g.mem_total_mb, 0);
     const jobs = [...new Set(gpus.flatMap(procNames))].slice(0, 2).join(' · ');
-    const real = !sim && !dark, lanes = real ? (data.gpus?.lanes ?? []).filter(l => l.node === node.name) : [];
+    const real = !dark, lanes = real ? (data.gpus?.lanes ?? []).filter(l => l.node === node.name) : [];
     const waiting = (on?: number) => lanes.filter(l => on == null || l.gpu_ids.includes(on)).reduce((a, l) => a + l.queued.length, 0);
     const more = (n: number) => (n ? tr('队列里还有 {0} 个', n) : '');
     rack(k, F, fx, x0 + i * (RW + gap), z, {
@@ -1072,7 +1061,7 @@ function plainHall(k: Kit, pl: Placement, data: HallData) {
   p.block(0.04, 0.45, 1.2, 0.04, 1.0, 2.2, 'wood');
   p.block(0.06, 0.5, 1.25, 0.03, 0.9, 2.1, '#d9b98e', false);
   k.sign([b.rep, '', data.sheet?.real ?? ''].filter((s, i) => s || i === 1), { at: [0.1, 0.95, 2.3], w: 2.0, size: 0.075, rot: Math.PI / 2, align: 'left', wrap: true });
-  const here = data.lines.filter(l => l.stages.some(s => s.building === pl.type && (s.status === 'run' || s.status === 'wait'))).slice(0, 4);
+  const here = data.lines.filter(l => l.stages.some(s => s.building === pl.type && s.status === 'run')).slice(0, 4);
   here.forEach((ln, i) => {
     const x = W - 1.5, z = 0.9 + i * 0.95, s = ln.stages.find(q => q.building === pl.type)!;
     p.block(x, 0.36, z, 0.9, 0.04, 0.6, 'wood');
@@ -1096,7 +1085,7 @@ export function buildHall(pl: Placement, data: HallData, mats: Materials, font: 
   const k = new Kit(mats, accent, font, fonts);
   const t = pl.type;
   const r = t === 'mill' ? millHall(k, pl, data) : t === 'press' ? pressHall(k, pl, data) : t === 'farm' ? farmHall(k, pl, data)
-    : t === 'power' ? gpuHall(k, pl, data, false) : t === 'power_sim' ? gpuHall(k, pl, data, true) : t === 'depot' ? depotHall(k, pl, data)
+    : t === 'power' ? gpuHall(k, pl, data) : t === 'depot' ? depotHall(k, pl, data)
       : t === 'library' ? libraryHall(k, pl, data) : plainHall(k, pl, data);
   const d = k.door, out = { title: tr('出口'), sub: tr('回到小镇'), act: { kind: 'exit' as const } };
   const exit = d.side === 'west' ? k.thing(-0.02, 0, d.z - 0.42, 0.12, 1.0, 0.84, out, false) : k.thing(d.x - 0.42, 0, d.z - 0.1, 0.84, 1.0, 0.12, out, false);

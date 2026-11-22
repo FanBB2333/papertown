@@ -195,12 +195,12 @@ class Linked:
         notes = {"idea": "来自本地仓库", "hatch": "本地项目，没有经过孵化场", "team": "本地项目，由你和你的 agent 负责",
                  "method": "方法已经在代码仓库里实现", "write": "论文在本地 LaTeX 仓库里写"}
         with self.db.lock:
-            self.db.insert("lines", {"id": line_id, "seq": seq, "title": title, "idea": idea[:1200], "budget": 0, "spent": 0,
+            self.db.insert("lines", {"id": line_id, "seq": seq, "title": title, "idea": idea[:1200],
                                      "status": "linked", "stage": "write", "revisions": 0, "linked": p,
                                      "note": "从本地仓库接入的项目", "created_at": now(), "updated_at": now()})
             for i, (key, _, b, _) in enumerate(STAGES):
                 st = "done" if key in done else "run" if key == "write" and paper else "todo"
-                self.db.insert("stages", {"line_id": line_id, "idx": i, "key": key, "status": st, "building": b, "workers": [],
+                self.db.insert("stages", {"line_id": line_id, "idx": i, "key": key, "status": st, "building": b,
                                           "pct": 100 if st == "done" else 0, "note": notes.get(key)})
         self.town.bus.publish("line", line=self.town.pipeline.snapshot(line_id))
         return line_id

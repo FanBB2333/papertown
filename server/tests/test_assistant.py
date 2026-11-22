@@ -7,7 +7,6 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from .conftest import wait_for
 from .test_farm_agents import IDEA, with_paseo
 
 PAGE = {"line": {"id": "", "seq": 0, "title": ""}, "mod": "exp", "mod_name": "实验",
@@ -21,7 +20,7 @@ def test_the_assistant_reads_the_page_and_asks_before_it_acts(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         line = c.post("/api/ideas", json={"text": IDEA}).json()
-        wait_for(town, line["id"], {"waiting"})
+
         v = c.get("/api/assistant").json()
         assert v["agent"]["role"] == "assistant" and not v["agent"]["started"] and "job.cancel" in v["actions"]
         assert c.post("/api/assistant/say", json={"text": "这是什么"}).status_code == 400

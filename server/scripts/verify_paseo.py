@@ -30,7 +30,7 @@ def main():
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
-    settings = Settings(provider='mock', data_dir=root, samples=False, arxiv_port=False, compile_tex=False,
+    settings = Settings(lead_resident=False, data_dir=root, samples=False, arxiv_port=False, compile_tex=False,
                         paseo_bin=APP_CLI, paseo_watch=0, lead_tick=3600, url=f'http://127.0.0.1:{port}',
                         nvidb_bin=str(root/'no-nvidb'), skim_bin=str(root/'no-skim'), pi_bin=str(root/'no-pi'),
                         claude_home=str(root/'no-claude'), codex_home=str(root/'no-codex'))
@@ -50,10 +50,7 @@ def main():
                 r = client.post(path, json=data)
                 r.raise_for_status()
                 return r.json()
-            lid = post('/api/ideas', {'text': 'Paseo 节点通信连通性验证；不做研究，不修改代码，不运行实验'})['id']
-            until = time.monotonic() + 30
-            while town.pipeline.running(lid) and time.monotonic() < until:
-                time.sleep(.1)
+            lid = post('/api/ideas', {'text': 'Paseo 节点通信连通性验证。不做研究，不修改代码，不运行实验'})['id']
             base = f'/api/lines/{lid}/canvas/nodes'
             first = post(base, {'kind': 'task', 'title': '传递验证信息', 'to': 'coder'})['added']
             second = post(base, {'kind': 'task', 'title': '确认验证信息', 'to': 'coder'})['added']
@@ -64,7 +61,7 @@ def main():
             nonce = 'PASEO_FLOW_' + uuid.uuid4().hex
             instructions = [
                 f'这是一次连通性测试，不做其他工作。用任务末尾给你的 pt 命令执行 tell task:{second} "{nonce}"，成功后用 pt task {first} done "已转交 {nonce}" 回报。不要只在聊天里回答，必须执行命令，回报时保留任务末尾的 --dispatch 参数。',
-                f'这是一次连通性测试，不做其他工作。等待另一个节点发来的 PASEO_FLOW_ 开头的字符串。如果还没有收到，只回复等待，不关闭任务；收到后必须用任务末尾给你的 pt 命令执行 task {second} done "收到 <收到的完整字符串>"，回报时保留任务末尾的 --dispatch 参数，然后停止。'
+                f'这是一次连通性测试，不做其他工作。等待另一个节点发来的 PASEO_FLOW_ 开头的字符串。如果还没有收到，只回复等待，不关闭任务。收到后必须用任务末尾给你的 pt 命令执行 task {second} done "收到 <收到的完整字符串>"，回报时保留任务末尾的 --dispatch 参数，然后停止。'
             ]
             for nid, text in zip((first, second), instructions):
                 r = client.put(f'{base}/{nid}', json={'text': text}); r.raise_for_status()

@@ -1,0 +1,2198 @@
+{
+ "version": 1,
+ "samples": [
+  {
+   "idea": "仓库级代码 Agent：先用检索增强在整个代码仓库里定位相关文件和调用链，再让 agent 分步修改并跑测试回归，减少跨文件修改时漏改、改错接口的情况",
+   "title": "Repository · Agent · Retrieval-Augmented Generation · Code Repository",
+   "verdict": "已被做过",
+   "status": "done",
+   "note": "样例项目，内容是占位的",
+   "stages": {
+    "idea": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "hatch": {
+     "status": "done",
+     "pct": 100,
+     "note": "已被做过"
+    },
+    "team": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "method": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "exp": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "write": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "review": {
+     "status": "done",
+     "pct": 100,
+     "note": "带意见放行"
+    },
+    "ship": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    }
+   },
+   "items": [
+    {
+     "kind": "egg",
+     "stage": "idea",
+     "building": "cityhall",
+     "title": "idea #1",
+     "body": {
+      "text": "仓库级代码 Agent：先用检索增强在整个代码仓库里定位相关文件和调用链，再让 agent 分步修改并跑测试回归，减少跨文件修改时漏改、改错接口的情况"
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "hatch",
+     "building": "hatchery",
+     "title": "撞车报告",
+     "body": {
+      "verdict": "已被做过",
+      "similar": [
+       {
+        "paper_id": "arxiv:2510.04905",
+        "title": "Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches",
+        "similarity": 1.0,
+        "note": "共用关键词：repository, agent, retrieval-augmented, retrieval, augmented · 2025 年，Yicheng Tao, Yuante Li, Yao Qin et al.",
+        "url": "http://arxiv.org/abs/2510.04905v3",
+        "year": "2025"
+       },
+       {
+        "paper_id": "arxiv:2504.10046",
+        "title": "GraphCodeAgent: Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation",
+        "similarity": 1.0,
+        "note": "共用关键词：repository, agent, retrieval-augmented, retrieval, augmented · 2025 年，Jia Li, Xianjie Shi, Kechi Zhang et al.",
+        "url": "http://arxiv.org/abs/2504.10046v2",
+        "year": "2025"
+       },
+       {
+        "paper_id": "arxiv:2510.17925",
+        "title": "SpecAgent: A Speculative Retrieval and Forecasting Agent for Code Completion",
+        "similarity": 1.0,
+        "note": "共用关键词：repository, agent, retrieval-augmented, retrieval, augmented · 2025 年，George Ma, Anurag Koul, Qi Chen et al.",
+        "url": "http://arxiv.org/abs/2510.17925v2",
+        "year": "2025"
+       }
+      ],
+      "gap": "关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。",
+      "suggestions": [
+       "换一个没被验证过的任务或场景",
+       "把已有方法当 baseline，找它的失败案例作为切入点"
+      ],
+      "summary": "已被做过（最高相似度 1.00，8 篇候选）。",
+      "sources": {
+       "library": 8,
+       "method": "coverage"
+      },
+      "candidates": [
+       {
+        "paper_id": "arxiv:2510.04905",
+        "arxiv_id": "2510.04905",
+        "title": "Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches",
+        "year": "2025",
+        "authors": "Yicheng Tao, Yuante Li, Yao Qin et al.",
+        "snippet": "Recent advances in large language models (LLMs) have significantly improved automated code generation. While existing approaches have achieved strong performance at the function and file levels, real-world software engineering requires reasoning over entire repositories, including cross-file dependencies, evolving exec",
+        "url": "http://arxiv.org/abs/2510.04905v3",
+        "tags": [
+         "语言",
+         "检索增强",
+         "智能体",
+         "代码",
+         "评测"
+        ],
+        "similarity": 1.0,
+        "matched": [
+         "repository",
+         "agent",
+         "retrieval-augmented",
+         "retrieval",
+         "augmented",
+         "generation",
+         "code"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2504.10046",
+        "arxiv_id": "2504.10046",
+        "title": "GraphCodeAgent: Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation",
+        "year": "2025",
+        "authors": "Jia Li, Xianjie Shi, Kechi Zhang et al.",
+        "snippet": "Writing code requires significant time and effort in software development. To automate this process, researchers have made substantial progress for code generation. Recently, large language models (LLMs) have demonstrated remarkable proficiency in function-level code generation, yet their performance significantly degr",
+        "url": "http://arxiv.org/abs/2504.10046v2",
+        "tags": [
+         "检索增强",
+         "智能体",
+         "代码",
+         "评测"
+        ],
+        "similarity": 1.0,
+        "matched": [
+         "repository",
+         "agent",
+         "retrieval-augmented",
+         "retrieval",
+         "augmented",
+         "generation",
+         "code"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2510.17925",
+        "arxiv_id": "2510.17925",
+        "title": "SpecAgent: A Speculative Retrieval and Forecasting Agent for Code Completion",
+        "year": "2025",
+        "authors": "George Ma, Anurag Koul, Qi Chen et al.",
+        "snippet": "Large Language Models (LLMs) excel at code-related tasks but often struggle in realistic software repositories, where project-specific APIs and cross-file dependencies are crucial. Retrieval-augmented methods mitigate this by injecting repository context at inference time. The low inference-time latency budget affects ",
+        "url": "http://arxiv.org/abs/2510.17925v2",
+        "tags": [
+         "人工智能",
+         "检索增强",
+         "智能体",
+         "代码",
+         "评测"
+        ],
+        "similarity": 1.0,
+        "matched": [
+         "repository",
+         "agent",
+         "retrieval-augmented",
+         "retrieval",
+         "augmented",
+         "generation",
+         "code"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2608.16742",
+        "arxiv_id": "2608.16742",
+        "title": "TDD-Agent: Test-Driven Reasoning for Code Generation",
+        "year": "2026",
+        "authors": "Hongyue Yu, Kefan Li, Jiakun Li et al.",
+        "snippet": "Large Language Models (LLMs) have achieved remarkable progress in code generation, yet ensuring correctness in complex, repository-level tasks remains challenging. Existing approaches often use generated tests as static post-hoc validators, which limits their ability to guide implementation and may introduce misleading",
+        "url": "http://arxiv.org/abs/2608.16742v1",
+        "tags": [
+         "人工智能",
+         "检索增强",
+         "智能体",
+         "代码",
+         "评测"
+        ],
+        "similarity": 0.69,
+        "matched": [
+         "repository",
+         "agent",
+         "retrieval",
+         "generation",
+         "code"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2604.18509",
+        "arxiv_id": "2604.18509",
+        "title": "MASS-RAG: Multi-Agent Synthesis Retrieval-Augmented Generation",
+        "year": "2026",
+        "authors": "Xingchen Xiao, Heyan Huang, Runheng Liu et al.",
+        "snippet": "Large language models (LLMs) are widely used in retrieval-augmented generation (RAG) to incorporate external knowledge at inference time. However, when retrieved contexts are noisy, incomplete, or heterogeneous, a single generation process often struggles to reconcile evidence effectively. We propose \\textbf{MASS-RAG},",
+        "url": "http://arxiv.org/abs/2604.18509v2",
+        "tags": [
+         "语言",
+         "检索增强",
+         "智能体",
+         "评测"
+        ],
+        "similarity": 0.67,
+        "matched": [
+         "agent",
+         "retrieval-augmented",
+         "retrieval",
+         "augmented",
+         "generation"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2607.08691",
+        "arxiv_id": "2607.08691",
+        "title": "ProjAgent: Procedural Similarity Retrieval for Repository-Level Code Generation",
+        "year": "2026",
+        "authors": "QiHong Chen, Aaron Imani, Iftekhar Ahmed",
+        "snippet": "Repository-level code generation requires implementing target functions while accounting for complex cross-file dependencies and project-specific conventions. Existing retrieval methods predominantly rely on lexical, structural, or semantic similarity, often overlooking repository functions that implement similar proce",
+        "url": "http://arxiv.org/abs/2607.08691v1",
+        "tags": [
+         "人工智能",
+         "检索增强",
+         "代码"
+        ],
+        "similarity": 0.58,
+        "matched": [
+         "repository",
+         "retrieval",
+         "generation",
+         "code"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2509.22009",
+        "arxiv_id": "2509.22009",
+        "title": "GraphSearch: An Agentic Deep Searching Workflow for Graph Retrieval-Augmented Generation",
+        "year": "2025",
+        "authors": "Cehao Yang, Xiaojun Wu, Xueyuan Lin et al.",
+        "snippet": "Graph Retrieval-Augmented Generation (GraphRAG) enhances factual reasoning in LLMs by structurally modeling knowledge through graph-based representations. However, existing GraphRAG approaches face two core limitations: shallow retrieval that fails to surface all critical evidence, and inefficient utilization of pre-co",
+        "url": "http://arxiv.org/abs/2509.22009v2",
+        "tags": [
+         "语言",
+         "检索增强",
+         "知识图谱",
+         "评测"
+        ],
+        "similarity": 0.56,
+        "matched": [
+         "retrieval-augmented",
+         "retrieval",
+         "augmented",
+         "generation"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2405.13002",
+        "arxiv_id": "2405.13002",
+        "title": "DuetRAG: Collaborative Retrieval-Augmented Generation",
+        "year": "2024",
+        "authors": "Dian Jiao, Li Cai, Jingsheng Huang et al.",
+        "snippet": "Retrieval-Augmented Generation (RAG) methods augment the input of Large Language Models (LLMs) with relevant retrieved passages, reducing factual errors in knowledge-intensive tasks. However, contemporary RAG approaches suffer from irrelevant knowledge retrieval issues in complex domain questions (e.g., HotPot QA) due ",
+        "url": "http://arxiv.org/abs/2405.13002v1",
+        "tags": [
+         "语言",
+         "检索增强"
+        ],
+        "similarity": 0.56,
+        "matched": [
+         "retrieval-augmented",
+         "retrieval",
+         "augmented",
+         "generation"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "team",
+     "building": "market",
+     "title": "编队方案",
+     "body": {
+      "team": [],
+      "reason": "样例项目：负责人接手后由它启动代码员工和写作员工。"
+     }
+    },
+    {
+     "kind": "draft",
+     "stage": "method",
+     "building": "mill",
+     "title": "Repository · Agent · Retrieval-Augmented Generation · Code Repository",
+     "body": {
+      "title": "Repository · Agent · Retrieval-Augmented Generation · Code Repository",
+      "problem": "Idea（原文）：仓库级代码 Agent：先用检索增强在整个代码仓库里定位相关文件和调用链，再让 agent 分步修改并跑测试回归，减少跨文件修改时漏改、改错接口的情况。目标是解决撞车报告里的空白点：关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。",
+      "mechanism": [
+       "针对 repository 设计专门的模块（样例占位，机制等负责人接手后写）",
+       "针对 Agent 设计专门的模块（样例占位，机制等负责人接手后写）",
+       "针对 retrieval-augmented generation 设计专门的模块（样例占位，机制等负责人接手后写）"
+      ],
+      "baselines": [
+       {
+        "name": "Retrieval-Augmented Code Generation",
+        "source": "arxiv:2510.04905"
+       },
+       {
+        "name": "GraphCodeAgent",
+        "source": "arxiv:2504.10046"
+       },
+       {
+        "name": "SpecAgent",
+        "source": "arxiv:2510.17925"
+       }
+      ],
+      "datasets": [
+       "sample-lab/sg-kit",
+       "sample-lab/paper-tpl"
+      ],
+      "metrics": [
+       "Task success rate (%)",
+       "Average completed subtasks (%)",
+       "Error recovery rate after perturbations (%)"
+      ],
+      "risks": [
+       "样例占位内容，机制部分等负责人接手后重写"
+      ]
+     }
+    },
+    {
+     "kind": "table",
+     "stage": "exp",
+     "building": "farm",
+     "title": "结果表（样例）",
+     "body": {
+      "metrics": [
+       "Task success rate (%)",
+       "Average completed subtasks (%)",
+       "Error recovery rate after perturbations (%)"
+      ],
+      "rows": [
+       {
+        "method": "Retrieval-Augmented Code Generation",
+        "values": [
+         55.7,
+         47.9,
+         42.9
+        ],
+        "ours": false
+       },
+       {
+        "method": "GraphCodeAgent",
+        "values": [
+         46.5,
+         54.7,
+         58.1
+        ],
+        "ours": false
+       },
+       {
+        "method": "SpecAgent",
+        "values": [
+         43.2,
+         36.9,
+         46.8
+        ],
+        "ours": false
+       },
+       {
+        "method": "Ours",
+        "values": [
+         58.8,
+         55.8,
+         60.1
+        ],
+        "ours": true
+       }
+      ],
+      "seeds": 3,
+      "analysis": "以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 58.8 vs 55.7，Average completed subtasks (%) 55.8 vs 54.7，Error recovery rate after perturbations (%) 60.1 vs 58.1。",
+      "concerns": [
+       "需要补消融实验"
+      ],
+      "job_id": null,
+      "sample": true
+     }
+    },
+    {
+     "kind": "tex",
+     "stage": "write",
+     "building": "press",
+     "title": "Repository · Agent · Retrieval-Augmented Generation · Code Repository",
+     "body": {
+      "title": "Repository · Agent · Retrieval-Augmented Generation · Code Repository",
+      "abstract": "Repository · Agent · Retrieval-Augmented Generation · Code Repository. We target a gap left by prior work. This is a sample draft with placeholder content. Every section is to be rewritten once a lead takes the project over.",
+      "sections": {
+       "introduction": "Prior work leaves an open problem. Closest to us are \\cite{arxiv251004905,arxiv250410046,arxiv251017925}.\n\\begin{itemize}\n\\item 针对 repository 设计专门的模块（样例占位，机制等负责人接手后写）\n\\item 针对 Agent 设计专门的模块（样例占位，机制等负责人接手后写）\n\\item 针对 retrieval-augmented generation 设计专门的模块（样例占位，机制等负责人接手后写）\n\\end{itemize}",
+       "related_work": "Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches~\\cite{arxiv251004905} is closely related to our setting. GraphCodeAgent: Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation~\\cite{arxiv250410046} is closely related to our setting. SpecAgent: A Speculative Retrieval and Forecasting Agent for Code Completion~\\cite{arxiv251017925} is closely related to our setting. Other relevant lines of work include TDD-Agent: Test-Driven Reasoning for Code Generation~\\cite{arxiv260816742}, MASS-RAG: Multi-Agent Synthesis Retrieval-Augmented Generation~\\cite{arxiv260418509}, ProjAgent: Procedural Similarity Retrieval for Repository-Level Code Generation~\\cite{arxiv260708691}, GraphSearch: An Agentic Deep Searching Workflow for Graph Retrieval-Augmented Generation~\\cite{arxiv250922009}, DuetRAG: Collaborative Retrieval-Augmented Generation~\\cite{arxiv240513002}.",
+       "method": "\\subsection{Component 1}\nThis component addresses: 针对 repository 设计专门的模块（样例占位，机制等负责人接手后写）.\n\\subsection{Component 2}\nThis component addresses: 针对 Agent 设计专门的模块（样例占位，机制等负责人接手后写）.\n\\subsection{Component 3}\nThis component addresses: 针对 retrieval-augmented generation 设计专门的模块（样例占位，机制等负责人接手后写）.",
+       "experiments": "We compare against Retrieval-Augmented Code Generation, GraphCodeAgent, SpecAgent on Task success rate (%), Average completed subtasks (%), Error recovery rate after perturbations (%). The numbers in Table~\\ref{tab:main} are sample placeholders.",
+       "conclusion": "This sample draft fixes the structure of the paper; the claims above are placeholders until the method is written and real experiments are run."
+      },
+      "cite_ids": [
+       "arxiv:2510.04905",
+       "arxiv:2504.10046",
+       "arxiv:2510.17925",
+       "arxiv:2608.16742",
+       "arxiv:2604.18509",
+       "arxiv:2607.08691",
+       "arxiv:2509.22009",
+       "arxiv:2405.13002"
+      ],
+      "typeset": {
+       "files": [
+        "main.tex",
+        "refs.bib"
+       ],
+       "cited": 8,
+       "words": 376,
+       "compiled": false,
+       "pages": null,
+       "summary": "已排版，未编译"
+      }
+     }
+    },
+    {
+     "kind": "pdf",
+     "stage": "review",
+     "building": "qa",
+     "title": "审稿意见 · 带意见放行",
+     "body": {
+      "reviews": [
+       {
+        "persona": "方法派",
+        "scores": {
+         "novelty": 4,
+         "soundness": 4,
+         "clarity": 5
+        },
+        "overall": 4,
+        "strengths": [
+         "结构完整，各节齐全",
+         "引用了检索到的相近工作"
+        ],
+        "weaknesses": [
+         "Method：和最相近的工作「Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches」的区别需要单独一段讨论"
+        ],
+        "decision": "revise"
+       },
+       {
+        "persona": "实验派",
+        "scores": {
+         "novelty": 4,
+         "soundness": 4,
+         "clarity": 5
+        },
+        "overall": 4,
+        "strengths": [
+         "结构完整，各节齐全",
+         "引用了检索到的相近工作"
+        ],
+        "weaknesses": [
+         "Experiments：结果是样例占位数字，需要真实实验",
+         "Experiments：需要补消融实验"
+        ],
+        "decision": "revise"
+       }
+      ],
+      "format": {
+       "issues": [],
+       "ok": true,
+       "summary": "格式通过"
+      },
+      "mean": 4.0,
+      "verdict": "带意见放行",
+      "feedback": [
+       "Method：和最相近的工作「Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches」的区别需要单独一段讨论",
+       "Experiments：结果是样例占位数字，需要真实实验",
+       "Experiments：需要补消融实验"
+      ]
+     }
+    },
+    {
+     "kind": "pdf",
+     "stage": "ship",
+     "building": "dock_arxiv",
+     "title": "出厂包",
+     "body": {
+      "zip": "paper.zip",
+      "files": [
+       "main.tex",
+       "refs.bib",
+       "paper.zip"
+      ]
+     }
+    }
+   ],
+   "press": {
+    "main.tex": "\\documentclass[11pt]{article}\n\\usepackage[margin=1in]{geometry}\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage{amsmath,amssymb}\n\\usepackage{booktabs}\n\\usepackage{hyperref}\n\\title{Repository · Agent · Retrieval-Augmented Generation · Code Repository}\n\\author{Anonymous Authors}\n\\date{}\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nRepository · Agent · Retrieval-Augmented Generation · Code Repository. We target a gap left by prior work. This is a sample draft with placeholder content. Every section is to be rewritten once a lead takes the project over.\n\\end{abstract}\n\n\\section{Introduction}\nPrior work leaves an open problem. Closest to us are \\cite{arxiv251004905,arxiv250410046,arxiv251017925}.\n\\begin{itemize}\n\\item  repository \n\\item  Agent \n\\item  retrieval-augmented generation \n\\end{itemize}\n\n\\section{Related Work}\nRetrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches~\\cite{arxiv251004905} is closely related to our setting. GraphCodeAgent: Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation~\\cite{arxiv250410046} is closely related to our setting. SpecAgent: A Speculative Retrieval and Forecasting Agent for Code Completion~\\cite{arxiv251017925} is closely related to our setting. Other relevant lines of work include TDD-Agent: Test-Driven Reasoning for Code Generation~\\cite{arxiv260816742}, MASS-RAG: Multi-Agent Synthesis Retrieval-Augmented Generation~\\cite{arxiv260418509}, ProjAgent: Procedural Similarity Retrieval for Repository-Level Code Generation~\\cite{arxiv260708691}, GraphSearch: An Agentic Deep Searching Workflow for Graph Retrieval-Augmented Generation~\\cite{arxiv250922009}, DuetRAG: Collaborative Retrieval-Augmented Generation~\\cite{arxiv240513002}.\n\n\\section{Method}\n\\subsection{Component 1}\nThis component addresses:  repository .\n\\subsection{Component 2}\nThis component addresses:  Agent .\n\\subsection{Component 3}\nThis component addresses:  retrieval-augmented generation .\n\n\\section{Experiments}\nWe compare against Retrieval-Augmented Code Generation, GraphCodeAgent, SpecAgent on Task success rate (\\%), Average completed subtasks (\\%), Error recovery rate after perturbations (\\%). The numbers in Table~\\ref{tab:main} are sample placeholders.\n\n\\begin{table}[t]\n\\centering\n\\begin{tabular}{lccc}\n\\toprule\nMethod & Task success rate (\\%) & Average completed subtasks (\\%) & Error recovery rate after perturbations (\\%) \\\\\n\\midrule\nRetrieval-Augmented Code Generation & 55.7 & 47.9 & 42.9 \\\\\nGraphCodeAgent & 46.5 & 54.7 & 58.1 \\\\\nSpecAgent & 43.2 & 36.9 & 46.8 \\\\\nOurs & \\textbf{58.8} & \\textbf{55.8} & \\textbf{60.1} \\\\\n\\bottomrule\n\\end{tabular}\n\\caption{Main results (mean over 3 seeds). Numbers are sample placeholders until real experiments finish.}\n\\label{tab:main}\n\\end{table}\n\n\n\\section{Conclusion}\nThis sample draft fixes the structure of the paper; the claims above are placeholders until the method is written and real experiments are run.\n\n\\bibliographystyle{plain}\n\\bibliography{refs}\n\\end{document}\n",
+    "refs.bib": "@article{arxiv251004905,\n  title = {Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches},\n  author = {Yicheng Tao and Yuante Li and Yao Qin and Yepang Liu},\n  journal = {arXiv preprint arXiv:2510.04905},\n  year = {2025},\n  url = {https://arxiv.org/abs/2510.04905}\n}\n\n@article{arxiv250410046,\n  title = {GraphCodeAgent: Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation},\n  author = {Jia Li and Xianjie Shi and Kechi Zhang and Ge Li and Zhi Jin and Lei Li and Huangzhao Zhang and Jia Li and Fang Liu and Yuwei Zhang and Zhengwei Tao and Yihong Dong and Yuqi Zhu and Chongyang Tao},\n  journal = {arXiv preprint arXiv:2504.10046},\n  year = {2025},\n  url = {https://arxiv.org/abs/2504.10046}\n}\n\n@article{arxiv251017925,\n  title = {SpecAgent: A Speculative Retrieval and Forecasting Agent for Code Completion},\n  author = {George Ma and Anurag Koul and Qi Chen and Yawen Wu and Sachit Kuhar and Yu Yu and Aritra Sengupta and Varun Kumar and Murali Krishna Ramanathan},\n  journal = {arXiv preprint arXiv:2510.17925},\n  year = {2025},\n  url = {https://arxiv.org/abs/2510.17925}\n}\n\n@article{arxiv260816742,\n  title = {TDD-Agent: Test-Driven Reasoning for Code Generation},\n  author = {Hongyue Yu and Kefan Li and Jiakun Li and Hongzheng Chai and Yuan Yuan and Rui He and Junyi Wei},\n  journal = {arXiv preprint arXiv:2608.16742},\n  year = {2026},\n  url = {https://arxiv.org/abs/2608.16742}\n}\n\n@article{arxiv260418509,\n  title = {MASS-RAG: Multi-Agent Synthesis Retrieval-Augmented Generation},\n  author = {Xingchen Xiao and Heyan Huang and Runheng Liu and Jincheng Xie},\n  journal = {arXiv preprint arXiv:2604.18509},\n  year = {2026},\n  url = {https://arxiv.org/abs/2604.18509}\n}\n\n@article{arxiv260708691,\n  title = {ProjAgent: Procedural Similarity Retrieval for Repository-Level Code Generation},\n  author = {QiHong Chen and Aaron Imani and Iftekhar Ahmed},\n  journal = {arXiv preprint arXiv:2607.08691},\n  year = {2026},\n  url = {https://arxiv.org/abs/2607.08691}\n}\n\n@article{arxiv250922009,\n  title = {GraphSearch: An Agentic Deep Searching Workflow for Graph Retrieval-Augmented Generation},\n  author = {Cehao Yang and Xiaojun Wu and Xueyuan Lin and Chengjin Xu and Xuhui Jiang and Yuanliang Sun and Jia Li and Hui Xiong and Jian Guo},\n  journal = {arXiv preprint arXiv:2509.22009},\n  year = {2025},\n  url = {https://arxiv.org/abs/2509.22009}\n}\n\n@article{arxiv240513002,\n  title = {DuetRAG: Collaborative Retrieval-Augmented Generation},\n  author = {Dian Jiao and Li Cai and Jingsheng Huang and Wenqiao Zhang and Siliang Tang and Yueting Zhuang},\n  journal = {arXiv preprint arXiv:2405.13002},\n  year = {2024},\n  url = {https://arxiv.org/abs/2405.13002}\n}\n"
+   },
+   "chat": [
+    {
+     "kind": "note",
+     "text": "样例对话：以下是占位内容，展示项目负责人推进项目的方式。打开项目页上的开关后，由真实的负责人接手。"
+    },
+    {
+     "kind": "user",
+     "text": "仓库级代码 Agent：先用检索增强在整个代码仓库里定位相关文件和调用链，再让 agent 分步修改并跑测试回归，减少跨文件修改时漏改、改错接口的情况"
+    },
+    {
+     "kind": "assistant",
+     "text": "收到，先查重。图书馆里最接近的是「Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches」，相似度 1.00。结论：已被做过。关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。"
+    },
+    {
+     "kind": "assistant",
+     "text": "已立项。代码员工和写作员工在轮到它们的工序时启动。"
+    },
+    {
+     "kind": "assistant",
+     "text": "方法草案写好了：Repository · Agent · Retrieval-Augmented Generation · Code Repository。baseline：Retrieval-Augmented Code Generation、GraphCodeAgent、SpecAgent。"
+    },
+    {
+     "kind": "assistant",
+     "text": "实验结果表已交。以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 58.8 vs 55.7，Average completed subtasks (%) 55.8 vs 54.7，Error recovery rate af"
+    },
+    {
+     "kind": "assistant",
+     "text": "初稿已排版，引用 8 篇，源码在印刷厂。"
+    },
+    {
+     "kind": "assistant",
+     "text": "质检完成：平均 4.0 分，带意见放行。主要意见：Method：和最相近的工作「Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches」的区别需要单独一段讨论"
+    },
+    {
+     "kind": "assistant",
+     "text": "论文已出厂，出厂包在印刷厂的论文目录里。"
+    }
+   ],
+   "reports": [
+    {
+     "kind": "report",
+     "text": "样例项目：八道工序都已完成，论文已出厂。质检平均 4.0 分，带意见放行。",
+     "key": false
+    }
+   ]
+  },
+  {
+   "idea": "大语言模型审稿：把 peer review 拆成查新颖性、核对方法、核对实验三个 agent，先检索相近工作再评新颖性，和单个模型直接审稿比打分的一致性与可解释性",
+   "title": "Large Language Model · Peer Review · Peer · Review",
+   "verdict": "需调整",
+   "status": "running",
+   "note": "样例项目，内容是占位的",
+   "stages": {
+    "idea": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "hatch": {
+     "status": "done",
+     "pct": 100,
+     "note": "需调整"
+    },
+    "team": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "method": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "exp": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "write": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "review": {
+     "status": "run",
+     "pct": 0,
+     "note": null
+    },
+    "ship": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    }
+   },
+   "items": [
+    {
+     "kind": "egg",
+     "stage": "idea",
+     "building": "cityhall",
+     "title": "idea #2",
+     "body": {
+      "text": "大语言模型审稿：把 peer review 拆成查新颖性、核对方法、核对实验三个 agent，先检索相近工作再评新颖性，和单个模型直接审稿比打分的一致性与可解释性"
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "hatch",
+     "building": "hatchery",
+     "title": "撞车报告",
+     "body": {
+      "verdict": "需调整",
+      "similar": [
+       {
+        "paper_id": "arxiv:2601.08003",
+        "title": "LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback",
+        "similarity": 0.83,
+        "note": "共用关键词：peer, review, novelty, agent · 2026 年，Weiyue Li, Mingxiao Song, Zhenda Shen et al.",
+        "url": "http://arxiv.org/abs/2601.08003v1",
+        "year": "2026"
+       },
+       {
+        "paper_id": "arxiv:2610.33644",
+        "title": "AlphaIdeaBench: Benchmarking Automated Research Idea Generation under Feasibility Constraints with Peer Review Alignment",
+        "similarity": 0.83,
+        "note": "共用关键词：peer, review, novelty, agent · 2026 年，Shunchao Zhou, Chang Yang, Jingrui Wang et al.",
+        "url": "http://arxiv.org/abs/2610.33644v1",
+        "year": "2026"
+       },
+       {
+        "paper_id": "arxiv:2604.27924",
+        "title": "Can AI Be a Good Peer Reviewer? A Survey of Peer Review Process, Evaluation, and the Future",
+        "similarity": 0.58,
+        "note": "共用关键词：peer, review, agent · 2026 年，Sihong Wu, Owen Jiang, Yilun Zhao et al.",
+        "url": "http://arxiv.org/abs/2604.27924v2",
+        "year": "2026"
+       }
+      ],
+      "gap": "最相近的工作里没有出现：retrieval。",
+      "suggestions": [
+       "围绕「retrieval」收窄问题",
+       "先精读最相近的两篇，确认差异是本质的"
+      ],
+      "summary": "需调整（最高相似度 0.83，8 篇候选）。",
+      "sources": {
+       "library": 8,
+       "method": "coverage"
+      },
+      "candidates": [
+       {
+        "paper_id": "arxiv:2601.08003",
+        "arxiv_id": "2601.08003",
+        "title": "LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback",
+        "year": "2026",
+        "authors": "Weiyue Li, Mingxiao Song, Zhenda Shen et al.",
+        "snippet": "Large Language Models (LLMs) often struggle with creative generation, and multi-agent frameworks that improve reasoning through interaction can paradoxically hinder creativity by inducing content homogenization. We introduce LLM Review, a peer-review-inspired framework implementing Blind Peer Review: agents exchange ta",
+        "url": "http://arxiv.org/abs/2601.08003v1",
+        "tags": [
+         "语言",
+         "智能体",
+         "科研辅助"
+        ],
+        "similarity": 0.83,
+        "matched": [
+         "peer",
+         "review",
+         "novelty",
+         "agent"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2610.33644",
+        "arxiv_id": "2610.33644",
+        "title": "AlphaIdeaBench: Benchmarking Automated Research Idea Generation under Feasibility Constraints with Peer Review Alignment",
+        "year": "2026",
+        "authors": "Shunchao Zhou, Chang Yang, Jingrui Wang et al.",
+        "snippet": "Research ideas are always proposed under resource constraints: a plan must fit the available compute, API credit, and time. Yet evaluations of research-ideation agents mostly score unconstrained novelty or overlap with a published paper, and their LLM judges are rarely checked against peer review. We introduce AlphaIde",
+        "url": "http://arxiv.org/abs/2610.33644v1",
+        "tags": [
+         "人工智能",
+         "智能体",
+         "科研辅助",
+         "评测"
+        ],
+        "similarity": 0.83,
+        "matched": [
+         "peer",
+         "review",
+         "novelty",
+         "agent"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2604.27924",
+        "arxiv_id": "2604.27924",
+        "title": "Can AI Be a Good Peer Reviewer? A Survey of Peer Review Process, Evaluation, and the Future",
+        "year": "2026",
+        "authors": "Sihong Wu, Owen Jiang, Yilun Zhao et al.",
+        "snippet": "Peer review is a multi-stage process involving reviews, rebuttals, meta-reviews, final decisions, and subsequent manuscript revisions. Recent advances in large language models (LLMs) have motivated methods that assist or automate different stages of this pipeline. In this survey, we synthesize techniques for (i) peer r",
+        "url": "http://arxiv.org/abs/2604.27924v2",
+        "tags": [
+         "语言",
+         "智能体",
+         "科研辅助"
+        ],
+        "similarity": 0.58,
+        "matched": [
+         "peer",
+         "review",
+         "agent"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2406.12708",
+        "arxiv_id": "2406.12708",
+        "title": "AgentReview: Exploring Peer Review Dynamics with LLM Agents",
+        "year": "2024",
+        "authors": "Yiqiao Jin, Qinlin Zhao, Yiyang Wang et al.",
+        "snippet": "Peer review is fundamental to the integrity and advancement of scientific publication. Traditional methods of peer review analyses often rely on exploration and statistics of existing peer review data, which do not adequately address the multivariate nature of the process, account for the latent variables, and are furt",
+        "url": "http://arxiv.org/abs/2406.12708v3",
+        "tags": [
+         "语言",
+         "智能体",
+         "科研辅助"
+        ],
+        "similarity": 0.58,
+        "matched": [
+         "peer",
+         "review",
+         "agent"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2504.18765",
+        "arxiv_id": "2504.18765",
+        "title": "A Vision for Auto Research with LLM Agents",
+        "year": "2025",
+        "authors": "Chengwei Liu, Chong Wang, Jiayue Cao et al.",
+        "snippet": "This paper introduces Agent-Based Auto Research, a structured multi-agent framework designed to automate, coordinate, and optimize the full lifecycle of scientific research. Leveraging the capabilities of large language models (LLMs) and modular agent collaboration, the system spans all major research phases, including",
+        "url": "http://arxiv.org/abs/2504.18765v3",
+        "tags": [
+         "人工智能",
+         "规划",
+         "智能体",
+         "科研辅助"
+        ],
+        "similarity": 0.58,
+        "matched": [
+         "peer",
+         "review",
+         "agent"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2608.21374",
+        "arxiv_id": "2608.21374",
+        "title": "LitReview Arena: Evaluating Literature Review Agents with Battle-Style Peer Review Platform",
+        "year": "2026",
+        "authors": "Ruotong Zhao, Zhiyu Chen, Xurui Liu et al.",
+        "snippet": "Literature reviews are essential to scientific progress, but rigorously evaluating automatically generated reviews remains difficult because many aspects of research utility depend on expert judgment rather than reference-overlap metrics. We introduce LitReview Arena, a battle-style evaluation platform with a structure",
+        "url": "http://arxiv.org/abs/2608.21374v2",
+        "tags": [
+         "人工智能",
+         "智能体",
+         "科研辅助"
+        ],
+        "similarity": 0.58,
+        "matched": [
+         "peer",
+         "review",
+         "agent"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2604.00835",
+        "arxiv_id": "2604.00835",
+        "title": "Agentic Tool Use in Large Language Models",
+        "year": "2026",
+        "authors": "Jinchao Hu, Meizhi Zhong, Kehai Chen et al.",
+        "snippet": "Large language models are increasingly being deployed as autonomous agents yet their real world effectiveness depends on reliable tools for information retrieval, computation and external action. Existing studies remain fragmented across tasks, tool types, and training settings, lacking a unified view of how tool-use m",
+        "url": "http://arxiv.org/abs/2604.00835v2",
+        "tags": [
+         "语言",
+         "检索增强",
+         "智能体"
+        ],
+        "similarity": 0.51,
+        "matched": [
+         "review",
+         "agent",
+         "retrieval"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2510.04905",
+        "arxiv_id": "2510.04905",
+        "title": "Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches",
+        "year": "2025",
+        "authors": "Yicheng Tao, Yuante Li, Yao Qin et al.",
+        "snippet": "Recent advances in large language models (LLMs) have significantly improved automated code generation. While existing approaches have achieved strong performance at the function and file levels, real-world software engineering requires reasoning over entire repositories, including cross-file dependencies, evolving exec",
+        "url": "http://arxiv.org/abs/2510.04905v3",
+        "tags": [
+         "语言",
+         "检索增强",
+         "智能体",
+         "代码",
+         "评测"
+        ],
+        "similarity": 0.51,
+        "matched": [
+         "review",
+         "agent",
+         "retrieval"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "team",
+     "building": "market",
+     "title": "编队方案",
+     "body": {
+      "team": [],
+      "reason": "样例项目：负责人接手后由它启动代码员工和写作员工。"
+     }
+    },
+    {
+     "kind": "draft",
+     "stage": "method",
+     "building": "mill",
+     "title": "Large Language Model · Peer Review · Peer · Review",
+     "body": {
+      "title": "Large Language Model · Peer Review · Peer · Review",
+      "problem": "Idea（原文）：大语言模型审稿：把 peer review 拆成查新颖性、核对方法、核对实验三个 agent，先检索相近工作再评新颖性，和单个模型直接审稿比打分的一致性与可解释性。目标是解决撞车报告里的空白点：最相近的工作里没有出现：retrieval。",
+      "mechanism": [
+       "针对 large language model 设计专门的模块（样例占位，机制等负责人接手后写）",
+       "针对 peer review 设计专门的模块（样例占位，机制等负责人接手后写）",
+       "针对 peer 设计专门的模块（样例占位，机制等负责人接手后写）"
+      ],
+      "baselines": [
+       {
+        "name": "LLM Review",
+        "source": "arxiv:2601.08003"
+       },
+       {
+        "name": "AlphaIdeaBench",
+        "source": "arxiv:2610.33644"
+       },
+       {
+        "name": "Can AI Be a Good Peer Reviewer? A Survey",
+        "source": "arxiv:2604.27924"
+       }
+      ],
+      "datasets": [
+       "sample-lab/sg-kit",
+       "sample-lab/paper-tpl"
+      ],
+      "metrics": [
+       "Task success rate (%)",
+       "Average completed subtasks (%)",
+       "Error recovery rate after perturbations (%)"
+      ],
+      "risks": [
+       "样例占位内容，机制部分等负责人接手后重写"
+      ]
+     }
+    },
+    {
+     "kind": "table",
+     "stage": "exp",
+     "building": "farm",
+     "title": "结果表（样例）",
+     "body": {
+      "metrics": [
+       "Task success rate (%)",
+       "Average completed subtasks (%)",
+       "Error recovery rate after perturbations (%)"
+      ],
+      "rows": [
+       {
+        "method": "LLM Review",
+        "values": [
+         47.7,
+         46.2,
+         46.1
+        ],
+        "ours": false
+       },
+       {
+        "method": "AlphaIdeaBench",
+        "values": [
+         49.7,
+         48.0,
+         55.7
+        ],
+        "ours": false
+       },
+       {
+        "method": "Can AI Be a Good Peer Reviewer? A Survey",
+        "values": [
+         36.7,
+         59.9,
+         42.5
+        ],
+        "ours": false
+       },
+       {
+        "method": "Ours",
+        "values": [
+         53.4,
+         64.2,
+         62.7
+        ],
+        "ours": true
+       }
+      ],
+      "seeds": 3,
+      "analysis": "以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 53.4 vs 49.7，Average completed subtasks (%) 64.2 vs 59.9，Error recovery rate after perturbations (%) 62.7 vs 55.7。",
+      "concerns": [
+       "需要补消融实验"
+      ],
+      "job_id": null,
+      "sample": true
+     }
+    },
+    {
+     "kind": "tex",
+     "stage": "write",
+     "building": "press",
+     "title": "Large Language Model · Peer Review · Peer · Review",
+     "body": {
+      "title": "Large Language Model · Peer Review · Peer · Review",
+      "abstract": "Large Language Model · Peer Review · Peer · Review. We target a gap left by prior work. This is a sample draft with placeholder content. Every section is to be rewritten once a lead takes the project over.",
+      "sections": {
+       "introduction": "Prior work leaves an open problem. Closest to us are \\cite{arxiv260108003,arxiv261033644,arxiv260427924}.\n\\begin{itemize}\n\\item 针对 large language model 设计专门的模块（样例占位，机制等负责人接手后写）\n\\item 针对 peer review 设计专门的模块（样例占位，机制等负责人接手后写）\n\\item 针对 peer 设计专门的模块（样例占位，机制等负责人接手后写）\n\\end{itemize}",
+       "related_work": "LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback~\\cite{arxiv260108003} is closely related to our setting. AlphaIdeaBench: Benchmarking Automated Research Idea Generation under Feasibility Constraints with Peer Review Alignment~\\cite{arxiv261033644} is closely related to our setting. Can AI Be a Good Peer Reviewer? A Survey of Peer Review Process, Evaluation, and the Future~\\cite{arxiv260427924} is closely related to our setting. Other relevant lines of work include AgentReview: Exploring Peer Review Dynamics with LLM Agents~\\cite{arxiv240612708}, A Vision for Auto Research with LLM Agents~\\cite{arxiv250418765}, LitReview Arena: Evaluating Literature Review Agents with Battle-Style Peer Review Platform~\\cite{arxiv260821374}, Agentic Tool Use in Large Language Models~\\cite{arxiv260400835}, Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches~\\cite{arxiv251004905}.",
+       "method": "\\subsection{Component 1}\nThis component addresses: 针对 large language model 设计专门的模块（样例占位，机制等负责人接手后写）.\n\\subsection{Component 2}\nThis component addresses: 针对 peer review 设计专门的模块（样例占位，机制等负责人接手后写）.\n\\subsection{Component 3}\nThis component addresses: 针对 peer 设计专门的模块（样例占位，机制等负责人接手后写）.",
+       "experiments": "We compare against LLM Review, AlphaIdeaBench, Can AI Be a Good Peer Reviewer? A Survey on Task success rate (%), Average completed subtasks (%), Error recovery rate after perturbations (%). The numbers in Table~\\ref{tab:main} are sample placeholders.",
+       "conclusion": "This sample draft fixes the structure of the paper; the claims above are placeholders until the method is written and real experiments are run."
+      },
+      "cite_ids": [
+       "arxiv:2601.08003",
+       "arxiv:2610.33644",
+       "arxiv:2604.27924",
+       "arxiv:2406.12708",
+       "arxiv:2504.18765",
+       "arxiv:2608.21374",
+       "arxiv:2604.00835",
+       "arxiv:2510.04905"
+      ],
+      "typeset": {
+       "files": [
+        "main.tex",
+        "refs.bib"
+       ],
+       "cited": 8,
+       "words": 401,
+       "compiled": false,
+       "pages": null,
+       "summary": "已排版，未编译"
+      }
+     }
+    }
+   ],
+   "press": {
+    "main.tex": "\\documentclass[11pt]{article}\n\\usepackage[margin=1in]{geometry}\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage{amsmath,amssymb}\n\\usepackage{booktabs}\n\\usepackage{hyperref}\n\\title{Large Language Model · Peer Review · Peer · Review}\n\\author{Anonymous Authors}\n\\date{}\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nLarge Language Model · Peer Review · Peer · Review. We target a gap left by prior work. This is a sample draft with placeholder content. Every section is to be rewritten once a lead takes the project over.\n\\end{abstract}\n\n\\section{Introduction}\nPrior work leaves an open problem. Closest to us are \\cite{arxiv260108003,arxiv261033644,arxiv260427924}.\n\\begin{itemize}\n\\item  large language model \n\\item  peer review \n\\item  peer \n\\end{itemize}\n\n\\section{Related Work}\nLLM Review: Enhancing Creative Writing via Blind Peer Review Feedback~\\cite{arxiv260108003} is closely related to our setting. AlphaIdeaBench: Benchmarking Automated Research Idea Generation under Feasibility Constraints with Peer Review Alignment~\\cite{arxiv261033644} is closely related to our setting. Can AI Be a Good Peer Reviewer? A Survey of Peer Review Process, Evaluation, and the Future~\\cite{arxiv260427924} is closely related to our setting. Other relevant lines of work include AgentReview: Exploring Peer Review Dynamics with LLM Agents~\\cite{arxiv240612708}, A Vision for Auto Research with LLM Agents~\\cite{arxiv250418765}, LitReview Arena: Evaluating Literature Review Agents with Battle-Style Peer Review Platform~\\cite{arxiv260821374}, Agentic Tool Use in Large Language Models~\\cite{arxiv260400835}, Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches~\\cite{arxiv251004905}.\n\n\\section{Method}\n\\subsection{Component 1}\nThis component addresses:  large language model .\n\\subsection{Component 2}\nThis component addresses:  peer review .\n\\subsection{Component 3}\nThis component addresses:  peer .\n\n\\section{Experiments}\nWe compare against LLM Review, AlphaIdeaBench, Can AI Be a Good Peer Reviewer? A Survey on Task success rate (\\%), Average completed subtasks (\\%), Error recovery rate after perturbations (\\%). The numbers in Table~\\ref{tab:main} are sample placeholders.\n\n\\begin{table}[t]\n\\centering\n\\begin{tabular}{lccc}\n\\toprule\nMethod & Task success rate (\\%) & Average completed subtasks (\\%) & Error recovery rate after perturbations (\\%) \\\\\n\\midrule\nLLM Review & 47.7 & 46.2 & 46.1 \\\\\nAlphaIdeaBench & 49.7 & 48.0 & 55.7 \\\\\nCan AI Be a Good Peer Reviewer? A Survey & 36.7 & 59.9 & 42.5 \\\\\nOurs & \\textbf{53.4} & \\textbf{64.2} & \\textbf{62.7} \\\\\n\\bottomrule\n\\end{tabular}\n\\caption{Main results (mean over 3 seeds). Numbers are sample placeholders until real experiments finish.}\n\\label{tab:main}\n\\end{table}\n\n\n\\section{Conclusion}\nThis sample draft fixes the structure of the paper; the claims above are placeholders until the method is written and real experiments are run.\n\n\\bibliographystyle{plain}\n\\bibliography{refs}\n\\end{document}\n",
+    "refs.bib": "@article{arxiv260108003,\n  title = {LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback},\n  author = {Weiyue Li and Mingxiao Song and Zhenda Shen and Dachuan Zhao and Yunfan Long and Yi Li and Yongce Li and Ruyi Yang and Mengyu Wang},\n  journal = {arXiv preprint arXiv:2601.08003},\n  year = {2026},\n  url = {https://arxiv.org/abs/2601.08003}\n}\n\n@article{arxiv261033644,\n  title = {AlphaIdeaBench: Benchmarking Automated Research Idea Generation under Feasibility Constraints with Peer Review Alignment},\n  author = {Shunchao Zhou and Chang Yang and Jingrui Wang and Shuxin Zhuang and Rundong Wang and Runsheng Yu and Xinrun Wang},\n  journal = {arXiv preprint arXiv:2610.33644},\n  year = {2026},\n  url = {https://arxiv.org/abs/2610.33644}\n}\n\n@article{arxiv260427924,\n  title = {Can AI Be a Good Peer Reviewer? A Survey of Peer Review Process, Evaluation, and the Future},\n  author = {Sihong Wu and Owen Jiang and Yilun Zhao and Tiansheng Hu and Yiling Ma and Kaiyan Zhang and Manasi Patwardhan and Arman Cohan},\n  journal = {arXiv preprint arXiv:2604.27924},\n  year = {2026},\n  url = {https://arxiv.org/abs/2604.27924}\n}\n\n@article{arxiv240612708,\n  title = {AgentReview: Exploring Peer Review Dynamics with LLM Agents},\n  author = {Yiqiao Jin and Qinlin Zhao and Yiyang Wang and Hao Chen and Kaijie Zhu and Yijia Xiao and Jindong Wang},\n  journal = {arXiv preprint arXiv:2406.12708},\n  year = {2024},\n  url = {https://arxiv.org/abs/2406.12708}\n}\n\n@article{arxiv250418765,\n  title = {A Vision for Auto Research with LLM Agents},\n  author = {Chengwei Liu and Chong Wang and Jiayue Cao and Jingquan Ge and Kun Wang and Lyuye Zhang and Ming-Ming Cheng and Penghai Zhao and Tianlin Li and Xiaojun Jia and Xiang Li and Xingshuai Li and Yang Liu and Yebo Feng and Yihao Huang and Yijia Xu and Yuqiang Sun and Zhenhong Zhou and Zhengzi Xu},\n  journal = {arXiv preprint arXiv:2504.18765},\n  year = {2025},\n  url = {https://arxiv.org/abs/2504.18765}\n}\n\n@article{arxiv260821374,\n  title = {LitReview Arena: Evaluating Literature Review Agents with Battle-Style Peer Review Platform},\n  author = {Ruotong Zhao and Zhiyu Chen and Xurui Liu and Haidong Xue and Dong Liang and Jigao Fu and Wu YanBiao and Yuanyi Zhen and Fengli Xu and Yong Li},\n  journal = {arXiv preprint arXiv:2608.21374},\n  year = {2026},\n  url = {https://arxiv.org/abs/2608.21374}\n}\n\n@article{arxiv260400835,\n  title = {Agentic Tool Use in Large Language Models},\n  author = {Jinchao Hu and Meizhi Zhong and Kehai Chen and Xuefeng Bai and Min Zhang},\n  journal = {arXiv preprint arXiv:2604.00835},\n  year = {2026},\n  url = {https://arxiv.org/abs/2604.00835}\n}\n\n@article{arxiv251004905,\n  title = {Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches},\n  author = {Yicheng Tao and Yuante Li and Yao Qin and Yepang Liu},\n  journal = {arXiv preprint arXiv:2510.04905},\n  year = {2025},\n  url = {https://arxiv.org/abs/2510.04905}\n}\n"
+   },
+   "chat": [
+    {
+     "kind": "note",
+     "text": "样例对话：以下是占位内容，展示项目负责人推进项目的方式。打开项目页上的开关后，由真实的负责人接手。"
+    },
+    {
+     "kind": "user",
+     "text": "大语言模型审稿：把 peer review 拆成查新颖性、核对方法、核对实验三个 agent，先检索相近工作再评新颖性，和单个模型直接审稿比打分的一致性与可解释性"
+    },
+    {
+     "kind": "assistant",
+     "text": "收到，先查重。图书馆里最接近的是「LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback」，相似度 0.83。结论：需调整。最相近的工作里没有出现：retrieval。"
+    },
+    {
+     "kind": "assistant",
+     "text": "已立项。代码员工和写作员工在轮到它们的工序时启动。"
+    },
+    {
+     "kind": "assistant",
+     "text": "方法草案写好了：Large Language Model · Peer Review · Peer · Review。baseline：LLM Review、AlphaIdeaBench、Can AI Be a Good Peer Reviewer? A Survey。"
+    },
+    {
+     "kind": "assistant",
+     "text": "实验结果表已交。以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 53.4 vs 49.7，Average completed subtasks (%) 64.2 vs 59.9，Error recovery rate af"
+    },
+    {
+     "kind": "assistant",
+     "text": "初稿已排版，引用 8 篇，源码在印刷厂。"
+    },
+    {
+     "kind": "assistant",
+     "text": "当前工序是「质检」。打开项目页上的开关后，从这里接着推进。"
+    }
+   ],
+   "reports": [
+    {
+     "kind": "report",
+     "text": "样例项目：已完成到「写作排版」，当前工序是「质检」。",
+     "key": false
+    }
+   ]
+  },
+  {
+   "idea": "长上下文推理加速：用稀疏注意力挑出关键 token，再对 KV cache 做分层压缩，显存减半时保持长文档问答的精度",
+   "title": "Long Context · Inference Acceleration · Sparse Attention · Token",
+   "verdict": "已被做过",
+   "status": "running",
+   "note": "样例项目，内容是占位的",
+   "stages": {
+    "idea": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "hatch": {
+     "status": "done",
+     "pct": 100,
+     "note": "已被做过"
+    },
+    "team": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "method": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "exp": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "write": {
+     "status": "run",
+     "pct": 0,
+     "note": null
+    },
+    "review": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    },
+    "ship": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    }
+   },
+   "items": [
+    {
+     "kind": "egg",
+     "stage": "idea",
+     "building": "cityhall",
+     "title": "idea #3",
+     "body": {
+      "text": "长上下文推理加速：用稀疏注意力挑出关键 token，再对 KV cache 做分层压缩，显存减半时保持长文档问答的精度"
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "hatch",
+     "building": "hatchery",
+     "title": "撞车报告",
+     "body": {
+      "verdict": "已被做过",
+      "similar": [
+       {
+        "paper_id": "arxiv:2604.20920",
+        "title": "Simplified Sparse Attention via Gist Tokens",
+        "similarity": 0.88,
+        "note": "共用关键词：long, context, inference, sparse, attention · 2026 年，Yuzhen Mao, Michael Y. Li, Emily B. Fox",
+        "url": "http://arxiv.org/abs/2604.20920v2",
+        "year": "2026"
+       },
+       {
+        "paper_id": "arxiv:2610.31098",
+        "title": "RIFT: KV Cache Compression for Draft Models with Complementary Compressibility Training",
+        "similarity": 0.76,
+        "note": "共用关键词：long, context, acceleration, sparse, attention · 2026 年，Dor Tsur, Maor Ashkenazi, Maximilian Golub et al.",
+        "url": "http://arxiv.org/abs/2610.31098v1",
+        "year": "2026"
+       },
+       {
+        "paper_id": "arxiv:2401.09486",
+        "title": "LoMA: Lossless Compressed Memory Attention",
+        "similarity": 0.71,
+        "note": "共用关键词：long, context, inference, attention, token · 2024 年，Yumeng Wang, Zhenyang Xiao",
+        "url": "http://arxiv.org/abs/2401.09486v2",
+        "year": "2024"
+       }
+      ],
+      "gap": "关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。",
+      "suggestions": [
+       "换一个没被验证过的任务或场景",
+       "把已有方法当 baseline，找它的失败案例作为切入点"
+      ],
+      "summary": "已被做过（最高相似度 0.88，8 篇候选）。",
+      "sources": {
+       "library": 8,
+       "method": "coverage"
+      },
+      "candidates": [
+       {
+        "paper_id": "arxiv:2604.20920",
+        "arxiv_id": "2604.20920",
+        "title": "Simplified Sparse Attention via Gist Tokens",
+        "year": "2026",
+        "authors": "Yuzhen Mao, Michael Y. Li, Emily B. Fox",
+        "snippet": "Sparse attention can reduce the cost of long-context inference, but most variants introduce new architectural components. We introduce Simplified Sparse Attention (SSA), a simpler approach to sparse attention that requires no architectural changes. Concretely, we first perform continued pretraining on sequences interle",
+        "url": "http://arxiv.org/abs/2604.20920v2",
+        "tags": [
+         "机器学习",
+         "检索增强",
+         "高效推理"
+        ],
+        "similarity": 0.88,
+        "matched": [
+         "long",
+         "context",
+         "inference",
+         "sparse",
+         "attention",
+         "token",
+         "kv",
+         "cache",
+         "hierarchical",
+         "compression",
+         "memory"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2610.31098",
+        "arxiv_id": "2610.31098",
+        "title": "RIFT: KV Cache Compression for Draft Models with Complementary Compressibility Training",
+        "year": "2026",
+        "authors": "Dor Tsur, Maor Ashkenazi, Maximilian Golub et al.",
+        "snippet": "Speculative decoding is a popular decode acceleration method. As such, it is particularly relevant to long-output generation, which requires an increasingly large KV cache. KV cache compression offers a way to constrain costs in long-context drafting. However, compression methods that focus on prefill information can l",
+        "url": "http://arxiv.org/abs/2610.31098v1",
+        "tags": [
+         "语言",
+         "高效推理"
+        ],
+        "similarity": 0.76,
+        "matched": [
+         "long",
+         "context",
+         "acceleration",
+         "sparse",
+         "attention",
+         "token",
+         "kv",
+         "cache",
+         "compression"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2401.09486",
+        "arxiv_id": "2401.09486",
+        "title": "LoMA: Lossless Compressed Memory Attention",
+        "year": "2024",
+        "authors": "Yumeng Wang, Zhenyang Xiao",
+        "snippet": "Large Language Models (LLMs) face limitations due to the high demand on GPU memory and computational resources when handling long contexts. While sparsify the Key-Value (KV) cache of transformer model is a typical strategy to alleviate resource usage, it unavoidably results in the loss of information. We introduce Loss",
+        "url": "http://arxiv.org/abs/2401.09486v2",
+        "tags": [
+         "机器学习",
+         "高效推理"
+        ],
+        "similarity": 0.71,
+        "matched": [
+         "long",
+         "context",
+         "inference",
+         "attention",
+         "token",
+         "kv",
+         "cache",
+         "compression",
+         "memory"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2510.25600",
+        "arxiv_id": "2510.25600",
+        "title": "PureKV: Plug-and-Play KV Cache Optimization with Spatial-Temporal Sparse Attention for Vision-Language Large Models",
+        "year": "2025",
+        "authors": "Zhonghua Jiang, Kunxi Li, Yiyun Zhou et al.",
+        "snippet": "Vision-Language Large Models (VLLMs) face significant efficiency challenges when processing high-resolution inputs. The quadratic complexity in attention and autoregressive generation, as well as the constantly growing key value (KV) cache size, severely hinder the prefilling and decoding stages. Recent efforts have at",
+        "url": "http://arxiv.org/abs/2510.25600v2",
+        "tags": [
+         "高效推理",
+         "多模态"
+        ],
+        "similarity": 0.65,
+        "matched": [
+         "acceleration",
+         "sparse",
+         "attention",
+         "token",
+         "kv",
+         "cache",
+         "compression"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2512.17917",
+        "arxiv_id": "2512.17917",
+        "title": "KVReviver: Reversible KV Cache Compression with Sketch-Based Token Reconstruction",
+        "year": "2025",
+        "authors": "Aomufei Yuan, Zhiming Wang, Ruijie Miao et al.",
+        "snippet": "As the context length of current large language models (LLMs) rapidly increases, the memory demand for the Key-Value (KV) cache is becoming a bottleneck for LLM deployment and batch processing. Traditional KV cache compression methods typically involve permanently evicting or irreversibly merging \"less important\" token",
+        "url": "http://arxiv.org/abs/2512.17917v1",
+        "tags": [
+         "语言",
+         "检索增强",
+         "高效推理"
+        ],
+        "similarity": 0.65,
+        "matched": [
+         "context",
+         "inference",
+         "attention",
+         "token",
+         "kv",
+         "cache",
+         "compression",
+         "memory"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2607.00760",
+        "arxiv_id": "2607.00760",
+        "title": "MosaicKV: Serving Long-Context LLM with Dynamic Two-D KV Cache Compression",
+        "year": "2026",
+        "authors": "Sheng Qiang, Ruiwei Chen, Yinpeng Wu et al.",
+        "snippet": "Long-context LLM services now sustain prompts with hundreds of thousands to millions of tokens, making the key-value (KV) cache a first-order serving cost. Because the cache grows linearly with context length, it can exhaust GPU memory, force smaller batches, and reduce serving throughput. Prior KV cache compression te",
+        "url": "http://arxiv.org/abs/2607.00760v1",
+        "tags": [
+         "机器学习",
+         "高效推理"
+        ],
+        "similarity": 0.63,
+        "matched": [
+         "long",
+         "context",
+         "attention",
+         "token",
+         "kv",
+         "cache",
+         "compression",
+         "memory"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2605.17613",
+        "arxiv_id": "2605.17613",
+        "title": "VeriCache: Turning Lossy KV Cache into Lossless LLM Inference",
+        "year": "2026",
+        "authors": "Jiayi Yao, Samuel Shen, Kuntai Du et al.",
+        "snippet": "The large size of the KV cache has become a major bottleneck for serving LLMs with increasing context lengths. In response, many KV cache compression methods, such as token dropping and quantization, have been proposed. However, almost all of these methods are inherently lossy-despite minimal accuracy degradation for s",
+        "url": "http://arxiv.org/abs/2605.17613v1",
+        "tags": [
+         "机器学习",
+         "高效推理",
+         "代码"
+        ],
+        "similarity": 0.63,
+        "matched": [
+         "long",
+         "context",
+         "inference",
+         "token",
+         "kv",
+         "cache",
+         "compression",
+         "memory"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2606.06256",
+        "arxiv_id": "2606.06256",
+        "title": "RedKnot: Efficient Long-Context LLM Serving with Head-Aware KV Reuse and SegPagedAttention",
+        "year": "2026",
+        "authors": "Yang Liu, Zhaokai Luo, Huayi Jin et al.",
+        "snippet": "As the input length of large language model (LLM) serving continues to grow, the KV cache has become a dominant bottleneck in AI infrastructure. It limits GPU memory capacity, serving concurrency, cache reuse, and distributed scalability. Multiple important problems, including position-independent KV cache, prefix KV c",
+        "url": "http://arxiv.org/abs/2606.06256v4",
+        "tags": [
+         "人工智能",
+         "高效推理"
+        ],
+        "similarity": 0.63,
+        "matched": [
+         "long",
+         "context",
+         "attention",
+         "token",
+         "kv",
+         "cache",
+         "compression",
+         "memory"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "team",
+     "building": "market",
+     "title": "编队方案",
+     "body": {
+      "team": [],
+      "reason": "样例项目：负责人接手后由它启动代码员工和写作员工。"
+     }
+    },
+    {
+     "kind": "draft",
+     "stage": "method",
+     "building": "mill",
+     "title": "Long Context · Inference Acceleration · Sparse Attention · Token",
+     "body": {
+      "title": "Long Context · Inference Acceleration · Sparse Attention · Token",
+      "problem": "Idea（原文）：长上下文推理加速：用稀疏注意力挑出关键 token，再对 KV cache 做分层压缩，显存减半时保持长文档问答的精度。目标是解决撞车报告里的空白点：关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。",
+      "mechanism": [
+       "针对 long context 设计专门的模块（样例占位，机制等负责人接手后写）",
+       "针对 inference acceleration 设计专门的模块（样例占位，机制等负责人接手后写）",
+       "针对 sparse attention 设计专门的模块（样例占位，机制等负责人接手后写）"
+      ],
+      "baselines": [
+       {
+        "name": "Hierarchical Vla",
+        "source": "sample-lab/vla-bench/baselines/hierarchical_vla.py"
+       },
+       {
+        "name": "Simplified Sparse Attention via Gist Tok",
+        "source": "arxiv:2604.20920"
+       },
+       {
+        "name": "RIFT",
+        "source": "arxiv:2610.31098"
+       }
+      ],
+      "datasets": [
+       "sample-lab/vla-bench",
+       "sample-lab/vla-bench"
+      ],
+      "metrics": [
+       "Task success rate (%)",
+       "Average completed subtasks (%)",
+       "Error recovery rate after perturbations (%)"
+      ],
+      "risks": [
+       "样例占位内容，机制部分等负责人接手后重写"
+      ]
+     }
+    },
+    {
+     "kind": "table",
+     "stage": "exp",
+     "building": "farm",
+     "title": "结果表（样例）",
+     "body": {
+      "metrics": [
+       "Task success rate (%)",
+       "Average completed subtasks (%)",
+       "Error recovery rate after perturbations (%)"
+      ],
+      "rows": [
+       {
+        "method": "Hierarchical Vla",
+        "values": [
+         46.4,
+         56.0,
+         50.5
+        ],
+        "ours": false
+       },
+       {
+        "method": "Simplified Sparse Attention via Gist Tok",
+        "values": [
+         51.3,
+         38.2,
+         41.5
+        ],
+        "ours": false
+       },
+       {
+        "method": "RIFT",
+        "values": [
+         39.9,
+         62.0,
+         55.5
+        ],
+        "ours": false
+       },
+       {
+        "method": "Ours",
+        "values": [
+         58.9,
+         63.7,
+         65.5
+        ],
+        "ours": true
+       }
+      ],
+      "seeds": 3,
+      "analysis": "以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 58.9 vs 51.3，Average completed subtasks (%) 63.7 vs 62.0，Error recovery rate after perturbations (%) 65.5 vs 55.5。",
+      "concerns": [
+       "需要补消融实验"
+      ],
+      "job_id": null,
+      "sample": true
+     }
+    }
+   ],
+   "press": {},
+   "chat": [
+    {
+     "kind": "note",
+     "text": "样例对话：以下是占位内容，展示项目负责人推进项目的方式。打开项目页上的开关后，由真实的负责人接手。"
+    },
+    {
+     "kind": "user",
+     "text": "长上下文推理加速：用稀疏注意力挑出关键 token，再对 KV cache 做分层压缩，显存减半时保持长文档问答的精度"
+    },
+    {
+     "kind": "assistant",
+     "text": "收到，先查重。图书馆里最接近的是「Simplified Sparse Attention via Gist Tokens」，相似度 0.88。结论：已被做过。关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。"
+    },
+    {
+     "kind": "assistant",
+     "text": "已立项。代码员工和写作员工在轮到它们的工序时启动。"
+    },
+    {
+     "kind": "assistant",
+     "text": "方法草案写好了：Long Context · Inference Acceleration · Sparse Attention · Token。baseline：Hierarchical Vla、Simplified Sparse Attention via Gist Tok、RIFT。"
+    },
+    {
+     "kind": "assistant",
+     "text": "实验结果表已交。以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 58.9 vs 51.3，Average completed subtasks (%) 63.7 vs 62.0，Error recovery rate af"
+    },
+    {
+     "kind": "assistant",
+     "text": "当前工序是「写作排版」。打开项目页上的开关后，从这里接着推进。"
+    }
+   ],
+   "reports": [
+    {
+     "kind": "report",
+     "text": "样例项目：已完成到「实验」，当前工序是「写作排版」。",
+     "key": false
+    }
+   ]
+  },
+  {
+   "idea": "机器人长程操作：用场景图记录物体关系和状态变化，视觉语言动作模型按子目标执行，失败时沿场景图回退重新规划，减少多步任务里的误差累积",
+   "title": "Robot · Long-Horizon · Manipulation · Scene Graph",
+   "verdict": "需调整",
+   "status": "running",
+   "note": "样例项目，内容是占位的",
+   "stages": {
+    "idea": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "hatch": {
+     "status": "done",
+     "pct": 100,
+     "note": "需调整"
+    },
+    "team": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "method": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "exp": {
+     "status": "run",
+     "pct": 0,
+     "note": null
+    },
+    "write": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    },
+    "review": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    },
+    "ship": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    }
+   },
+   "items": [
+    {
+     "kind": "egg",
+     "stage": "idea",
+     "building": "cityhall",
+     "title": "idea #4",
+     "body": {
+      "text": "机器人长程操作：用场景图记录物体关系和状态变化，视觉语言动作模型按子目标执行，失败时沿场景图回退重新规划，减少多步任务里的误差累积"
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "hatch",
+     "building": "hatchery",
+     "title": "撞车报告",
+     "body": {
+      "verdict": "需调整",
+      "similar": [
+       {
+        "paper_id": "arxiv:2610.05230",
+        "title": "Vela: Scaling Vision-Language-Action Models with Adaptive Action Curve Parametrization",
+        "similarity": 0.57,
+        "note": "共用关键词：robot, long-horizon, long, horizon, manipulation · 2026 年，Yifan Li, Jiaxu Wang, Dongming Wu et al.",
+        "url": "http://arxiv.org/abs/2610.05230v1",
+        "year": "2026"
+       },
+       {
+        "paper_id": "arxiv:2604.20246",
+        "title": "Cortex 2.0: Grounding World Models in Real-World Industrial Deployment",
+        "similarity": 0.56,
+        "note": "共用关键词：long-horizon, long, horizon, manipulation, vision-language-action · 2026 年，Adriana Aida, Walid Amer, Katarina Bankovic et al.",
+        "url": "http://arxiv.org/abs/2604.20246v1",
+        "year": "2026"
+       },
+       {
+        "paper_id": "arxiv:2610.31518",
+        "title": "SCOPE: Scene-graph Construction Optimized by Plan Error-correction for Robot Long-term Planning Datasets",
+        "similarity": 0.56,
+        "note": "共用关键词：robot, long-horizon, long, horizon, scene · 2026 年，Chaoyue Li, Zeyu Gao, Yanfeng Lu et al.",
+        "url": "http://arxiv.org/abs/2610.31518v1",
+        "year": "2026"
+       }
+      ],
+      "gap": "最相近的工作里没有出现：accumulation。",
+      "suggestions": [
+       "围绕「accumulation」收窄问题",
+       "先精读最相近的两篇，确认差异是本质的"
+      ],
+      "summary": "需调整（最高相似度 0.57，8 篇候选）。",
+      "sources": {
+       "library": 8,
+       "method": "coverage"
+      },
+      "candidates": [
+       {
+        "paper_id": "arxiv:2610.05230",
+        "arxiv_id": "2610.05230",
+        "title": "Vela: Scaling Vision-Language-Action Models with Adaptive Action Curve Parametrization",
+        "year": "2026",
+        "authors": "Yifan Li, Jiaxu Wang, Dongming Wu et al.",
+        "snippet": "Most vision-language-action models represent future motion as fixed-rate action chunks, tying temporal resolution and prediction horizon to a fixed output budget. This pointwise representation wastes capacity on highly correlated neighboring actions, leaves temporal continuity and smoothness to be learned implicitly, a",
+        "url": "http://arxiv.org/abs/2610.05230v1",
+        "tags": [
+         "机器人",
+         "具身智能",
+         "规划",
+         "多模态"
+        ],
+        "similarity": 0.57,
+        "matched": [
+         "robot",
+         "long-horizon",
+         "long",
+         "horizon",
+         "manipulation",
+         "vision-language-action",
+         "vision",
+         "action"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2604.20246",
+        "arxiv_id": "2604.20246",
+        "title": "Cortex 2.0: Grounding World Models in Real-World Industrial Deployment",
+        "year": "2026",
+        "authors": "Adriana Aida, Walid Amer, Katarina Bankovic et al.",
+        "snippet": "Industrial robotic manipulation demands reliable long-horizon execution across embodiments, tasks, and changing object distributions. While Vision-Language-Action models have demonstrated strong generalization, they remain fundamentally reactive. By optimizing the next action given the current observation without evalu",
+        "url": "http://arxiv.org/abs/2604.20246v1",
+        "tags": [
+         "机器人",
+         "具身智能",
+         "规划",
+         "多模态"
+        ],
+        "similarity": 0.56,
+        "matched": [
+         "long-horizon",
+         "long",
+         "horizon",
+         "manipulation",
+         "vision-language-action",
+         "vision",
+         "action",
+         "planning"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2610.31518",
+        "arxiv_id": "2610.31518",
+        "title": "SCOPE: Scene-graph Construction Optimized by Plan Error-correction for Robot Long-term Planning Datasets",
+        "year": "2026",
+        "authors": "Chaoyue Li, Zeyu Gao, Yanfeng Lu et al.",
+        "snippet": "Task and Motion Planning (TAMP) stands as a fundamental challenge in robotics, essential for enabling autonomous agents to execute complex, long-horizon tasks in diverse environments. While Large Language Models (LLMs) introduce a new paradigm for TAMP by leveraging extensive common sense, their inherent reasoning limi",
+        "url": "http://arxiv.org/abs/2610.31518v1",
+        "tags": [
+         "机器人",
+         "具身智能",
+         "规划",
+         "场景图",
+         "智能体"
+        ],
+        "similarity": 0.56,
+        "matched": [
+         "robot",
+         "long-horizon",
+         "long",
+         "horizon",
+         "scene",
+         "graph",
+         "planning",
+         "error"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2509.21928",
+        "arxiv_id": "2509.21928",
+        "title": "SAGE: Scene Graph-Aware Guidance and Execution for Long-Horizon Manipulation Tasks",
+        "year": "2025",
+        "authors": "Jialiang Li, Wenzheng Wu, Gaojing Zhang et al.",
+        "snippet": "Successfully solving long-horizon manipulation tasks remains a fundamental challenge. These tasks involve extended action sequences and complex object interactions, presenting a critical gap between high-level symbolic planning and low-level continuous control. To bridge this gap, two essential capabilities are require",
+        "url": "http://arxiv.org/abs/2509.21928v1",
+        "tags": [
+         "机器人",
+         "具身智能",
+         "规划",
+         "场景图",
+         "多模态"
+        ],
+        "similarity": 0.54,
+        "matched": [
+         "long-horizon",
+         "long",
+         "horizon",
+         "manipulation",
+         "scene",
+         "graph",
+         "action",
+         "planning"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2012.07277",
+        "arxiv_id": "2012.07277",
+        "title": "Hierarchical Planning for Long-Horizon Manipulation with Geometric and Symbolic Scene Graphs",
+        "year": "2020",
+        "authors": "Yifeng Zhu, Jonathan Tremblay, Stan Birchfield et al.",
+        "snippet": "We present a visually grounded hierarchical planning algorithm for long-horizon manipulation tasks. Our algorithm offers a joint framework of neuro-symbolic task planning and low-level motion generation conditioned on the specified goal. At the core of our approach is a two-level scene graph representation, namely geom",
+        "url": "http://arxiv.org/abs/2012.07277v2",
+        "tags": [
+         "机器人",
+         "具身智能",
+         "规划",
+         "场景图"
+        ],
+        "similarity": 0.54,
+        "matched": [
+         "robot",
+         "long-horizon",
+         "long",
+         "horizon",
+         "manipulation",
+         "scene",
+         "graph",
+         "planning"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2409.16473",
+        "arxiv_id": "2409.16473",
+        "title": "KinScene: Model-Based Mobile Manipulation of Articulated Scenes",
+        "year": "2024",
+        "authors": "Cheng-Chun Hsu, Ben Abbatematteo, Zhenyu Jiang et al.",
+        "snippet": "Sequentially interacting with articulated objects is crucial for a mobile manipulator to operate effectively in everyday environments. To enable long-horizon tasks involving articulated objects, this study explores building scene-level articulation models for indoor scenes through autonomous exploration. While previous",
+        "url": "http://arxiv.org/abs/2409.16473v2",
+        "tags": [
+         "机器人",
+         "具身智能",
+         "规划"
+        ],
+        "similarity": 0.54,
+        "matched": [
+         "robot",
+         "long-horizon",
+         "long",
+         "horizon",
+         "manipulation",
+         "scene",
+         "action",
+         "planning"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2307.06135",
+        "arxiv_id": "2307.06135",
+        "title": "SayPlan: Grounding Large Language Models using 3D Scene Graphs for Scalable Robot Task Planning",
+        "year": "2023",
+        "authors": "Krishan Rana, Jesse Haviland, Sourav Garg et al.",
+        "snippet": "Large language models (LLMs) have demonstrated impressive results in developing generalist planning agents for diverse tasks. However, grounding these plans in expansive, multi-floor, and multi-room environments presents a significant challenge for robotics. We introduce SayPlan, a scalable approach to LLM-based, large",
+        "url": "http://arxiv.org/abs/2307.06135v2",
+        "tags": [
+         "机器人",
+         "具身智能",
+         "规划",
+         "场景图",
+         "智能体"
+        ],
+        "similarity": 0.53,
+        "matched": [
+         "robot",
+         "long-horizon",
+         "long",
+         "horizon",
+         "scene",
+         "graph",
+         "action",
+         "planning"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2511.17889",
+        "arxiv_id": "2511.17889",
+        "title": "MobileVLA-R1: Reinforcing Vision-Language-Action for Mobile Robots",
+        "year": "2025",
+        "authors": "Ting Huang, Dongjian Li, Rui Yang et al.",
+        "snippet": "Grounding natural-language instructions into continuous control for quadruped robots remains a fundamental challenge in vision language action. Existing methods struggle to bridge high-level semantic reasoning and low-level actuation, leading to unstable grounding and weak generalization in the real world. To address t",
+        "url": "http://arxiv.org/abs/2511.17889v1",
+        "tags": [
+         "机器人",
+         "具身智能",
+         "规划",
+         "多模态"
+        ],
+        "similarity": 0.5,
+        "matched": [
+         "robot",
+         "long-horizon",
+         "long",
+         "horizon",
+         "vision-language-action",
+         "vision",
+         "action"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "team",
+     "building": "market",
+     "title": "编队方案",
+     "body": {
+      "team": [],
+      "reason": "样例项目：负责人接手后由它启动代码员工和写作员工。"
+     }
+    },
+    {
+     "kind": "draft",
+     "stage": "method",
+     "building": "mill",
+     "title": "Robot · Long-Horizon · Manipulation · Scene Graph",
+     "body": {
+      "title": "Robot · Long-Horizon · Manipulation · Scene Graph",
+      "problem": "Idea（原文）：机器人长程操作：用场景图记录物体关系和状态变化，视觉语言动作模型按子目标执行，失败时沿场景图回退重新规划，减少多步任务里的误差累积。目标是解决撞车报告里的空白点：最相近的工作里没有出现：accumulation。",
+      "mechanism": [
+       "针对 robot 设计专门的模块（样例占位，机制等负责人接手后写）",
+       "针对 long-horizon 设计专门的模块（样例占位，机制等负责人接手后写）",
+       "针对 manipulation 设计专门的模块（样例占位，机制等负责人接手后写）"
+      ],
+      "baselines": [
+       {
+        "name": "Hierarchical Vla",
+        "source": "sample-lab/vla-bench/baselines/hierarchical_vla.py"
+       },
+       {
+        "name": "Vela",
+        "source": "arxiv:2610.05230"
+       },
+       {
+        "name": "Cortex 2.0",
+        "source": "arxiv:2604.20246"
+       }
+      ],
+      "datasets": [
+       "sample-lab/vla-bench",
+       "sample-lab/vla-bench"
+      ],
+      "metrics": [
+       "Task success rate (%)",
+       "Average completed subtasks (%)",
+       "Error recovery rate after perturbations (%)"
+      ],
+      "risks": [
+       "样例占位内容，机制部分等负责人接手后重写"
+      ]
+     }
+    }
+   ],
+   "press": {},
+   "chat": [
+    {
+     "kind": "note",
+     "text": "样例对话：以下是占位内容，展示项目负责人推进项目的方式。打开项目页上的开关后，由真实的负责人接手。"
+    },
+    {
+     "kind": "user",
+     "text": "机器人长程操作：用场景图记录物体关系和状态变化，视觉语言动作模型按子目标执行，失败时沿场景图回退重新规划，减少多步任务里的误差累积"
+    },
+    {
+     "kind": "assistant",
+     "text": "收到，先查重。图书馆里最接近的是「Vela: Scaling Vision-Language-Action Models with Adaptive Action Curve Parametrization」，相似度 0.57。结论：需调整。最相近的工作里没有出现：accumulation。"
+    },
+    {
+     "kind": "assistant",
+     "text": "已立项。代码员工和写作员工在轮到它们的工序时启动。"
+    },
+    {
+     "kind": "assistant",
+     "text": "方法草案写好了：Robot · Long-Horizon · Manipulation · Scene Graph。baseline：Hierarchical Vla、Vela、Cortex 2.0。"
+    },
+    {
+     "kind": "assistant",
+     "text": "当前工序是「实验」。打开项目页上的开关后，从这里接着推进。"
+    }
+   ],
+   "reports": [
+    {
+     "kind": "report",
+     "text": "样例项目：已完成到「方法设计」，当前工序是「实验」。",
+     "key": false
+    }
+   ]
+  },
+  {
+   "idea": "多智能体通过 model context protocol 共享工具：研究工具调用的分工与交接，谁来调用、何时交给别人、怎样避免重复调用",
+   "title": "多智能体通过 model context pr…",
+   "verdict": "已被做过",
+   "status": "running",
+   "note": "样例项目，内容是占位的",
+   "stages": {
+    "idea": {
+     "status": "done",
+     "pct": 100,
+     "note": null
+    },
+    "hatch": {
+     "status": "run",
+     "pct": 80,
+     "note": "撞车报告已交，等你决定是否立项"
+    },
+    "team": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    },
+    "method": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    },
+    "exp": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    },
+    "write": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    },
+    "review": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    },
+    "ship": {
+     "status": "todo",
+     "pct": 0,
+     "note": null
+    }
+   },
+   "items": [
+    {
+     "kind": "egg",
+     "stage": "idea",
+     "building": "cityhall",
+     "title": "idea #5",
+     "body": {
+      "text": "多智能体通过 model context protocol 共享工具：研究工具调用的分工与交接，谁来调用、何时交给别人、怎样避免重复调用"
+     }
+    },
+    {
+     "kind": "notes",
+     "stage": "hatch",
+     "building": "hatchery",
+     "title": "撞车报告",
+     "body": {
+      "verdict": "已被做过",
+      "similar": [
+       {
+        "paper_id": "arxiv:2606.10322",
+        "title": "Game-Theoretic Multi-Agent Control for Robust Contextual Reasoning in LLMs",
+        "similarity": 0.85,
+        "note": "共用关键词：multi-agent, multi, agent, context, protocol · 2026 年，Saeid Jamshidi, Amin Nikanjam, Arghavan Moradi Dakhel et al.",
+        "url": "http://arxiv.org/abs/2606.10322v2",
+        "year": "2026"
+       },
+       {
+        "paper_id": "arxiv:2601.06235",
+        "title": "An Intelligent AI glasses System with Multi-Agent Architecture for Real-Time Voice Processing and Task Execution",
+        "similarity": 0.85,
+        "note": "共用关键词：multi-agent, multi, agent, context, protocol · 2026 年，Sheng-Kai Chen, Jyh-Horng Wu, Ching-Yao Lin et al.",
+        "url": "http://arxiv.org/abs/2601.06235v1",
+        "year": "2026"
+       },
+       {
+        "paper_id": "arxiv:2510.14312",
+        "title": "Terrarium: Revisiting the Blackboard for Multi-Agent Safety, Privacy, and Security Studies",
+        "similarity": 0.73,
+        "note": "共用关键词：multi-agent, multi, agent, protocol, tool · 2025 年，Mason Nakamura, Abhinav Kumar, Saaduddin Mahmud et al.",
+        "url": "http://arxiv.org/abs/2510.14312v1",
+        "year": "2025"
+       }
+      ],
+      "gap": "最相近的工作里没有出现：use。",
+      "suggestions": [
+       "换一个没被验证过的任务或场景",
+       "把已有方法当 baseline，找它的失败案例作为切入点"
+      ],
+      "summary": "已被做过（最高相似度 0.85，8 篇候选）。",
+      "sources": {
+       "library": 8,
+       "method": "coverage"
+      },
+      "candidates": [
+       {
+        "paper_id": "arxiv:2606.10322",
+        "arxiv_id": "2606.10322",
+        "title": "Game-Theoretic Multi-Agent Control for Robust Contextual Reasoning in LLMs",
+        "year": "2026",
+        "authors": "Saeid Jamshidi, Amin Nikanjam, Arghavan Moradi Dakhel et al.",
+        "snippet": "Large Language Models (LLMs) in multi-turn interactions maintain evolving context rather than generating isolated responses, making them vulnerable to prompt-injection and context-poisoning attacks in which locally plausible adversarial fragments gradually distort reasoning trajectories. Existing defenses mainly filter",
+        "url": "http://arxiv.org/abs/2606.10322v2",
+        "tags": [
+         "规划",
+         "智能体"
+        ],
+        "similarity": 0.85,
+        "matched": [
+         "multi-agent",
+         "multi",
+         "agent",
+         "context",
+         "protocol",
+         "tool"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2601.06235",
+        "arxiv_id": "2601.06235",
+        "title": "An Intelligent AI glasses System with Multi-Agent Architecture for Real-Time Voice Processing and Task Execution",
+        "year": "2026",
+        "authors": "Sheng-Kai Chen, Jyh-Horng Wu, Ching-Yao Lin et al.",
+        "snippet": "This paper presents an AI glasses system that integrates real-time voice processing, artificial intelligence(AI) agents, and cross-network streaming capabilities. The system employs dual-agent architecture where Agent 01 handles Automatic Speech Recognition (ASR) and Agent 02 manages AI processing through local Large L",
+        "url": "http://arxiv.org/abs/2601.06235v1",
+        "tags": [
+         "人工智能",
+         "检索增强",
+         "智能体"
+        ],
+        "similarity": 0.85,
+        "matched": [
+         "multi-agent",
+         "multi",
+         "agent",
+         "context",
+         "protocol",
+         "tool"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2510.14312",
+        "arxiv_id": "2510.14312",
+        "title": "Terrarium: Revisiting the Blackboard for Multi-Agent Safety, Privacy, and Security Studies",
+        "year": "2025",
+        "authors": "Mason Nakamura, Abhinav Kumar, Saaduddin Mahmud et al.",
+        "snippet": "A multi-agent system (MAS) powered by large language models (LLMs) can automate tedious user tasks such as meeting scheduling that requires inter-agent collaboration. LLMs enable nuanced protocols that account for unstructured private data, user constraints, and preferences. However, this design introduces new risks, i",
+        "url": "http://arxiv.org/abs/2510.14312v1",
+        "tags": [
+         "人工智能",
+         "智能体"
+        ],
+        "similarity": 0.73,
+        "matched": [
+         "multi-agent",
+         "multi",
+         "agent",
+         "protocol",
+         "tool"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2607.25297",
+        "arxiv_id": "2607.25297",
+        "title": "Hybrid Analysis for Secure MCP Tool Use in LLM Agents",
+        "year": "2026",
+        "authors": "Ping He, Yuexiang Xie, Yaliang Li et al.",
+        "snippet": "The rapid development of large language model (LLM) agents has enabled their broad adoption across diverse real-world tasks. To standardize interactions between LLM agents and external environments, Model Context Protocol (MCP) tools have emerged as a de facto standard and have been widely integrated into these systems",
+        "url": "http://arxiv.org/abs/2607.25297v1",
+        "tags": [
+         "人工智能",
+         "智能体"
+        ],
+        "similarity": 0.72,
+        "matched": [
+         "agent",
+         "context",
+         "protocol",
+         "tool",
+         "use"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2601.17502",
+        "arxiv_id": "2601.17502",
+        "title": "Pipeline Inspection, Visualization, and Interoperability in PyTerrier",
+        "year": "2026",
+        "authors": "Emmanouil Georgios Lionis, Craig Macdonald, Sean MacAvaney",
+        "snippet": "PyTerrier provides a declarative framework for building and experimenting with Information Retrieval (IR) pipelines. In this demonstration, we highlight several recent pipeline operations that improve their ability to be programmatically inspected, visualized, and integrated with other tools (via the Model Context Prot",
+        "url": "http://arxiv.org/abs/2601.17502v2",
+        "tags": [
+         "检索增强",
+         "智能体"
+        ],
+        "similarity": 0.72,
+        "matched": [
+         "agent",
+         "context",
+         "protocol",
+         "tool",
+         "use"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2505.07838",
+        "arxiv_id": "2505.07838",
+        "title": "Moving From Monolithic To Microservices Architecture for Multi-Agent Systems",
+        "year": "2025",
+        "authors": "Muskaan Goyal, Pranav Bhasin",
+        "snippet": "The transition from monolithic to microservices architecture revolutionized software development by improving scalability and maintainability. This paradigm shift is now becoming relevant for complex multi-agent systems (MAS). This review article explores the evolution from monolithic architecture to microservices arch",
+        "url": "http://arxiv.org/abs/2505.07838v1",
+        "tags": [
+         "人工智能",
+         "智能体"
+        ],
+        "similarity": 0.7,
+        "matched": [
+         "multi-agent",
+         "multi",
+         "agent",
+         "context",
+         "protocol"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2508.18781",
+        "arxiv_id": "2508.18781",
+        "title": "AniME: Adaptive Multi-Agent Planning for Long Animation Generation",
+        "year": "2025",
+        "authors": "Lisai Zhang, Baohan Xu, Siqian Yang et al.",
+        "snippet": "We present AniME, a director-oriented multi-agent system for automated long-form anime production, covering the full workflow from a story to the final video. The director agent keeps a global memory for the whole workflow, and coordinates several downstream specialized agents. By integrating customized Model Context P",
+        "url": "http://arxiv.org/abs/2508.18781v3",
+        "tags": [
+         "人工智能",
+         "规划",
+         "智能体"
+        ],
+        "similarity": 0.7,
+        "matched": [
+         "multi-agent",
+         "multi",
+         "agent",
+         "context",
+         "protocol"
+        ]
+       },
+       {
+        "paper_id": "arxiv:2510.03610",
+        "arxiv_id": "2510.03610",
+        "title": "PentestMCP: A Toolkit for Agentic Penetration Testing",
+        "year": "2025",
+        "authors": "Zachary Ezetta, Wu-chang Feng",
+        "snippet": "Agentic AI is transforming security by automating many tasks being performed manually. While initial agentic approaches employed a monolithic architecture, the Model-Context-Protocol has now enabled a remote-procedure call (RPC) paradigm to agentic applications, allowing for the flexible construction and composition of",
+        "url": "http://arxiv.org/abs/2510.03610v1",
+        "tags": [
+         "人工智能",
+         "智能体"
+        ],
+        "similarity": 0.7,
+        "matched": [
+         "multi-agent",
+         "multi",
+         "agent",
+         "context",
+         "protocol"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "press": {},
+   "chat": [
+    {
+     "kind": "note",
+     "text": "样例对话：以下是占位内容，展示项目负责人推进项目的方式。打开项目页上的开关后，由真实的负责人接手。"
+    },
+    {
+     "kind": "user",
+     "text": "多智能体通过 model context protocol 共享工具：研究工具调用的分工与交接，谁来调用、何时交给别人、怎样避免重复调用"
+    },
+    {
+     "kind": "assistant",
+     "text": "收到，先查重。图书馆里最接近的是「Game-Theoretic Multi-Agent Control for Robust Contextual Reasoning in LLMs」，相似度 0.85。结论：已被做过。最相近的工作里没有出现：use。"
+    },
+    {
+     "kind": "assistant",
+     "text": "撞车报告已交。是否立项需要你决定，问题在这个项目的对话上方。"
+    }
+   ],
+   "reports": [
+    {
+     "kind": "report",
+     "text": "样例项目：查重完成，结论是「已被做过」，最接近的工作相似度 0.85。立项前等你决定。",
+     "key": false
+    },
+    {
+     "kind": "ask",
+     "question": "查重结论是「已被做过」，最接近的工作相似度 0.85。照原 idea 立项，还是先调整 idea？",
+     "choices": [
+      "照原 idea 立项",
+      "先调整 idea"
+     ]
+    }
+   ]
+  }
+ ]
+}

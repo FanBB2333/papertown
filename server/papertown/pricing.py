@@ -1,4 +1,4 @@
-"""USD per million tokens (input, output[, cache read]), which the bank prices every call with. Models
+"""USD per million tokens (input, output[, cache read]), used to estimate local session usage. Models
 not listed cost 0 until set, e.g. PAPERTOWN_PRICES='{"deepseek-chat": [0.27, 1.1]}'. A cache read costs a
 tenth of the input price unless the third value says otherwise.
 """
@@ -9,7 +9,6 @@ import json
 import os
 import re
 
-from .base import Usage
 
 PRICES: dict[str, tuple[float, ...]] = {
     "claude-fable-5-2": (8.0, 40.0, 0.20),
@@ -61,7 +60,3 @@ try:
 except (ValueError, TypeError):
     pass
 
-
-def cost(model: str, usage: Usage) -> float:
-    p_in, p_out = PRICES.get(model, (0.0, 0.0))[:2]
-    return (usage.input_tokens * p_in + usage.output_tokens * p_out) / 1_000_000

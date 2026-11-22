@@ -8,6 +8,7 @@ import { Ava, Item, ROLE_NAMES, Sprite, itemName } from '../art';
 import { GpuBoard } from './Gpus';
 import { LinkedRepos } from './Linked';
 import { LibraryShelf, LinePapers } from './Papers';
+import { AgentPost } from './Resident';
 import { tr } from '../i18n';
 
 interface Props {
@@ -17,9 +18,6 @@ interface Props {
   onClose: () => void;
   onOpen: (id: string) => void;
   onAsk: (id: string, name: string) => void;
-  onHatch: (lineId: string) => void;
-  onResume: (lineId: string) => void;
-  onAdjust: (lineId: string) => void;
   focus?: string | null;
 }
 
@@ -28,17 +26,16 @@ const STAGE_SKILLS: Record<string, string[]> = {
   review: ['anonymity-check', 'paper-review'],
 };
 const STAGE_TOOLS: Record<string, string[]> = {
-  hatch: ['library.search', 'arxiv.search (MCP)', 'genealogy.expand'], team: ['market.compile_team'],
-  method: ['library.search', 'depot.search'], exp: ['power.status', 'power.submit', 'power.wait'],
+  hatch: ['library.search', 'arxiv.search (MCP)', 'genealogy.expand'], team: ['pt hire'],
+  method: ['library.search', 'depot.search'], exp: ['pt stage', 'pt output'],
   write: ['library.get', 'press.typeset'], review: ['press.read'], ship: ['press.package'],
 };
 
-const STAGE_WORD: Record<Stage['status'], string> = { done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('排队'), fail: tr('出错') };
+const STAGE_WORD: Record<Stage['status'], string> = { done: tr('完成'), run: tr('进行中'), todo: tr('排队') };
 
 const chip = (st: string, pct?: number) => st === 'done' ? <span className="chip ok">{STAGE_WORD.done}</span>
   : st === 'run' ? <span className="chip pri">{STAGE_WORD.run}{pct ? ` ${pct}%` : ''}</span>
-    : st === 'wait' ? <span className="chip warn">{STAGE_WORD.wait}</span>
-      : st === 'fail' ? <span className="chip bad">{STAGE_WORD.fail}</span> : <span className="chip">{STAGE_WORD.todo}</span>;
+    : <span className="chip">{STAGE_WORD.todo}</span>;
 
 const chips = (xs: string[]) => xs.length ? xs.map(x => <span key={x} className="chip">{x}</span>) : <span className="muted">—</span>;
 
@@ -56,7 +53,7 @@ function Belt({ stations }: { stations: { key: string; name: string; st: string;
       <div className="stations" style={style}>
         <div className="belt" />
         {stations.map((s, i) => (
-          <div key={s.key} className={`stn ${s.st === 'wait' ? 'run' : s.st === 'fail' ? 'todo' : s.st}`} data-open={s.open} title={s.open ? tr('打开{0}所在的建筑', s.name) : undefined}>
+          <div key={s.key} className={`stn ${s.st}`} data-open={s.open} title={s.open ? tr('打开{0}所在的建筑', s.name) : undefined}>
             <div className="stn-ic">{s.icon}</div>
             <b>{i + 1}. {s.name}</b>
             {chip(s.st, s.pct)}
@@ -92,7 +89,7 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   );
   if (stage === 'exp') return (
     <>
-      {body.simulated && <p><span className="chip warn">{tr('模拟电厂 · 模拟结果，不是真实实验')}</span></p>}
+      {body.simulated && <p><span className="chip warn">{tr('样例结果（占位内容）')}</span></p>}
       <table className="rtab"><thead><tr><th>{tr('方法')}</th>{body.metrics?.map((m: string) => <th key={m}>{m}</th>)}</tr></thead>
         <tbody>{body.rows?.map((r: any) => <tr key={r.method} className={r.ours ? 'ours' : ''}><td>{r.method}</td>{r.values.map((v: number, i: number) => <td key={i}>{v}</td>)}</tr>)}</tbody>
       </table>
@@ -123,9 +120,8 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   return null;
 }
 
-export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, onAsk, real, tick }: {
-  line: Line; typeOf: (id: string) => string; onOpen: (id: string) => void; onHatch: (id: string) => void;
-  onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; real: string; tick: number;
+export function MillDetail({ line, typeOf, onOpen, onAsk, real, tick }: {
+  line: Line; typeOf: (id: string) => string; onOpen: (id: string) => void; onAsk: () => void; real: string; tick: number;
 }) {
   const outputs = line.outputs ?? {};
   const done = Object.keys(outputs);
@@ -139,21 +135,18 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
       <Belt stations={line.stages.map(s => ({
         key: s.key, name: s.name, st: s.status, pct: s.pct, out: s.out, open: s.building,
         icon: <Sprite type={typeOf(s.building)} />,
-        team: s.workers.length ? s.workers.map(w => <Ava key={w.id} role={w.role} level={w.level} code={w.id} />) : <em>—</em>,
+        team: <AgentPost stage={s} />,
       }))} />
       <section className="detail">
         <div className="pnl">
           <h4>{line.stages.findIndex(s => s.key === cur.key) + 1}. {cur.name} · {STAGE_WORD[cur.status]}</h4>
           <dl className="kv">
-            <dt>{tr('员工')}</dt><dd>{cur.workers.length ? cur.workers.map(w => <span key={w.id} className="w"><Ava role={w.role} level={w.level} code={w.id} />{w.title} Lv.{w.level}</span>) : <span className="muted">{tr('Papertown 直接处理')}</span>}</dd>
-            <dt>{tr('小镇 API 预算')}</dt><dd>{line.linked ? <span className="muted">{tr('本地项目未计入小镇 API 预算')}</span> : <><div className="bar"><i style={{ width: `${Math.min(100, 100 * line.spent / line.budget)}%` }} /></div>${line.spent.toFixed(4)} / ${line.budget.toFixed(2)}</>}</dd>
+            <dt>{tr('员工')}</dt><dd><AgentPost stage={cur} /></dd>
             <dt>Skills</dt><dd>{chips(STAGE_SKILLS[cur.key] ?? [])}</dd>
             <dt>{tr('工具')}</dt><dd>{(STAGE_TOOLS[cur.key] ?? []).map(s => <span key={s} className="chip">{s}</span>)}</dd>
-            <dt>{tr('状态')}</dt><dd>{line.note ?? cur.note ?? ({ waiting: tr('撞车报告已经发到对话框，等你决定'), done: tr('已出厂') } as Record<string, string>)[line.status] ?? line.status}</dd>
+            <dt>{tr('状态')}</dt><dd>{line.note ?? cur.note ?? ({ done: tr('已出厂') } as Record<string, string>)[line.status] ?? line.status}</dd>
           </dl>
           <div className="btns" style={{ marginTop: 12 }}>
-            {line.status === 'waiting' && <><button className="btn pri" onClick={() => onHatch(line.id)}>{tr('孵化并立项')}</button><button className="btn" onClick={() => onAdjust(line.id)}>{tr('调整 idea')}</button></>}
-            {['paused', 'failed'].includes(line.status) && <button className="btn pri" onClick={() => onResume(line.id)}>{tr('继续')}</button>}
             <button className="btn" onClick={onAsk}>{tr('问问这里的员工')}</button>
           </div>
         </div>
@@ -161,7 +154,7 @@ export function MillDetail({ line, typeOf, onOpen, onHatch, onResume, onAdjust, 
           <h4>{tr('产出 ·')} {shown ? names[shown] : '—'}</h4>
           <div className="out-tabs">{done.map(k => <a key={k} className={k === shown ? 'on' : ''} onClick={() => setView(k)}>{names[k]}</a>)}</div>
           {shown ? <Output stage={shown} body={outputs[shown]} lineId={line.id} />
-            : line.linked && <p className="muted small">{tr('本地项目不走流水线，没有工序产出。代码和论文的现状在下面「本地仓库」里。')}</p>}
+            : line.linked && <p className="muted small">{tr('工序产出由项目员工提交。代码和论文的现状见「本地仓库」。')}</p>}
         </div>
         <div className="pnl">
           <h4>{next ? tr('下一站 · {0}', next.name) : tr('已出厂')}</h4>
@@ -229,8 +222,7 @@ export function Sheet(p: Props) {
         </div>
       </header>
       {line ? (
-        <MillDetail line={line} typeOf={typeOf} real={s.real} tick={p.tick} onOpen={p.onOpen} onHatch={p.onHatch} onResume={p.onResume}
-          onAdjust={p.onAdjust} onAsk={() => p.onAsk(s.id, s.name)} />
+        <MillDetail line={line} typeOf={typeOf} real={s.real} tick={p.tick} onOpen={p.onOpen} onAsk={() => p.onAsk(s.id, s.name)} />
       ) : (
         <>
           <Belt stations={(s.stations ?? []).map((x, i) => ({

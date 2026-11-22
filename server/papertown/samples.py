@@ -1,11 +1,10 @@
-"""Demo samples for the offline town: ordinary ideas put through the ordinary pipeline, each parked before a
-different stage. Also the library shelf, which files each seed paper under the query that found it.
-"""
+"""Prebuilt sample projects and the library shelves."""
 
 from __future__ import annotations
 
-import threading
-import time
+import json
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -15,19 +14,8 @@ from .library import Library
 if TYPE_CHECKING:
     from .town import Town
 
-# until: the stage a sample stops before (None: runs to the end; "hatch": waits for you)
-SAMPLES = [
-    {"idea": "仓库级代码 Agent：先用检索增强在整个代码仓库里定位相关文件和调用链，再让 agent 分步修改并跑测试回归，"
-             "减少跨文件修改时漏改、改错接口的情况", "until": None},
-    {"idea": "大语言模型审稿：把 peer review 拆成查新颖性、核对方法、核对实验三个 agent，先检索相近工作再评新颖性，"
-             "和单个模型直接审稿比打分的一致性与可解释性", "until": "review"},
-    {"idea": "长上下文推理加速：用稀疏注意力挑出关键 token，再对 KV cache 做分层压缩，显存减半时保持长文档问答的精度",
-     "until": "write"},
-    {"idea": "机器人长程操作：用场景图记录物体关系和状态变化，视觉语言动作模型按子目标执行，失败时沿场景图回退重新规划，"
-             "减少多步任务里的误差累积", "until": "exp"},
-    {"idea": "多智能体通过 model context protocol 共享工具：研究工具调用的分工与交接，谁来调用、何时交给别人、怎样避免重复调用",
-     "until": "hatch"},
-]
+FIXTURE = Path(__file__).parent / "data" / "samples.json"
+SAMPLES = json.loads(FIXTURE.read_text(encoding="utf-8"))["samples"] if FIXTURE.exists() else []
 
 # the seed library's search queries, as shelf labels
 TOPICS = {
@@ -58,48 +46,60 @@ class SampleError(Exception):
 
 
 def seed(town: "Town") -> dict:
-    """Put the samples the town does not have yet onto its lines. Offline only: with a model
-    connected every stage would call it, and that costs money."""
-    if not town.s.offline:
-        raise SampleError("样例只在展示模式（离线）里提供：接了模型以后，跑样例的每道工序都会真的调用模型、花钱")
-    have = {r["idea"] for r in town.db.q("select idea from lines")}
-    todo = [x for x in SAMPLES if x["idea"] not in have]
-    town.db.set_meta("samples", now())
-    if not todo:
-        return {"added": [], "note": "样例项目都已经在小镇里了"}
-    added = [(town.pipeline.submit_idea(x["idea"])["id"], x) for x in todo]
-    threading.Thread(target=_drive, args=(town, added), daemon=True, name="samples").start()
-    parked = sum(1 for _, x in added if x["until"] not in (None, "hatch"))
-    return {"added": [i for i, _ in added],
-            "note": f"放入了 {len(added)} 个样例项目，正在孵化场查重。之后"
-                    + "、".join(p for p in [
-                        "1 篇一路跑到出厂" if any(x["until"] is None for _, x in added) else "",
-                        f"{parked} 篇停在不同工序前（点「继续」接着跑）" if parked else "",
-                        "1 篇留在孵化场等你决定" if any(x["until"] == "hatch" for _, x in added) else ""] if p)
-                    + "。"}
+    """Import fixtures directly, leaving every sample lead unstarted."""
+    from .pipeline import STAGES
 
-
-def _drive(town: "Town", added: list[tuple[str, dict]]) -> None:
-    """Once the hatchery has reported on a sample, hatch it, parked where it should stop."""
-    for line_id, x in added:
-        if x["until"] == "hatch":
-            continue
-        t0 = time.time()
-        while time.time() - t0 < 180:
-            ln = town.pipeline.line(line_id)
-            if ln["status"] != "hatching" and not town.pipeline.running(line_id):
-                break
-            time.sleep(0.1)
-        if ln["status"] != "waiting":
-            continue
-        if x["until"]:
-            town.db.update("lines", {"id": line_id}, hold=x["until"])
-        town.pipeline.hatch(line_id)
+    samples = json.loads(FIXTURE.read_text(encoding="utf-8"))["samples"] if FIXTURE.exists() else SAMPLES
+    if not samples:
+        raise SampleError("预制样例文件尚未就绪")
+    added = []
+    with town.db.lock:
+        have = {r["idea"] for r in town.db.q("select idea from lines")}
+        for sample in samples:
+            if sample["idea"] in have:
+                continue
+            seq = (town.db.val("select max(seq) from lines") or 0) + 1
+            line_id = f"line_{seq}"
+            stages = sample["stages"]
+            stage = next((k for k, *_ in STAGES if stages[k]["status"] == "run"), None)
+            stage = stage or next((k for k, *_ in reversed(STAGES) if stages[k]["status"] == "done"), "idea")
+            at = now()
+            town.db.insert("lines", {"id": line_id, "seq": seq, "idea": sample["idea"], "title": sample["title"],
+                                     "verdict": sample["verdict"], "status": sample["status"], "note": sample["note"],
+                                     "sample": 1, "mill_id": "mill", "stage": stage, "created_at": at, "updated_at": at})
+            for idx, (key, _, building, _) in enumerate(STAGES):
+                st = stages[key]
+                town.db.insert("stages", {"line_id": line_id, "idx": idx, "key": key, "building": building,
+                                          "status": st["status"], "pct": st["pct"], "note": st["note"],
+                                          "started_at": at if st["status"] != "todo" else None,
+                                          "ended_at": at if st["status"] == "done" else None})
+            start = datetime.now(timezone.utc)
+            for idx, item in enumerate(sample["items"]):
+                row = town.save_item(line_id, **item)
+                town.db.update("items", {"id": row["id"]}, created_at=(start + timedelta(microseconds=idx)).isoformat())
+            directory = town.press.dir(line_id)
+            for name, text in sample["press"].items():
+                if name not in ("main.tex", "refs.bib"):
+                    raise SampleError(f"样例论文文件名无效：{name}")
+                (directory / name).write_text(text, encoding="utf-8")
+            agent = town.agents.ensure(line_id, "lead")
+            for event in sample["chat"]:
+                town.agents.record(agent["id"], event["kind"], {"text": event["text"]})
+            for report in sample["reports"]:
+                if report["kind"] == "ask":
+                    town.leads.ask(agent["id"], report["question"], report["choices"])
+                else:
+                    town.leads.report(agent["id"], report["text"], report.get("key", False))
+            town.pipeline._publish(line_id)
+            added.append(line_id)
+            have.add(sample["idea"])
+        town.db.set_meta("samples", now())
+    return {"added": added, "note": f"已放入 {len(added)} 个预制样例。样例的负责人开关默认关闭，打开项目开关后由真实负责人接手。"}
 
 
 def maybe_seed(town: "Town") -> None:
-    """The first start of an offline town with nothing on its lines gets the samples."""
-    if town.s.offline and town.s.samples and not town.db.get_meta("samples") and not town.db.val("select count(*) from lines"):
+    """Seed only the first empty start when samples are enabled."""
+    if town.s.samples and not town.db.get_meta("samples") and not town.db.val("select count(*) from lines"):
         seed(town)
 
 

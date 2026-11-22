@@ -1,6 +1,5 @@
 from fastapi.testclient import TestClient
 
-from .conftest import wait_for
 from .test_farm_agents import IDEA
 from .test_leads import started
 
@@ -14,7 +13,7 @@ def test_a_card_is_written_by_the_lead_only_when_you_ask(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, lid, {"waiting"})
+
         row = c.get("/api/cards").json()["cards"][0]
         assert row["line"]["id"] == lid and row["card"] is None and row["lead"] is None and row["pending"] is None
         assert c.post(f"/api/lines/{lid}/card", json={}).status_code == 400

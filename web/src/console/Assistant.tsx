@@ -9,7 +9,6 @@ import { HostedRoom } from '../agents/Terminal';
 import { TerminalPick } from '../agents/TerminalPick';
 import { fold, paseoTool, PaseoPick, piTool, PiSwitch, Text, Tool, Trail, UserMsg, usePaseoTalk, usePiTalk, type Item, type Linker, type ToolSt } from '../components/AgentRoom';
 import { AGENT_STATUS } from '../components/MillRoom';
-import { Select } from '../components/Select';
 import { tr, trx } from '../i18n';
 import { useNow } from './charts';
 import { Icon } from './icons';
@@ -18,10 +17,9 @@ import { describe, onPageChange, onSelect, pickable, SCOPE, snapshot, usePlace, 
 import { enterSends } from './util';
 
 const ID = 'assistant';
-const BUDGETS = [0.5, 1, 2];
 
-// what the message box sends: a message to the assistant, a new idea, or the rewrite of a project's idea
-export type Target = { kind: 'assistant'; draft?: string } | { kind: 'idea' } | { kind: 'adjust'; line: { id: string; seq: number; idea: string } };
+// What the message box sends: a message to the assistant or a new idea.
+export type Target = { kind: 'assistant'; draft?: string } | { kind: 'idea' };
 
 // starter questions: per panel, on any panel, about what you point at, about what you selected
 const ASK: Record<string, string[]> = {
@@ -147,9 +145,9 @@ interface Side {
   setDown: (why: string) => void;
 }
 
-export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea, onAdjust }: {
+export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea }: {
   toast: (t: string) => void; onClose: () => void; target: Target; setTarget: (t: Target) => void; focusKey: number;
-  onIdea: (text: string, budget: number) => Promise<boolean>; onAdjust: (lineId: string, text: string) => Promise<boolean>;
+  onIdea: (text: string) => Promise<boolean>;
 }) {
   const [view, setView] = useState<AssistantView | null>(null);
   const [err, setErr] = useState('');
@@ -271,7 +269,7 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea,
       ) : a.term ? <HostedRoom agent={a} toast={toast} /> : a.runtime === 'paseo'
         ? <PaseoSide key={a.ext_id ?? 'paseo'} agent={a} side={side} />
         : <PiSide key="pi" agent={a} side={side} />}
-      {side && a && !a.term && <Composer agent={a} side={side} target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} onAdjust={onAdjust} />}
+      {side && a && (!a.term || target.kind === 'idea') && <Composer agent={a} side={side} target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} />}
       {history && <History onPick={resume} onClose={() => setHistory(false)} />}
       {pointing && <Pointer onPick={pointing} onCancel={() => setPointing(null)} />}
     </div>
@@ -433,13 +431,12 @@ function Busy({ tail }: { tail?: Row }) {
 }
 
 // the message box: to the assistant, with the page, what you point at and the selected text going along; or a
-// new idea for the hatchery; or the rewrite of an idea that waits on you
-function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }: {
+// new idea for a resident lead.
+function Composer({ agent, side, target, setTarget, focusKey, onIdea }: {
   agent: Agent; side: Side; target: Target; setTarget: (t: Target) => void; focusKey: number;
-  onIdea: (text: string, budget: number) => Promise<boolean>; onAdjust: (lineId: string, text: string) => Promise<boolean>;
+  onIdea: (text: string) => Promise<boolean>;
 }) {
   const [text, setText] = useState('');
-  const [budget, setBudget] = useState(1);
   const [sending, setSending] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
   const place = usePlace();
@@ -458,10 +455,9 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
     el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
   }, [text]);
   useEffect(() => { if (focusKey) box.current?.focus(); }, [focusKey]);
-  // a new target brings its text: the idea to rewrite, or what to ask
+  // A new question can bring a draft from the building.
   useEffect(() => {
-    if (target.kind === 'adjust') setText(target.line.idea);
-    else if (target.kind === 'assistant' && target.draft) setText(target.draft);
+    if (target.kind === 'assistant' && target.draft) setText(target.draft);
     box.current?.focus();
   }, [target]);
 
@@ -475,14 +471,12 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
       return;
     }
     setSending(true);
-    const ok = target.kind === 'idea' ? await onIdea(s, budget) : await onAdjust(target.line.id, s);
+    const ok = await onIdea(s);
     setSending(false);
     if (!ok) return;
     setText('');
-    if (target.kind === 'adjust') setTarget({ kind: 'assistant' });
   }
-  const placeholder = target.kind === 'idea' ? tr('写一颗新 idea，孵化员会去图书馆和 arXiv 查重…')
-    : target.kind === 'adjust' ? tr('改写你的 idea，孵化员会重新查重…')
+  const placeholder = target.kind === 'idea' ? tr('写下新 idea，项目负责人将开始调研…')
       : !started ? tr('先在上面启动小助手，写新 idea 现在就可以')
         : off ? tr('连不上 Paseo，等它启动后再问（写新 idea 照常可用）')
         : !working ? tr('问这一页的事，或者请它帮你办') : agent.runtime === 'pi' ? tr('它在忙，发出的消息会排在它手上的事之后') : tr('它在忙，发出的消息会插进它手上的事');
@@ -507,25 +501,16 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea, onAdjust }
           onChange={e => setText(e.target.value)}
           onKeyDown={enterSends(() => go(text))} />
         <div className="as-tools">
-          {target.kind === 'adjust' ? (
-            <span className="as-pill on"><Icon n="compose" size={12} /><b>{tr('调整 #{0} 的 idea', target.line.seq)}</b>
-              <button onClick={() => { setText(''); setTarget({ kind: 'assistant' }); }} aria-label={tr('不调整了')}><Icon n="close" size={10} /></button></span>
-          ) : (
             <div className="seg mini as-to" role="radiogroup" aria-label={tr('发给谁')}>
               <button role="radio" aria-checked={asking} className={asking ? 'on' : ''} onClick={() => setTarget({ kind: 'assistant' })}>{tr('小助手')}</button>
               <button role="radio" aria-checked={!asking} className={!asking ? 'on' : ''} onClick={() => setTarget({ kind: 'idea' })}
-                title={tr('孵化员先去图书馆和 arXiv 查重，结果出来后在「进展」里决定')}>{tr('新 idea')}</button>
+                title={tr('创建项目后，负责人自动启动并开展调研')}>{tr('新 idea')}</button>
             </div>
-          )}
           {asking && pointable && (
             <button className={`as-tool${side.pointing ? ' on' : ''}`} title={tr('在页面上点一下你想问的地方')}
               onClick={() => (side.pointing ? side.unpoint() : side.point(side.setFocus))}>
               <Icon n="target" size={15} />{side.pointing ? tr('点页面上的一处…') : tr('指给它看')}
             </button>
-          )}
-          {target.kind === 'idea' && (
-            <Select className="as-budget" value={budget} onChange={setBudget} title={tr('本项目的小镇 API 预算')} label={tr('本项目的小镇 API 预算')}
-              options={BUDGETS.map(b => ({ value: b, label: `$${b.toFixed(2)}` }))} />
           )}
           {working && !typed
             ? <button className="as-send stop" title={tr('打断它手上的事')} onClick={() => api.abort(ID).catch(e => side.toast((e as Error).message))}><Icon n="stop" size={14} /></button>

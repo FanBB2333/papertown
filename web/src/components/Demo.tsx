@@ -6,7 +6,7 @@ import { REPO } from '../demo';
 import { tr } from '../i18n';
 import '../demo.css';
 
-const SEEN = 'papertown.demo-seen-2'; // a new key when the card says something new, so it shows again
+const SEEN = 'papertown.demo-seen-3'; // a new key when the card says something new, so it shows again
 
 function seen() {
   try { return localStorage.getItem(SEEN) === '1'; } catch { return false; }
@@ -28,7 +28,7 @@ export function DemoWelcome() {
       <div className="demo-card pnl">
         <h2>{tr('欢迎来到 Papertown')}</h2>
         <p>{tr('一个开源的科研流水线：idea 经过查重、立项、方法设计、实验、写作和审稿，最后成为一篇论文。每个项目走同一套研究流程，agent 员工做事，你在关键处监督、纠错和拍板。')}</p>
-        <p className="muted">{tr('这是只读的静态演示，内容来自一次离线运行的快照，五个示例项目停在不同的阶段。这里的改动不会保存。')}</p>
+        <p className="muted">{tr('这是只读的静态演示，五个预制样例项目展示不同阶段，包含占位内容。项目负责人默认关闭。')}</p>
         <ul>
           <li>{tr('「进展」里每个项目一张卡片，点开项目页，再进入「研究回路」')}</li>
           <li>{tr('研究回路按研究流程排成四行分块，按住 ⌘ 或 Ctrl 滚动缩放，点节点在右侧看详情')}</li>

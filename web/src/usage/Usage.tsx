@@ -114,20 +114,6 @@ export function BudgetDialog({ title, initial, confirm, onSave, onClose }: {
   </Dialog.Root>;
 }
 
-export function HatchDialog({ lineId, onDone, onClose }: { lineId: string; onDone: () => void; onClose: () => void }) {
-  const [defaults, setDefaults] = useState<UsageBudget | undefined>(undefined), [error, setError] = useState('');
-  useEffect(() => {
-    let alive = true;
-    api.usageSettings().then(s => { if (alive) setDefaults(s.default_budget); }, e => alive && setError((e as Error).message));
-    return () => { alive = false; };
-  }, []);
-  if (defaults === undefined) return <Dialog.Root open onOpenChange={v => { if (!v) onClose(); }}><Dialog size="sm" className="st-dlg">
-    <Dialog.Title>{tr('开启项目')}</Dialog.Title><Dialog.Description>{error ? tr(error) : tr('正在读取默认预算…')}</Dialog.Description>
-    <Button onClick={onClose}>{tr('取消')}</Button>
-  </Dialog></Dialog.Root>;
-  return <BudgetDialog title={tr('开启项目')} initial={defaults} confirm={tr('开启项目')} onClose={onClose} onSave={async budget => { await api.hatch(lineId, budget); onDone(); }} />;
-}
-
 export function ProjectUsage({ lineId }: { lineId: string }) {
   const [value, setValue] = useState<LineUsage | null>(null), [error, setError] = useState(''), [editing, setEditing] = useState(false);
   useEffect(() => {

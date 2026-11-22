@@ -1,8 +1,9 @@
-"""Each project's lead: an agent that keeps its project moving, acting on the <checkin> messages
-sent when the project's stages, jobs, workers or open questions change (or it sits still too long).
-Messages between agents (`pt tell`) pass the work boundaries (bounds.py) first.
+"""Each project's lead: the agent that runs its project. It stays up while the town does (`ensure`, unless you
+switch it off), starts the workers it needs (`hire`), moves the line through its stages (`stage`) and acts on the
+<checkin> messages sent when the project's stages, jobs, workers or open questions change (or it sits still too long).
+What it does to other agents and to the line passes the work boundaries (bounds.py) first.
 
-    data/projects/<project>/lead.json    whether it gets check-ins, and how long a quiet spell is
+    data/projects/<project>/lead.json    whether it runs, whether it gets check-ins, and how long a quiet spell is
 """
 
 from __future__ import annotations
@@ -15,15 +16,16 @@ from typing import TYPE_CHECKING
 
 from .agents import AgentError, ROLES
 from .db import now, read_json
+from .hosted import RUNTIMES
 from .nvidb import as_farm_job
+from .pipeline import LIVE, NAMES as STAGES, LineError
 
 if TYPE_CHECKING:
     from .town import Town
 
 NAMES = {role: ROLES[role]["name"] for role in ("assistant", "lead", "coder", "writer")}
-STATUS = {"hatching": "孵化中", "waiting": "等你决定", "running": "在做", "paused": "暂停", "done": "已出厂", "failed": "出错",
-          "dropped": "放弃了", "linked": "本地项目"}
-STAGE = {"todo": "没开始", "run": "进行中", "wait": "等你", "done": "完成"}
+STATUS = {"running": "在做", "done": "已出厂", "dropped": "放弃了", "linked": "本地项目"}
+STAGE = {"todo": "没开始", "run": "进行中", "done": "完成"}
 JOB = {"queued": "排队", "running": "在跑", "done": "完成", "failed": "失败", "cancelled": "已取消"}
 CHECK = {"pass": "通过", "warn": "有问题", "fail": "没过"}
 TASK = {"sent": "已经发出", "done": "完成", "blocked": "卡住了"}
@@ -31,7 +33,9 @@ WORKER = {"working": "在干活", "idle": "空闲", "starting": "启动中", "er
 YES = ("可以", "允许", "同意", "好", "行", "yes", "ok", "y")
 DEFAULTS = {"supervise": True, "every": 60}  # every: minutes of quiet before a check-in comes anyway
 QUIET_MAX = 3  # check-ins in a row with nothing new, then quiet until something happens
-ACTIVE = ("running", "linked")
+RETRY = 60  # seconds before a lead that could not be started is tried again
+ACTIVE = LIVE
+HIRE = ("coder", "writer")
 
 
 class LeadError(Exception):
@@ -61,28 +65,123 @@ class Leads:
         self._since: dict[str, str] = {}
         self._last: dict[str, float] = {}
         self._quiet: dict[str, int] = {}
+        self._why: dict[str, str] = {}  # why a lead that should be running is not
+        self._retry: dict[str, float] = {}
+        self._starting: set[str] = set()
+        self._lock = threading.Lock()
         self._halt = threading.Event()
         self._thread: threading.Thread | None = None
 
     def settings(self, line_id: str) -> dict:
+        """on: whether the lead is kept running. Until you choose, a project you are working on has it on, and a
+        sample or a finished one has it off."""
         d = read_json(self.s.projects_dir / line_id / "lead.json", {})
-        return DEFAULTS | {k: v for k, v in d.items() if k in DEFAULTS}
+        out = DEFAULTS | {k: v for k, v in d.items() if k in DEFAULTS}
+        if "on" in d:
+            out["on"] = bool(d["on"])
+        else:
+            ln = self.db.one("select status, sample from lines where id = ?", line_id)
+            out["on"] = bool(ln) and ln["status"] in LIVE and not ln["sample"]
+        return out
 
-    def configure(self, line_id: str, supervise: bool | None = None, every: int | None = None) -> dict:
+    def configure(self, line_id: str, supervise: bool | None = None, every: int | None = None, on: bool | None = None) -> dict:
         d = self.settings(line_id)
         if supervise is not None:
             d["supervise"] = bool(supervise)
         if every is not None:
             d["every"] = max(10, min(24 * 60, int(every)))
+        was = d["on"]
+        if on is not None:
+            d["on"] = bool(on)
         p = self.s.projects_dir / line_id / "lead.json"
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        if on is not None and d["on"] != was:
+            self._switched(line_id, d["on"])
         return d
 
     def view(self, line_id: str) -> dict:
         a = self.town.agents.get(f"lead-{line_id}")
-        return {"agent": self.town.agents.public(a), "settings": self.settings(line_id),
+        return {"agent": self.town.agents.public(a), "settings": self.settings(line_id), "resident": self.resident(line_id),
                 "reports": self.reports(line_id, 30), "asks": self.asks(line_id)}
+
+    # the lead stays up
+
+    def _up(self, a: dict | None) -> bool:
+        """Whether the lead has a session to work in: a Paseo conversation, or a terminal that has not exited."""
+        if not a or not a.get("runtime"):
+            return False
+        if a["runtime"] == "paseo":
+            return bool(a.get("ext_id"))
+        return a["runtime"] in RUNTIMES and bool(a.get("term")) and a["term"].get("status") != "exited"
+
+    def resident(self, line_id: str) -> dict:
+        """Whether the project's lead is running, for the switch on the project's page: on (your choice), state
+        (running, starting, blocked: it should run and cannot, off, ended: the project is over) and why."""
+        ln = self.db.one("select status from lines where id = ?", line_id)
+        a = self.town.agents.get(f"lead-{line_id}")
+        on = self.settings(line_id)["on"]
+        base = {"on": on, "agent": a["id"] if a else None, "runtime": a.get("runtime") if a else None, "status": a["status"] if a else None, "note": None}
+        if not ln or ln["status"] not in LIVE:
+            return base | {"state": "ended", "note": "项目已经结束，负责人不再常驻。"}
+        if not on:
+            return base | {"state": "off"}
+        if line_id in self._starting:
+            return base | {"state": "starting"}
+        if self._up(a):
+            down = self.town.agents.down(a)
+            return base | ({"state": "blocked", "note": down} if down else {"state": "running"})
+        why = self._why.get(line_id)
+        if not self.s.lead_resident:
+            why = why or "这个小镇没有开负责人常驻（PAPERTOWN_LEAD_RESIDENT=0），可以在对话里手动启动。"
+        return base | {"state": "blocked" if why else "starting", "note": why}
+
+    def ensure(self, line_id: str, force: bool = False) -> None:
+        """Bring the project's lead up when it should be running and is not: on the default runtime, with the lead's
+        default model, its brief as the first message. A start that fails is kept as the reason and tried again later."""
+        if not (self.s.lead_resident or force):
+            return
+        ln = self.db.one("select status from lines where id = ?", line_id)
+        if not ln or ln["status"] not in LIVE or not self.settings(line_id)["on"]:
+            return
+        with self._lock:
+            if line_id in self._starting or (not force and time.time() < self._retry.get(line_id, 0)):
+                return
+            a = self.town.agents.ensure(line_id, "lead")
+            if self._up(a):
+                self._why.pop(line_id, None)
+                return
+            self._starting.add(line_id)
+        try:
+            self.town.agents.start(a["id"])
+            self._why.pop(line_id, None)
+            self._retry.pop(line_id, None)
+        except Exception as e:  # noqa: BLE001 - whatever stops one lead is shown on its project, the others still start
+            self._why[line_id] = str(e) or type(e).__name__
+            self._retry[line_id] = time.time() + RETRY
+        finally:
+            self._starting.discard(line_id)
+            self.town.pipeline._publish(line_id)
+
+    def wake(self, line_id: str) -> None:
+        """Start the lead in the background, as a project begins or its switch goes on."""
+        threading.Thread(target=self.ensure, args=(line_id,), daemon=True, name=f"lead-{line_id}").start()
+
+    def _switched(self, line_id: str, on: bool) -> None:
+        self._retry.pop(line_id, None)
+        self._why.pop(line_id, None)
+        if on:
+            self.wake(line_id)
+            return
+        a = self.town.agents.get(f"lead-{line_id}")
+        try:  # off: stop what it is doing; a terminal is closed, a Paseo conversation is kept
+            if a and a.get("runtime") in RUNTIMES and (a.get("term") or {}).get("status") != "exited":
+                self.town.agents.hosted.close(a["id"])
+            elif a and a.get("runtime") == "paseo" and a.get("ext_id"):
+                self.town.agents.abort(a["id"])
+        except Exception:  # noqa: BLE001 - the switch is off either way: no check-in reaches it
+            pass
+        self.town.pipeline._publish(line_id)
 
     def agent(self, line_id: str, role: str) -> dict | None:
         """The project's agent in that role, once it has been started."""
@@ -123,12 +222,77 @@ class Leads:
         if role not in ("lead", "coder", "writer"):
             raise LeadError("收件人要写 lead（项目负责人）、coder（代码员工）或 writer（写作员工）")
         a = self.agent(lid, role)
+        how = f"用 `pt hire {role}` 启动它" if sender["role"] == "lead" and role in HIRE else "请用户在项目页上打开负责人的开关" if role == "lead" else "让项目负责人启动它"
         if not a:
             seq = self.db.val("select seq from lines where id = ?", lid)
-            raise LeadError(f"#{seq} 的{NAMES[role]}还没有启动，请用户先在「员工」面板里启动它")
-        if a["runtime"] == "pi" and not self.town.agents.alive(a):
-            raise LeadError(f"{self._who(a)}（pi）没在运行，请用户在「员工」面板里启动它")
+            raise LeadError(f"#{seq} 的{NAMES[role]}还没有启动，{how}")
+        if a["runtime"] == "pi" and not self.town.agents.alive(a) or a["runtime"] in RUNTIMES and (a.get("term") or {}).get("status") == "exited":
+            raise LeadError(f"{self._who(a)}没在运行，{how}")
         return a
+
+    # what a lead does to its project: starting workers, moving the line
+
+    def _lead(self, sender_id: str) -> dict:
+        s = self.town.agents.get(sender_id)
+        if not s or s["role"] != "lead" or s.get("node_id") or not s["line_id"]:
+            raise LeadError("只有项目负责人能这么做")
+        return s
+
+    def hire(self, sender_id: str, role: str, runtime: str | None = None, provider: str | None = None,
+             model: str | None = None, thinking: str | None = None) -> str:
+        """`pt hire`: the lead starts the project's coder or writer, on the town's default runtime and the workers'
+        default model unless it names others."""
+        s = self._lead(sender_id)
+        if role not in HIRE:
+            raise LeadError("能启动的是 coder（代码员工）和 writer（写作员工）")
+        kind, rule = self.town.bounds.policy("lead", s["line_id"], "agent.start")
+        if kind == "never":
+            raise LeadError(f"你的工作边界不让你启动员工：{rule['text']}")
+        act = {"action": "agent.start", "role": role, "runtime": runtime, "provider": provider, "model": model, "thinking": thinking}
+        if kind == "ask":
+            q = self.ask(sender_id, f"{self._who(s)}想启动{NAMES[role]}，可以吗？", ["可以", "不可以"], act=act)
+            return f"按你的工作边界（{rule['text']}），启动员工要先问用户。已经问了（问题 {q['id']}），他同意后会替你启动，结果会告诉你。"
+        return self._hire(s, act)
+
+    def _hire(self, s: dict, act: dict) -> str:
+        role = act["role"]
+        a = self.town.agents.ensure(s["line_id"], role)
+        if self._up(a) or a.get("runtime") == "pi" and self.town.agents.alive(a):
+            return f"{NAMES[role]}已经在运行（{a['runtime']}{' · ' + a['model'] if a.get('model') else ''}），直接用 `pt tell {role} \"…\"` 派活。"
+        runtime = act.get("runtime") or a.get("runtime") or self.town.paseo_models.runtime()
+        d = self.town.paseo_models.default(role)
+        try:
+            a = self.town.agents.start(a["id"], runtime, act.get("provider") or d["provider"], act.get("model") or (None if act.get("provider") else d["model"]),
+                                       act.get("thinking") or (None if act.get("provider") else d["thinking"]))
+        except AgentError as e:
+            raise LeadError(f"{NAMES[role]}没能启动：{e}") from e
+        self.town.pipeline._publish(s["line_id"])
+        return (f"{NAMES[role]}启动了（{a['runtime']}{' · ' + a['model'] if a.get('model') else ''}），它先读项目简报。"
+                f"用 `pt tell {role} \"…\"` 给它派活，`pt worker {role}` 看它的对话。")
+
+    def stage(self, sender_id: str, key: str, status: str, note: str | None = None, pct: int | None = None) -> str:
+        """`pt stage run|done|todo`: the lead moves its project's line. A stage closes only through its hard gate."""
+        s = self._lead(sender_id)
+        kind, rule = self.town.bounds.policy("lead", s["line_id"], "stage.move")
+        if kind == "never":
+            raise LeadError(f"你的工作边界不让你推进工序：{rule['text']}")
+        act = {"action": "stage.move", "stage": key, "status": status, "note": note, "pct": pct}
+        if kind == "ask":
+            verb = {"done": "收尾", "todo": "放回去重做"}.get(status, status)
+            q = self.ask(sender_id, f"{self._who(s)}想把工序「{STAGES.get(key, key)}」{verb}{'：' + clip(note, 200) if note else ''}，可以吗？", ["可以", "不可以"], act=act)
+            return f"按你的工作边界（{rule['text']}），这一步要先问用户。已经问了（问题 {q['id']}），他同意后会替你办，结果会告诉你。"
+        return self._stage(s, act)
+
+    def _stage(self, s: dict, act: dict) -> str:
+        try:
+            snap = self.town.pipeline.stage(s["line_id"], act["stage"], act["status"], act.get("note"), act.get("pct"))
+        except LineError as e:
+            raise LeadError(str(e)) from e
+        key, cur = act["stage"], snap["current"]
+        if act["status"] == "done":
+            tail = "项目出厂了。" if snap["status"] == "done" else f"下一道「{cur['name']}」已经开工。" if cur else "没有在做的工序了。"
+            return f"「{STAGES[key]}」收尾了。{tail}"
+        return f"「{STAGES[key]}」{'开工了' if act['status'] == 'run' else '放回去了'}" + (f"（{snap['stages'][list(STAGES).index(key)]['pct']}%）。" if act["status"] == "run" else "。")
 
     def tell(self, sender_id: str, to: str, text: str, now_: bool = False, line: str | None = None) -> str:
         """`pt tell`: a message to another agent, if the sender's boundaries allow it."""
@@ -236,6 +400,10 @@ class Leads:
         if act.get("action") == "job.submit":
             j = self.town.farm.submit(asker["line_id"], act["name"], act["command"], act.get("backend") or "local", asker["id"], asker["cwd"])
             return f"已经提交了 {j['id']}。"
+        if act.get("action") == "agent.start":
+            return self._hire(asker, act)
+        if act.get("action") == "stage.move":
+            return self._stage(asker, act)
         raise LeadError(f"不认识的动作：{act.get('action')}")
 
     def status(self, line_id: str) -> str:
@@ -247,14 +415,14 @@ class Leads:
         out = [f"项目 #{snap['seq']}「{snap['title']}」：{STATUS.get(snap['status'], snap['status'])}"
                + (f"，当前工序「{cur['name']}」{STAGE.get(cur['status'], cur['status'])}" + (f" {cur['pct']}%" if cur["pct"] else "") if cur else "")
                + (f"（{snap['note']}）" if snap["note"] else "")]
-        out.append("工序：" + " · ".join(f"{s['name']}{'✓' if s['status'] == 'done' else '▶' if s['status'] == 'run' else '?' if s['status'] == 'wait' else ''}"
-                                        for s in snap["stages"]))
+        out.append("工序：" + " · ".join(f"{s['name']}{'✓' if s['status'] == 'done' else '▶' if s['status'] == 'run' else ''}" for s in snap["stages"])
+                   + "（`pt stage` 看每道的产出和卡口）")
         out.append("")
         out.append("这个项目的 agent：")
         for role in ("lead", "coder", "writer"):
             a = self.agent(line_id, role)
             if not a:
-                out.append(f"- {NAMES[role]}：还没有启动")
+                out.append(f"- {NAMES[role]}：还没有启动" + (f"（要它干活时用 `pt hire {role}`）" if role in HIRE else ""))
                 continue
             last = self.town.agents.public(a).get("last")
             said = f"，最后一条（{_ago(last['ts'])}）：「{clip((last['data'] or {}).get('text'), 100)}」" if last else ""
@@ -422,9 +590,14 @@ class Leads:
         self._thread = None
 
     def _loop(self) -> None:
-        while not self._halt.wait(self.s.lead_tick):
-            for a in self.db.q("select * from agents where role = 'lead' and node_id is null and runtime is not null"):
-                try:
-                    self.look(a)
-                except Exception:  # noqa: BLE001 - one project's trouble must not stop the others' check-ins
+        first = True  # the town has just started: bring the leads up before the first check-in round is due
+        while not self._halt.wait(1 if first else self.s.lead_tick):
+            for ln in self.db.q("select id from lines where status in ('running', 'linked') order by seq"):
+                try:  # one project's trouble must not stop the others' leads
+                    self.ensure(ln["id"])
+                    a = self.agent(ln["id"], "lead")
+                    if a and not first and self.settings(ln["id"])["on"]:
+                        self.look(a)
+                except Exception:  # noqa: BLE001
                     continue
+            first = False

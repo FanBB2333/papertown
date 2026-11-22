@@ -13,7 +13,7 @@ from .paseo import PaseoError
 if TYPE_CHECKING:
     from .town import Town
 
-ROLES = ("assistant", "lead")
+ROLES = ("assistant", "lead", "worker")  # worker: a project's coder or writer
 NEWS_MAX = 30
 
 
@@ -57,9 +57,12 @@ class PaseoModels:
 
     def default(self, role: str) -> dict:
         """The provider, model and thinking an agent of this role starts with when none is picked."""
+        role = "worker" if role in ("coder", "writer") else role
         d = (self._read().get("defaults") or {}).get(role)
         if isinstance(d, dict) and d.get("provider"):
             return {"provider": d["provider"], "model": d.get("model") or None, "thinking": d.get("thinking") or None}
+        if role == "worker" and not self.s.worker_model:  # a worker follows the lead until it has its own
+            return self.default("lead")
         return self.s.paseo_default(role)
 
     def defaults(self) -> dict:

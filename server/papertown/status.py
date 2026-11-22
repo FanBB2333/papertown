@@ -7,29 +7,27 @@ from typing import TYPE_CHECKING
 
 from .db import week_ago
 from .library import terms_of
-from .pipeline import NAMES
-from .world import ASK_ROLE
+from .pipeline import LIVE, NAMES
 
 if TYPE_CHECKING:
     from .town import Town
 
-ACTIVE = ("hatching", "waiting", "running", "paused")
+ACTIVE = LIVE
 # the departments the chat shows, in the order a paper passes through them, and where the staff agents work
 DEPARTMENTS = ("hatchery", "market", "mill", "depot", "farm", "power", "press", "qa", "library")
 STAFF = {"coder": "depot", "writer": "press"}
 KINDS = [("RAG", "检索"), ("MCP", "外部工具"), ("SKILL", "加载 skill"), ("SCRIPT", "skill 脚本"), ("GRAPH", "图谱扩展"),
-         ("TOOL", "内部工具"), ("LLM", "模型调用")]
+         ("TOOL", "内部工具")]
 
 
 def hud(town: "Town") -> dict:
-    lines = town.db.q("select status from lines")
+    lines = town.db.q("select id, status from lines")
     first = town.db.val("select min(created_at) from lines")
     day = (datetime.now(timezone.utc) - datetime.fromisoformat(first)).days + 1 if first else 1
-    return {"day": day, "bank": town.bank.summary(), "plant": town.plant.status(),
-            "lines": {"running": sum(1 for r in lines if r["status"] in ("running", "hatching")),
-                      "waiting": sum(1 for r in lines if r["status"] == "waiting"), "total": len(lines)},
-            "library": town.library.count(), "provider": town.provider.name, "offline": town.s.offline,
-            "model": town.s.model_strong, "ports": town.mcp.status}
+    leads = [town.leads.resident(r["id"]) for r in lines if r["status"] in LIVE]
+    return {"day": day, "lines": {"running": len(leads), "total": len(lines)},
+            "leads": {"on": sum(r["on"] for r in leads), "running": sum(r["state"] == "running" for r in leads)},
+            "library": town.library.count(), "ports": town.mcp.status}
 
 
 def running(town: "Town") -> list[dict]:
@@ -49,9 +47,9 @@ def departments(town: "Town") -> list[dict]:
         at.setdefault(r["building"], {})[r["id"]] = {k: r[k] for k in ("id", "seq", "title", "status", "stage", "pct")}
     # a linked project can be at work at several stages at once
     for s in town.db.q("select s.building, s.key, s.status as st, s.pct, l.id, l.seq, l.title, l.status from stages s"
-                       " join lines l on l.id = s.line_id where s.status in ('run', 'wait', 'fail') and l.status not in ('dropped', 'done')"):
+                       " join lines l on l.id = s.line_id where s.status = 'run' and l.status in ('running', 'linked')"):
         at.setdefault(s["building"], {}).setdefault(s["id"], {"id": s["id"], "seq": s["seq"], "title": s["title"], "stage": NAMES.get(s["key"], s["key"]),
-                                                             "status": "waiting" if s["st"] == "wait" else s["status"], "pct": s["pct"]})
+                                                             "status": s["status"], "pct": s["pct"]})
     staff: dict[str, list[dict]] = {}
     seqs = {r["id"]: r["seq"] for r in town.db.q("select id, seq from lines")}
     for a in town.db.q("select * from agents where role in ('coder', 'writer') and runtime is not null order by updated_at desc"):
@@ -71,19 +69,17 @@ def departments(town: "Town") -> list[dict]:
         lines = sorted(at.get(t, {}).values(), key=lambda x: -x["seq"])
         agents = sorted(staff.get(t, []), key=lambda x: x["status"] != "working")
         mine = [{k: j[k] for k in ("id", "name", "status", "progress", "line_id", "backend")} for j in jobs] if t == "farm" else []
-        busy = (b["status"] == "busy" or any(x["status"] in ("running", "hatching") for x in lines)
+        busy = (b["status"] == "busy" or any(x["status"] in LIVE for x in lines)
                 or any(x["status"] in ("working", "starting") for x in agents) or any(j["status"] == "running" for j in mine)
                 or (t == "power" and nv["ok"] and gpus_running > 0))
-        state = ("wait" if any(x["status"] == "waiting" for x in lines) else "busy" if busy
+        state = ("busy" if busy
                  else "off" if t == "power" and not nv["ok"] else "idle")
-        w = next(iter(town.market.best(ASK_ROLE.get(t, "scout"))), None)
         meta = town.world.types[t]
         d = town.world.districts[meta["district"]]
         sm = nv["summary"] if t == "power" and nv["ok"] else None
         out.append({"id": b["id"], "type": t, "name": town.world.name(b), "district": d["name"], "color": d["color"],
                     "state": state, "job": town.world.job(b), "lines": lines, "agents": agents, "jobs": mine,
-                    "gpus": {"total": sm["gpus"], "idle": sm["idle"], "running": gpus_running} if sm else None,
-                    "worker": {"id": w["id"], "role": w["role"], "level": w["level"]} if w else None})
+                    "gpus": {"total": sm["gpus"], "idle": sm["idle"], "running": gpus_running} if sm else None})
     return out
 
 
@@ -101,15 +97,14 @@ def fresh_papers(town: "Town", n: int = 6) -> list[dict]:
 
 def status(town: "Town") -> dict:
     db = town.db
-    projects = [{k: s[k] for k in ("id", "seq", "title", "status", "pct", "spent", "budget", "verdict", "mill_id")}
+    projects = [{k: s[k] for k in ("id", "seq", "title", "status", "pct", "verdict", "mill_id")}
                 | {"stage": NAMES.get(s["stage"], s["stage"]), "files": s["files"]} for s in town.pipeline.lines()]
     counts = {r["kind"]: r["c"] for r in db.q("select kind, count(*) as c from trace where ts >= ? group by kind", week_ago())}
     top = max(counts.values(), default=1)
     calls = [{"kind": k, "name": name, "count": counts.get(k, 0), "pct": round(100 * counts.get(k, 0) / top)} for k, name in KINDS]
     news = [m["body"].get("text", "") for m in db.q("select body from messages where kind in ('report', 'team', 'paper') order by id desc limit 4")]
     return {
-        "projects": projects, "papers": fresh_papers(town), "workers": town.market.events(6), "calls": calls,
-        "bank": town.bank.summary(), "models": town.bank.by_model(), "plant": town.plant.status(),
+        "projects": projects, "papers": fresh_papers(town), "calls": calls,
         "skills": [s.summary() for s in town.skills.all()], "headline": news, "hud": hud(town),
         "library": {"total": town.library.count(), "arxiv": db.val("select count(*) from papers where source = 'arxiv'"),
                     "graph": town.genealogy.stats()},

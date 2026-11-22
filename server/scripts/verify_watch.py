@@ -37,13 +37,13 @@ HEAD = "联调测试，不要修改任何文件，也不要解释。"
 class Run:
     """One agent going through the flow."""
 
-    def __init__(self, url: str, spec: str, steps: list[dict], timeout: int, hatching, runtime="paseo"):
+    def __init__(self, url: str, spec: str, steps: list[dict], timeout: int, runtime="paseo"):
         provider, model, thinking = (spec.split(":") + [None, None])[:3]
         self.runtime = runtime
         self.screen_replies, self.baseline = [], set()
         self.provider, self.model, self.thinking = provider, model or None, thinking or None
         self.c = httpx.Client(base_url=url, timeout=120)
-        self.steps, self.timeout, self.t0, self.hatching = steps, timeout, time.monotonic(), hatching
+        self.steps, self.timeout, self.t0 = steps, timeout, time.monotonic()
         self.n = uuid.uuid4().hex[:6].upper()
         self.results, self.log, self.permitted, self.last = {}, [], set(), None
         self.id = self.ext = self.line = None
@@ -232,9 +232,7 @@ class Run:
 
     def run(self):
         try:
-            lid = self.call("POST", "/api/ideas", {"text": f"实时监控与介入联调（{self.provider}）；不做研究，不修改代码，不运行实验"})["id"]
-            while self.hatching(lid):  # the offline pipeline sets the project up first
-                time.sleep(.3)
+            lid = self.call("POST", "/api/ideas", {"text": f"实时监控与介入联调（{self.provider}）。不做研究，不修改代码，不运行实验"})["id"]
             a = self.call("POST", "/api/agents", {"line_id": lid, "role": "coder"})
             a = self.call("POST", f"/api/agents/{a['id']}/start", {"runtime": self.runtime, "provider": self.provider, "model": self.model, "thinking": self.thinking})
             self.id, self.ext, self.line = a["id"], a["ext_id"], lid
@@ -271,7 +269,7 @@ def main():
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     no = lambda name: str(root / f"no-{name}")
-    settings = Settings(provider="mock", data_dir=root / "data", samples=False, arxiv_port=False, compile_tex=False,
+    settings = Settings(lead_resident=False, data_dir=root / "data", samples=False, arxiv_port=False, compile_tex=False,
                         paseo_bin=APP_CLI, paseo_watch=0, lead_tick=3600, url=f"http://127.0.0.1:{port}",
                         nvidb_bin=no("nvidb"), skim_bin=no("skim"), pi_bin=no("pi"), claude_home=no("claude"), codex_home=no("codex"),
                         # A tmux server of its own: project numbers restart at #1 here, and must not meet another Papertown's sessions.
@@ -291,7 +289,7 @@ def main():
     print(f"Watching at {settings.url}/agents", flush=True)
     if opts.runtime == "tmux":
         print(f"tmux server: tmux -L {settings.tmux_socket} ls", flush=True)
-    runs = [Run(settings.url, spec, steps, opts.timeout, town.pipeline.running, opts.runtime) for spec in opts.agent]
+    runs = [Run(settings.url, spec, steps, opts.timeout, opts.runtime) for spec in opts.agent]
     threads = [threading.Thread(target=r.run, daemon=True) for r in runs]
     for t in threads:
         t.start()

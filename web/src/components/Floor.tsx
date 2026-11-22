@@ -2,40 +2,40 @@
 // working them, dressed as the mill's conveyor, the depot's rack, the farm's field row or the press.
 
 import { useEffect, useMemo, useState } from 'react';
-import { api, listen, type Agent, type Job, type Line, type RosterRow } from '../api';
-import { Ava, Item, ROLE_NAMES } from '../art';
+import { api, listen, type Agent, type Job, type Line, type StageAgent, type RosterRow } from '../api';
+import { Ava, Item } from '../art';
 import '../floor.css';
 import { GpuStrip } from './Gpus';
 import { AGENT_STATUS, STATUS } from './MillRoom';
+import { POST_NAMES } from './Resident';
 import { tr } from '../i18n';
 
 type WState = 'working' | 'waiting' | 'resting' | 'error' | 'done' | 'off';
 type SState = 'run' | 'wait' | 'done' | 'todo' | 'rest' | 'bad';
 
-interface Worker { id: string; role: string; level?: number; state: WState; title: string; say?: string }
+interface Worker { id: string; role: string; post?: string; state: WState; title: string; say?: string }
 interface Station { key: string; name: string; state: SState; art: React.ReactNode; workers: Worker[]; note?: string }
 interface Lane { id: string; seq: number; title: string; status: string; tag: string; note?: string; stations: Station[]; at: number; token?: React.ReactNode; moving: boolean }
 
 export type CoreType = 'mill' | 'depot' | 'farm' | 'press';
 
 const THEME: Record<CoreType, { title: string; how: string; empty: string }> = {
-  mill: { title: tr('生产车间'), how: tr('每条生产线是一篇论文，八道工序排在传送带上，工位上站的是负责这道工序的 Agent，论文跟着传送带走到它现在的工序。'), empty: tr('还没有论文上线。放入一颗 idea，孵化后它会在这里占一条生产线。') },
+  mill: { title: tr('生产车间'), how: tr('每条生产线是一篇论文，八道工序排在传送带上，工位上站的是负责这道工序的 Agent，论文跟着传送带走到它现在的工序。'), empty: tr('提交 idea 后，项目负责人将在这里推进各道工序。') },
   depot: { title: tr('货架区'), how: tr('每个项目一排货架：读代码、写代码、跑测试，打包好的实验箱子发往实验农场。站在货架前的是这个项目的代码员工。'), empty: tr('还没有项目。项目立项后，仓库会给它一排货架和一位代码员工。') },
   farm: { title: tr('试验田'), how: tr('每个项目一垄田，每个实验任务是一块地：排队是种子，运行中按进度长高，跑完结穗，失败就枯了。看田员在田边盯着。'), empty: tr('田里还空着。流水线跑到实验工序、或代码员工提交任务后，这里就会种上。') },
   press: { title: tr('印刷车间'), how: tr('每篇论文一台印刷机：排字、开印、校对、装订出厂。机器旁是写这篇论文的员工，纸张停在它正在做的那一步。'), empty: tr('还没有稿子。项目立项后，印刷厂会给它一台印刷机和一位写作员工。') },
 };
 
 // which kind of worker a stage needs, for the empty places on a line
-const STAGE_ROLE: Record<string, string> = { hatch: 'hatcher', method: 'designer', exp: 'experimenter', write: 'writer', review: 'reviewer' };
-const AGENT_ROLE: Record<string, string> = { coder: 'keeper', writer: 'writer', monitor: 'experimenter' };
-const AGENT_NAME: Record<string, string> = { coder: tr('代码员工'), writer: tr('写作员工'), monitor: tr('看田员') };
+const AGENT_ROLE: Record<string, string> = { lead: 'designer', coder: 'keeper', writer: 'writer', monitor: 'experimenter' };
+const AGENT_NAME: Record<string, string> = { lead: tr('项目负责人'), coder: tr('代码员工'), writer: tr('写作员工'), monitor: tr('看田员') };
 
-function agentState(a: Agent | null | undefined): WState {
+function agentState(a: Pick<StageAgent, 'status' | 'id' | 'model'> | null | undefined): WState {
   if (!a) return 'off';
   return ({ working: 'working', starting: 'working', watching: 'working', idle: 'resting', error: 'error', stopped: 'off' } as Record<string, WState>)[a.status] ?? 'resting';
 }
 
-function agentWorker(a: Agent | null | undefined, role: string, say?: string): Worker {
+function agentWorker(a: Pick<StageAgent, 'status' | 'id' | 'model'> | null | undefined, role: string, say?: string): Worker {
   const st = agentState(a);
   return {
     id: a?.id ?? `${role}-none`, role: AGENT_ROLE[role], state: st, say,
@@ -45,23 +45,14 @@ function agentWorker(a: Agent | null | undefined, role: string, say?: string): W
 
 function millLanes(lines: Line[]): Lane[] {
   return lines.map(l => {
-    const parked = ['paused', 'failed'].includes(l.status);
+    const parked = l.lead.state !== 'running';
     const nextTodo = l.stages.findIndex(s => s.status !== 'done');
-    const at = l.status === 'done' ? l.stages.length - 1 : Math.max(0, l.stages.findIndex(s => s.status === 'run' || s.status === 'wait' || s.status === 'fail'), parked ? nextTodo : -1);
+    const at = l.status === 'done' ? l.stages.length - 1 : Math.max(0, l.stages.findIndex(s => s.status === 'run'), parked ? nextTodo : -1);
     const stations: Station[] = l.stages.map((s, i) => {
       const here = i === at && l.status !== 'done';
-      let state: SState = s.status === 'done' ? 'done' : s.status === 'run' ? 'run' : s.status === 'wait' ? 'wait' : s.status === 'fail' ? 'bad' : 'todo';
-      if (here && parked) state = l.status === 'failed' ? 'bad' : 'rest';
-      const wstate: WState = state === 'run' ? 'working' : state === 'wait' ? 'waiting' : state === 'rest' ? 'resting' : state === 'bad' ? 'error' : state === 'done' ? 'done' : 'off';
-      const say = state === 'run' ? `${s.name}${s.pct ? ` ${s.pct}%` : ''}` : state === 'wait' ? tr('等你决定') : state === 'rest' ? tr('歇着，点继续') : state === 'bad' ? tr('出错了') : undefined;
-      let workers: Worker[] = stageWorkers(s, wstate, say);
-      if (!workers.length && STAGE_ROLE[s.key] && (state === 'todo' || state === 'rest' || state === 'bad')) {
-        const ids = l.team?.[s.key] ?? [];
-        workers = (ids.length ? ids : ['']).slice(0, 2).map((id, k) => ({
-          id: id || `${s.key}-${k}`, role: STAGE_ROLE[s.key], state: state === 'todo' ? 'off' : wstate, say: k ? undefined : say,
-          title: `${ROLE_NAMES[STAGE_ROLE[s.key]]}${id ? ` ${id}` : ''} · ${state === 'todo' ? tr('还没轮到') : say}`,
-        }));
-      }
+      let state: SState = s.status === 'done' ? 'done' : s.status === 'run' ? 'run' : 'todo';
+      if (here && parked) state = l.lead.state === 'blocked' ? 'bad' : 'rest';
+      const workers = stageWorkers(s, state === 'run' ? 'working' : 'off', state === 'run' ? `${s.name} ${s.pct}%` : undefined);
       return { key: s.key, name: s.name, state, art: <Item k={s.out} />, workers, note: s.note ?? undefined };
     });
     const cur = l.stages[at];
@@ -71,7 +62,7 @@ function millLanes(lines: Line[]): Lane[] {
       id: l.id, seq: l.seq, title: l.title, status: l.status, tag: STATUS[l.status] ?? l.status,
       note: linked ? tr('本地仓库 {0}', linked) : l.note ?? (l.status === 'done' ? tr('已出厂') : cur ? tr('在「{0}」', cur.name) : undefined),
       stations, at, token: <Item k={cur?.out ?? 'egg'} />,
-      moving: l.status === 'running' || l.status === 'hatching' || !!l.linked && l.stages.some(s => s.key === 'exp' && s.status === 'run'),
+      moving: l.lead.state === 'running' && l.stages.some(s => s.status === 'run'),
     };
   });
 }
@@ -86,8 +77,10 @@ function coderBay(a: Agent | null | undefined) {
   return /pytest|test|make |cargo |npm run|pnpm |submit/.test(t) ? 2 : 1;
 }
 
-function stageWorkers(s: Line['stages'][number] | undefined, state: WState, say?: string): Worker[] {
-  return (s?.workers ?? []).map((w, k) => ({ id: w.id, role: w.role, level: w.level, state, say: k ? undefined : say, title: `${w.title ?? ROLE_NAMES[w.role]} ${w.id} Lv.${w.level}` }));
+function stageWorkers(s: Line['stages'][number] | undefined, _state: WState, say?: string): Worker[] {
+  if (!s) return [];
+  if (!s.agents.length) return [{ id: `${s.key}-post`, role: AGENT_ROLE[s.owner], post: POST_NAMES[s.owner], state: 'off', title: POST_NAMES[s.owner] }];
+  return s.agents.map(a => ({ ...agentWorker(a, a.role, a.status === 'working' ? say : undefined), title: [a.name, AGENT_STATUS[a.status] ?? a.status, a.runtime, a.model].filter(Boolean).join(' · ') }));
 }
 
 function depotLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
@@ -190,7 +183,7 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
     const stage = (k: string) => l?.stages.find(s => s.key === k);
     const paper = l?.linked?.paper;
     const printed = paper ? !!paper.pdf : !!l?.files.some(f => f === 'main.pdf' || f === 'main.tex');
-    const parked = !!l && ['paused', 'failed'].includes(l.status);
+    const parked = !!l && l.lead.state !== 'running';
     const next = l?.stages.find(s => s.status !== 'done')?.key;
     // a linked paper is still being written while its PDF is already printed
     const done = (i: number) => i === 1 ? printed && (!!paper || stage('write')?.status === 'done') : stage(PRESS[i][3])?.status === 'done';
@@ -201,25 +194,23 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
       const s = stage(sk);
       let state: SState = done(i) ? 'done' : 'todo';
       if (i === at && !done(i)) {
-        state = s?.status === 'run' ? 'run' : parked && next === sk ? (l!.status === 'failed' ? 'bad' : 'rest') : 'todo';
+        state = s?.status === 'run' ? 'run' : parked && next === sk ? (l!.lead.state === 'blocked' ? 'bad' : 'rest') : 'todo';
       }
       const ws: WState = state === 'run' ? 'working' : state === 'rest' ? 'resting' : state === 'bad' ? 'error' : 'off';
       let crew: Worker[] = [];
       if (i === at && state !== 'todo' && (i !== 1 || state === 'run')) {
-        crew = stageWorkers(s, ws, state === 'run' ? name : state === 'rest' ? tr('歇着，点继续') : undefined);
-        if (!crew.length && state === 'rest') {
-          const role = sk === 'review' ? 'reviewer' : 'writer';
-          crew = (l?.team?.[sk] ?? ['']).slice(0, 2).map((id, k) => ({ id: id || `${sk}-${k}`, role, state: ws, say: k ? undefined : tr('歇着，点继续'), title: `${ROLE_NAMES[role]}${id ? ` ${id}` : ''}` }));
-        }
+        crew = stageWorkers(s, ws, state === 'run' ? name : state === 'rest' ? tr('负责人已暂停') : undefined);
+
       }
-      if (i === 0) crew.unshift(writer);
+      if (i === 0 && agent?.started && !crew.some(w => w.id === agent.id)) crew.unshift(writer);
+      if (!crew.length && s) crew = stageWorkers(s, 'off');
       return { key, name, state, art: <Item k={item} />, workers: crew, note: i === 2 ? s?.note || undefined : undefined };
     });
     return {
       id: line.id, seq: line.seq, title: line.title, status: l?.status ?? line.status, tag: l ? STATUS[l.status] ?? l.status : line.status,
       note: [paper ? tr('{0} · 约 {1} 词', paper.path, paper.words ?? 0) : '', agent?.started ? tr('写作员工：{0}', agent.runtime === 'paseo' ? 'Paseo' : agent.runtime || 'pi') : '',
-        l?.revisions ? tr('改过 {0} 版', l.revisions) : printed ? tr('稿子已经排出来了') : tr('还没开印')].filter(Boolean).join(' · '),
-      stations, at, token: <span className="sheets">{Array.from({ length: Math.min(4, 1 + (l?.revisions ?? 0) + (printed ? 1 : 0)) }, (_, i) => <i key={i} />)}</span>,
+        printed ? tr('稿子已经排出来了') : tr('还没开印')].filter(Boolean).join(' · '),
+      stations, at, token: <span className="sheets">{Array.from({ length: Math.min(4, 1 + (printed ? 1 : 0)) }, (_, i) => <i key={i} />)}</span>,
       moving: l?.status === 'running',
     };
   });
@@ -227,12 +218,13 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
 
 const CREW = 3; // workers drawn at one station; the rest are counted
 
-function WorkerFig({ w }: { w: Worker }) {
+function AgentFig({ w }: { w: Worker }) {
+  if (w.post) return <span className="muted small">{w.post}</span>;
   return (
     <span className={`wk w-${w.state}`} title={w.title}>
       {w.say && <em className="bub">{w.say}</em>}
       {w.state === 'resting' && !w.say && <em className="bub z">z</em>}
-      <Ava role={w.role} level={w.level} />
+      <Ava role={w.role} />
     </span>
   );
 }
@@ -252,7 +244,7 @@ function LaneRow({ lane, i, onPick }: { lane: Lane; i: number; onPick: (id: stri
         {lane.stations.map(s => (
           <div key={s.key} className={`fst st-${s.state}`} title={s.note ? `${s.name} · ${s.note}` : s.name}>
             <div className="fst-crew">
-              {s.workers.slice(0, CREW).map(w => <WorkerFig key={w.id} w={w} />)}
+              {s.workers.slice(0, CREW).map(w => <AgentFig key={w.id} w={w} />)}
               {s.workers.length > CREW && <span className="wk-more" title={s.workers.slice(CREW).map(w => w.title).join('\n')}>+{s.workers.length - CREW}</span>}
             </div>
             <div className="fst-art">{s.art}</div>

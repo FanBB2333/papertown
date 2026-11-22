@@ -3,7 +3,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, listen, type Department, type DeptAgent, type TraceRow } from '../api';
-import { Ava, ROLE_NAMES } from '../art';
 import { AGENT_STATUS, STATUS } from '../components/MillRoom';
 import { tr } from '../i18n';
 import { Icon } from './icons';
@@ -32,14 +31,12 @@ const count = <T,>(xs: T[], f: (x: T) => boolean) => xs.filter(f).length;
 
 // what a department is doing, in a few words: what waits for you first, then what is moving
 function brief(d: Department): string {
-  const wait = count(d.lines, l => l.status === 'waiting');
-  if (wait) return tr('{0} 个等你决定', wait);
   const working = count(d.agents, a => a.status === 'working' || a.status === 'starting');
   if (working) return tr('{0} 个员工在干活', working);
   const run = count(d.jobs, j => j.status === 'running'), queued = d.jobs.length - run;
   if (run) return queued ? tr('{0} 个实验在跑 · {1} 个排队', run, queued) : tr('{0} 个实验在跑', run);
   if (queued) return tr('{0} 个实验在排队', queued);
-  const going = count(d.lines, l => l.status === 'running' || l.status === 'hatching');
+  const going = count(d.lines, l => l.status === 'running');
   if (going) return tr('{0} 个项目在做', going);
   if (d.gpus) return d.gpus.running ? tr('{0} 个任务在跑', d.gpus.running) : tr('{0} 张卡空闲', d.gpus.idle);
   if (d.lines.length === 1) return `#${d.lines[0].seq} ${STATUS[d.lines[0].status] ?? d.lines[0].status}`;
@@ -50,9 +47,8 @@ function brief(d: Department): string {
 const agentName = (a: Pick<DeptAgent, 'name' | 'seq'>) => (a.seq ? `${a.name} · #${a.seq}` : a.name);
 const agentSub = (a: DeptAgent) => `${AGENT_STATUS[a.status] ?? a.status} · ${a.runtime === 'paseo' ? 'Paseo' : a.runtime || 'pi'}`;
 
-function DeptCard({ d, onRoom, onAgent, onHatch, onResume, onAdjust }: {
+function DeptCard({ d, onRoom, onAgent }: {
   d: Department; onRoom: (id: string, lineId?: string | null) => void; onAgent: (a: DeptAgent) => void;
-  onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void;
 }) {
   return (
     <section className="dp-dept" style={{ ['--dc' as string]: d.color }}>
@@ -70,11 +66,6 @@ function DeptCard({ d, onRoom, onAgent, onHatch, onResume, onAdjust }: {
               <i className={`dp-ld d-${l.status}`} />
               <button className="dp-rt" onClick={() => onRoom(d.id, l.id)} title={l.title}><b>#{l.seq}</b>{l.title}</button>
               <span className="dp-rs">{l.stage} · {STATUS[l.status] ?? l.status}</span>
-              {l.status === 'waiting' && <span className="dp-ra">
-                <button className="btn pri" onClick={() => onHatch(l.id)}>{tr('孵化并立项')}</button>
-                <button className="btn" onClick={() => onAdjust(l.id)}>{tr('调整 idea')}</button>
-              </span>}
-              {l.status === 'paused' && <span className="dp-ra"><button className="btn" onClick={() => onResume(l.id)}>{tr('继续')}</button></span>}
             </div>
           ))}
           {d.agents.map(a => (
@@ -97,25 +88,18 @@ function DeptCard({ d, onRoom, onAgent, onHatch, onResume, onAdjust }: {
           {d.jobs.length > 5 && <p className="dp-more">{tr('还有 {0} 个', d.jobs.length - 5)}</p>}
         </div>
       )}
-      {d.worker && (
-        <p className="dp-asker">
-          <Ava role={d.worker.role} level={d.worker.level} code={d.worker.id} />
-          {tr('在这里值班的是{0}', ` ${ROLE_NAMES[d.worker.role] ?? d.worker.role} ${d.worker.id} · Lv.${d.worker.level}`)}
-        </p>
-      )}
     </section>
   );
 }
 
-export function Departments({ tick, onRoom, onAgent, onHatch, onResume, onAdjust }: {
+export function Departments({ tick, onRoom, onAgent }: {
   tick: number; onRoom: (id: string, lineId?: string | null) => void; onAgent: (a: DeptAgent) => void;
-  onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void;
 }) {
   const depts = useDepartments(tick);
   return (
     <div className="cm-page dp-page">
       {!depts.length ? <p className="muted">{tr('加载中…')}</p>
-        : depts.map(d => <DeptCard key={d.id} d={d} onRoom={onRoom} onAgent={onAgent} onHatch={onHatch} onResume={onResume} onAdjust={onAdjust} />)}
+        : depts.map(d => <DeptCard key={d.id} d={d} onRoom={onRoom} onAgent={onAgent} />)}
     </div>
   );
 }

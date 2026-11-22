@@ -15,7 +15,7 @@ interface Props extends RoomActions {
 }
 
 export const STATUS: Record<string, string> = {
-  hatching: tr('查重中'), waiting: tr('等你决定'), running: tr('生产中'), paused: tr('已暂停'), failed: tr('出错'), done: tr('已出厂'), dropped: tr('已放弃'),
+  running: tr('在做'), done: tr('已出厂'), dropped: tr('已放弃'),
   linked: tr('本地项目'),
 };
 export function StatusTag({ status }: { status: string }) {
@@ -60,14 +60,13 @@ export function MillRoom(p: Props) {
   }, [cur, p.tick]);
 
   const count = (st: string[]) => lines.filter(l => st.includes(l.status)).length;
-  const spent = lines.reduce((s, l) => s + l.spent, 0);
   const typeOf = (id: string) => p.placements.find(x => x.id === id)?.type ?? id;
 
   if (!lines.length) {
     return (
       <div className="room-empty">
         <h2>{tr('还没有项目')}</h2>
-        <p>{tr('放入一颗 idea，孵化场查完重、你点了「孵化并立项」，它就会出现在这里。')}</p>
+        <p>{tr('提交 idea 后，项目负责人自动启动并推进项目。')}</p>
         <button className="btn pri" onClick={p.onIdea}>{tr('放入一颗新 idea')}</button>
       </div>
     );
@@ -77,10 +76,8 @@ export function MillRoom(p: Props) {
     <div className="room room-mill">
       <aside className="room-side">
         <div className="tally">
-          <div><b>{count(['running', 'hatching'])}</b><span>{tr('在跑')}</span></div>
-          <div><b>{count(['waiting', 'paused', 'failed'])}</b><span>{tr('等你')}</span></div>
+          <div><b>{count(['running'])}</b><span>{tr('在跑')}</span></div>
           <div><b>{count(['done'])}</b><span>{tr('已出厂')}</span></div>
-          <div><b>${spent.toFixed(2)}</b><span>{tr('小镇 API 总花费')}</span></div>
         </div>
         <div className="plist">
           {lines.map((l, i) => {
@@ -94,7 +91,6 @@ export function MillRoom(p: Props) {
                 </div>
                 <div className="proj-meta">
                   <span>{l.current?.name ?? (l.status === 'done' ? tr('已出厂') : STATUS[l.status])}</span>
-                  <span>{l.linked ? l.linked.code?.name ?? l.linked.paper?.name : tr('小镇 API：${0} / ${1}', l.spent.toFixed(2), l.budget.toFixed(2))}</span>
                 </div>
                 <div className="crew">
                   <span className={`crew-a s-${coder?.status ?? 'none'}`}>{tr('代码员工 ·')} {coder ? AGENT_STATUS[coder.status] : '—'}</span>
@@ -122,8 +118,7 @@ export function MillRoom(p: Props) {
               </div>
             </div>
             <div className="lc">
-              <MillDetail line={line} typeOf={typeOf} real={REAL} tick={p.tick} onOpen={id => p.onOpen(id, line.id)} onHatch={p.onHatch}
-                onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} />
+              <MillDetail line={line} typeOf={typeOf} real={REAL} tick={p.tick} onOpen={id => p.onOpen(id, line.id)} onAsk={() => p.onAsk('mill', tr('造纸厂'))} />
             </div>
           </>
         ) : <p className="muted">{tr('加载中…')}</p>}

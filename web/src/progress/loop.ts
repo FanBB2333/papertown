@@ -38,7 +38,7 @@ export const needs = (n: CanvasNode) => {
   if (n.kind === 'gate') return !!n.gate && ['block', 'warn'].includes(gateLook(n.gate));
   if (n.check) return n.check.on && (['fail', 'warn'].includes(status(n.check)) || !!n.check.due);
   if (n.kind === 'task') return n.status !== 'done' || !!n.stale; // a result to be looked at again is yours to settle
-  if (n.kind === 'stage') return n.status === 'wait' || !!n.locked;
+  if (n.kind === 'stage') return !!n.locked;
   if (n.kind === 'human') return !!n.items?.length;
   return false;
 };
@@ -56,8 +56,8 @@ export function blockPills(key: FlowPart, ns: CanvasNode[]): Pill[] {
   const stages = ns.filter(n => n.kind === 'stage'), tasks = ns.filter(n => n.kind === 'task');
   if (stages.length) {
     const done = stages.filter(s => s.status === 'done').length;
-    out.push({ text: tr('工序 {0}/{1}', done, stages.length), tone: stages.some(s => s.status === 'fail') ? 'bad' : done === stages.length ? 'pass'
-      : stages.some(s => s.status === 'wait') ? 'warn' : stages.some(s => s.status === 'run') ? 'run' : 'none' });
+    out.push({ text: tr('工序 {0}/{1}', done, stages.length), tone: done === stages.length ? 'pass'
+      : stages.some(s => s.status === 'run') ? 'run' : 'none' });
   }
   const looks = ns.filter(n => n.kind === 'gate' && n.gate).map(n => gateLook(n.gate!));
   if (looks.includes('block')) out.push({ text: tr('卡口阻断'), tone: 'bad' });

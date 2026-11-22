@@ -34,7 +34,7 @@ def serve() -> None:
     @server.tool()
     def list_lines() -> list[dict]:
         """All paper lines with their stage and progress."""
-        return [{k: x[k] for k in ("id", "title", "status", "stage", "pct", "spent")} for x in town.pipeline.lines()]
+        return [{k: x[k] for k in ("id", "title", "status", "stage", "pct")} for x in town.pipeline.lines()]
 
     @server.tool()
     def get_line(line_id: str) -> dict:

@@ -75,8 +75,7 @@ class Plant(Place):
         p, g = self.pal, self.g
         out = Text(" ")
         if not g.get("ok"):
-            plant = (self.town.hud or {}).get("plant") or {}
-            out.append(f"{plant.get('name', '电厂')} · {plant.get('summary', '')}", style=p["ink"])
+            out.append("电厂 · 等待 nvidb GPU 数据", style=p["ink"])
             if g.get("note"):
                 out.append(f"   {g['note']}", style=p["muted"])
             self.query_one("#pl-sum", Static).update(out, layout=False)

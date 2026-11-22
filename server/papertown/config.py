@@ -1,6 +1,4 @@
-"""Settings, read once from the environment. Keys never live in files in this repo; without a
-provider key the server runs offline with the scripted provider.
-"""
+"""Settings for local agents and the town services."""
 
 from __future__ import annotations
 
@@ -16,55 +14,17 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
 
 
-def _detect_provider() -> str:
-    explicit = _env("PAPERTOWN_PROVIDER")
-    if explicit:
-        return explicit
-    if _env("ANTHROPIC_API_KEY") or _env("ANTHROPIC_AUTH_TOKEN"):
-        return "anthropic"
-    if _env("PAPERTOWN_OPENAI_API_KEY"):
-        return "openai"
-    return "mock"
-
-
-# providers the town's own workers can use: default (strong, cheap) models and suggestions for the switch
-PROVIDERS = {
-    "mock": {"name": "离线演示", "default": ("scripted", "scripted"), "models": ["scripted"]},
-    "anthropic": {"name": "Anthropic", "default": ("claude-opus-5-5", "claude-haiku-5-5"),
-                  "models": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"]},
-    "openai": {"name": "OpenAI 兼容接口", "default": ("deepseek-chat", "deepseek-chat"),
-               "models": ["deepseek-chat", "deepseek-reasoner", "qwen-max", "glm-4.6"]},
-}
-
-
 @dataclass
 class Settings:
-    # mock | anthropic | openai (any OpenAI-compatible endpoint: DeepSeek, Qwen, ...)
-    provider: str = field(default_factory=_detect_provider)
-    # strong model for Lv.3+ workers and final answers, cheap model for the rest
-    model_strong: str = field(default_factory=lambda: _env("PAPERTOWN_MODEL_STRONG"))
-    model_cheap: str = field(default_factory=lambda: _env("PAPERTOWN_MODEL_CHEAP"))
-    effort: str = field(default_factory=lambda: _env("PAPERTOWN_EFFORT", "medium"))
-    openai_base_url: str = field(default_factory=lambda: _env("PAPERTOWN_OPENAI_BASE_URL", "https://api.deepseek.com"))
-    openai_api_key: str = field(default_factory=lambda: _env("PAPERTOWN_OPENAI_API_KEY"))
-    # optional embeddings (OpenAI-compatible /embeddings); BM25 + TF-IDF otherwise
-    embed_base_url: str = field(default_factory=lambda: _env("PAPERTOWN_EMBED_BASE_URL"))
-    embed_api_key: str = field(default_factory=lambda: _env("PAPERTOWN_EMBED_API_KEY"))
-    embed_model: str = field(default_factory=lambda: _env("PAPERTOWN_EMBED_MODEL"))
-
     data_dir: Path = field(default_factory=lambda: Path(_env("PAPERTOWN_DATA_DIR", str(SERVER_DIR / "var"))))
     skills_dir: Path = field(default_factory=lambda: Path(_env("PAPERTOWN_SKILLS_DIR", str(SERVER_DIR / "skills"))))
     web_dist: Path = field(default_factory=lambda: REPO_DIR / "web" / "dist")
     manifest: Path = field(default_factory=lambda: REPO_DIR / "assets" / "manifest.json")
 
-    weekly_budget: float = field(default_factory=lambda: float(_env("PAPERTOWN_WEEKLY_BUDGET", "10")))
-    default_line_budget: float = field(default_factory=lambda: float(_env("PAPERTOWN_LINE_BUDGET", "1.0")))
     # "0" turns off the arXiv dock (tests, no network)
     arxiv_port: bool = field(default_factory=lambda: _env("PAPERTOWN_ARXIV", "1") != "0")
     # extra MCP servers, JSON file in the Claude Desktop format {"mcpServers": {...}}
     mcp_config: str = field(default_factory=lambda: _env("PAPERTOWN_MCP_CONFIG"))
-    # seconds a simulated GPU job takes; tests set 0
-    sim_gpu_seconds: float = field(default_factory=lambda: float(_env("PAPERTOWN_SIM_GPU_SECONDS", "6")))
     compile_tex: bool = field(default_factory=lambda: _env("PAPERTOWN_COMPILE_TEX", "1") != "0")
     # pi agents use pi's own model settings and login
     pi_bin: str = field(default_factory=lambda: _env("PAPERTOWN_PI_BIN"))
@@ -91,7 +51,7 @@ class Settings:
     herdr_socket: str = field(default_factory=lambda: _env("PAPERTOWN_HERDR_SOCKET", "~/.config/herdr/herdr.sock"))
     # where the bridge extension inside each pi reaches this server; `serve` sets it
     url: str = field(default_factory=lambda: _env("PAPERTOWN_URL", "http://127.0.0.1:8000"))
-    # offline demo: put the sample papers on the lines the first time the town starts empty
+    # Prebuilt samples: put the sample papers on the lines the first time the town starts empty
     samples: bool = field(default_factory=lambda: _env("PAPERTOWN_SAMPLES", "1") != "0")
     # nvidb's GPU queue, read only: the cards on your machines and their jobs ("0" turns it off)
     nvidb: bool = field(default_factory=lambda: _env("PAPERTOWN_NVIDB", "1") != "0")
@@ -105,6 +65,10 @@ class Settings:
     # what the assistant and the leads start with on Paseo until chosen in settings: provider/model@thinking
     assistant_model: str = field(default_factory=lambda: _env("PAPERTOWN_ASSISTANT_MODEL", "codex/gpt-6.1-terra@xhigh"))
     lead_model: str = field(default_factory=lambda: _env("PAPERTOWN_LEAD_MODEL", "codex/gpt-6.1-terra@high"))
+    # what a coder or a writer starts on when its lead hires it; empty: the lead's default
+    worker_model: str = field(default_factory=lambda: _env("PAPERTOWN_WORKER_MODEL"))
+    # each project in progress keeps its lead running ("0": leads start only by hand)
+    lead_resident: bool = field(default_factory=lambda: _env("PAPERTOWN_LEAD_RESIDENT", "1") != "0")
     # project leads: seconds between looks at their projects, and at least between two check-ins
     lead_tick: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_TICK", "20") or 20))
     lead_gap: float = field(default_factory=lambda: float(_env("PAPERTOWN_LEAD_GAP", "180") or 180))
@@ -124,16 +88,14 @@ class Settings:
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))
 
     def paseo_default(self, role: str) -> dict:
-        """The provider, model and thinking an assistant or a lead starts with on Paseo."""
-        spec = self.assistant_model if role == "assistant" else self.lead_model if role == "lead" else ""
+        """The provider, model and thinking an agent of this role starts with: the assistant, a lead, or a worker
+        (a coder or a writer, which follows the lead unless PAPERTOWN_WORKER_MODEL names its own)."""
+        spec = self.assistant_model if role == "assistant" else self.lead_model if role == "lead" else self.worker_model or self.lead_model
         provider, _, rest = spec.partition("/")
         model, _, thinking = rest.partition("@")
         return {"provider": provider or None, "model": model or None, "thinking": thinking or None}
 
     def __post_init__(self) -> None:
-        strong, cheap = PROVIDERS.get(self.provider, PROVIDERS["mock"])["default"]
-        self.model_strong = self.model_strong or strong
-        self.model_cheap = self.model_cheap or cheap
         self.data_dir.mkdir(parents=True, exist_ok=True)
 
     @property
@@ -155,7 +117,3 @@ class Settings:
     @property
     def jobs_dir(self) -> Path:
         return self.data_dir / "jobs"
-
-    @property
-    def offline(self) -> bool:
-        return self.provider == "mock"

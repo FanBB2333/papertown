@@ -22,7 +22,7 @@ from .conftest import make_settings
 def serving(s, monkeypatch):
     """Serve the app for `s` on a free port and yield its URL; what the TUI reads itself (nvidb, skim, the skills) follows `s` too."""
     for k, v in {"PAPERTOWN_DATA_DIR": s.data_dir, "PAPERTOWN_SKILLS_DIR": s.skills_dir, "PAPERTOWN_NVIDB_BIN": s.nvidb_bin,
-                 "PAPERTOWN_SKIM_BIN": s.skim_bin, "PAPERTOWN_PROVIDER": "mock"}.items():
+                 "PAPERTOWN_SKIM_BIN": s.skim_bin, "PAPERTOWN_LEAD_RESIDENT": "0"}.items():
         monkeypatch.setenv(k, str(v))
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -40,7 +40,7 @@ def serving(s, monkeypatch):
 
 @pytest.fixture
 def server(tmp_path, monkeypatch):
-    with serving(make_settings(tmp_path), monkeypatch) as url:
+    with serving(make_settings(tmp_path, lead_resident=False), monkeypatch) as url:
         yield url
 
 

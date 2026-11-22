@@ -35,10 +35,8 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "answer": ("把用户对项目里某个问题的回答转给在等的 agent：id 是问题编号，text 是用户的回答", "id text"),
     "job.submit": ("在实验农场提交一个任务：本地执行器在项目的代码目录里用 bash 跑这条命令", "line name command"),
     "job.cancel": ("取消实验农场里排着或在跑的任务（nvidb 的任务不行，Papertown 对 nvidb 只读）", "job"),
-    "line.hatch": ("让孵化场里查重过了的项目立项，进造纸厂开工", "line"),
-    "line.resume": ("让停下来等你的项目接着往下做", "line"),
-    "line.adjust": ("按一句话调整项目的方向，再接着做", "line text"),
-    "idea.submit": ("放入一颗新 idea，孵化场先查重", "text"),
+    "lead.switch": ("打开或关掉一个项目的负责人：on=true 让它常驻运行、接着推进项目，on=false 让它停下", "line on"),
+    "idea.submit": ("放入一颗新 idea：建成一个项目，它的负责人自动启动，先查重", "text"),
     "agent.brief": ("给项目的代码员工或写作员工再发一遍最新的项目简报", "line role"),
     "agent.abort": ("打断项目的代码员工或写作员工手上的事", "line role"),
     "paper.compile": ("重新编译项目的论文", "line"),
@@ -513,7 +511,7 @@ class Assistant:
             return f"给{who}发消息：{clip(text, 160)}", tell
         if name == "idea.submit":
             text = str(a["text"]).strip()
-            return f"放入一颗新 idea：{clip(text, 80)}", lambda: f"已放入，成了项目 #{t.pipeline.submit_idea(text, None)['seq']}"
+            return f"放入一颗新 idea：{clip(text, 80)}", lambda: f"已放入，成了项目 #{t.pipeline.create(text)['seq']}，它的负责人在启动"
         if name in ("mcp.toggle", "mcp.restart"):
             n = str(a["name"])
             if n not in {s["name"] for s in t.mcp.info()}:
@@ -551,13 +549,10 @@ class Assistant:
             jname, cmd = clip(a["name"], 60), str(a["command"]).strip()
             return (f"在 {tag} 提交实验农场任务「{jname}」：{clip(cmd, 160)}",
                     lambda: (lambda j: f"已提交 {j['id']}，现在{j['status']}")(t.farm.submit(lid, jname, cmd, "local", ID)))
-        if name == "line.hatch":
-            return f"让 {tag} 立项", lambda: f"已立项，现在是 {t.pipeline.hatch(lid)['status']}"
-        if name == "line.resume":
-            return f"让 {tag} 接着往下做", lambda: f"已继续，现在是 {t.pipeline.resume(lid)['status']}"
-        if name == "line.adjust":
-            text = str(a["text"]).strip()
-            return f"调整 {tag} 的方向：{clip(text, 120)}", lambda: f"已调整，现在是 {t.pipeline.adjust(lid, text)['status']}"
+        if name == "lead.switch":
+            on = _bool(a["on"])
+            return (f"{'打开' if on else '关掉'} {tag} 的负责人",
+                    lambda: (t.leads.configure(lid, on=on), f"{tag} 的负责人{'在启动，之后常驻运行' if on else '已经停下'}")[1])
         if name == "paper.compile":
             def build() -> str:
                 r = t.workspace.compile(lid)

@@ -1,0 +1,24 @@
+.resident-mark { display: inline-flex; align-items: center; gap: .4em; white-space: nowrap; font-size: .85em; color: var(--muted); }
+.resident-mark > i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }
+.resident-mark.rs-running { color: var(--green, #24804b); }
+.resident-mark.rs-starting { color: var(--blue, #2968b8); }
+.resident-mark.rs-blocked, .resident-warning { color: var(--orange, #a76814); }
+.resident-mark.rs-running > i { animation: resident-live 2s var(--out, ease-out) infinite; }
+.resident-control { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 16px; margin-bottom: 16px; }
+.resident-copy { flex: 1 1 230px; min-width: 0; overflow-wrap: anywhere; }
+.resident-copy p { margin: 6px 0 0; }
+.resident-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.resident-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.resident-switch { width: 46px; height: 28px; flex: 0 0 46px; border: 1px solid var(--muted); border-radius: 20px; background: var(--line, #aaa); padding: 3px; cursor: pointer; transition: background .2s var(--out, ease-out); }
+.resident-switch > span { display: block; width: 20px; height: 20px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0003; transition: transform .25s var(--spring, ease-out); }
+.resident-switch[aria-checked="true"] { background: var(--green, #24804b); border-color: var(--green, #24804b); }
+.resident-switch[aria-checked="true"] > span { transform: translateX(18px); }
+.resident-switch:focus-visible { outline: 2px solid var(--blue, #2968b8); outline-offset: 3px; }
+.resident-switch:disabled { opacity: .55; cursor: wait; }
+.stage-agent { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }
+.resident-history { margin-bottom: 18px; }
+.theme-sketch.calm .resident-mark > i { animation: none; }
+.theme-sketch.calm .resident-switch, .theme-sketch.calm .resident-switch > span { transition: none; }
+@keyframes resident-live { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .resident-mark > i { animation: none; } .resident-switch, .resident-switch > span { transition: none; } }
+@media (max-width: 480px) { .resident-control { padding: 12px; } .resident-actions { width: 100%; } .resident-switch { margin-left: auto; } }

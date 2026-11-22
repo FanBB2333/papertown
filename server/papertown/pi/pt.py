@@ -21,6 +21,13 @@ A project's lead also has:
     .papertown/pt card                       its card on the 进展 page: the fields and the card as it is
     .papertown/pt card set '<json>'|file.json   write the card, when the user asked for it
     .papertown/pt check <id> pass|warn|fail "reason"   a soft check's verdict
+    .papertown/pt hire coder|writer [--runtime R] [--cli C] [--model M] [--thinking T]
+                                             start the project's coder or writer
+    .papertown/pt stage                      the project's stages: whose they are, what is handed in, which gate holds
+    .papertown/pt stage run|done|todo <stage> ["note"] [--pct N]
+                                             open a stage or write its progress, close it, put it back
+    .papertown/pt survey                     the novelty scan, by code: the closest papers and the verdict
+    .papertown/pt library "keywords" [--top N]   search the library
 
 Any agent of a project has:
 
@@ -34,6 +41,7 @@ Any agent of a project has:
     .papertown/pt tasks                      the tasks the user put on the project's canvas for you
     .papertown/pt tell task:<id> "..."       to another task's assigned agent in the same project
     .papertown/pt task <id> done|blocked "…" close one: what came of it, or why it is stuck
+    .papertown/pt output <stage> '<json>'|@file.json   hand in a stage's output (the lead: any stage; a worker: its own)
 
 The console's assistant has more (see its AGENTS.md):
 
@@ -281,6 +289,40 @@ def main(a):
         if len(a) < 4 or a[2] not in ("pass", "warn", "fail"):
             sys.exit('用法：pt check <编号> pass|warn|fail "理由"')
         print(call("/check", {"id": a[1], "status": a[2], "text": " ".join(a[3:])})["text"])
+    elif a[0] == "hire":
+        opts, rest = options(a[1:], many=(), flags=())
+        if len(rest) != 1:
+            sys.exit("用法：pt hire coder|writer [--runtime paseo|herdr|tmux] [--cli claude|codex|antigravity] [--model 模型] [--thinking 强度]")
+        print(call("/hire", {"role": rest[0], "runtime": opts.get("runtime"), "provider": opts.get("cli") or opts.get("provider"),
+                             "model": opts.get("model"), "thinking": opts.get("thinking")})["text"])
+    elif a[0] == "stage":
+        opts, rest = options(a[1:], many=(), flags=())
+        if not rest:
+            print(call("/stage" + (f"?line={quote(opts['line'])}" if opts.get("line") else ""))["text"])
+        elif rest[0] in ("run", "done", "todo") and len(rest) >= 2:
+            pct = opts.get("pct")
+            if pct is not None and not pct.isdigit():
+                sys.exit("--pct 是 0 到 100 的整数")
+            print(call("/stage", {"stage": rest[1], "status": rest[0], "note": " ".join(rest[2:]) or None, "pct": int(pct) if pct else None})["text"])
+        else:
+            sys.exit('用法：pt stage | pt stage run|done|todo <工序> ["说明"] [--pct 0-99]')
+    elif a[0] == "output":
+        if len(a) < 3:
+            sys.exit("用法：pt output <工序> '<JSON>' | pt output <工序> @文件.json")
+        raw = " ".join(a[2:]).strip()
+        raw = read(raw[1:]) if raw.startswith("@") else raw if raw.startswith("{") else read(raw)
+        try:
+            body = json.loads(raw)
+        except ValueError as e:
+            sys.exit(f"产出不是合法的 JSON：{e}")
+        print(call("/output", {"stage": a[1], "body": body})["text"])
+    elif a[0] == "survey":
+        print(call("/survey" + (f"?line={quote(a[1])}" if len(a) > 1 else ""))["text"])
+    elif a[0] == "library":
+        opts, rest = options(a[1:], many=(), flags=())
+        if not rest:
+            sys.exit('用法：pt library "英文关键词" [--top 8]')
+        print(call("/library?q=" + quote(" ".join(rest)) + (f"&top={quote(opts['top'])}" if opts.get("top") else ""))["text"])
     elif a[0] == "recall":
         if len(a) < 2:
             sys.exit('用法：pt recall "要找的"')

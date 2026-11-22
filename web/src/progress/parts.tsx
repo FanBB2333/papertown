@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { api, type Card, type CardRepo, type CardRun, type Health, type OutputState, type Pane, type PaseoDefaults, type ProjectCard } from '../api';
-import { AGENT_STATUS } from '../components/MillRoom';
+import { ResidentMark } from '../components/Resident';
 import { Icon, type IconName } from '../console/icons';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
@@ -27,15 +27,15 @@ export const PANES: Record<Pane, [string, string, IconName]> = {
 };
 export const PANE_KEYS = Object.keys(PANES) as Pane[];
 
-export const youNeeded = (c: ProjectCard) => c.asks > 0 || !!c.card?.need_you.length || ['waiting', 'paused', 'failed'].includes(c.line.status);
+export const youNeeded = (c: ProjectCard) => c.asks > 0 || c.line.lead.state === 'blocked';
 
 const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
-const STAGE_ST: Record<'todo' | 'run' | 'wait' | 'done' | 'fail', string> = { done: tr('完成'), run: tr('进行中'), wait: tr('等你'), todo: tr('还没开始'), fail: tr('出错') };
+const STAGE_ST: Record<'todo' | 'run' | 'done', string> = { done: tr('完成'), run: tr('进行中'), todo: tr('还没开始') };
 
 // what a card's buttons do, the same on the card and on the project's page
 export function useCardActs(r: ProjectCard, toast: (t: string) => void, onChange: (r: ProjectCard) => void) {
   const [busy, setBusy] = useState(false);
-  const { line, lead } = r;
+  const { line } = r;
   async function run(fn: () => Promise<ProjectCard>, done?: string) {
     setBusy(true);
     try {
@@ -49,10 +49,10 @@ export function useCardActs(r: ProjectCard, toast: (t: string) => void, onChange
     update: (note = '') => run(() => api.updateCard(line.id, note.trim()), tr('已经请 #{0} 的负责人更新卡片。', line.seq)),
     cancel: () => run(() => api.cancelCard(line.id)),
     hire: () => run(async () => {
-      const a = lead ?? await api.openAgent(line.id, 'lead');
-      await api.startAgent(a.id, { runtime: 'paseo' });
+      await api.setLead(line.id, { on: true });
+      await api.lead(line.id);
       return api.card(line.id);
-    }, tr('#{0} 的负责人在 Paseo 里启动了，等它读完项目再按「更新」。', line.seq)),
+    }, tr('项目 #{0} 的负责人正在启动。', line.seq)),
   };
 }
 type CardActs = ReturnType<typeof useCardActs>;
@@ -65,7 +65,7 @@ export function Stages({ r }: { r: ProjectCard }) {
         {line.stages.map(s => <li key={s.key} className={`s-${s.status}`} title={`${s.name} · ${STAGE_ST[s.status]}`} />)}
       </ol>
       <span className="small muted pc-stage">
-        {line.stage ? `${line.stage.name} · ${line.stage.status === 'wait' ? tr('等你') : line.stage.status === 'fail' ? tr('出错') : line.stage.status === 'todo' ? tr('还没开始') : `${line.stage.pct}%`}` : tr('全部完成')}
+        {line.stage ? `${line.stage.name} · ${line.stage.status === 'todo' ? tr('还没开始') : `${line.stage.pct}%`}` : tr('全部完成')}
         {!!r.jobs.failed && <> · <b className="bad-t">{tr('{0} 个失败', r.jobs.failed)}</b></>}
         {r.asks > 0 && <> · <b className="pg-wait">{tr('{0} 个问题等你', r.asks)}</b></>}
         {!!r.checks?.hard.fail && <> · <b className="bad-t" title={tr('研究回路上必须满足的硬检查')}>{tr('{0} 项硬检查没过', r.checks.hard.fail)}</b></>}
@@ -90,13 +90,7 @@ export function Meter({ r }: { r: ProjectCard }) {
 }
 
 export function Who({ r, full }: { r: ProjectCard; full?: boolean }) {
-  const live = r.lead?.started ? r.lead : null;
-  return (
-    <span className="pc-who small muted">
-      {live && <i className={`dot s-${live.status}`} />}
-      <span title={r.card ? tr('卡片{0}更新', ago(r.card.at)) : undefined}>{live ? `${tr('负责人')} ${AGENT_STATUS[live.status]}` : tr('没有负责人')}{full && r.card && ` · ${tr('卡片{0}更新', ago(r.card.at))}`}</span>
-    </span>
-  );
+  return <span className="pc-who small muted"><span>{tr('负责人')}</span><ResidentMark resident={r.line.lead} />{full && r.card && <span>{tr('卡片{0}更新', ago(r.card.at))}</span>}</span>;
 }
 
 // the card's main button: update, the update in flight, or a lead to set up
@@ -112,7 +106,8 @@ export function UpdateButton({ r, acts, defs, note }: { r: ProjectCard; acts: Ca
       </span>
     );
   }
-  if (r.lead?.started) {
+  if (r.line.lead.state === 'ended') return null;
+  if (r.lead?.started && r.line.lead.state === 'running') {
     return (
       <button className="btn pri" disabled={acts.busy} onClick={e => { e.stopPropagation(); acts.update(note); }} title={tr('请负责人读一遍项目，重写这张卡片')}>
         <Icon n="refresh" size={14} />{tr('更新')}
@@ -121,8 +116,8 @@ export function UpdateButton({ r, acts, defs, note }: { r: ProjectCard; acts: Ca
   }
   return (
     <button className="btn pri" disabled={acts.busy} onClick={e => { e.stopPropagation(); acts.hire(); }}
-      title={d?.provider ? tr('在 Paseo 里用 {0} 启动', [d.provider, d.model, d.thinking].filter(Boolean).join(' / ')) : undefined}>
-      {acts.busy ? tr('启动中…') : tr('配负责人')}
+      title={d?.provider ? tr('使用默认运行方式启动：{0}', [d.provider, d.model, d.thinking].filter(Boolean).join(' / ')) : undefined}>
+      {acts.busy ? tr('启动中…') : tr('开启负责人')}
     </button>
   );
 }

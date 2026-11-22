@@ -1,5 +1,5 @@
 """MCP client side (the ports): each configured server runs over stdio on the hub's own event loop thread, its tools
-registered for the agents as `<server>_<tool>`. Servers are built in (arXiv), from PAPERTOWN_MCP_CONFIG or from the
+listed in the MCP room. Servers are built in (arXiv), from PAPERTOWN_MCP_CONFIG or from the
 town's mcp.json (Claude Desktop format, plus a "disabled" list); env values may name variables ("${GITHUB_TOKEN}").
 """
 
@@ -14,13 +14,12 @@ import threading
 import time
 from concurrent.futures import Future
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from mcp import Client, StdioServerParameters
 
 from .config import SERVER_DIR
 from .db import read_json
-from .tools import Tool, ToolCtx
 
 if TYPE_CHECKING:
     from .town import Town
@@ -50,8 +49,6 @@ class McpHub:
         self.clients: dict[str, Client] = {}
         self.status: dict[str, dict] = {}
         self.tools_of: dict[str, list[dict]] = {}  # each server's tools: name and description
-        self.registered: dict[str, list[str]] = {}
-        self.after: dict[str, Callable[[ToolCtx, dict, Any], Any]] = {}  # post-processing per api tool name
         self._stop: asyncio.Event | None = None
         self._stops: dict[str, asyncio.Event] = {}
         self._running: dict[str, Future] = {}
@@ -201,8 +198,6 @@ class McpHub:
             async with Client(params, read_timeout_seconds=60) as client:
                 listed = await asyncio.wait_for(client.list_tools(), 60)
                 self.clients[name] = client
-                for t in listed.tools:
-                    self._register(name, t)
                 self.tools_of[name] = [{"name": t.name, "description": (t.description or "").strip()[:400]} for t in listed.tools]
                 self.status[name] = {"ok": True, "tools": [t.name for t in listed.tools]}
                 waits = [asyncio.ensure_future(stop.wait()), asyncio.ensure_future(self._stop.wait())]
@@ -216,22 +211,6 @@ class McpHub:
             self.tools_of.pop(name, None)
             if self._stops.get(name) is stop:
                 self._stops.pop(name, None)
-            for api in self.registered.pop(name, []):
-                self.town.tools.remove(api)
-
-    def _register(self, server: str, t) -> None:
-        api = f"{server}_{t.name}".replace("-", "_").replace(".", "_")[:64]
-        schema = t.input_schema or {"type": "object", "properties": {}}
-        main_arg = next(iter(schema.get("properties", {})), None)
-
-        def fn(ctx: ToolCtx, args: dict, _tool=t.name, _api=api):
-            value = self.call(server, _tool, args)
-            hook = self.after.get(_api)
-            return hook(ctx, args, value) if hook else value
-
-        tool = Tool(api, f"{server}.{t.name}", "MCP", (t.description or t.name)[:1000], schema, fn, arg=main_arg)
-        self.town.tools.add(tool)
-        self.registered.setdefault(server, []).append(api)
 
     def call(self, server: str, tool: str, args: dict, timeout: float = 90) -> Any:
         client = self.clients.get(server)

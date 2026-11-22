@@ -19,14 +19,14 @@ from textual.widgets import ContentSwitcher, DataTable, Static
 
 from ..anim import bar, clock, dur, gleam, mix, seconds_since
 from ..client import ApiError
-from ..look import JOB, LINE, STAGE, clip, job_mark, job_state, line_mark, money, stage_mark
+from ..look import JOB, LEAD, LINE, STAGE, clip, job_mark, job_state, line_mark, money, stage_mark
 from ..widgets import Bar, Confirm, Pane, Place, Prompt, row_key, sync_rows
 from . import cycle, tabs
 from .ide import Editor, Ide
 
 TABS = [("overview", "概览"), ("survey", "调研"), ("code", "代码"), ("exp", "实验"), ("paper", "论文"), ("files", "文件"), ("team", "员工")]
-FILTERS = [("all", "全部"), ("active", "在做的"), ("waiting", "等你决定"), ("done", "已出厂")]
-ACTIVE = ("running", "hatching", "paused", "linked")
+FILTERS = [("all", "全部"), ("active", "在做的"), ("done", "已出厂")]
+ACTIVE = ("running", "linked")
 
 
 def shown(f: str, status: str) -> bool:
@@ -39,7 +39,7 @@ class Projects(Place):
     BINDINGS = [
         Binding("left_square_bracket", "tab(-1)", "上一页", show=False), Binding("right_square_bracket", "tab(1)", "下一页", show=False),
         Binding("f", "filter", "筛选"), Binding("slash", "search", "搜索"), Binding("n", "idea", "新 idea"),
-        Binding("h", "hatch", "立项"), Binding("r", "resume", "继续"), Binding("e", "adjust", "调整"), Binding("a", "ask", "问"),
+        Binding("l", "lead", "负责人开关"), Binding("a", "ask", "问"),
         Binding("d", "diff", "看改动", show=False), Binding("E", "edit", "改文件", show=False), Binding("C", "compile", "编译", show=False),
         Binding("P", "pdf", "看 PDF", show=False), Binding("o", "open", "打开", show=False), Binding("z", "focus_mode", "专注", show=False),
     ]
@@ -143,7 +143,7 @@ class Projects(Place):
         if not self.town.beat:
             return
         table = self.query_one("#pj-table", DataTable)
-        moving = {ln["id"] for ln in self.town.lines if ln["status"] in ("running", "hatching", "waiting")}
+        moving = {ln["id"] for ln in self.town.lines if ln["status"] in ACTIVE}
         if moving or self.town.glow.at:
             for key, cells in self.rows():
                 if key in moving or self.town.glow.k(("line", key), t):
@@ -229,12 +229,7 @@ class Projects(Place):
             elif self.tab == "files":
                 self.paint_files()
             elif self.tab == "team":
-                self.agents = []
-                for role in ("coder", "writer"):
-                    try:
-                        self.agents.append((await api.get(f"/api/agents/{role}-{lid}"))["agent"])
-                    except ApiError:
-                        pass
+                self.agents = list(self.line.get("team") or [])
                 self.paint_team()
         except ApiError as e:
             self.town.notify(str(e), severity="error")
@@ -255,27 +250,20 @@ class Projects(Place):
         if ln.get("idea"):
             parts.append(Text(clip(ln["idea"], 400), style=p["muted"]))
         hatch = (ln.get("outputs") or {}).get("hatch") or {}
-        ask = None
-        if ln["status"] == "waiting":
-            ask = ("查重报告出来了，等你决定", hatch.get("summary") or "看过调研后，决定立项还是调整 idea。",
-                   [("h", "孵化并立项"), ("e", "调整 idea"), ("]", "先看调研")])
-        elif ln["status"] in ("paused", "failed"):
-            ask = ("流水线出错停下了" if ln["status"] == "failed" else "流水线暂停了",
-                   ln.get("note") or (ln.get("current") or {}).get("note") or ln.get("reason") or "", [("r", "继续"), ("e", "调整方向")])
-        if ask:
-            keys = Text()
-            for k, what in ask[2]:
-                keys.append(f" {k} ", style=f"bold {p['bg']} on {p['brand']}")
-                keys.append(f" {what}   ", style=p["ink"])
-            parts.append(Panel(Group(Text(clip(ask[1], 300), style=p["ink"]), Text(), keys), title=Text(f" {ask[0]} ", style=f"bold {p['warn']}"),
-                               title_align="left", border_style=p["warn"], padding=(0, 1)))
+        lead = ln.get("lead") or {}
+        state = LEAD.get(lead.get("state"), lead.get("state") or "—")
+        parts.append(Text(f"负责人：{state} · {'开启' if lead.get('on') else '关闭'} · {lead.get('runtime') or '—'}", style=p["ink"]))
+        if lead.get("note"):
+            parts.append(Text(lead["note"], style=p["warn"]))
+        if ln["status"] in ACTIVE:
+            parts.append(Text("l  切换负责人开关", style=p["brand"]))
+        if ln.get("sample"):
+            parts.append(Text("样例项目 · 预制状态", style=p["muted"]))
         stages = ln.get("stages") or []
         done = sum(s["status"] == "done" for s in stages)
         prog = Text("进度  ", style=p["muted"])
         prog.append_text(bar(ln.get("pct", 0) / 100, 24, p["brand"], p["raised"]))
-        prog.append(f"  {done}/{len(stages)} 道工序 · 花了 {money(ln.get('spent'))}", style=p["muted"])
-        if ln.get("budget"):
-            prog.append(f" / {money(ln['budget'])}", style=p["muted"])
+        prog.append(f"  {done}/{len(stages)} 道工序", style=p["muted"])
         parts += [Text(), prog, Text()]
         grid = Table.grid(padding=(0, 2))
         for col in ("mark", "name", "where", "state", "when"):
@@ -283,11 +271,12 @@ class Projects(Place):
         for i, s in enumerate(stages):
             running = s["status"] == "run"
             name = gleam(s["name"], t, p["run"], p["hi"]) if running else Text(s["name"], style=p["ink"] if s["status"] != "todo" else p["muted"])
-            state = Text(STAGE.get(s["status"], s["status"]), style=p["run"] if running else p["warn"] if s["status"] == "wait" else p["muted"])
+            state = Text(STAGE.get(s["status"], s["status"]), style=p["run"] if running else p["muted"])
             if s.get("note"):
                 state.append(f" · {clip(s['note'], 40)}", style=p["muted"])
-            if s.get("workers"):
-                state.append(f"  {'、'.join(w.get('title') or w['id'] for w in s['workers'][:3])}", style=p["faint"])
+            state.append(f" · {s.get('owner') or '—'}", style=p["muted"])
+            if s.get("agents"):
+                state.append(f"  {'、'.join(w.get('name') or w['id'] for w in s['agents'][:3])}", style=p["faint"])
             since = seconds_since(s.get("started_at")) if running else None
             when = Text(dur(since) if since is not None else (clock(s.get("ended_at")) if s.get("ended_at") else ""), style=p["muted"])
             grid.add_row(stage_mark(s["status"], t, p), Text.assemble((f"{i + 1} ", p["faint"]), name),
@@ -296,8 +285,6 @@ class Projects(Place):
         facts = []
         if hatch.get("verdict"):
             facts.append(("查重", f"{hatch['verdict']}（最接近 {len(hatch.get('similar') or [])} 篇）"))
-        if ln.get("reason"):
-            facts.append(("编队", ln["reason"]))
         if c := self.ws.get("code"):
             facts.append(("代码", f"{c.get('name')} · {c.get('branch') or ''} · {'%d 处改动' % c['dirty'] if c.get('dirty') else '无改动'}"))
         if pp := self.ws.get("paper"):
@@ -485,25 +472,17 @@ class Projects(Place):
         p, ln = self.pal, self.line
         parts: list[Any] = [self.head(), Text()]
         if self.agents:
-            parts.append(Text("接入的 agent", style=f"bold {p['ink']}"))
+            parts.append(Text("已启动的员工", style=f"bold {p['ink']}"))
             for a in self.agents:
                 last = a.get("last") or {}
                 last_text = (last.get("data") or {}).get("text") or last.get("text") or ""
-                parts.append(Text.assemble(("● " if a.get("started") else "○ ", p["ok"] if a.get("started") else p["faint"]),
-                                           (self.town.agent_name(a["id"]), f"bold {p['ink']}"),
-                                           (f"  {a.get('status', '')} · {a.get('runtime', '')} · {a.get('model') or ''} · {money(a.get('cost'))}", p["muted"])))
+                parts.append(Text.assemble(("● ", p["ok"]),
+                                           (a.get("name") or self.town.agent_name(a["id"]), f"bold {p['ink']}"),
+                                           (f"  {a.get('status', '')} · {a.get('runtime', '')} · {a.get('model') or ''}", p["muted"])))
                 if last_text:
                     parts.append(Text(f"   {clip(last_text, 120)}", style=p["faint"]))
             parts.append(Text.assemble(("Tab", f"bold {p['brand']}"), (" 在底下的框里换成「对它说」 · ", p["muted"]), ("4", f"bold {p['brand']}"), (" 到员工页看它在做什么", p["muted"])))
             parts.append(Text())
-        workers = {}
-        for s in ln.get("stages") or []:
-            for w in s.get("workers") or []:
-                workers.setdefault(w["id"], (w, []))[1].append(s["name"])
-        if workers:
-            parts.append(Text("小镇的员工", style=f"bold {p['ink']}"))
-            for w, stages in workers.values():
-                parts.append(Text.assemble((f"  {w.get('title') or w['id']}", p["ink"]), (f"  Lv.{w.get('level', '?')} · {'、'.join(stages)}", p["muted"])))
         if len(parts) == 2:
             parts.append(Text("还没有员工接手", style=p["muted"]))
         self.query_one("#team", Pane).show(Padding(Group(*parts), (1, 2)))
@@ -514,14 +493,11 @@ class Projects(Place):
             if self.tab == "paper":
                 out += [("C", "编译"), ("P", "PDF")]
             return out + [("z", "专注"), ("T", "配色")]
-        st = (self.line or {}).get("status")
         out = [("[ ]", "翻页"), ("f", "筛选"), ("/", "搜索"), ("n", "新 idea")]
-        if st == "waiting":
-            out.append(("h", "立项"))
-        if st in ("paused", "failed"):
-            out.append(("r", "继续"))
         if self.line:
-            out += [("e", "调整"), ("a", "问")]
+            out.append(("a", "问"))
+            if self.line["status"] in ACTIVE:
+                out.append(("l", "关闭负责人" if (self.line.get("lead") or {}).get("on") else "开启负责人"))
         if self.tab in ("survey", "files"):
             out.append(("Enter", "打开" if self.tab == "survey" else "下载"))
         return out
@@ -553,34 +529,17 @@ class Projects(Place):
     def action_ask(self) -> None:
         self.town.aim("ask")
 
-    async def _act(self, path: str, done: str) -> None:
+    async def action_lead(self) -> None:
+        if not self.line or self.line["status"] not in ACTIVE:
+            return
+        on = not (self.line.get("lead") or {}).get("on", False)
         try:
-            await self.town.api.post(path)
-            self.town.notify(done)
-            self.town.schedule_refetch()
+            await self.town.api.post(f"/api/lines/{self.line['id']}/lead", {"on": on})
+            self.town.notify("负责人已开启" if on else "负责人已关闭")
+            await self.town.refetch()
+            await self.load()
         except ApiError as e:
             self.town.notify(str(e), severity="error")
-
-    async def action_hatch(self) -> None:
-        if self.line and self.line["status"] == "waiting":
-            await self._act(f"/api/lines/{self.line['id']}/hatch", f"#{self.line['seq']} 立项了，进造纸厂开工")
-
-    async def action_resume(self) -> None:
-        if self.line and self.line["status"] in ("paused", "failed", "waiting"):
-            await self._act(f"/api/lines/{self.line['id']}/resume", f"#{self.line['seq']} 接着做")
-
-    @work(group="pj-ask")
-    async def action_adjust(self) -> None:
-        if not self.line:
-            return
-        text = await self.app.push_screen_wait(Prompt(f"调整 #{self.line['seq']} 的方向", "一句话说怎么改，项目会按新方向接着做"))
-        if text:
-            try:
-                await self.town.api.post(f"/api/lines/{self.line['id']}/adjust", {"text": text})
-                self.town.notify("按新方向接着做", title=f"#{self.line['seq']}")
-                self.town.schedule_refetch()
-            except ApiError as e:
-                self.town.notify(str(e), severity="error")
 
     @work(group="pj-ask")
     async def action_compile(self) -> None:

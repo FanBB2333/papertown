@@ -1,9 +1,9 @@
 // Snapshots every GET the static demo makes into dist-demo/demo/<key>.json, plus the papers' files and PDFs.
-// Run it against a fresh offline instance, never the one you work in: it compiles the papers there, and it fails
+// Run it against a fresh isolated instance, never the one you work in: it compiles the papers there, and it fails
 // if personal data is left. Give that instance an empty home and data directory, nothing of yours linked in, and
-// TeX on its PATH; let the sample projects run for a few minutes before taking the snapshot.
+// TeX on its PATH. Samples are prebuilt states with their resident leads switched off.
 //
-//   HOME=/tmp/pt-demo/home PAPERTOWN_PROVIDER=mock PAPERTOWN_DATA_DIR=/tmp/pt-demo/var PAPERTOWN_NVIDB=0 \
+//   HOME=/tmp/pt-demo/home PAPERTOWN_LEAD_RESIDENT=0 PAPERTOWN_DATA_DIR=/tmp/pt-demo/var PAPERTOWN_NVIDB=0 \
 //     PAPERTOWN_PASEO_BIN=/nonexistent PAPERTOWN_PASEO_WATCH=0 PAPERTOWN_PROJECTS=/nonexistent \
 //     server/.venv/bin/papertown serve --port 8001
 //   PAPERTOWN_DEMO_SOURCE=http://127.0.0.1:8001 pnpm build:demo     (or: node scripts/demo-snapshot.mjs [source] [dist-demo])
@@ -49,9 +49,9 @@ async function get(url, key = null) {
 const world = await get('/api/world');
 const lines = await get('/api/lines');
 for (const u of ['/api/messages?limit=120', '/api/trace?limit=80', '/api/papers/fresh', '/api/departments', '/api/skills', '/api/skim', '/api/skim?fresh=1',
-  '/api/skim/resolve', '/api/mcp', '/api/rag', '/api/gpus', '/api/gpus?fresh=1', '/api/paseo', '/api/paseo/conversations', '/api/llm',
+  '/api/skim/resolve', '/api/mcp', '/api/rag', '/api/gpus', '/api/gpus?fresh=1', '/api/paseo', '/api/paseo/conversations',
   '/api/agents?role=coder', '/api/agents?role=writer', '/api/agents?role=monitor', '/api/agents?role=lead', '/api/agents?role=',
-  '/api/agents/overview', '/api/cards', '/api/paseo/news', '/api/reports', '/api/bounds', '/api/assistant']) await get(u);
+  '/api/agents/runtime', '/api/backends', '/api/herdr', '/api/usage', '/api/usage/settings', '/api/agents/overview', '/api/cards', '/api/paseo/news', '/api/reports', '/api/bounds', '/api/assistant']) await get(u);
 await get('/api/library?limit=5000', 'library_all');
 
 for (const pl of world.placements) { await get(`/api/buildings/${pl.id}`); await get(`/api/buildings/${pl.type}`); }
@@ -64,7 +64,7 @@ for (const ln of lines) {
   await get(`/api/lines/${ln.id}/papers`);
   await get(`/api/skim/resolve?line_id=${ln.id}`);
   // the project page, its research loop and what hangs off them
-  for (const part of ['card', 'canvas', 'canvas/report', 'pages', 'lead', 'memory']) await get(`/api/lines/${ln.id}/${part}`);
+  for (const part of ['card', 'canvas', 'canvas/report', 'pages', 'lead', 'memory', 'usage']) await get(`/api/lines/${ln.id}/${part}`);
   await get(`/api/reports?line_id=${ln.id}`);
   await get(`/api/bounds?line_id=${ln.id}`);
   for (const j of (await get(`/api/jobs?line_id=${ln.id}`))?.jobs ?? []) jobs.add(j.id);
@@ -103,6 +103,10 @@ for (const role of ['coder', 'writer', 'monitor', 'lead']) {
   for (const row of saved.get(demoKey('/api/agents', `?role=${role}`))?.roster ?? []) if (row.agent) agents.set(row.agent.id, row.agent);
 }
 for (const g of saved.get(demoKey('/api/agents/overview'))?.groups ?? []) for (const a of g.agents) agents.set(a.id, a);
+for (const ln of lines) {
+  const lead = saved.get(demoKey(`/api/lines/${ln.id}/lead`))?.agent;
+  if (lead) agents.set(lead.id, lead);
+}
 for (const a of agents.values()) {
   await get(`/api/agents/${a.id}?after=0`);
   await get(`/api/agents/${a.id}/timeline`);

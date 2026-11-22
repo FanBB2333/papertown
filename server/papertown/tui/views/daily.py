@@ -1,5 +1,4 @@
-"""日报: the town's daily report (the web page's 运行状态): headlines, projects, new papers, staff
-changes, calls and spending, with bars that grow in when the page opens."""
+"""日报: the town's daily report (the web page's 运行状态): headlines, projects, new papers, resident leads and tools, with bars that grow in when the page opens."""
 
 from __future__ import annotations
 
@@ -16,7 +15,7 @@ from textual.binding import Binding
 
 from ..anim import Tween, bar
 from ..client import ApiError
-from ..look import LINE, clip, line_mark, money, pad
+from ..look import LINE, clip, line_mark, pad
 from ..widgets import Pane, Place
 
 
@@ -67,14 +66,13 @@ class Daily(Place):
         if projects:
             parts.append(self.section("项目"))
             grid = Table.grid(padding=(0, 2))
-            for _ in range(6):
+            for _ in range(5):
                 grid.add_column(no_wrap=True)
             for x in projects:
                 prog = bar((x.get("pct") or 0) / 100 * k, 14, p["done"] if x.get("status") == "done" else p["brand"], p["raised"])
                 prog.append(f" {x.get('pct') or 0:>3}%", style=p["muted"])
                 grid.add_row(line_mark(x.get("status", ""), t, p), Text(f"#{x['seq']}", style=p["brand"]), Text(clip(x.get("title"), 34), style=p["ink"]),
-                             Text(x.get("stage") or LINE.get(x.get("status", ""), ""), style=p["muted"]), prog,
-                             Text(f"{money(x.get('spent'))}" + (f" / {money(x['budget'])}" if x.get("budget") else ""), style=p["muted"]))
+                             Text(x.get("stage") or LINE.get(x.get("status", ""), ""), style=p["muted"]), prog)
             parts += [grid, Text()]
         papers = s.get("papers") or []
         if papers:
@@ -84,12 +82,8 @@ class Daily(Place):
                 parts.append(Text.assemble(rel, (f" {clip(x.get('title'), 60)}", p["ink"]), (f"  {x.get('year', '')}  {'、'.join(x.get('tags') or [])}", p["muted"])))
             parts.append(Text())
         side: list[Any] = []
-        bank = s.get("bank") or {}
-        if bank:
-            used = (bank.get("week") or 0) / (bank.get("budget") or 1)
-            side += [self.section("账本"), Text.assemble(bar(used * k, 16, p["warn"] if used > 0.8 else p["ok"], p["raised"]),
-                                                       (f"  本周 {money(bank.get('week'))} / {money(bank.get('budget'))}", p["ink"])),
-                     Text(f"{bank.get('calls', 0)} 次调用 · 进 {bank.get('tokens_in', 0):,} · 出 {bank.get('tokens_out', 0):,} tokens", style=p["muted"]), Text()]
+        leads = hud.get("leads") or {}
+        side += [self.section("负责人"), Text(f"{leads.get('running', 0)} 位运行 · {leads.get('on', 0)} 位开启", style=p["ink"]), Text()]
         calls = s.get("calls") or []
         if calls:
             side.append(self.section("调用"))
@@ -98,28 +92,12 @@ class Daily(Place):
                 side.append(Text.assemble((f"{pad(c.get('name') or c.get('kind'), 12)} ", p["ink"]), bar((c.get("count") or 0) / top * k, 16, p["brand"], p["raised"]),
                                           (f" {c.get('count', 0)}", p["muted"])))
             side.append(Text())
-        models = s.get("models") or []
-        if models:
-            side.append(self.section("模型"))
-            for m in models:
-                side.append(Text(f"{m.get('provider')} · {m.get('model')}  {m.get('calls', 0)} 次 · {money(m.get('cost'))}", style=p["ink"]))
-            side.append(Text())
         other: list[Any] = []
-        plant = s.get("plant") or {}
-        if plant:
-            other += [self.section("电厂"), Text(f"{plant.get('name', '')} · {plant.get('summary', '')}", style=p["ink"]), Text()]
         lib = s.get("library") or {}
         if lib:
             graph = lib.get("graph") or {}
             other += [self.section("图书馆"), Text(f"馆藏 {lib.get('total', 0)} 篇 · arXiv {lib.get('arxiv', 0)} 篇"
                                                    + (f" · 引用边 {graph.get('edges', 0)} 条" if graph else ""), style=p["ink"]), Text()]
-        workers = s.get("workers") or []
-        if workers:
-            other.append(self.section("人事"))
-            for w in workers[:6]:
-                other.append(Text.assemble(("▲ " if w.get("change") == "升" else "▼ ", p["ok"] if w.get("change") == "升" else p["bad"]),
-                                           (clip(w.get("note"), 50), p["ink"])))
-            other.append(Text())
         skills = s.get("skills") or []
         if skills:
             other += [self.section("技能"), Text("、".join(x["name"] for x in skills), style=p["muted"]), Text()]
@@ -130,7 +108,7 @@ class Daily(Place):
     def tick(self, t: float) -> None:
         if not self.town.beat:
             return
-        if self.grow.step(3 / 12) or any(x.get("status") in ("running", "hatching", "waiting") for x in self.s.get("projects") or []):
+        if self.grow.step(3 / 12) or any(x.get("status") in ("running", "linked") for x in self.s.get("projects") or []):
             self.paint(layout=False)
 
     def hints(self) -> list[tuple[str, str]]:

@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 
 from papertown.bounds import BoundsError
 
-from .conftest import wait_for
 from .test_farm_agents import IDEA, with_paseo
 
 
@@ -15,7 +14,7 @@ def rule(text, kind="must", inherit="yes", action=None):
 
 
 def test_rules_pass_down_the_levels_as_their_inheritance_says(town):
-    line = town.pipeline.submit_idea(IDEA, None)
+    line = town.pipeline.create(IDEA)
     lid = line["id"]
     b = town.bounds
     g = b.save(None, None, [rule("提交和推送前先问我", "ask", "force"), rule("改动要跑测试", "must", "yes"),
@@ -54,7 +53,7 @@ def test_agents_read_their_rules_and_hear_when_they_change(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, lid, {"waiting"})
+
         c.put("/api/bounds", json={"rules": [rule("不要 push 到远端", "never", "force")]})
         a = c.post("/api/agents", json={"line_id": lid, "role": "coder"}).json()
         c.post(f"/api/agents/{a['id']}/start", json={"runtime": "paseo", "provider": "pi"})

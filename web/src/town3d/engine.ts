@@ -277,7 +277,7 @@ export class Engine {
     this.outside = doorOf(this.places, pl) ?? this.groundPos();
     this.ev.veil(placementName(pl));
     const [data] = await Promise.all([
-      this.ev.hall(pl).catch((): HallData => ({ sheet: null, lines: [], jobs: [], gpus: null, plant: null, shelf: null, roster: null })),
+      this.ev.hall(pl).catch((): HallData => ({ sheet: null, lines: [], jobs: [], gpus: null, shelf: null, roster: null })),
       sleep(380),
     ]);
     this.entering = false;

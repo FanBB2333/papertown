@@ -50,13 +50,14 @@ TOOLS = {
     "pi": {"brief": "用 `papertown_project` 工具读项目简报",
            "submit": "用 `papertown_submit_job` 提交到实验农场",
            "status": "用 `papertown_job_status` 查看任务进度、结果和日志",
-           "lead": "这个项目可能有一位项目负责人，它会给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
+           "lead": "这个项目由项目负责人推进，它给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
                    "做完或卡住时在回复里说清楚，它会读你的对话。"},
     "paseo": {"brief": "运行 `.papertown/pt brief` 读项目简报",
               "submit": "用 `.papertown/pt submit <名字> -- <命令>` 提交到实验农场",
               "status": "用 `.papertown/pt jobs [任务 id]` 查看任务进度、结果和日志",
-              "lead": "这个项目可能有一位项目负责人，它会给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
-                      "做完、卡住或要它拍板时，用 `.papertown/pt tell lead \"…\"` 告诉它。"},
+              "lead": "这个项目由项目负责人推进，它给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
+                      "做完、卡住或要它拍板时，用 `.papertown/pt tell lead \"…\"` 告诉它。它让你交工序产出时用 `.papertown/pt output <工序> '<JSON>'`"
+                      "（`.papertown/pt stage` 写着格式）。"},
 }
 CHECKS = {
     "pi": "论文还要过一组用代码查的硬检查（禁用词、连字符、括号、分号、图表标题、方括号区间），结果在用户的研究回路上。阻断级的规则没过时，Papertown 会给你发一张修补单（`<task>`，写着第几轮、哪条规则、哪个文件哪一行），改完用 `pt checks run` 确认清零再 `pt task <编号> done`。",
@@ -83,7 +84,7 @@ GUIDE = {
 
 - 先{brief}：idea、方法草案、实验结果和审稿意见。
 - 论文写在 `main.tex`，参考文献在 `refs.bib`；目录里已有初稿时在它的基础上改。
-- 只写有依据的内容：数字来自实验结果，标着「模拟」的结果要在文中注明是模拟。
+- 只写有依据的内容：数字来自实验农场里跑完的任务，没有跑出来的结果不写。
 - 改完用 `latexmk -pdf -interaction=nonstopmode main.tex` 编译，修掉报错。
 - {checks}
 - {lead}
@@ -93,7 +94,7 @@ GUIDE = {
 
 LEAD_GUIDE = """# Papertown · 项目负责人
 
-你是 Papertown 里项目 #{seq}「{title}」的负责人。代码由代码员工写，论文由写作员工写，你不动手改项目里的文件；你的事是让这个项目往前走，并让用户知道他该知道的事。
+你是 Papertown 里项目 #{seq}「{title}」的负责人。这个项目由你推进：从查重、立项、方法、实验、写作、质检到出厂，八道工序都是你的事。代码由代码员工写，论文由写作员工写，你不动手改项目里的文件；员工由你启动、由你派活。Papertown 自己不调用任何模型，项目里的每一步都是你和你启动的员工做的。
 
 ## 工具（都是 `.papertown/pt`）
 
@@ -101,7 +102,12 @@ LEAD_GUIDE = """# Papertown · 项目负责人
 - `pt brief`：项目简报（idea、方法草案、实验、审稿意见、仓库现状）。
 - `pt worker coder|writer [条数]`：员工最近的对话。
 - `pt jobs [任务 id]`：实验农场里的任务和日志。
+- `pt hire coder|writer`：启动代码员工或写作员工（已经在运行的不会重复启动）。它启动后先读项目简报，再用 `pt tell` 给它派活。
 - `pt tell coder|writer "…" [--now]`：给员工派活或提醒它。默认等它做完手上的事再交给它，`--now` 插进它正在做的事。
+- `pt stage`：八道工序的状态、归谁做、产出交没交、哪道硬卡口在阻断，以及各工序产出的格式。
+- `pt stage run|done|todo <工序> ["说明"] [--pct N]`：开工或写进度、收尾、放回去重做。工序的名字是 idea、hatch、team、method、exp、write、review、ship。
+- `pt output <工序> '<JSON>'`（或 `@文件.json`）：交一道工序的产出，用户在项目页和中控屏里看的就是它。
+- `pt survey`：Papertown 用代码做的查重：图书馆里最接近的论文、相似度和结论。`pt library "英文关键词"`：检索图书馆。
 - `pt report "…" [--key]`：给用户写一条汇报；要紧的（结论、卡住了、要他拍板的取舍）加 `--key`。
 - `pt ask "问题" [--choice 选项]…`：问用户，他的回答会作为 `<answer>` 消息发给你。
 - `pt rules`：你的工作边界。
@@ -114,6 +120,14 @@ LEAD_GUIDE = """# Papertown · 项目负责人
 {linked}
 ## 怎么干活
 
+- 八道工序按顺序推进，每道做完用 `pt stage done <工序>` 收尾，下一道自动开工。收尾时 Papertown 会再跑一遍这道工序的硬检查，阻断级的没过就收不了：看 `pt checks`，让员工改完再收尾。做到一半时用 `pt stage run <工序> --pct 40 "做到哪了"` 写进度，用户在小镇和项目页上看得到。
+  - **查重孵化（hatch）**：先 `pt survey` 看代码算出的最接近的工作，再用 `pt library` 和你自己的检索换几个说法找一找、读一读，然后 `pt output hatch` 交撞车报告（差别在哪、建议怎么调、最相近的几篇各一句说明）。相似度和结论由 Papertown 用代码算，你写的是理解。交完用 `pt report --key` 告诉用户结论。结论是「已被做过」或「需调整」时，先用 `pt ask` 问用户是调整 idea 还是照做，再收尾。
+  - **立项编队（team）**：想清楚这个项目要谁，用 `pt hire coder`、`pt hire writer` 启动（写作员工可以等到要写的时候再启动），然后 `pt stage done team "为什么这样编队"`。
+  - **方法设计（method）**：自己定方法，`pt output method` 交草案（题目、问题、机制、baseline、数据、指标、风险）。需要读代码或找 baseline 实现时派给代码员工。
+  - **实验（exp）**：派给代码员工：写代码、用 `pt submit` 把实验提交到实验农场、结束时交回结果。跑完后你或它用 `pt output exp` 交结果表。只写真的跑出来的数字。
+  - **写作排版（write）**：派给写作员工，它在论文目录里写 `main.tex` 和 `refs.bib`。
+  - **质检（review）**：你来审：读稿子、对照结果表，`pt output review` 交审稿意见。要改就 `pt stage todo write "按审稿意见修改"` 放回去，再派给写作员工。
+  - **出厂投稿（ship）**：`pt stage done ship` 打包，项目结束。
 - 你不会一直在线。项目里有动静时（实验结束或失败、员工结束一轮、工序变了、用户回答了问题），Papertown 会发一条 `<checkin>` 给你，写着这段时间变了什么和项目现在的样子；项目停着不动时也会隔一阵来一条。收到后看一眼，需要时读员工的对话或任务日志，该催的催、该派的派、该报的报，然后结束这一轮。
 - 派活时说清楚做什么、做到什么程度算完、做完用 `pt tell lead` 告诉你。员工卡住了先看它卡在哪，你能定的直接定；超出你工作边界的问用户。
 - 汇报只写用户该知道的：进展的结论、出了什么问题、要他决定什么，三五句话。没有新东西就不写，不要每次巡检都汇报。要用表格、图或对比才说得清的（一批实验的结果、方案之间的取舍），写成一页 HTML 用 `pt publish 页面.html --kind report` 发布，再用 `pt report` 说一句结论，提一下页面的标题。
@@ -817,7 +831,7 @@ class Agents:
         """Create the agent in Paseo with its brief as the first message; once there, starting again only reopens it."""
         if a.get("ext_id"):
             return self.public(a)
-        if not provider and a["role"] in ("assistant", "lead"):
+        if not provider:
             d = self.town.paseo_models.default(a["role"])
             provider, model, thinking = d["provider"], model or d["model"], thinking or d["thinking"]
         if not provider:
@@ -1295,9 +1309,10 @@ class Agents:
             raise AgentError("小助手不跟着某个项目，没有项目简报")
         if a["role"] == "lead":
             line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
-            return (f"你现在是项目 #{line['seq']}「{line['title']}」的负责人。工作目录里的 AGENTS.md 说明了你的职责和工具，先读一遍，"
-                    f"再读下面项目现在的样子和简报。读完用 `{self._tools(a)} report` 写第一条汇报：项目到哪了、接下来怎么推进、有什么要用户定的；"
-                    "要员工动手的用 `pt tell` 派下去。然后结束这一轮，等巡检消息。\n\n"
+            return (f"你现在是项目 #{line['seq']}「{line['title']}」的负责人，这个项目由你推进。工作目录里的 AGENTS.md 说明了你的职责和工具，先读一遍，"
+                    f"再读下面项目现在的样子和简报，然后从当前工序做起（`{self._tools(a)} stage` 看每道工序的状态和要交的产出）："
+                    "该你做的现在就做，要员工动手的先 `pt hire` 启动它、再用 `pt tell` 派下去。"
+                    "这一轮做完用 `pt report` 写一条汇报：项目到哪了、接下来怎么推进、有什么要用户定的。然后结束这一轮，等巡检消息。\n\n"
                     + self.town.leads.status(a["line_id"]) + "\n\n## 项目简报\n\n" + self.town.brief(a["line_id"], "lead"))
         if self.town.linked.of(a["line_id"]):
             return self._linked_intro(a, "paseo" if a.get("runtime") in ("paseo", *RUNTIMES) else "pi")
@@ -1379,12 +1394,7 @@ class Agents:
     def _charge(self, agent_id: str, model: str, usage: dict) -> None:
         a = self.get(agent_id)
         cost = float(usage.get("cost") or 0)
-        self.db.insert("ledger", {"ts": now(), "run_id": None, "line_id": a["line_id"], "provider": "pi", "model": model,
-                                  "tokens_in": int(usage.get("input") or 0), "tokens_out": int(usage.get("output") or 0), "cost": cost})
-        if a["line_id"]:
-            self.db.x("update lines set spent = spent + ? where id = ?", cost, a["line_id"])
         self.db.update("agents", {"id": agent_id}, cost=(a["cost"] or 0) + cost)
-        self.town.bus.publish("bank", **self.town.bank.summary())
 
     def monitor_note(self, line_id: str, text: str, **data) -> None:
         """A note from the farm's built-in monitor of a project."""

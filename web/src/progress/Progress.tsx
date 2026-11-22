@@ -13,7 +13,7 @@ import { AskPage } from './Ask';
 import { DisplayMenu, rowCols } from './Display';
 import { pagesPath, PagesView, type PageOpen } from './Pages';
 import { AskButton, CardPane, opens, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
-import { Project, type ConsoleTarget, type Decide } from './Project';
+import { Project, type ConsoleTarget } from './Project';
 import { ProjectRows, type Group } from './Rows';
 
 const CanvasPage = lazy(() => import('./Canvas'));
@@ -23,7 +23,7 @@ type Filter = 'all' | 'you' | 'run' | 'done';
 const FILTERS: [Filter, string, (c: ProjectCard) => boolean][] = [
   ['all', tr('全部'), () => true],
   ['you', tr('等你'), youNeeded],
-  ['run', tr('在做'), c => !['done', 'waiting'].includes(c.line.status)],
+  ['run', tr('在做'), c => ['running', 'linked'].includes(c.line.status)],
   ['done', tr('已完成'), c => c.line.status === 'done'],
 ];
 // what needs you first, then what is stuck, then what is moving; finished ones last
@@ -57,8 +57,8 @@ const pageLook = (s: S) => ({ ['--pg-min' as string]: SIZES.pgCard[s.pgCard], ['
 
 type Open = (lineId: string, t?: ConsoleTarget) => void;
 
-export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
-  active: boolean; seq?: number; sub?: 'ask' | 'pages' | 'canvas'; page?: string; toast: (t: string) => void; onOpen: Open; decide: Decide;
+export function Progress({ active, seq, sub, page, toast, onOpen }: {
+  active: boolean; seq?: number; sub?: 'ask' | 'pages' | 'canvas'; page?: string; toast: (t: string) => void; onOpen: Open;
 }) {
   const [rows, setRows] = useState<ProjectCard[] | null>(null);
   const [layout, setLayout] = useState<CardLayout | null>(null);
@@ -77,7 +77,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
     load();
     api.modelNews().then(r => alive && setDefs(r.defaults)).catch(() => {});
     const off = listen(e => {
-      if (e.type === 'card' && e.card) setRows(rs => rs && rs.map(r => (r.line.id === e.card.line.id ? e.card : r)));
+      if (e.type === 'card' && e.card) setRows(rs => rs && rs.map(r => (r.line.id === e.card.line.id ? { ...e.card, line: { ...e.card.line, lead: r.line.lead, sample: r.line.sample } } : r)));
       else if (e.type === 'card_layout' && e.layout) setLayout(e.layout);
       else if (['line', 'job', 'report', 'memory', 'usage'].includes(e.type) || (e.type === 'agent' && e.agent?.role === 'lead')) {
         clearTimeout(again.current);
@@ -123,7 +123,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen, decide }: {
       <div className="pg-wrap">
         {seq != null ? (
           project && sub ? null
-          : project ? <Project key={project.line.id} r={project} defs={defs} toast={toast} onChange={put} onConsole={onOpen} decide={decide} />
+          : project ? <Project key={project.line.id} r={project} defs={defs} toast={toast} onChange={put} onConsole={onOpen} />
             : <p className="muted pg-none">{rows ? <>{tr('没有项目 #{0}。', seq)} <a href={href('/progress')} onClick={e => follow(e, '/progress')}>{tr('看全部项目')}</a></> : tr('加载中…')}</p>
         ) : (
           <>

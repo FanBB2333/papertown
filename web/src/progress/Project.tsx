@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { type PaseoDefaults, type ProjectCard } from '../api';
+import { ResidentControl, useResidentLine } from '../components/Resident';
 import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { ago } from '../console/util';
@@ -18,32 +19,22 @@ import { Meter, noCardText, OUT_STATE, repoLine, runText, UpdateButton, useCardA
 
 export interface ConsoleTarget { mod?: string; file?: string; job?: string }
 type Open = (lineId: string, t?: ConsoleTarget) => void;
-export interface Decide { onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void }
 
 const LISTS = [['need_you', tr('要你决定')], ['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')]] as const;
 
-export function Project({ r, defs, toast, onChange, onConsole, decide }: {
-  r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onConsole: Open; decide: Decide;
+export function Project({ r, defs, toast, onChange, onConsole }: {
+  r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onConsole: Open;
 }) {
   const acts = useCardActs(r, toast, onChange);
   const [note, setNote] = useState('');
   const [viewer, setViewer] = useState<{ id: string; msg?: number } | null>(null);
   const { line, card } = r;
   const ask = askPath(line.seq);
+  const [liveLine, reloadLead] = useResidentLine(line.id);
   useEffect(() => { document.querySelector('.p-prog')?.scrollTo({ top: 0 }); }, [line.id]);
   const more = (mod: string) => (
     <button className="lnk pj-more small" onClick={() => onConsole(line.id, { mod })} title={tr('在中控屏里看细节')}>{tr('详细')}<Icon n="right" size={12} /></button>
   );
-  const wait = line.status === 'waiting' ? {
-    t: tr('查重报告出来了，等你决定'), d: tr('看过调研后，决定立项还是调整 idea。'), btns: <>
-      <button className="btn pri" onClick={() => decide.onHatch(line.id)}>{tr('孵化并立项')}</button>
-      <button className="btn" onClick={() => decide.onAdjust(line.id)}>{tr('调整 idea')}</button>
-      <button className="btn" onClick={() => onConsole(line.id, { mod: 'survey' })}>{tr('先看调研')}</button></>,
-  } : line.status === 'paused' || line.status === 'failed' ? {
-    t: line.status === 'failed' ? tr('流水线出错停下了') : tr('流水线暂停了'), d: '', btns: <>
-      <button className="btn pri" onClick={() => decide.onResume(line.id)}>{tr('继续')}</button>
-      <button className="btn" onClick={() => decide.onAdjust(line.id)}>{tr('调整方向')}</button></>,
-  } : null;
 
   return (
     <div className="pj">
@@ -61,13 +52,7 @@ export function Project({ r, defs, toast, onChange, onConsole, decide }: {
           <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏里看这个项目的细节')}><Icon n="board" size={14} />{tr('中控屏')}</button>
         </div>
       </header>
-      {wait && (
-        <section className="ov-ask">
-          <Icon n="bell" size={20} />
-          <div><b>{wait.t}</b>{wait.d && <p className="small">{wait.d}</p>}</div>
-          <div className="btns">{wait.btns}</div>
-        </section>
-      )}
+      <ResidentControl lineId={line.id} resident={liveLine?.lead ?? line.lead} sample={liveLine?.sample ?? line.sample} model={r.lead?.model} talk={ask} toast={toast} onChanged={reloadLead} />
       <LoopCard r={r} toast={toast} />
 
       <div className="pj-grid">

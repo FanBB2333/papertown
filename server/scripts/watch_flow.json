@@ -1,5 +1,5 @@
 {
- "about": "The standard flow for watching and steering a live agent. verify_watch.py runs it against real agents in Paseo. {n} is a fresh marker per run, so a reply proves which message it answers.",
+ "about": "The standard flow for watching and steering a live agent. verify_watch.py creates projects immediately with resident leads disabled and runs only its explicit agents in Paseo, herdr or tmux. {n} is a fresh marker per run, so a reply proves which message it answers.",
  "long": "python3 -c \"import time; time.sleep(90)\"",
  "steps": [
   {

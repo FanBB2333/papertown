@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, listen, type LeadView } from '../api';
+import { ResidentControl } from '../components/Resident';
 import { Select } from '../components/Select';
 import { tr } from '../i18n';
 import { follow, href } from '../route';
@@ -13,7 +14,7 @@ export function useLead(lineId: string) {
   const [v, setV] = useState<LeadView | null>(null);
   const [bump, setBump] = useState(0);
   useEffect(() => listen(e => {
-    if ((e.type === 'report' && e.report?.line_id === lineId) || (e.type === 'agent' && e.agent?.id === `lead-${lineId}`)) setBump(b => b + 1);
+    if ((e.type === 'report' && e.report?.line_id === lineId) || (e.type === 'agent' && (e.agent?.line_id === lineId || e.agent?.id === `lead-${lineId}`)) || (e.type === 'line' && (e.line?.id === lineId || e.line_id === lineId))) setBump(b => b + 1);
   }), [lineId]);
   useEffect(() => {
     let alive = true;
@@ -31,6 +32,7 @@ export function LeadAside({ lineId, seq, toast }: { lineId: string; seq?: number
   const talk = seq != null ? `/progress/${seq}/ask` : null;
   return (
     <>
+      <ResidentControl lineId={lineId} resident={v.resident} model={v.agent?.model} talk={talk ?? undefined} toast={toast} onChanged={again} />
       <div className="pnl-s">
         <h4>{tr('巡检')}</h4>
         <label className="ld-sw">

@@ -55,7 +55,7 @@ def test_mcp_servers_are_added_switched_and_removed(tmp_path, monkeypatch):
         assert saved["mcpServers"]["echo"]["env"] == {"TOKEN": "${ECHO_TOKEN}"}
 
         c.post("/api/mcp/servers/echo/toggle", json={"enabled": False})
-        assert wait_for(c, "echo", "off")["tools"] == [] and "echo_echo" not in town.tools.names()
+        assert wait_for(c, "echo", "off")["tools"] == [] and "echo" not in town.mcp.clients
         c.post("/api/mcp/servers/echo/toggle", json={"enabled": True})
         wait_for(c, "echo", "ok")
 
@@ -69,7 +69,7 @@ def test_rag_settings_bound_and_persist(tmp_path):
     s = make_settings(tmp_path)
     with TestClient(create_app(s)) as c:
         v = c.post("/api/rag", json={"top_k": 99, "candidates": 3}).json()
-        assert v["opts"]["top_k"] == 30 and v["opts"]["candidates"] == 5 and v["embed"]["configured"] is False
+        assert v["opts"]["top_k"] == 30 and v["opts"]["candidates"] == 5 and "embed" not in v
         hits = c.get("/api/rag/search", params={"q": "sparse attention"}).json()
         assert hits["method"] == "coverage" and len(hits["hits"]) <= 30
         assert c.get("/api/rag/search", params={"q": " "}).status_code == 400

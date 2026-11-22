@@ -1,9 +1,8 @@
-"""papertown (the TUI) | tui | serve | ingest | mcp | skills | demo | job"""
+"""papertown (the TUI) | tui | serve | ingest | mcp | skills | job"""
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import time
 
@@ -23,8 +22,6 @@ def main() -> None:
     ig.add_argument("--refs", action="store_true", help="also fetch citation edges from Semantic Scholar")
     sub.add_parser("mcp", help="serve Papertown's own tools over MCP (stdio)")
     sub.add_parser("skills", help="list skills")
-    dm = sub.add_parser("demo", help="run one idea through the whole line, without the server")
-    dm.add_argument("idea", nargs="?", default="让 VLA 模型用结构化的场景图做长程规划，减少多步任务里的误差累积")
     jb = sub.add_parser("job", help="submit or list experiments on a running server's farm")
     jb.add_argument("action", choices=["submit", "list"])
     jb.add_argument("--line", help="project id, e.g. line_1")
@@ -70,29 +67,6 @@ def main() -> None:
         from .skills import SkillRegistry
         for s in SkillRegistry(Settings().skills_dir).all():
             print(f"{s.name:22} {','.join(s.roles):18} {s.description[:60]}")
-    elif a.cmd == "demo":
-        from .town import Town
-        town = Town()
-        town.start()
-        try:
-            line = town.pipeline.submit_idea(a.idea)
-            wait(town, line["id"], {"waiting", "failed"})
-            print(json.dumps(town.pipeline.item(line["id"], "hatch"), ensure_ascii=False, indent=1)[:1500])
-            town.pipeline.hatch(line["id"])
-            wait(town, line["id"], {"done", "failed"})
-            snap = town.pipeline.snapshot(line["id"])
-            print(f"{snap['status']}: {snap['title']}  files={snap['files']}  spent=${snap['spent']:.4f}")
-        finally:
-            town.stop()
-
-
-def wait(town, line_id: str, until: set[str], timeout: float = 900) -> None:
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        if town.pipeline.line(line_id)["status"] in until and not town.pipeline.running(line_id):
-            return
-        time.sleep(0.3)
-    raise TimeoutError(line_id)
 
 
 if __name__ == "__main__":

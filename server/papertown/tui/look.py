@@ -43,14 +43,13 @@ def themes() -> list[Theme]:
     return out
 
 
-LINE = {"hatching": "查重中", "waiting": "等你决定", "running": "生产中", "paused": "已暂停", "failed": "出错", "done": "已出厂",
-        "dropped": "已放弃", "linked": "本地项目"}
-STAGE = {"done": "完成", "run": "进行中", "wait": "等你决定", "todo": "还没开始", "fail": "出错"}
+LINE = {"running": "在做", "done": "已出厂", "dropped": "已放弃", "linked": "本地项目"}
+LEAD = {"running": "运行中", "starting": "启动中", "blocked": "启动受阻", "off": "已关闭", "ended": "已结束"}
+STAGE = {"done": "完成", "run": "进行中", "todo": "还没开始"}
 JOB = {"running": "在跑", "done": "完成", "failed": "失败", "queued": "排队", "cancelled": "已取消"}
-BACKEND = {"local": "本地执行器", "sim": "模拟电厂", "nvidb": "nvidb"}
+BACKEND = {"local": "本地执行器", "nvidb": "nvidb"}
 DEPT = {"busy": "在忙", "wait": "等你", "idle": "空闲"}
 AGENT = {"stopped": "未启动", "starting": "启动中", "idle": "待命", "working": "工作中", "error": "出错", "watching": "值守", "offline": "连不上"}
-WORKER = {"active": "在岗", "frozen": "冻结"}
 
 
 def doing(d: dict) -> str:
@@ -79,11 +78,9 @@ def wait_mark(t: float, p: dict[str, str]) -> Text:
 
 def line_mark(status: str, t: float, p: dict[str, str]) -> Text:
     """a project's state as one animated cell"""
-    if status in ("running", "hatching"):
+    if status == "running":
         return busy_mark(t, p)
-    if status == "waiting":
-        return wait_mark(t, p)
-    sign, color = {"paused": ("‖", "muted"), "failed": ("✕", "bad"), "done": ("✓", "done"), "dropped": ("⊘", "muted"),
+    sign, color = {"done": ("✓", "done"), "dropped": ("⊘", "muted"),
                    "linked": ("⇄", "info")}.get(status, ("·", "muted"))
     return Text(sign, style=p[color])
 
@@ -98,9 +95,7 @@ def job_mark(state: str, t: float, p: dict[str, str]) -> Text:
 def stage_mark(status: str, t: float, p: dict[str, str]) -> Text:
     if status == "run":
         return busy_mark(t, p)
-    if status == "wait":
-        return wait_mark(t, p)
-    sign, color = {"done": ("✓", "ok"), "fail": ("✕", "bad")}.get(status, ("○", "faint"))
+    sign, color = {"done": ("✓", "ok")}.get(status, ("○", "faint"))
     return Text(sign, style=p[color])
 
 

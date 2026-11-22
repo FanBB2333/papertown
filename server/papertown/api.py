@@ -7,7 +7,6 @@ import json
 import threading
 from contextlib import asynccontextmanager
 from typing import Literal
-from urllib.parse import urlparse
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
@@ -15,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import samples, stages, status as status_mod
+from . import samples, status as status_mod
 from .agents import AgentError, ROLES
 from .herdr import HerdrError
 from .prompts import PromptError
@@ -36,11 +35,11 @@ from .farm import FarmError, summarize
 from .history import HistoryError
 from .pages import KINDS as PAGE_KINDS, MAX as PAGE_MAX, PageError, csp as page_csp, render as render_page
 from .mcp_hub import McpError
-from .pipeline import LineError
+from .pipeline import NAMES as STAGE_NAMES, OWNER, LineError
 from .skim import SkimError
 from .town import Town
 from .workspace import WsError
-from .world import ASK_ROLE
+from .world import STAFF_AT
 
 FILES = {"main.tex", "refs.bib", "main.pdf", "paper.zip"}
 
@@ -63,10 +62,27 @@ class BoundsIn(BaseModel):
 class LeadIn(BaseModel):
     supervise: bool | None = None
     every: int | None = Field(default=None, ge=10, le=1440)
+    on: bool | None = None
 
 
-class HatchIn(BaseModel):
-    usage_budget: float | None = Field(default=None, strict=True, gt=0, allow_inf_nan=False)
+class HireIn(BaseModel):
+    role: str = Field(min_length=1, max_length=20)
+    runtime: str | None = Field(default=None, max_length=20)
+    provider: str | None = Field(default=None, max_length=60)
+    model: str | None = Field(default=None, max_length=120)
+    thinking: str | None = Field(default=None, max_length=40)
+
+
+class StageIn(BaseModel):
+    stage: str = Field(min_length=1, max_length=20)
+    status: str = Field(min_length=1, max_length=10)
+    note: str | None = Field(default=None, max_length=600)
+    pct: int | None = Field(default=None, ge=0, le=100)
+
+
+class OutputIn(BaseModel):
+    stage: str = Field(min_length=1, max_length=20)
+    body: dict
 
 
 class UsageSettingsIn(BaseModel):
@@ -231,21 +247,10 @@ class ToggleIn(BaseModel):
 class RagIn(BaseModel):
     top_k: int | None = None
     candidates: int | None = None
-    vectors: bool | None = None
 
 
 class IdeaIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
-    budget: float | None = Field(default=None, gt=0, le=50)
-
-
-class AdjustIn(BaseModel):
-    text: str = Field(min_length=1, max_length=4000)
-
-
-class ChatIn(BaseModel):
-    text: str = Field(min_length=1, max_length=4000)
-    building: str | None = None
 
 
 class AgentIn(BaseModel):
@@ -276,13 +281,6 @@ class NodeAgentIn(BaseModel):
     model: str | None = None
     thinking: str | None = None
     ext_id: str | None = None
-
-
-class LlmIn(BaseModel):
-    provider: str | None = None
-    model_strong: str | None = None
-    model_cheap: str | None = None
-    effort: str | None = None
 
 
 class SaveIn(BaseModel):
@@ -504,11 +502,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/ideas")
     def submit_idea(body: IdeaIn):
-        return guard(town.pipeline.submit_idea, body.text, body.budget)
-
-    @app.post("/api/lines/{line_id}/hatch")
-    def hatch(line_id: str, body: HatchIn | None = None):
-        return mapped(LineError, UsageError)(town.pipeline.hatch, line_id, body.usage_budget if body else None)
+        return guard(town.pipeline.create, body.text)
 
     @app.get("/api/usage")
     def usage():
@@ -535,14 +529,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if set(body) != {"usd"}:
             raise HTTPException(400, "请提供 usd 美元金额或 null")
         return mapped(UsageError)(town.usage.set_budget, line_id, body["usd"])
-
-    @app.post("/api/lines/{line_id}/adjust")
-    def adjust(line_id: str, body: AdjustIn):
-        return guard(town.pipeline.adjust, line_id, body.text)
-
-    @app.post("/api/lines/{line_id}/resume")
-    def resume(line_id: str):
-        return guard(town.pipeline.resume, line_id)
 
     @app.get("/api/lines/{line_id}/papers")
     def line_papers(line_id: str):
@@ -615,40 +601,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/messages")
     def messages(limit: int = 80, line_id: str | None = None):
         rows = latest("messages", line_id, min(limit, 300))
-        workers = {w["id"]: w for w in town.market.all()}
-        for r in rows:
-            w = workers.get(r["worker_id"])
-            r["worker"] = {"id": w["id"], "role": w["role"], "level": w["level"]} if w else None
         return rows
 
     @app.get("/api/trace")
     def trace(limit: int = 60, line_id: str | None = None):
         return latest("trace", line_id, min(limit, 500))
 
-    @app.post("/api/chat")
-    def chat(body: ChatIn):
-        if not body.building:
-            return {"line": guard(town.pipeline.submit_idea, body.text, None)}
-        b = town.world.get(body.building)
+    @app.get("/api/buildings/{bid}/staff")
+    def building_staff(bid: str):
+        """Whom to ask in a building: the worker of the project there (the coder at the depot and the farm, the writer
+        at the press), else that project's lead; the assistant where no project is at work."""
+        b = town.world.get(bid)
         if not b:
             raise HTTPException(404, "没有这座建筑")
-        sheet = town.world.sheet(b["id"])
+        sheet = town.world.sheet(b["id"]) or {}
         line_id = b["line_id"] or sheet.get("active_line")
-        ln = town.db.one("select * from lines where id = ?", line_id) if line_id else None
-        role = ASK_ROLE.get(b["type"], "scout")
-        worker = town.market.best(role)[0]
-        town.message(line_id, "user", None, "text", {"text": body.text, "to": b["id"]})
-        context = f"{sheet['name']}现在：{sheet.get('job', '')}。"
-
-        def answer():
-            try:
-                out, _ = stages.ask(town, worker, b, body.text, ln, context)
-                town.message(line_id, "worker", worker["id"], "text", {"text": out.get("text", ""), "from": b["id"]})
-            except Exception as e:
-                town.message(line_id, "system", None, "error", {"text": f"回答失败：{e}"})
-
-        threading.Thread(target=answer, daemon=True).start()
-        return {"ok": True, "worker": worker["id"]}
+        ln = town.db.one("select id, seq, title, status from lines where id = ?", line_id) if line_id else None
+        if not ln or ln["status"] == "dropped":
+            return {"who": ASSISTANT, "agent": town.agents.public(town.agents.get(ASSISTANT)), "line": None, "name": "小助手"}
+        role = STAFF_AT.get(b["type"], "lead")
+        a = town.leads.agent(ln["id"], role) or town.leads.agent(ln["id"], "lead") or town.agents.ensure(ln["id"], "lead")
+        return {"who": a["role"], "agent": town.agents.public(a), "line": {k: ln[k] for k in ("id", "seq", "title")}, "name": ROLES[a["role"]]["name"]}
 
     @app.get("/api/status")
     def status():
@@ -667,7 +640,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def jobs(line_id: str | None = None, external: bool = True):
         # external=false: only the farm's own (the TUI reads nvidb's itself)
         ext = [j for j in town.linked.farm_jobs() if not line_id or j["line_id"] == line_id] if external else []
-        return {"jobs": ext + town.farm.list(line_id), "backends": town.farm.backends(), "plant": town.plant.status()}
+        return {"jobs": ext + town.farm.list(line_id), "backends": town.farm.backends()}
 
     @app.get("/api/gpus")
     def gpus(fresh: bool = False):
@@ -859,14 +832,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if agent_id == ASSISTANT:
             return assistant(town.assistant.resume, ext_id)
         return agents(town.agents.resume, found(agent_id), ext_id)
-
-    @app.get("/api/llm")
-    def llm():
-        return town.llm()
-
-    @app.post("/api/llm")
-    def set_llm(body: LlmIn):
-        return mapped(ValueError)(town.set_llm, body.provider, body.model_strong, body.model_cheap, body.effort)
 
     @app.get("/api/paseo")
     def paseo(fresh: bool = False):
@@ -1123,7 +1088,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def lead_settings(line_id: str, body: LeadIn):
         if not town.pipeline.line(line_id):
             raise HTTPException(404, "没有这个项目")
-        return town.leads.configure(line_id, body.supervise, body.every)
+        return town.leads.configure(line_id, body.supervise, body.every, body.on)
 
     @app.get("/api/reports")
     def reports(line_id: str | None = None, limit: int = 30):
@@ -1281,6 +1246,44 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(403, "只有项目负责人写汇报；员工有事用 pt tell lead 告诉负责人")
         r = leads(town.leads.report, agent_id, body.text, body.key)
         return {"text": f"已经记下这条汇报（{r['id']}），用户在项目的概览里会看到。"}
+
+    @app.post("/api/bridge/{agent_id}/hire")
+    def bridge_hire(agent_id: str, body: HireIn, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        return {"text": leads(town.leads.hire, agent_id, body.role, body.runtime, body.provider, body.model, body.thinking)}
+
+    @app.get("/api/bridge/{agent_id}/stage")
+    def bridge_stages(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        return {"text": guard(town.pipeline.text, own_line(a, line))}
+
+    @app.post("/api/bridge/{agent_id}/stage")
+    def bridge_stage(agent_id: str, body: StageIn, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        return {"text": leads(town.leads.stage, agent_id, body.stage, body.status, body.note, body.pct)}
+
+    @app.post("/api/bridge/{agent_id}/output")
+    def bridge_output(agent_id: str, body: OutputIn, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        if not a["line_id"]:
+            raise HTTPException(400, "你没有自己的项目")
+        if a["role"] != "lead" and OWNER.get(body.stage) != a["role"]:
+            raise HTTPException(403, f"「{body.stage}」的产出由{ROLES[OWNER.get(body.stage, 'lead')]['name']}或项目负责人交")
+        out = guard(town.pipeline.output, a["line_id"], body.stage, body.body)
+        tail = f"查重结论（用代码算）：{out['verdict']}，最接近的一篇相似度 {max((x['similarity'] for x in out['similar']), default=0):.2f}。" if body.stage == "hatch" else ""
+        return {"text": f"「{STAGE_NAMES[body.stage]}」的产出记下了，用户在项目页和中控屏里能看到。{tail}这道工序做完了就用 `pt stage done {body.stage}` 收尾。"}
+
+    @app.get("/api/bridge/{agent_id}/survey")
+    def bridge_survey(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        return {"text": guard(town.pipeline.survey_text, own_line(a, line))}
+
+    @app.get("/api/bridge/{agent_id}/library")
+    def bridge_library(agent_id: str, q: str, top: int = 8, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        r = town.library.search(q, top_k=max(1, min(top, 20)))
+        rows = [f"- {h['paper_id']}（相似度 {h['similarity']:.2f}，{h.get('year') or '?'}，{h.get('authors') or ''}）{h['title']}\n  {str(h.get('snippet') or '')[:400]}" for h in r["hits"]]
+        return {"text": f"图书馆里和「{q}」最接近的 {len(rows)} 篇（{r['method']}）：\n" + "\n".join(rows) if rows else f"图书馆里没有找到和「{q}」相关的论文，换几个英文关键词再试。"}
 
     @app.get("/api/bridge/{agent_id}/checks")
     def bridge_checks(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
@@ -1446,9 +1449,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def rag_status():
         lib = town.library
         return {"stats": lib.stats(), "opts": lib.opts, "limits": {k: list(v) for k, v in RAG_LIMITS.items()},
-                "index": "SQLite FTS5 · BM25 召回 + 关键词覆盖率打分",
-                "embed": {"configured": lib.embedder is not None, "model": town.s.embed_model or None,
-                          "host": urlparse(town.s.embed_base_url).netloc or None}}
+                "index": "SQLite FTS5 · BM25 召回 + 关键词覆盖率打分"}
 
     @app.post("/api/rag")
     def rag_set(body: RagIn):
@@ -1460,10 +1461,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not q.strip():
             raise HTTPException(400, "输入要检索的内容")
         return town.library.search(q, k)
-
-    @app.get("/api/workers")
-    def workers():
-        return town.market.all()
 
     @app.get("/api/events")
     async def events(request: Request):

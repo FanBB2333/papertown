@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
 TASK = {"draft": "还没发", "queued": "排队中", "sent": "已经发给它", "done": "完成", "blocked": "卡住了"}
 TO = ("lead", "coder", "writer")
-STAGE = {"todo": "没开始", "run": "进行中", "wait": "等用户", "done": "完成"}
+STAGE = {"todo": "没开始", "run": "进行中", "done": "完成"}
 NODES_MAX, EDGES_MAX, LOG_MAX, TRAIL_MAX = 300, 800, 40, 12
 KIND = {"stage": "工序", "gate": "硬卡口", "hard": "硬检查", "soft": "软巡检", "spec": "软限制", "clamp": "硬边界",
         "human": "人类拍板", "task": "任务", "note": "备注", "info": "资料卡"}
@@ -559,7 +559,7 @@ class Canvas:
                 (f"gate:{stage}", f"check:{cid}", "member"))
 
     def _line(self, line_id: str) -> dict:
-        ln = self.town.db.one("select id, seq, title, status, note, budget, spent from lines where id = ?", line_id)
+        ln = self.town.db.one("select id, seq, title, status, note from lines where id = ?", line_id)
         if not ln:
             raise CanvasError("没有这个项目")
         return ln
@@ -601,6 +601,16 @@ class Canvas:
         v = self.view(line_id)
         return [f"「{n['gate']['name']}」的硬卡口阻断，「{n['gate']['locks']}」要等它放行（{'、'.join(c['title'] for c in n['gate']['blocking'])}）"
                 for n in v["nodes"] if n["kind"] == "gate" and n["gate"]["state"] == "block" and n["gate"]["locks"] and not n["gate"]["waived"]]
+
+    def blocked(self, line_id: str, stage: str) -> str:
+        """Why a stage cannot close yet: the blocking hard checks of its gate, by name; empty when it may (the gate
+        passes, or you waived it)."""
+        if not self._path(line_id).exists():
+            return ""
+        g = next((n["gate"] for n in self.view(line_id)["nodes"] if n["kind"] == "gate" and n.get("ref") == stage), None)
+        if not g or g["state"] != "block" or g["waived"]:
+            return ""
+        return "、".join(c["title"] for c in g["blocking"])
 
     # for the assistant, which edits the canvas for the user (assistant.py)
 
@@ -742,7 +752,7 @@ class Canvas:
                     continue
                 out |= {"kind": c["kind"], "ref": n["ref"], "title": c["title"], "check": c}
             elif n["kind"] in ("spec", "clamp"):
-                out |= {"title": FIXED[n["kind"]], "rules": bounds[n["kind"]], **({"budget": bounds["budget"]} if n["kind"] == "clamp" else {})}
+                out |= {"title": FIXED[n["kind"]], "rules": bounds[n["kind"]]}
             elif n["kind"] == "human":
                 out |= {"title": FIXED["human"], "items": self._human(line_id, ln, cv, tasks, gates)}
             elif n["kind"] == "info":
@@ -799,7 +809,7 @@ class Canvas:
                 "before": sum(_over(c, (c.get("first") or {}).get("value")) for c in on), "now": sum(_over(c, (c["last"] or {}).get("value")) for c in on),
                 "policy": policy, "ticket": ticket["id"] if ticket else None, "ticket_status": ticket["status"] if ticket else None,
                 "round": ticket.get("round") or 0 if ticket else 0, "escalated": bool(ticket and ticket.get("escalated") and ticket["status"] != "done"),
-                "open": bool(n.get("open")), "waived": bool(n.get("waived")), "reached": (stages.get(stage) or {}).get("status") in ("run", "fail", "wait", "done"),
+                "open": bool(n.get("open")), "waived": bool(n.get("waived")), "reached": (stages.get(stage) or {}).get("status") in ("run", "done"),
                 "next": later[0] if later else None, "locks": NAMES[later[0]] if later else None}
 
     def _bounds(self, line_id: str) -> dict:
@@ -813,8 +823,7 @@ class Canvas:
                 seen.add(r["id"])
                 row = {"id": r["id"], "kind": r["kind"], "text": r["text"], "from": r.get("from") or role, "action": r.get("action")}
                 (clamp if r.get("action") else spec).append(row)
-        ln = self.town.db.one("select budget, spent from lines where id = ?", line_id) or {}
-        return {"spec": spec, "clamp": clamp, "budget": {"budget": ln.get("budget") or 0, "spent": ln.get("spent") or 0}}
+        return {"spec": spec, "clamp": clamp}
 
     def _human(self, line_id: str, ln: dict, cv: dict, tasks: list[dict], gates: dict) -> list[dict]:
         """What waits for your decision: gates past their rounds, stuck tasks, sentinels judged off course,
@@ -834,8 +843,6 @@ class Canvas:
                 out.append({"kind": "fail", "id": f"check:{c['id']}", "text": f"软巡检「{c['title']}」判为偏离：{clip(c['last']['note'], 80)}"})
         for q in self.town.leads.asks(line_id):
             out.append({"kind": "ask", "id": str(q["id"]), "text": f"{q['data'].get('who') or 'agent'}问你：{clip(q['data'].get('question'), 100)}"})
-        if ln.get("status") in ("waiting", "paused", "failed"):
-            out.append({"kind": "line", "id": ln["id"], "text": clip(ln.get("note") or "项目在等你", 100)})
         return out
 
     # editing

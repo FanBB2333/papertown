@@ -11,8 +11,7 @@ import type { ModId } from './Console';
 import { gist } from './util';
 
 interface Props {
-  line: Line | null; info: WsInfo | null; tick: number; typeOf: (id: string) => string; go: (m: ModId) => void;
-  onHatch: (id: string) => void; onResume: (id: string) => void; onAdjust: (id: string) => void; onAsk: () => void; onOpen: (id: string) => void;
+  line: Line | null; info: WsInfo | null; tick: number; typeOf: (id: string) => string; go: (m: ModId) => void; onAsk: () => void; onOpen: (id: string) => void;
 }
 
 const REAL = tr('工序按顺序走：方法设计在造纸厂，代码和实验在仓库与实验农场，写作在印刷厂，最后经质检所出厂。');
@@ -23,15 +22,14 @@ export function Overview(p: Props) {
   const done = l.stages.filter(s => s.status === 'done').length;
   const h = l.outputs?.hatch;
   const exp = l.stages.find(s => s.key === 'exp');
-  const money = (v: number) => (v > 0 && v < 0.01 ? '<$0.01' : `$${v.toFixed(2)}`);
 
   const brief = `/progress/${l.seq}`;
-  const ask = l.status === 'waiting' ? tr('查重报告出来了，等你决定') : l.status === 'failed' ? tr('流水线出错停下了') : l.status === 'paused' ? tr('流水线暂停了') : null;
+  const ask = l.lead.state === 'blocked' ? l.lead.note : null;
 
   const parts: { m: ModId; icon: IconName; t: string; v: string; s?: string }[] = [
     { m: 'survey', icon: 'lens', t: tr('调研'), v: h?.verdict ?? (l.linked?.paper?.title ? tr('本地项目') : '—'), s: h ? tr('最接近 {0} 篇', h.similar?.length ?? 0) : undefined },
     { m: 'code', icon: 'code', t: tr('代码仓库'), v: p.info?.code ? p.info.code.name : tr('暂无'), s: p.info?.code ? [p.info.code.branch, p.info.code.dirty ? tr('{0} 处改动', p.info.code.dirty) : tr('无改动')].filter(Boolean).join(' · ') : undefined },
-    { m: 'exp', icon: 'flask', t: tr('实验'), v: exp ? { done: tr('完成'), run: tr('进行中'), wait: tr('等你决定'), todo: tr('还没开始'), fail: tr('出错') }[exp.status] : '—', s: exp?.note ? gist(exp.note, 36) : undefined },
+    { m: 'exp', icon: 'flask', t: tr('实验'), v: exp ? { done: tr('完成'), run: tr('进行中'), todo: tr('还没开始') }[exp.status] : '—', s: exp?.note ? gist(exp.note, 36) : undefined },
     { m: 'paper', icon: 'doc', t: tr('论文'), v: p.info?.paper ? p.info.paper.main ?? p.info.paper.name : tr('暂无'), s: p.info?.paper ? (p.info.paper.pdf ? tr('有 PDF') : tr('还没编译')) : undefined },
   ];
 
@@ -59,20 +57,14 @@ export function Overview(p: Props) {
         <div className="cs-h">
           <h3>{tr('研究进度')}</h3>
           <span className="muted small">{tr('{0}/{1} 站完成', done, l.stages.length)}</span>
-          {!l.linked && (
-            <span className="ov-spend small" title={tr('小镇 API 预算')}>
-              {tr('小镇 API 用量：{0} / 预算 {1}', money(l.spent), money(l.budget))}
-              <i className="bar"><i style={{ width: `${Math.min(100, (100 * l.spent) / Math.max(l.budget, 1e-9))}%` }} /></i>
-            </span>
-          )}
         </div>
         <ol className="ov-steps" style={{ ['--done' as string]: done, ['--n' as string]: l.stages.length }}>
           {l.stages.map((s, i) => (
             <li key={s.key} className={`ov-step s-${s.status}`} style={{ ['--i' as string]: i }} data-ref={`stage:${s.key}`} data-ref-label={`${tr('工序')} ${s.name}`}>
-              <button onClick={() => p.go(s.mod ?? 'overview')} title={s.note ?? s.out}>
-                <span className="ov-dot">{s.status === 'done' ? '✓' : s.status === 'fail' ? '✕' : i + 1}</span>
+              <button onClick={() => p.go(s.mod as ModId)} title={s.note ?? s.out}>
+                <span className="ov-dot">{s.status === 'done' ? '✓' : i + 1}</span>
                 <b>{s.name}</b>
-                <span className="muted small">{s.status === 'run' ? `${s.pct}%` : s.status === 'wait' ? tr('等你') : s.status === 'fail' ? tr('出错') : '\u00a0'}</span>
+                <span className="muted small">{s.status === 'run' ? `${s.pct}%` : '\u00a0'}</span>
               </button>
             </li>
           ))}
@@ -94,7 +86,7 @@ export function Overview(p: Props) {
       <details className="cs fold">
         <summary><Icon n="table" size={16} />{tr('完整工序明细')}</summary>
         <div className="ov-mill">
-          <MillDetail line={l} typeOf={p.typeOf} real={REAL} tick={p.tick} onOpen={p.onOpen} onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={p.onAsk} />
+          <MillDetail line={l} typeOf={p.typeOf} real={REAL} tick={p.tick} onOpen={p.onOpen} onAsk={p.onAsk} />
         </div>
       </details>
     </div>

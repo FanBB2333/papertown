@@ -119,7 +119,7 @@ export function Experiments(p: Props) {
           <span className="muted small">{tr('拖动框选放大 · 双击还原 · 点一个任务看详情')}</span>
         </div>
         {gjobs.length ? <Gantt jobs={gjobs} domain={[d0, d1]} now={now} onZoom={setZoom} onPick={openIn([...gjobs].sort((a, b) => a.start - b.start).map(x => x.id))} />
-          : <p className="muted small">{jobs.length ? tr('这段时间里没有符合条件的任务。换一个时间范围试试。') : tr('这个项目还没有实验任务。代码员工会把实验提交到 nvidb（或者模拟电厂），到时候进度就在这里。')}</p>}
+          : <p className="muted small">{jobs.length ? tr('这段时间里没有符合条件的任务。换一个时间范围试试。') : tr('这个项目还没有实验任务。代码员工提交实验后，进度将在这里显示。')}</p>}
       </section>
 
       <Cluster mine={new Set(jobs.map(j => j.nvidb?.id).filter((x): x is number => x != null))} onOpen={openIn([])} />

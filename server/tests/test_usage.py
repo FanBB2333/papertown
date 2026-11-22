@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from papertown.api import create_app
-from papertown.llm.pricing import token_cost, PRICES
+from papertown.pricing import token_cost, PRICES
 from papertown.project_dirs import owner, project_roots
 from papertown.town import Town
 from papertown.usage import Usage, budget_state, week_start
@@ -74,7 +74,7 @@ def usage(tmp_path):
     readers = FakeReaders(clock)
     town.usage = service = Usage(town, readers=readers, clock=clock)
     for i, lid in enumerate(("a", "b"), 1):
-        town.db.insert("lines", {"id": lid, "seq": i, "title": lid, "idea": "sample", "status": "waiting", "budget": 1, "created_at": iso(START - 40 * 86400)})
+        town.db.insert("lines", {"id": lid, "seq": i, "title": lid, "idea": "sample", "status": "running", "created_at": iso(START - 40 * 86400)})
     return service, clock, readers
 
 
@@ -311,19 +311,18 @@ def test_readers_use_only_quota_commands_and_redact_failures(usage, monkeypatch)
         readers.agy(clock())
 
 
-def test_api_hatch_budget_settings_and_shapes(tmp_path, monkeypatch):
+def test_api_usage_budget_settings_and_shapes(tmp_path, monkeypatch):
     app = create_app(make_settings(tmp_path))
     town = app.state.town
     clock = Clock()
     town.usage = Usage(town, readers=FakeReaders(clock), clock=clock)
     with TestClient(app) as c:
         for i, lid in enumerate(("test", "blank"), 1):
-            town.db.insert("lines", {"id": lid, "seq": i, "title": "sample", "idea": "sample", "status": "waiting", "budget": 1,
+            town.db.insert("lines", {"id": lid, "seq": i, "title": "sample", "idea": "sample", "status": "running",
                                      "created_at": iso(START - 100)})
-        monkeypatch.setattr(town.pipeline, "_spawn", lambda *args: None)
-        assert c.post("/api/lines/test/hatch", json={"usage_budget": 250}).status_code == 200
+        assert c.put("/api/lines/test/usage_budget", json={"usd": 250}).status_code == 200
         assert town.db.one("select usage_budget from lines where id = 'test'")["usage_budget"] == 250
-        assert c.post("/api/lines/blank/hatch", json={"usage_budget": None}).status_code == 200
+        assert c.put("/api/lines/blank/usage_budget", json={"usd": None}).status_code == 200
         assert c.get("/api/lines/blank/usage").json()["budget"] is None
         detail = c.get("/api/lines/test/usage").json()
         assert {"budget", "spent", "state", "since", "week", "providers", "models", "sessions"} <= detail.keys()
@@ -471,7 +470,7 @@ def test_a_stale_second_login_is_a_note(usage):
 
 def test_environment_price_override():
     import sys
-    result = subprocess.run([sys.executable, "-c", "from papertown.llm.pricing import token_cost; print(token_cost('custom', dict(input=1000000, cache_write=0, cache_read=0, output=1000000)))"],
+    result = subprocess.run([sys.executable, "-c", "from papertown.pricing import token_cost; print(token_cost('custom', dict(input=1000000, cache_write=0, cache_read=0, output=1000000)))"],
                             capture_output=True, text=True, check=True, env={**os.environ, "PAPERTOWN_PRICES": '{"custom": [3, 7]}'})
     assert result.stdout.strip() == "(10.0, True)"
 

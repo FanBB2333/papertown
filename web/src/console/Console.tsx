@@ -50,15 +50,15 @@ const BLEED = new Set<ModId>(['code', 'paper', 'agents', 'skills', 'mcp', 'rag']
 // the panel that does a building's work
 const BY_BUILDING: Record<string, ModId> = {
   mill: 'overview', hatchery: 'survey', customs: 'survey', genealogy: 'survey', depot: 'code', workshop: 'code', farm: 'exp',
-  power: 'exp', power_sim: 'exp', coldstore: 'data', press: 'paper', qa: 'paper', market: 'agents', academy: 'skills', exchange: 'mcp', library: 'rag',
+  power: 'exp', coldstore: 'data', press: 'paper', qa: 'paper', market: 'agents', academy: 'skills', exchange: 'mcp', library: 'rag',
 };
 
 // `asked`: the projects whose agents have a question waiting for you
 type Filter = 'all' | 'run' | 'you' | 'done' | 'local';
 const FILTERS: [Filter, string, (l: Line, asked: Set<string>) => boolean][] = [
   ['all', tr('全部'), () => true],
-  ['run', tr('在跑'), l => ['running', 'hatching'].includes(l.status)],
-  ['you', tr('等你'), (l, asked) => ['waiting', 'paused', 'failed'].includes(l.status) || asked.has(l.id)],
+  ['run', tr('在跑'), l => l.status === 'running'],
+  ['you', tr('等你'), (l, asked) => l.lead.state === 'blocked' || asked.has(l.id)],
   ['done', tr('已完成'), l => l.status === 'done'],
   ['local', tr('本地项目'), l => !!l.linked],
 ];
@@ -304,9 +304,8 @@ export function Console(p: Props) {
         <div className="cm" key={id}>
           {!kept.has(mod) && (
             <section className={`cm-mod on${BLEED.has(mod) ? ' bleed' : ''}`} key={mod} style={{ ['--dir' as string]: dir }}>
-              {mod === 'overview' ? <Overview line={line} info={ws.data} tick={p.tick} typeOf={typeOf} go={m => go({ mod: m })}
-                onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)} />
-                : mod === 'survey' ? <Survey line={line} tick={p.tick} onHatch={p.onHatch} onAdjust={p.onAdjust} />
+              {mod === 'overview' ? <Overview line={line} info={ws.data} tick={p.tick} typeOf={typeOf} go={m => go({ mod: m })} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)} />
+                : mod === 'survey' ? <Survey line={line} tick={p.tick} />
                   : mod === 'exp' ? <Experiments lineId={id} tick={p.tick} onData={() => go({ mod: 'data' })} />
                     : mod === 'data' ? <Data lineId={id} tick={p.tick} onOpenFile={path => { setReveal(r => ({ root: 'code', path, n: (r?.n ?? 0) + 1 })); go({ mod: 'code' }); }} />
                       : mod === 'agents' ? (
@@ -324,7 +323,7 @@ export function Console(p: Props) {
                           : mod === 'mcp' ? <McpRoom {...actions} tick={p.tick} />
                             : mod === 'rag' ? <RagRoom {...actions} tick={p.tick} />
                               : mod === 'rules' ? <Bounds line={line} toast={p.toast} />
-                                : mod === 'depts' ? <Departments tick={p.tick} onRoom={openBuilding} onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust}
+                                : mod === 'depts' ? <Departments tick={p.tick} onRoom={openBuilding}
                                   onAgent={a => { if (a.role === 'lead' || a.role === 'coder' || a.role === 'writer') setRole(a.role); go({ mod: 'agents', line: a.line_id ?? undefined }); }} />
                                   : mod === 'trace' ? <Trace /> : null}
             </section>
@@ -354,7 +353,7 @@ function markOf(line: Line | null, m: ModId) {
   const st = (line?.stages ?? []).filter(s => s.mod === m && s.key !== 'idea').map(s => s.status);
   if (m === 'data') return line?.stages.find(s => s.key === 'exp')?.status === 'done' ? 'done' : '';
   if (!st.length) return '';
-  return st.includes('run') ? 'run' : st.includes('wait') ? 'wait' : st.every(s => s === 'done') ? 'done' : '';
+  return st.includes('run') ? 'run' : st.every(s => s === 'done') ? 'done' : '';
 }
 
 function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
@@ -403,7 +402,7 @@ function PhoneTabs({ mod, line, code, onPick }: { mod: ModId; line: Line | null;
     const k = markOf(line, m);
     return m === 'code' && code > 0 ? <em className="cd-n">{code}</em> : k && <i className={`cd-dot k-${k}`} />;
   };
-  const behind = code > 0 || MODS.some(m => !PHONE_TABS.includes(m.id) && markOf(line, m.id) === 'wait');
+  const behind = code > 0 || line?.lead.state === 'blocked';
   return (
     <>
       <nav className="mtabs" aria-label={tr('面板')}>

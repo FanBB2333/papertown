@@ -10,7 +10,7 @@ export const t = (s: string | null | undefined) => (s ? Date.parse(s) : NaN);
 // where a job ran: its machine and cards, or the backend that ran it
 export const placeOf = (j: Job) => {
   const n = j.nvidb;
-  if (!n) return j.backend === 'sim' ? tr('模拟电厂') : j.backend;
+  if (!n) return j.backend;
   if (!n.node) return n.lane ?? (n.pool ? tr('池 {0}', n.pool) : tr('等分配'));
   return `${n.node} · ${n.gpu_ids.length ? `GPU ${n.gpu_ids.join(',')}` : 'CPU'}`;
 };

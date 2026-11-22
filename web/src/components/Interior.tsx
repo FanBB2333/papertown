@@ -19,9 +19,6 @@ export interface RoomActions {
   onOpen: (id: string, lineId?: string) => void;
   onIdea: () => void;
   onAsk: (id: string, name: string) => void;
-  onHatch: (lineId: string) => void;
-  onResume: (lineId: string) => void;
-  onAdjust: (lineId: string) => void;
   toast: (text: string) => void;
 }
 
@@ -62,7 +59,7 @@ export function Interior(p: Props) {
     return (
       <div className={`interior in-sheet m-${p.motion}`} role="dialog" aria-modal="true">
         <Sheet id={p.id} tick={p.tick} placements={p.placements} focus={p.focus} onClose={p.onClose} onOpen={p.onOpen}
-          onAsk={p.onAsk} onHatch={p.onHatch} onResume={p.onResume} onAdjust={p.onAdjust} />
+          onAsk={p.onAsk} />
       </div>
     );
   }

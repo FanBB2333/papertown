@@ -1,11 +1,11 @@
 // The settings page at /settings/<section>, drawn with Kumo whichever look the app has: browser
 // settings (settings.ts) and the server's model, agents, access and demo samples.
 
-import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Table, Text } from '@cloudflare/kumo';
-import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
+import { Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Table, Text } from '@cloudflare/kumo';
+import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, listen, type DefaultRuntime, type AuthState, type Hud, type HerdrInfo, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
+import { api, type DefaultRuntime, type AuthState, type Hud, type HerdrInfo, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { Logo } from '../art';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
@@ -20,7 +20,7 @@ import { go } from '../route';
 import { UsageSettings } from '../usage/Settings';
 
 // each section: its address, name, what is in it, icon, and the colour of its tile in the macOS look
-type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'model' | 'agents' | 'access' | 'demo' | 'keys';
+type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'agents' | 'access' | 'demo' | 'keys';
 const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
   [tr('界面'), [
     ['look', tr('外观与动效'), tr('界面风格、明暗、语言和动画'), PaletteIcon, '#5856d6'],
@@ -34,7 +34,6 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
     ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质'), CubeIcon, '#30b0c7'],
   ]],
   [tr('模型与员工'), [
-    ['model', tr('模型'), tr('小镇员工用的大模型'), CpuIcon, '#ff9500'],
     ['agents', tr('员工 Agent'), tr('Paseo、herdr 和本机 pi'), RobotIcon, '#a2845e'],
   ]],
   [tr('系统'), [
@@ -250,87 +249,9 @@ function Walk({ s }: { s: S }) {
   );
 }
 
-// a model's name: picked from what the provider lists, or written in
-function ModelBox({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
-  return (
-    <Autocomplete items={options} label={label} value={value} onValueChange={v => onChange(String(v ?? ''))}>
-      <Autocomplete.InputGroup />
-      <Autocomplete.Content>
-        <Autocomplete.List>{(m: string) => <Autocomplete.Item key={m} value={m}>{m}</Autocomplete.Item>}</Autocomplete.List>
-      </Autocomplete.Content>
-    </Autocomplete>
-  );
-}
-
-type LlmDraft = Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>;
-
-function withProvider(llm: Llm, draft: LlmDraft, id: string): LlmDraft {
-  const d = llm.providers.find(x => x.id === id);
-  return { ...draft, provider: id, model_strong: d?.models[0] ?? '', model_cheap: d?.models[d.models.length > 2 ? 2 : 0] ?? '' };
-}
-
-// choosing the town's own model: a new provider first, then what you picked for it
-async function applyLlm(llm: Llm, draft: LlmDraft) {
-  const changed = draft.provider !== llm.provider;
-  const out = await api.setLlm(changed ? { provider: draft.provider } : draft);
-  return changed && (draft.model_strong || draft.model_cheap) ? api.setLlm({ model_strong: draft.model_strong, model_cheap: draft.model_cheap, effort: draft.effort }) : out;
-}
-
-// the town's own model: the same as the switch in the chat, as a form on the page
-function ModelForm({ llm, onDone }: { llm: Llm; onDone: (l: Llm) => void }) {
-  const was = { provider: llm.provider, model_strong: llm.model_strong, model_cheap: llm.model_cheap, effort: llm.effort };
-  const [draft, setDraft] = useState(was);
-  const [err, setErr] = useState('');
-  const pv = llm.providers.find(x => x.id === draft.provider);
-  const changed = JSON.stringify(draft) !== JSON.stringify(was);
-  async function apply() {
-    setErr('');
-    try { onDone(await applyLlm(llm, draft)); } catch (e) { setErr((e as Error).message); }
-  }
-  return (
-    <div className="st-form">
-      <Select label={tr('供应商')} hideLabel={false} value={draft.provider} items={Object.fromEntries(llm.providers.map(x => [x.id, x.name]))} onValueChange={id => setDraft(x => withProvider(llm, x, String(id)))} />
-      <ModelBox label={tr('强模型（Lv.3 以上的员工、最终回答）')} value={draft.model_strong} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_strong: v }))} />
-      <ModelBox label={tr('便宜模型（其余员工）')} value={draft.model_cheap} options={pv?.models ?? []} onChange={v => setDraft(x => ({ ...x, model_cheap: v }))} />
-      {draft.provider === 'anthropic' && (
-        <Select label="effort" hideLabel={false} value={draft.effort} items={Object.fromEntries(['low', 'medium', 'high', 'xhigh', 'max'].map(x => [x, x]))} onValueChange={v => setDraft(x => ({ ...x, effort: String(v) }))} />
-      )}
-      <Note>{tr('key 照旧从环境变量读取。切换只在这次运行里有效，重启服务后按环境变量重新决定。')}{draft.provider === 'openai' ? tr(' 接口：{0}', llm.openai_base_url) : ''}</Note>
-      {err && <Warn bad>{err}</Warn>}
-      <div className="st-btns">
-        <Button variant="primary" disabled={!changed} onClick={apply}>{tr('应用')}</Button>
-        {changed && <Button onClick={() => setDraft(was)}>{tr('取消')}</Button>}
-      </div>
-    </div>
-  );
-}
-
-function Model() {
-  const [llm, setLlm] = useState<Llm | null>(null);
-  const [n, setN] = useState(0);
-  useEffect(() => { api.llm().then(setLlm).catch(() => {}); }, []);
-  useEffect(() => listen(e => { if (e.type === 'llm') setLlm(e.llm); }), []);
-  if (!llm) return <Note>{tr('读取中…')}</Note>;
-  const name = llm.providers.find(x => x.id === llm.provider)?.name ?? llm.provider;
-  return (
-    <>
-      <Card title={tr('现在')}>
-        <Row label={name} desc={`${llm.model_strong}${llm.model_cheap !== llm.model_strong ? ` / ${llm.model_cheap}` : ''}`}>
-          <Badge variant={llm.offline ? 'warning' : 'success'}>{llm.offline ? tr('离线模式') : tr('在线')}</Badge>
-        </Row>
-        {llm.offline && <Note>{tr('（离线模式，员工按 skill 的步骤调用工具，文字用模板）')}</Note>}
-      </Card>
-      <Card title={tr('切换模型')}>
-        <ModelForm key={n} llm={llm} onDone={l => { setLlm(l); setN(x => x + 1); }} />
-      </Card>
-      <Note>{tr('仓库和印刷厂里的代码、写作员工用的是 Paseo 或 pi 自己的模型，在各自的房间里切换。')}</Note>
-    </>
-  );
-}
-
 // what the assistant or a project's lead starts on, picked from what Paseo lists now
-const ENV = { assistant: 'PAPERTOWN_ASSISTANT_MODEL', lead: 'PAPERTOWN_LEAD_MODEL' } as const;
-function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead'; name: string; info: PaseoInfo; onSaved: (i: PaseoInfo) => void }) {
+const ENV = { assistant: 'PAPERTOWN_ASSISTANT_MODEL', lead: 'PAPERTOWN_LEAD_MODEL', worker: 'PAPERTOWN_WORKER_MODEL' } as const;
+function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead' | 'worker'; name: string; info: PaseoInfo; onSaved: (i: PaseoInfo) => void }) {
   const d: PaseoDefault = info.defaults?.[role] ?? { provider: null, model: null, thinking: null };
   const was = { provider: d.provider ?? '', model: d.model ?? '', thinking: d.thinking ?? '' };
   const [v, setV] = useState(was);
@@ -433,6 +354,7 @@ function Agents() {
             <div key={n}>
               <DefaultModel role="assistant" name={tr('小助手')} info={info} onSaved={setPaseo} />
               <DefaultModel role="lead" name={tr('项目负责人')} info={info} onSaved={setPaseo} />
+              <DefaultModel role="worker" name={tr('员工（代码员工和写作员工）')} info={info} onSaved={setPaseo} />
             </div>
           </>
         )}
@@ -475,13 +397,9 @@ function Demo({ hud }: { hud: Hud | null }) {
   }
   return (
     <Card>
-      <Row label={tr('现在')} desc={tr('没有配置模型 key 时就是展示模式')}>
-        <Badge variant={hud?.offline ? 'warning' : 'success'}>{hud ? (hud.offline ? tr('展示模式（离线）') : tr('在线 · {0}', hud.provider)) : '…'}</Badge>
+      <Row label={tr('样例项目')} desc={tr('样例项目是预制的状态，放入后负责人默认关闭。')}>
+        <Button variant="primary" loading={busy} onClick={seed}>{busy ? tr('放入中…') : tr('放入样例项目')}</Button>
       </Row>
-      <Row label={tr('样例项目')} desc={tr('放入几篇写到不同工序的样例论文：有的已出厂，有的停在实验或写作前，有的等你决定孵不孵化')}>
-        <Button variant="primary" loading={busy} disabled={!hud?.offline} onClick={seed}>{busy ? tr('放入中…') : tr('放入样例项目')}</Button>
-      </Row>
-      {!hud?.offline && <Note>{tr('接了模型以后样例也会真的调用模型、花钱，所以只在展示模式里提供。')}</Note>}
       {msg && <Note>{msg}</Note>}
       <Row label={tr('调研文章')} desc={tr('图书馆的馆藏，样例项目查重和写方法时从这里找相近工作')}>
         <Note>{tr('馆藏')} {tr('{0} 篇 · 在小镇里进图书馆翻看', hud?.library ?? '…')}</Note>
@@ -650,7 +568,6 @@ export function SettingsPage({ section, hud, onClose }: { section?: string; hud:
             {key === 'editor' && <Editor s={s} />}
             {key === 'map' && <MapSection s={s} />}
             {key === 'walk' && <Walk s={s} />}
-            {key === 'model' && <Model />}
             {key === 'agents' && <Agents />}
             {key === 'access' && <Access />}
             {key === 'demo' && <Demo hud={hud} />}

@@ -1,4 +1,4 @@
-"""The experiment farm: one job board for every experiment (local commands, the simulated plant, nvidb read only),
+"""The experiment farm: one job board for every experiment (local commands and nvidb read only),
 with a monitor per project that notes each job's progress. A local job prints `PROGRESS <0-100>` and
 `RESULT {json}`, or writes $PAPERTOWN_JOB_DIR/result.json.
 """
@@ -15,7 +15,6 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .compute import Job
 from .db import now
 
 if TYPE_CHECKING:
@@ -23,7 +22,6 @@ if TYPE_CHECKING:
 
 BACKENDS = {
     "local": {"name": "本地执行器", "ready": True, "note": "在项目的代码目录里直接运行命令"},
-    "sim": {"name": "模拟电厂", "ready": True, "note": "离线流水线用的模拟 GPU，结果都标着「模拟」"},
     "nvidb": {"name": "nvidb", "ready": False, "note": "你自己机器上的 GPU 队列（只读）：显卡和任务显示在这里，提交用 nvidb job submit"},
 }
 PROGRESS = re.compile(r"^\s*PROGRESS\s+(\d{1,3})\b")
@@ -84,8 +82,6 @@ class Farm:
             raise FarmError(f"没有这个后端：{backend}")
         if backend == "nvidb":
             raise FarmError("nvidb 只读接入：在这里看显卡和任务，提交请在终端里用 nvidb job submit")
-        if backend == "sim":
-            raise FarmError("模拟电厂只给离线流水线用")
         command = (command or "").strip()
         if not command:
             raise FarmError("command 不能为空")
@@ -163,21 +159,6 @@ class Farm:
                 self._set(job_id, status="done", progress=100, result=result, ended_at=now())
             else:
                 self._set(job_id, status="failed", result=result, ended_at=now(), note=f"退出码 {code}")
-
-    def sync_sim(self, job: Job) -> None:
-        row = self.db.one("select id, status from jobs where id = ?", job.id)
-        fields = {"status": job.status, "progress": job.progress, "result": job.result}
-        if job.status == "running" and (not row or row["status"] != "running"):
-            fields["started_at"] = now()
-        if job.status == "done":
-            fields["ended_at"] = now()
-        if not row:
-            self.db.insert("jobs", {"id": job.id, "line_id": job.line_id, "name": job.name, "backend": "sim", "command": None,
-                                    "cwd": None, "config": job.config, "submitted_by": "pipeline", "created_at": now(),
-                                    "note": None, "started_at": None, "ended_at": None, **fields})
-            self._changed(job.id)
-        else:
-            self._set(job.id, **fields)
 
     def _set(self, job_id: str, **fields) -> None:
         before = self.db.one("select status, progress from jobs where id = ?", job_id)

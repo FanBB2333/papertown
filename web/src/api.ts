@@ -10,32 +10,25 @@ export interface Placement {
 }
 
 export interface Hud {
-  day: number;
-  bank: { week: number; budget: number; calls: number };
-  plant: { load: number; busy: number; gpus: number; queued: number; name: string };
-  lines: { running: number; waiting: number; total: number };
-  library: number; provider: string; offline: boolean; model: string;
+  day: number; lines: { running: number; total: number }; library: number;
+  leads: { on: number; running: number };
 }
-
-export interface RunningLine { id: string; seq: number; title: string; status: string; stage: string; building: string; pct: number; mill_id: string | null }
-
+export type LineStatus = 'running' | 'done' | 'linked' | 'dropped';
+export interface RunningLine { id: string; seq: number; title: string; status: LineStatus; stage: string; building: string; pct: number; mill_id: string | null }
 export interface WorldState { placements: Placement[]; running: RunningLine[]; hud: Hud }
-
-export interface WorkerRef { id: string; role: string; level: number; title?: string }
-
+export interface StageAgent { id: string; role: 'lead' | 'coder' | 'writer'; name: string; status: string; runtime: string | null; model: string | null }
+export interface Resident { on: boolean; state: 'running' | 'starting' | 'blocked' | 'off' | 'ended'; note: string | null; agent: string | null; runtime: string | null; status: string | null }
 export interface Stage {
-  key: string; name: string; status: 'todo' | 'run' | 'done' | 'wait' | 'fail'; pct: number; building: string; out: string;
-  mod: FlowPart; // the part of the research flow its work is in
-  note: string | null; workers: WorkerRef[];
+  key: string; name: string; mod: string; status: 'todo' | 'run' | 'done'; pct: number; building: string; out: string; note: string | null;
+  owner: 'lead' | 'coder' | 'writer'; agents: StageAgent[]; started_at: string | null; ended_at: string | null;
 }
-
 export interface Line {
-  id: string; seq: number; title: string; idea: string; budget: number; spent: number; status: string; stage: string;
-  mill_id: string | null; verdict: string | null; revisions: number; note: string | null; pct: number;
-  current: Stage | null; stages: Stage[]; team: Record<string, string[]>; reason: string | null; files: string[];
-  outputs?: Record<string, any>;
-  linked?: Linked | null;
+  id: string; seq: number; title: string; idea: string; status: LineStatus; stage: string;
+  mill_id: string | null; verdict: string | null; note: string | null; pct: number;
+  current: Stage | null; stages: Stage[]; team: StageAgent[]; files: string[];
+  sample: boolean; lead: Resident; outputs?: Record<string, any>; linked?: Linked | null;
 }
+export interface BuildingStaff { who: 'lead' | 'coder' | 'writer' | 'assistant'; agent: Agent | null; line: { id: string; seq: number; title: string } | null; name: string }
 
 export type UsageProviderId = 'claude' | 'codex' | 'antigravity';
 export type UsageBudget = number | null;
@@ -72,8 +65,7 @@ export interface LinkedPaper {
 export interface Linked { key: string; match: string[]; code: LinkedCode | null; paper: LinkedPaper | null }
 
 export interface Message {
-  id: number; ts: string; line_id: string | null; role: 'user' | 'worker' | 'system'; worker_id: string | null;
-  worker: WorkerRef | null; kind: string; body: any;
+  id: number; ts: string; line_id: string | null; role: 'user' | 'system'; kind: string; body: any;
 }
 
 export interface TraceRow { id: number; ts: string; kind: string; label: string; detail: string; ms: number; line_id: string | null }
@@ -158,7 +150,7 @@ export interface PaseoInfo {
 }
 // set: chosen in the settings page rather than from PAPERTOWN_ASSISTANT_MODEL / _LEAD_MODEL
 export interface PaseoDefault { provider: string | null; model: string | null; thinking: string | null; set?: boolean }
-export type PaseoDefaults = Record<'assistant' | 'lead', PaseoDefault>;
+export type PaseoDefaults = Record<'assistant' | 'lead' | 'worker', PaseoDefault>;
 export interface ModelNews { key: string; provider: string; label: string; model: string; name: string; thinking: string[]; default_thinking: string | null; at: string }
 
 export interface Report {
@@ -182,8 +174,8 @@ export interface CardRepo {
 }
 export interface MemoryCounts { sessions: number; notes: number; messages: number; at: string | null }
 export interface ProjectCard {
-  line: { id: string; seq: number; title: string; status: string; linked: boolean; updated_at: string; usage_state?: UsageState;
-    stages: { key: string; name: string; status: 'todo' | 'run' | 'wait' | 'done' | 'fail' }[]; stage: { name: string; status: string; pct: number } | null };
+  line: { id: string; seq: number; title: string; status: LineStatus; linked: boolean; updated_at: string; sample: boolean; lead: Resident; usage_state?: UsageState;
+    stages: { key: string; name: string; status: 'todo' | 'run' | 'done' }[]; stage: { name: string; status: string; pct: number } | null };
   lead: Agent | null; card: Card | null; prev: number | null; pending: { at: string; note: string } | null;
   jobs: Record<string, number>; asks: number;
   running: CardRun[]; queued: CardRun[]; repos: { code: CardRepo | null; paper: CardRepo | null }; memory: MemoryCounts;
@@ -229,7 +221,7 @@ export interface CanvasNode {
   ref?: string; status?: string; pct?: number; // a stage: its key, state and progress; a task: its state; an info card: what it shows
   note?: string; role?: TaskTo | null; locked?: { gate: string; title: string } | null; // a stage: its note, who works there, the gate holding it
   check?: Check; gate?: Gate;
-  rules?: BoundRule[]; budget?: { budget: number; spent: number }; items?: HumanItem[];
+  rules?: BoundRule[]; items?: HumanItem[];
   to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string; log?: TaskLog[];
   agent_id?: string | null; agent?: Agent | null;
   // a task's turn: what it waits for while queued, why it could not be delivered, and why its result is to be looked at again
@@ -265,7 +257,7 @@ export interface MemoryFull extends MemoryItem { messages?: { role: 'user' | 'as
 export type PageKind = 'report' | 'explain' | 'answer';
 export interface Page { id: string; n: number; title: string; kind: PageKind; by: string; agent: string; question: string | null; at: string; size: number }
 export interface AuthState { local: boolean; password: boolean; authed: boolean; signed_in: boolean; sessions?: number }
-export interface LeadView { agent: Agent | null; settings: { supervise: boolean; every: number }; reports: Report[]; asks: Report[] }
+export interface LeadView { agent: Agent | null; resident: Resident; settings: { on: boolean; supervise: boolean; every: number }; reports: Report[]; asks: Report[] }
 
 export type BoundKind = 'must' | 'never' | 'ask';
 export type BoundInherit = 'yes' | 'no' | 'force';
@@ -275,10 +267,7 @@ export interface BoundsView {
   levels: { global: BoundsLevel; project?: BoundsLevel; workers?: Record<'coder' | 'writer', BoundsLevel> };
   effective: Record<string, Bound[]>; kinds: Record<BoundKind, string>; inherit: Record<BoundInherit, string>; actions: Record<string, string>;
 }
-export interface Llm {
-  provider: string; model_strong: string; model_cheap: string; effort: string; offline: boolean; openai_base_url: string;
-  providers: { id: string; name: string; models: string[] }[];
-}
+
 export interface PaseoConversation {
   id: string; title: string | null; provider: string; model: string | null; cwd: string | null; status: string;
   updated: string; last_user: string | null; linked: string | null;
@@ -311,7 +300,7 @@ export interface DeptAgent extends Pick<Agent, 'id' | 'role' | 'name' | 'status'
 export interface Department {
   id: string; type: string; name: string; district: string; color: string; state: 'busy' | 'wait' | 'idle' | 'off'; job: string;
   lines: (ProjectRef & { pct: number })[]; agents: DeptAgent[]; jobs: Pick<Job, 'id' | 'name' | 'status' | 'progress' | 'line_id' | 'backend'>[];
-  gpus: { total: number; idle: number; running: number } | null; worker: WorkerRef | null;
+  gpus: { total: number; idle: number; running: number } | null;
 }
 export type SayMode = 'steer' | 'queue' | 'interrupt';
 export interface RosterRow { line: ProjectRef; agent: Agent | null }
@@ -380,7 +369,7 @@ export interface LineData {
 }
 
 export interface Backend { id: string; name: string; ready: boolean; note: string; active: number }
-export interface JobBoard { jobs: Job[]; backends: Backend[]; plant: Hud['plant'] }
+export interface JobBoard { jobs: Job[]; backends: Backend[] }
 
 // skim: skills layered like git config (global → project → session)
 export type SkimScope = 'global' | 'project' | 'session';
@@ -446,8 +435,14 @@ async function call<T>(method: string, url: string, body?: unknown, keep?: (v: o
   return localize(data, keep) as T;
 }
 
+async function residentCard(card: ProjectCard): Promise<ProjectCard> {
+  const line = await call<Line>('GET', `/api/lines/${card.line.id}`);
+  return { ...card, line: { ...card.line, lead: line.lead, sample: line.sample } };
+}
+
 export const api = {
   world: () => call<WorldState>('GET', '/api/world'),
+  staffAt: (id: string) => call<BuildingStaff>('GET', `/api/buildings/${encodeURIComponent(id)}/staff`),
   building: (id: string) => call<Sheet>('GET', `/api/buildings/${id}`),
   line: (id: string) => call<Line>('GET', `/api/lines/${id}`),
   lines: () => call<Line[]>('GET', '/api/lines'),
@@ -455,17 +450,13 @@ export const api = {
   trace: () => call<TraceRow[]>('GET', '/api/trace?limit=80'),
   freshPapers: () => call<{ papers: (PaperCard & { relevance: number })[] }>('GET', '/api/papers/fresh'),
   departments: () => call<Department[]>('GET', '/api/departments'),
-  idea: (text: string, budget: number) => call<Line>('POST', '/api/ideas', { text, budget }),
-  hatch: (id: string, usage_budget?: UsageBudget) => call<Line>('POST', `/api/lines/${id}/hatch`, { usage_budget }),
+  idea: (text: string) => call<Line>('POST', '/api/ideas', { text }),
   usage: () => call<UsageView>('GET', '/api/usage'),
   refreshUsage: () => call<UsageView>('POST', '/api/usage/refresh'),
   usageSettings: () => call<UsageSettings>('GET', '/api/usage/settings'),
   setUsageSettings: (body: UsageSettings) => call<UsageSettings>('PUT', '/api/usage/settings', body),
   lineUsage: (id: string) => call<LineUsage>('GET', `/api/lines/${id}/usage`),
   setUsageBudget: (id: string, body: UsageBudget) => call<LineUsage>('PUT', `/api/lines/${id}/usage_budget`, { usd: body }),
-  adjust: (id: string, text: string) => call<Line>('POST', `/api/lines/${id}/adjust`, { text }),
-  resume: (id: string) => call<Line>('POST', `/api/lines/${id}/resume`),
-  ask: (text: string, building: string) => call<{ ok: boolean }>('POST', '/api/chat', { text, building }),
   jobs: (lineId?: string) => call<JobBoard>('GET', `/api/jobs${lineId ? `?line_id=${lineId}` : ''}`),
   job: (id: string) => call<Job>('GET', `/api/jobs/${id}?tail=400`),
   townSkills: () => call<TownSkill[]>('GET', '/api/skills'),
@@ -498,6 +489,7 @@ export const api = {
   seen: (id: string) => call<unknown>('POST', `/api/agents/${encodeURIComponent(id)}/seen`),
   queueAct: (id: string, eventId: number, what: 'now' | 'drop') =>
     call<unknown>('POST', `/api/agents/${encodeURIComponent(id)}/queue/${eventId}`, { what }),
+  events: (id: string) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=0`, undefined, said).then(v => v.events),
   agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`, undefined, said),
   openAgent: (lineId: string, role: AgentRole) => call<Agent>('POST', '/api/agents', { line_id: lineId, role }),
   backends: () => call<Backends>('GET', '/api/backends'),
@@ -510,7 +502,7 @@ export const api = {
   startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
   openInPaseo: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/open`),
   paseo: (fresh?: boolean) => call<PaseoInfo>('GET', `/api/paseo${fresh ? '?fresh=1' : ''}`),
-  setPaseoDefault: (role: 'assistant' | 'lead', o: { provider: string | null; model?: string | null; thinking?: string | null }) =>
+  setPaseoDefault: (role: 'assistant' | 'lead' | 'worker', o: { provider: string | null; model?: string | null; thinking?: string | null }) =>
     call<PaseoDefaults>('POST', '/api/paseo/defaults', { role, ...o }),
   modelNews: () => call<{ news: ModelNews[]; defaults: PaseoDefaults }>('GET', '/api/paseo/news'),
   dismissModels: (keys?: string[]) => call<{ news: ModelNews[] }>('POST', '/api/paseo/news/dismiss', { keys: keys ?? null }),
@@ -518,14 +510,15 @@ export const api = {
   importAgent: (lineId: string, role: AgentRole, extId: string) => call<Agent>('POST', '/api/agents/import', { line_id: lineId, role, ext_id: extId }),
   timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; queued: AgentEvent[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null }; transcript?: Transcript }>('GET', `/api/agents/${id}/timeline`, undefined, said),
   permit: (id: string, requestId: string, allow: boolean) => call<{ ok: boolean }>('POST', `/api/agents/${id}/permit`, { request_id: requestId, allow }),
-  llm: () => call<Llm>('GET', '/api/llm'),
   samples: () => call<{ added: string[]; note: string }>('POST', '/api/samples'),
   library: (q = '', topic = '', limit = 60) => call<Shelf>('GET', `/api/library?${new URLSearchParams({ q, topic, limit: String(limit) })}`),
   papersOf: (lineId: string) => call<{ survey: PaperCard[]; references: PaperCard[] }>('GET', `/api/lines/${lineId}/papers`),
-  setLlm: (o: Partial<Pick<Llm, 'provider' | 'model_strong' | 'model_cheap' | 'effort'>>) => call<Llm>('POST', '/api/llm', o),
   stopAgent: (id: string) => call<Agent>('POST', `/api/agents/${id}/stop`),
-  cards: () => call<{ cards: ProjectCard[]; layout: CardLayout }>('GET', '/api/cards', undefined, carded),
-  card: (lineId: string) => call<ProjectCard>('GET', `/api/lines/${lineId}/card`, undefined, carded),
+  cards: async () => {
+    const [v, lines] = await Promise.all([call<{ cards: ProjectCard[]; layout: CardLayout }>('GET', '/api/cards', undefined, carded), call<Line[]>('GET', '/api/lines')]);
+    return { ...v, cards: v.cards.map(c => { const l = lines.find(l => l.id === c.line.id); return { ...c, line: { ...c.line, lead: l?.lead ?? c.line.lead, sample: l?.sample ?? c.line.sample } }; }) };
+  },
+  card: (lineId: string) => call<ProjectCard>('GET', `/api/lines/${lineId}/card`, undefined, carded).then(residentCard),
   setLayout: (panes: Pane[] | null) => call<CardLayout>('POST', '/api/cards/layout', { panes }),
   memory: (lineId: string) => call<{ items: MemoryItem[]; counts: MemoryCounts }>('GET', `/api/lines/${lineId}/memory`, undefined, asIs),
   memoryScan: (lineId: string) => call<{ found: MemoryFound[]; roots: { repo: 'code' | 'paper'; path: string }[]; sources: Record<'claude' | 'codex', boolean> }>(
@@ -543,11 +536,11 @@ export const api = {
   logoutAll: () => call<{ ok: boolean; ended: number }>('POST', '/api/auth/logout-all'),
   setPassword: (password: string, old?: string) => call<AuthState>('POST', '/api/auth/password', { password, ...(old ? { old } : {}) }),
   clearPassword: () => call<AuthState>('DELETE', '/api/auth/password'),
-  updateCard: (lineId: string, note = '') => call<ProjectCard>('POST', `/api/lines/${lineId}/card`, { note }, carded),
-  cancelCard: (lineId: string) => call<ProjectCard>('POST', `/api/lines/${lineId}/card/cancel`, {}, carded),
+  updateCard: (lineId: string, note = '') => call<ProjectCard>('POST', `/api/lines/${lineId}/card`, { note }, carded).then(residentCard),
+  cancelCard: (lineId: string) => call<ProjectCard>('POST', `/api/lines/${lineId}/card/cancel`, {}, carded).then(residentCard),
   updateCards: () => call<{ sent: string[]; skipped: { line_id: string; why: string }[] }>('POST', '/api/cards/update', {}),
   lead: (lineId: string) => call<LeadView>('GET', `/api/lines/${lineId}/lead`, undefined, written),
-  setLead: (lineId: string, o: { supervise?: boolean; every?: number }) => call<LeadView['settings']>('POST', `/api/lines/${lineId}/lead`, o),
+  setLead: (lineId: string, o: { on?: boolean; supervise?: boolean; every?: number }) => call<LeadView['settings']>('POST', `/api/lines/${lineId}/lead`, o),
   reports: (lineId?: string) => call<{ reports: Report[]; asks: Report[] }>('GET', `/api/reports${lineId ? `?line_id=${lineId}` : ''}`, undefined, written),
   answer: (id: number, text: string) => call<Report>('POST', `/api/reports/${id}/answer`, { text }),
   bounds: (lineId?: string) => call<BoundsView>('GET', `/api/bounds${lineId ? `?line_id=${lineId}` : ''}`, undefined, ruled),
@@ -621,8 +614,8 @@ export function listen(fn: (e: ServerEvent) => void): () => void {
 export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boolean) => void): () => void {
   if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
-  const types = ['line', 'message', 'trace', 'world', 'building', 'bank', 'power', 'workers', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'terminal', 'llm', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas', 'usage'];
+  const types = ['line', 'message', 'trace', 'world', 'building', 'skills', 'library', 'item',
+    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'terminal', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas', 'usage'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);

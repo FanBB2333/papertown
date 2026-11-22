@@ -14,7 +14,7 @@ interface Props extends RoomActions {
 }
 
 const JOB_STATUS: Record<string, string> = { queued: tr('排队'), running: tr('运行中'), done: tr('完成'), failed: tr('失败'), cancelled: tr('已取消') };
-const WHO = (by: string | null) => !by ? '—' : by === 'pipeline' ? tr('流水线') : by === 'you' ? tr('你') : by.startsWith('coder-') ? tr('代码员工') : by;
+const WHO = (by: string | null) => !by ? '—' : by === 'you' ? tr('你') : by.startsWith('coder-') ? tr('代码员工') : by;
 
 // a linked project's experiments are its jobs in nvidb, counted on its experiment stage
 const linkedNote = (l?: Line) => l?.linked ? l.stages.find(s => s.key === 'exp')?.note ?? tr('nvidb 里还没有它的任务。') : undefined;
@@ -48,7 +48,7 @@ function JobDetail({ id, onClose, toast }: { id: string; onClose: () => void; to
       <p className="small">{JOB_STATUS[j.status]} · {j.progress}%{j.note && !j.nvidb ? ` · ${j.note}` : ''}</p>
       {j.nvidb && <NvidbJob n={j.nvidb} />}
       {j.command && <><h4>{tr('命令')}</h4><pre className="code">{j.command}</pre></>}
-      {j.result && <><h4>{tr('结果')}{j.result.simulated ? tr('（模拟）') : ''}</h4><Result r={j.result} /></>}
+      {j.result && <><h4>{tr('结果')}{j.result.simulated ? tr('样例结果（占位内容）') : ''}</h4><Result r={j.result} /></>}
       {j.nvidb ? <><h4>{tr('日志')}</h4><p className="muted small">{tr('日志留在 nvidb 里，这里不去节点上读：')}<code>nvidb job logs {j.nvidb.id} -n 200</code></p></>
         : j.backend !== 'sim' && <><h4>{tr('日志')}</h4><pre className="code log-box">{j.log || tr('（还没有输出）')}</pre></>}
     </div>

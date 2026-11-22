@@ -1,16 +1,17 @@
-"""A line is one paper's life, idea to shipped PDF, in eight stages across the town.
-Each line runs in its own thread and publishes its progress on the event bus; a restart pauses it at its current stage.
+"""A project's line: eight stages from idea to shipped paper, and what each stage has handed in.
+
+Papertown runs no model of its own. A project's lead (leads.py) moves its line with `pt stage`, and its agents hand
+in a stage's output with `pt output`; the hard gates of the research loop (canvas.py) decide what may close.
 """
 
 from __future__ import annotations
 
 import threading
-import traceback
 from typing import TYPE_CHECKING
 
-from . import stages
+from .agents import ROLES
 from .db import now
-from .market import title
+from .library import expand
 
 if TYPE_CHECKING:
     from .town import Town
@@ -31,11 +32,38 @@ NAMES = {k: name for k, name, *_ in STAGES}
 # the research loop frames its nodes by them (canvas.py); STAGE_MOD says which part a stage's work is in.
 MODULES = [("overview", "概览"), ("survey", "调研"), ("code", "代码仓库"), ("exp", "实验"), ("data", "数据"), ("paper", "论文"), ("agents", "员工")]
 STAGE_MOD = {"idea": "survey", "hatch": "survey", "team": "agents", "method": "survey", "exp": "exp", "write": "paper", "review": "paper", "ship": "paper"}
-MAX_REVISIONS = 1
+# the post whose work a stage is: it stands at the stage, and the lead hands the stage's work to it
+OWNER = {"idea": "lead", "hatch": "lead", "team": "lead", "method": "lead", "exp": "coder", "write": "writer", "review": "lead", "ship": "lead"}
+POSTS = ("lead", "coder", "writer")
+LIVE = ("running", "linked")  # the projects still being worked on
+STATUS = {"run": "进行中", "done": "完成", "todo": "还没开始"}
+TEXT_MAX, LIST_MAX = 4000, 12
+
+# what an agent hands in for a stage: the item's kind and title, the fields it must have, and how to write it
+OUTPUTS = {
+    "hatch": ("notes", "撞车报告", ("gap",),
+              '{"gap": "和最相近的工作差在哪", "summary": "一两句结论", "suggestions": ["…"], "similar": [{"paper_id": "arxiv:2401.01234", "note": "它做了什么、和 idea 的差别"}]}'),
+    "method": ("draft", "方法草案", ("title", "problem"),
+               '{"title": "英文题目", "problem": "要解决的问题", "mechanism": ["…"], "baselines": [{"name": "…", "source": "arxiv:…"}], "datasets": ["…"], "metrics": ["…"], "risks": ["…"]}'),
+    "exp": ("table", "结果表", ("metrics", "rows"),
+            '{"metrics": ["指标名"], "rows": [{"method": "方法名", "values": [数字], "ours": true}], "seeds": 3, "analysis": "结果说明了什么", "concerns": ["…"], "job_id": "任务 id"}'),
+    "write": ("tex", "论文稿", ("title",), '{"title": "论文题目", "abstract": "摘要", "cite_ids": ["arxiv:2401.01234"], "summary": "这一版改了什么"}'),
+    "review": ("pdf", "审稿意见", ("verdict",),
+               '{"verdict": "放行 | 退回修改", "mean": 6.5, "reviews": [{"persona": "方法", "overall": 6, "strengths": ["…"], "weaknesses": ["…"], "decision": "accept | revise"}], "feedback": ["要改的事"]}'),
+}
+NEEDED = ("hatch", "method", "review")  # these stages close only once their output is in
 
 
 def _short(text: str) -> str:
     return text if len(text) <= 24 else text[:23] + "…"
+
+
+def _text(v: object, limit: int = TEXT_MAX) -> str:
+    return str(v or "").strip()[:limit]
+
+
+def _list(v: object, limit: int = 400) -> list[str]:
+    return [_text(x, limit) for x in (v if isinstance(v, list) else [v] if v else []) if _text(x)][:LIST_MAX]
 
 
 class LineError(Exception):
@@ -46,45 +74,44 @@ class Pipeline:
     def __init__(self, town: "Town"):
         self.town = town
         self.db = town.db
-        self._active: set[str] = set()
         self._lock = threading.Lock()
 
     def line(self, line_id: str) -> dict:
         ln = self.db.one("select * from lines where id = ?", line_id)
         if not ln:
-            raise LineError(f"没有这条流水线：{line_id}")
+            raise LineError(f"没有这个项目：{line_id}")
         return ln
 
     def item(self, line_id: str, stage: str) -> dict | None:
         r = self.db.one("select * from items where line_id = ? and stage = ? order by created_at desc, rowid desc limit 1", line_id, stage)
         return r["body"] if r else None
 
+    def agents(self, line_id: str) -> list[dict]:
+        """The project's own agents that have been started: who they are and what they run on."""
+        rows = self.db.q("select id, role, status, runtime, model from agents where line_id = ? and node_id is null and runtime is not null", line_id)
+        return sorted(({**r, "name": ROLES[r["role"]]["name"]} for r in rows if r["role"] in POSTS), key=lambda r: POSTS.index(r["role"]))
+
     def snapshot(self, line_id: str) -> dict | None:
         ln = self.db.one("select * from lines where id = ?", line_id)
         if not ln:
             return None
         rows = self.db.q("select * from stages where line_id = ? order by idx", line_id)
-        workers = {w["id"]: w for w in self.town.market.all()}
-        plan = ln["plan"] or {}
-        out_stages = []
-        for r in rows:
-            ids = r["workers"] or []
-            out_stages.append({"key": r["key"], "name": NAMES[r["key"]], "mod": STAGE_MOD[r["key"]], "status": r["status"], "pct": r["pct"],
-                               "building": r["building"], "out": STAGES[r["idx"]][3], "note": r["note"],
-                               "workers": [{"id": i, "role": workers[i]["role"], "level": workers[i]["level"],
-                                            "title": title(workers[i])} for i in ids if i in workers],
-                               "started_at": r["started_at"], "ended_at": r["ended_at"]})
+        team = self.agents(line_id)
+        by_role = {a["role"]: a for a in team}
+        out_stages = [{"key": r["key"], "name": NAMES[r["key"]], "mod": STAGE_MOD[r["key"]], "status": r["status"], "pct": r["pct"],
+                       "building": r["building"], "out": STAGES[r["idx"]][3], "note": r["note"], "owner": OWNER[r["key"]],
+                       "agents": [by_role[OWNER[r["key"]]]] if OWNER[r["key"]] in by_role else [],
+                       "started_at": r["started_at"], "ended_at": r["ended_at"]} for r in rows]
         linked = self.town.linked.summary(line_id) if ln["linked"] else None
         if linked:
             self.town.linked.overlay(line_id, out_stages)
         done = sum(1 for r in out_stages if r["status"] == "done")
-        cur = next((r for r in out_stages if r["status"] in ("run", "wait", "fail")), None)
+        cur = next((r for r in out_stages if r["status"] == "run"), None)
         items = self.db.q("select id, kind, stage, building, title, created_at from items where line_id = ? order by created_at", line_id)
         files = [f for f in ("main.tex", "refs.bib", "main.pdf", "paper.zip") if (self.town.press.root / line_id / f).exists()]
-        return {**{k: ln[k] for k in ("id", "seq", "title", "idea", "budget", "spent", "status", "stage", "mill_id", "verdict",
-                                       "revisions", "note", "created_at", "updated_at")},
-                "pct": round(100 * done / len(STAGES)), "current": cur, "stages": out_stages, "team": plan.get("team", {}), "linked": linked,
-                "reason": plan.get("reason"), "items": items, "files": files}
+        return {**{k: ln[k] for k in ("id", "seq", "title", "idea", "status", "stage", "mill_id", "verdict", "note", "created_at", "updated_at")},
+                "sample": bool(ln["sample"]), "pct": round(100 * done / len(STAGES)), "current": cur, "stages": out_stages, "team": team,
+                "lead": self.town.leads.resident(line_id), "linked": linked, "items": items, "files": files}
 
     def lines(self) -> list[dict]:
         return [self.snapshot(r["id"]) for r in self.db.q("select id from lines order by seq desc")]
@@ -95,264 +122,199 @@ class Pipeline:
     def _set_line(self, line_id: str, **f) -> None:
         self.db.update("lines", {"id": line_id}, **f, updated_at=now())
 
-    def _stage(self, line_id: str, key: str, status: str, pct: int | None = None, note: str | None = None,
-               workers: list[str] | None = None, building: str | None = None) -> None:
+    def _stage(self, line_id: str, key: str, status: str, pct: int | None = None, note: str | None = None) -> None:
         f: dict = {"status": status}
         if pct is not None:
             f["pct"] = pct
         if note is not None:
             f["note"] = note
-        if workers is not None:
-            f["workers"] = workers
-        if building is not None:
-            f["building"] = building
         if status == "run":
             f["started_at"] = now()
         if status == "done":
             f["ended_at"], f["pct"] = now(), 100
         self.db.update("stages", {"line_id": line_id, "idx": INDEX[key]}, **f)
-        if status in ("run", "done"):
-            self._set_line(line_id, stage=key)
-        b = building or self.db.val("select building from stages where line_id = ? and idx = ?", line_id, INDEX[key])
+        rows = self.db.q("select key, status from stages where line_id = ? order by idx", line_id)
+        at = next((r["key"] for r in rows if r["status"] == "run"), None) or next((r["key"] for r in reversed(rows) if r["status"] == "done"), key)
+        self._set_line(line_id, stage=at)
+        b = self.db.val("select building from stages where line_id = ? and idx = ?", line_id, INDEX[key])
         if b:
             self.town.world.set_status(b, "busy" if status == "run" else "idle", line_id)
         self._publish(line_id)
 
-    def _say(self, line_id: str, worker: dict | None, text: str, kind: str = "text", **body) -> None:
-        self.town.message(line_id, "worker" if worker else "system", worker["id"] if worker else None, kind, {"text": text, **body})
+    # a project begins
 
-    def _spawn(self, line_id: str, fn, *args) -> None:
-        with self._lock:
-            if line_id in self._active:
-                raise LineError("这条流水线已经在运行")
-            self._active.add(line_id)
-
-        def run():
-            try:
-                fn(line_id, *args)
-            except Exception as e:  # keep the town alive; the line records what went wrong
-                traceback.print_exc()
-                for stage in self.db.q("select key from stages where line_id = ? and status = 'run'", line_id):
-                    self._stage(line_id, stage["key"], "fail", note=str(e))  # 「继续」runs it again
-                self._set_line(line_id, status="failed", note=f"{type(e).__name__}: {e}")
-                self._say(line_id, None, f"流水线出错停下了：{e}", kind="error")
-                self._publish(line_id)
-            finally:
-                with self._lock:
-                    self._active.discard(line_id)
-
-        threading.Thread(target=run, daemon=True, name=f"line-{line_id}").start()
-
-    def running(self, line_id: str) -> bool:
-        with self._lock:
-            return line_id in self._active
-
-    def submit_idea(self, text: str, budget: float | None = None) -> dict:
+    def create(self, text: str) -> dict:
+        """An idea becomes a project: its line of stages, with the novelty check open. Its lead takes it from here."""
         text = text.strip()
         if len(text) < 4:
             raise LineError("idea 太短了，多写几句：想解决什么问题、打算怎么做")
-        budget = float(budget or self.town.s.default_line_budget)
-        seq = (self.db.val("select max(seq) from lines") or 0) + 1
-        line_id = f"line_{seq}"
         with self.db.lock:
-            self.db.insert("lines", {"id": line_id, "seq": seq, "title": _short(text), "idea": text, "budget": budget, "spent": 0,
-                                     "status": "hatching", "stage": "idea", "revisions": 0, "created_at": now(), "updated_at": now()})
+            seq = (self.db.val("select max(seq) from lines") or 0) + 1
+            line_id = f"line_{seq}"
+            self.db.insert("lines", {"id": line_id, "seq": seq, "title": _short(text), "idea": text, "status": "running", "stage": "idea",
+                                     "mill_id": "mill", "revisions": 0, "created_at": now(), "updated_at": now()})
             for i, (key, _, b, _) in enumerate(STAGES):
                 self.db.insert("stages", {"line_id": line_id, "idx": i, "key": key, "status": "todo", "building": b, "workers": [], "pct": 0})
-        self.town.save_item(line_id, "egg", "idea", "cityhall", f"idea #{seq}", {"text": text, "budget": budget})
-        self.town.message(line_id, "user", None, "text", {"text": text})
+        self.town.save_item(line_id, "egg", "idea", "cityhall", f"idea #{seq}", {"text": text})
         self._stage(line_id, "idea", "done")
-        self._spawn(line_id, self._hatch)
+        self._stage(line_id, "hatch", "run")
+        self.town.leads.wake(line_id)
         return self.snapshot(line_id)
 
-    def adjust(self, line_id: str, text: str) -> dict:
+    def migrate(self) -> None:
+        """Lines from before the leads took over: the old executor's states become plain ones, and its samples are marked."""
+        from .samples import SAMPLES
+        ideas = [x["idea"] for x in SAMPLES]
+        for ln in self.db.q("select id, idea, sample, status from lines where status in ('hatching', 'waiting', 'paused', 'failed')"):
+            self.db.update("lines", {"id": ln["id"]}, status="running", note=None, hold=None, sample=1 if ln["idea"] in ideas else ln["sample"])
+        self.db.x("update stages set status = 'run' where status = 'fail'")
+        self.db.x("update stages set status = 'todo' where status = 'wait'")
+        for ln in self.db.q("select id, idea from lines where sample is null"):
+            self.db.update("lines", {"id": ln["id"]}, sample=1 if ln["idea"] in ideas else 0)
+
+    # the stages, as the lead moves them
+
+    def stage(self, line_id: str, key: str, status: str, note: str | None = None, pct: int | None = None) -> dict:
+        """Open a stage (`run`), close it (`done`) or put it back (`todo`). A stage closes only with its output in and
+        its hard gate open."""
         ln = self.line(line_id)
-        if ln["status"] not in ("waiting", "failed", "paused"):
-            raise LineError("只有等你决定的 idea 才能调整")
-        self._set_line(line_id, idea=text.strip(), title=_short(text), status="hatching", verdict=None)
-        self.town.message(line_id, "user", None, "text", {"text": f"调整 idea：{text}"})
-        self._spawn(line_id, self._hatch)
+        if key not in INDEX:
+            raise LineError(f"没有工序「{key}」，可用的是：{' '.join(INDEX)}")
+        if status not in STATUS:
+            raise LineError("工序只能 run（开工）、done（收尾）或 todo（放回去）")
+        if ln["status"] == "dropped":
+            raise LineError("这个项目已经放弃了")
+        note = _text(note, 300) or None
+        if status != "done":
+            if ln["status"] == "done":
+                self._set_line(line_id, status="running")
+            self._stage(line_id, key, status, pct=0 if status == "todo" else max(0, min(99, int(pct))) if pct is not None else None, note=note)
+            return self.snapshot(line_id)
+        if key in NEEDED and not ln["linked"] and not self.item(line_id, key):
+            raise LineError(f"「{NAMES[key]}」还没有交产出，先用 `pt output {key} '<JSON>'` 交上来（`pt stage` 写着格式）")
+        self.town.checks.run(line_id, True)
+        why = self.town.canvas.blocked(line_id, key)
+        if why:
+            raise LineError(f"「{NAMES[key]}」的硬卡口还没放行：{why}。用 `pt checks` 看没过的位置，改完再收尾")
+        if key == "team":
+            self.town.save_item(line_id, "notes", "team", "market", "编队方案", {"team": self.agents(line_id), "reason": note or ""})
+        if key == "ship":
+            z = self.town.press.package(line_id)
+            self.town.save_item(line_id, "pdf", "ship", "dock_arxiv", "出厂包", {"zip": z.name, "files": self.snapshot(line_id)["files"]})
+        self._stage(line_id, key, "done", note=note)
+        nxt = self.db.one("select key, status from stages where line_id = ? and idx = ?", line_id, INDEX[key] + 1)
+        if nxt and nxt["status"] == "todo":
+            self._stage(line_id, nxt["key"], "run")
+        if key == "ship" and not ln["linked"]:
+            self._set_line(line_id, status="done")
+            self._publish(line_id)
         return self.snapshot(line_id)
 
-    def _hatch(self, line_id: str) -> None:
-        worker = self.town.market.best("hatcher")[0]
-        self._stage(line_id, "hatch", "run", pct=10, workers=[worker["id"]])
-        self._say(line_id, worker, "收到，我先去图书馆和 arXiv 码头查有没有撞车的工作。")
-        report, res = stages.hatch(self.town, self.line(line_id), worker)
-        self.town.save_item(line_id, "notes", "hatch", "hatchery", "撞车报告", report)
-        self._set_line(line_id, status="waiting", verdict=report.get("verdict"))
-        self._stage(line_id, "hatch", "done", note=report.get("verdict"))
-        self.db.update("stages", {"line_id": line_id, "idx": INDEX["team"]}, status="wait")
-        self._say(line_id, worker, report.get("summary") or report.get("verdict", ""), kind="report", report=report,
-                  cost=round(res.cost, 4), steps=res.steps, degraded=res.degraded, skills=res.skills)
+    def survey(self, line_id: str) -> dict:
+        """The novelty scan, by code: the library's closest papers to the idea, each with its similarity, and the
+        verdict the novelty-check skill's script gives them."""
+        idea = self.line(line_id)["idea"]
+        hits = self.town.library.search(expand(idea) or idea, top_k=8)["hits"]
+        sc = self.town.library.rescore(idea, [h["arxiv_id"] for h in hits])
+        v = self.town.skills.run_script("novelty-check", "verdict.py", {
+            "candidates": [{"id": h["paper_id"], "title": h["title"], "similarity": h["similarity"]} for h in sc["hits"]], "method": sc["method"]})
+        return {"verdict": v.get("verdict", "可孵化"), "summary": v.get("summary", ""), "method": sc["method"], "terms": sc["terms"], "hits": sc["hits"][:8]}
+
+    def output(self, line_id: str, stage: str, body: object) -> dict:
+        """What an agent hands in for a stage. Numbers a check reads (how close the nearest paper is, the verdict)
+        come from code, whatever the agent wrote."""
+        ln = self.line(line_id)
+        if stage not in OUTPUTS:
+            raise LineError(f"「{stage}」没有要交的产出，能交的是：{' '.join(OUTPUTS)}")
+        kind, title, need, how = OUTPUTS[stage]
+        if not isinstance(body, dict):
+            raise LineError(f"产出是一个 JSON 对象：{how}")
+        miss = [k for k in need if not body.get(k)]
+        if miss:
+            raise LineError(f"还缺 {'、'.join(miss)}。格式：{how}")
+        out = getattr(self, f"_out_{stage}")(ln, body)
+        self.town.save_item(line_id, kind, stage, STAGES[INDEX[stage]][2], _text(out.get("title"), 120) if stage in ("method", "write") else title, out)
         self._publish(line_id)
+        return out
 
-    def hatch(self, line_id: str, usage_budget: float | None = None) -> dict:
-        ln = self.line(line_id)
-        if ln["status"] != "waiting":
-            raise LineError("这颗蛋现在不能孵化")
-        self.town.usage.set_budget(line_id, usage_budget)
-        report = self.item(line_id, "hatch") or {}
-        plan = self.town.market.compile_team(ln["idea"], report, ln["budget"])
-        self.town.trace("SCRIPT", "market.compile_team", plan["reason"], 0, line_id=line_id)
-        ids = [w for ws in plan["team"].values() for w in ws]
-        self._set_line(line_id, status="running", plan=plan)
-        self._stage(line_id, "team", "run", workers=ids)
-        self._set_line(line_id, mill_id="mill")
-        self.town.world.set_status("mill", "busy", line_id)
-        self.town.save_item(line_id, "notes", "team", "market", "编队方案", plan)
-        workers = {w["id"]: w for w in self.town.market.all()}
-        def who(i: str) -> str:
-            return f"{title(workers[i])} Lv.{workers[i]['level']}"
+    def _out_hatch(self, ln: dict, body: dict) -> dict:
+        sv = self.survey(ln["id"])
+        known = {h["paper_id"]: h for h in sv["hits"]}
+        picked = [s for s in body.get("similar") or [] if isinstance(s, dict) and s.get("paper_id")][:5]
+        more = [s["paper_id"] for s in picked if s["paper_id"] not in known]
+        if more:  # papers the agent found beyond the scan, scored the same way
+            known |= {h["paper_id"]: h for h in self.town.library.rescore(ln["idea"], [i.removeprefix("arxiv:") for i in more])["hits"]}
+        similar = [{"paper_id": h["paper_id"], "title": h["title"], "similarity": h["similarity"], "url": h.get("url"), "year": h.get("year"),
+                    "note": _text(s.get("note"), 600)} for s in picked if (h := known.get(s["paper_id"]))]
+        if not similar:  # the closest by code, so the novelty check always has something to read
+            similar = [{"paper_id": h["paper_id"], "title": h["title"], "similarity": h["similarity"], "url": h.get("url"), "year": h.get("year"),
+                        "note": ""} for h in sv["hits"][:3]]
+        self._set_line(ln["id"], verdict=sv["verdict"])
+        return {"verdict": sv["verdict"], "similar": similar, "gap": _text(body["gap"]), "suggestions": _list(body.get("suggestions")),
+                "summary": _text(body.get("summary"), 600) or sv["summary"], "sources": {"library": len(sv["hits"]), "method": sv["method"]},
+                "candidates": sv["hits"]}
 
-        roster = " · ".join(f"{NAMES[k]}：{', '.join(who(i) for i in v)}" for k, v in plan["team"].items())
-        self._say(line_id, None, f"项目 #{ln['seq']} 在造纸厂立项。人才市场编队：{roster}。{plan['reason']}。", kind="team",
-                  mill="mill", team=plan["team"])
-        self._stage(line_id, "team", "done")
-        self._spawn(line_id, self._produce)
-        return self.snapshot(line_id)
+    def _out_method(self, ln: dict, body: dict) -> dict:
+        base = [{"name": _text(b.get("name") if isinstance(b, dict) else b, 120), "source": _text(b.get("source"), 120) if isinstance(b, dict) else ""}
+                for b in (body.get("baselines") or [])[:LIST_MAX] if b]
+        out = {"title": _text(body["title"], 160), "problem": _text(body["problem"]), "mechanism": _list(body.get("mechanism"), 800),
+               "baselines": [b for b in base if b["name"]], "datasets": _list(body.get("datasets"), 160), "metrics": _list(body.get("metrics"), 160),
+               "risks": _list(body.get("risks"))}
+        self._set_line(ln["id"], title=out["title"][:80])
+        return out
 
-    def resume(self, line_id: str) -> dict:
-        ln = self.line(line_id)
-        if ln["status"] not in ("paused", "failed"):
-            raise LineError("只有暂停或出错的流水线可以继续")
-        if not ln["plan"]:
-            self._set_line(line_id, status="hatching")
-            self._spawn(line_id, self._hatch)
-        else:
-            self._set_line(line_id, status="running", note=None)
-            self._spawn(line_id, self._produce)
-        return self.snapshot(line_id)
+    def _out_exp(self, ln: dict, body: dict) -> dict:
+        metrics = _list(body.get("metrics"), 80)
+        rows = [{"method": _text(r.get("method"), 120), "values": [v for v in (r.get("values") or [])[:len(metrics)] if isinstance(v, (int, float))],
+                 "ours": bool(r.get("ours"))} for r in (body.get("rows") or [])[:40] if isinstance(r, dict) and r.get("method")]
+        if not metrics or not rows:
+            raise LineError("结果表要有指标名（metrics）和至少一行（rows：method、values）")
+        return {"metrics": metrics, "rows": rows, "seeds": body.get("seeds") if isinstance(body.get("seeds"), int) else None,
+                "analysis": _text(body.get("analysis")), "concerns": _list(body.get("concerns")), "job_id": _text(body.get("job_id"), 80) or None}
 
-    def recover(self) -> None:
-        """After a restart nothing is running: park interrupted lines."""
-        for ln in self.db.q("select id from lines where status in ('running', 'hatching')"):
-            self._set_line(ln["id"], status="paused", note="服务重启，点「继续」从当前工序接着跑")
-            self.db.x("update stages set status = 'todo', pct = 0 where line_id = ? and status = 'run'", ln["id"])
-        self.db.x("update buildings set status = 'idle' where status = 'busy'")
+    def _out_write(self, ln: dict, body: dict) -> dict:
+        cites = body.get("cite_ids") if isinstance(body.get("cite_ids"), list) else []
+        return {"title": _text(body["title"], 160), "abstract": _text(body.get("abstract")), "cite_ids": [_text(c, 80) for c in cites[:80] if _text(c)],
+                "summary": _text(body.get("summary"), 600)}
 
-    def _team(self, line_id: str, key: str) -> list[dict]:
-        ln = self.line(line_id)
-        return [self.town.market.get(i) for i in (ln["plan"] or {}).get("team", {}).get(key, [])]
+    def _out_review(self, ln: dict, body: dict) -> dict:
+        reviews = [{"persona": _text(r.get("persona"), 40) or "审稿", "overall": r.get("overall") if isinstance(r.get("overall"), (int, float)) else None,
+                    "strengths": _list(r.get("strengths")), "weaknesses": _list(r.get("weaknesses")),
+                    "decision": "accept" if r.get("decision") == "accept" else "revise"} for r in (body.get("reviews") or [])[:6] if isinstance(r, dict)]
+        scores = [r["overall"] for r in reviews if r["overall"] is not None]
+        mean = body.get("mean") if isinstance(body.get("mean"), (int, float)) else round(sum(scores) / len(scores), 1) if scores else None
+        return {"reviews": reviews, "mean": mean, "verdict": _text(body["verdict"], 40),
+                "feedback": _list(body.get("feedback")) or [w for r in reviews for w in r["weaknesses"]][:LIST_MAX]}
 
-    def _held(self, line_id: str, key: str) -> bool:
-        """Park a demo sample before a stage once, to show a paper part way along."""
-        if self.db.val("select hold from lines where id = ?", line_id) != key:
-            return False
-        self._set_line(line_id, status="paused", hold=None, note=f"展示样例停在「{NAMES[key]}」之前，点「继续」接着跑")
-        mill = self.line(line_id)["mill_id"]
-        if mill:
-            self.town.world.set_status(mill, "idle", line_id)
-        self._publish(line_id)
-        return True
+    # as the lead reads it
 
-    def _produce(self, line_id: str) -> None:
-        def todo(key: str) -> bool:
-            return self.db.val("select status from stages where line_id = ? and idx = ?", line_id, INDEX[key]) != "done"
+    def text(self, line_id: str) -> str:
+        """The line as its lead reads it: each stage, whose work it is, what it has handed in, what holds it."""
+        snap = self.snapshot(line_id)
+        if not snap:
+            raise LineError("没有这个项目")
+        have = {i["stage"] for i in snap["items"]}
+        out = [f"项目 #{snap['seq']}「{snap['title']}」的工序（{snap['pct']}%）："]
+        for s in snap["stages"]:
+            k = s["key"]
+            who = ROLES[s["owner"]]["name"] + ("" if s["agents"] or s["owner"] == "lead" else "，还没有启动")
+            tail = [STATUS.get(s["status"], s["status"]) + (f" {s['pct']}%" if s["status"] == "run" and s["pct"] else ""), who]
+            if k in OUTPUTS:
+                tail.append("产出已交" if k in have else "要交产出" if k in NEEDED else "产出可交")
+            if s["note"]:
+                tail.append(s["note"])
+            why = self.town.canvas.blocked(line_id, k) if s["status"] != "todo" else ""
+            out.append(f"- {k} {s['name']}：{'，'.join(tail)}" + (f"【硬卡口阻断：{why}】" if why else ""))
+        out += ["", "推进：`pt stage run <工序> [\"说明\"] [--pct 0-99]` 开工或写进度，`pt stage done <工序> [\"说明\"]` 收尾，`pt stage todo <工序> \"原因\"` 放回去重做。",
+                "收尾时 Papertown 会再跑一遍硬检查：阻断级的没过就收不了，改完再来。一道工序收尾后，下一道自动开工。", "",
+                "产出：`pt output <工序> '<JSON>'`（也可以写成文件：`pt output <工序> @文件.json`）。格式："]
+        out += [f"- {k}：{how}" for k, (_, _, _, how) in OUTPUTS.items()]
+        out += ["查重孵化的相似度和结论由 Papertown 用代码算（`pt survey` 看），你写的是差别在哪、建议怎么调。"]
+        return "\n".join(out)
 
-        report = self.item(line_id, "hatch") or {}
-        if todo("method") and self._held(line_id, "method"):
-            return
-        if todo("method"):
-            team = self._team(line_id, "method")
-            self._stage(line_id, "method", "run", pct=10, workers=[w["id"] for w in team])
-            self._say(line_id, team[0], "开始写方法草案：先补检索，再去仓库群找 baseline。", kind="stage", stage="method")
-            draft, _ = stages.method(self.town, self.line(line_id), team[0], report)
-            self.town.save_item(line_id, "draft", "method", self.line(line_id)["mill_id"], draft.get("title", "方法草案"), draft)
-            self._set_line(line_id, title=draft.get("title", "")[:80] or self.line(line_id)["title"])
-            self._say(line_id, team[0], f"方法草案「{draft.get('title')}」写好了，baseline：{', '.join(b['name'] for b in draft.get('baselines') or [])}。",
-                      kind="stage", stage="method")
-            self._stage(line_id, "method", "done")
-        draft = self.item(line_id, "method") or {}
-
-        if todo("exp") and self._held(line_id, "exp"):
-            return
-        if todo("exp"):
-            team = self._team(line_id, "exp")
-            self._stage(line_id, "exp", "run", pct=10, workers=[w["id"] for w in team])
-            self._say(line_id, team[0], f"去{self.town.plant.name}申请算力，跑主实验。", kind="stage", stage="exp")
-            table, _ = stages.experiment(self.town, self.line(line_id), team[0], draft)
-            self.town.save_item(line_id, "table", "exp", "farm", "结果表" + ("（模拟）" if table.get("simulated") else ""), table)
-            self._say(line_id, team[0], table.get("analysis", ""), kind="stage", stage="exp")
-            self._stage(line_id, "exp", "done")
-        table = self.item(line_id, "exp") or {}
-
-        while True:
-            ln = self.line(line_id)
-            if todo("write") and self._held(line_id, "write"):
-                return
-            if todo("write"):
-                team = self._team(line_id, "write")
-                feedback = (self.item(line_id, "review") or {}).get("feedback", []) if ln["revisions"] else []
-                self._stage(line_id, "write", "run", pct=10, workers=[w["id"] for w in team])
-                self._say(line_id, team[0], "排铅字：按草案和结果写初稿，生成 refs.bib 后开机印刷。" if not feedback
-                          else f"按审稿意见改第 {ln['revisions'] + 1} 版。", kind="stage", stage="write")
-                tex, _ = stages.write(self.town, ln, team[0], report, draft, table, feedback)
-                info = tex.get("typeset") or {}
-                self._say(line_id, team[0], f"{tex.get('summary', '')}（{info.get('summary', '')}）", kind="stage", stage="write")
-                self._stage(line_id, "write", "done")
-            tex = self.item(line_id, "write") or {}
-
-            if self._held(line_id, "review"):
-                return
-            team = self._team(line_id, "review")
-            self._stage(line_id, "review", "run", pct=10, workers=[w["id"] for w in team])
-            fmt = stages.format_check(self.town, ln, tex)
-            reviews = []
-            for k, w in enumerate(team):
-                r, _ = stages.review(self.town, self.line(line_id), w, k, report, table, fmt)
-                reviews.append(r)
-                self._stage(line_id, "review", "run", pct=10 + 80 * (k + 1) // len(team))
-                self._say(line_id, w, f"{r['persona']}审稿：总分 {r['overall']}，{'建议接收' if r['decision'] == 'accept' else '建议修改'}。"
-                          + (f"主要问题：{r['weaknesses'][0]}" if r.get("weaknesses") else ""), kind="stage", stage="review")
-            mean = sum(r["overall"] for r in reviews) / max(1, len(reviews))
-            passed = fmt.get("ok", True) and mean >= 5
-            feedback = [x for r in reviews for x in r.get("weaknesses", [])]
-            verdict = "放行" if passed else ("退回印刷厂" if ln["revisions"] < MAX_REVISIONS else "带意见放行")
-            self.town.save_item(line_id, "pdf", "review", "qa", f"审稿意见 · {verdict}",
-                                {"reviews": reviews, "format": fmt, "mean": round(mean, 1), "verdict": verdict, "feedback": feedback})
-            if passed or ln["revisions"] >= MAX_REVISIONS:
-                self._stage(line_id, "review", "done", note=verdict)
-                break
-            self._set_line(line_id, revisions=ln["revisions"] + 1)
-            self._say(line_id, None, f"质检所：平均 {mean:.1f} 分{'，有格式硬伤' if not fmt.get('ok', True) else ''}，退回印刷厂改一版。", kind="stage", stage="review")
-            self._stage(line_id, "review", "todo", pct=0, note="退回修改")
-            self._stage(line_id, "write", "todo", pct=0, note="按审稿意见修改")
-
-        self._ship(line_id, report, table)
-
-    def _ship(self, line_id: str, report: dict, table: dict) -> None:
-        self._stage(line_id, "ship", "run", pct=50)
-        z = self.town.press.package(line_id)
-        files = self.snapshot(line_id)["files"]
-        self.town.save_item(line_id, "pdf", "ship", "dock_arxiv", "出厂包", {"zip": z.name, "files": files})
-        self._stage(line_id, "ship", "done")
-
-        ln = self.line(line_id)
-        rv = self.item(line_id, "review") or {}
-        reviews = rv.get("reviews", [])
-        mean = rv.get("mean", 5) / 10
-        soundness = sum(r.get("scores", {}).get("soundness", 5) for r in reviews) / max(1, len(reviews)) / 10
-        compiled = (self.item(line_id, "write") or {}).get("typeset", {}).get("compiled", False)
-        team = (ln["plan"] or {}).get("team", {})
-        quality: dict[str, float] = {}
-        hatchers = self.db.one("select workers from stages where line_id = ? and idx = ?", line_id, INDEX["hatch"])["workers"]
-        for wid in hatchers or []:
-            quality[wid] = 0.8 if not report.get("verdict_note") else 0.6
-        for wid in team.get("method", []):
-            quality[wid] = min(1.0, soundness + 0.25)
-        for wid in team.get("exp", []):
-            quality[wid] = 0.8 if table.get("rows") else 0.3
-        for wid in team.get("write", []):
-            quality[wid] = max(0.1, min(1.0, mean + (0.1 if compiled else 0) - 0.15 * ln["revisions"]))
-        for r in reviews:
-            quality[r["worker"]] = min(0.9, 0.6 + 0.05 * len(r.get("weaknesses", [])))
-        changes = self.town.market.settle(line_id, quality)
-        spent = self.town.bank.line_spent(line_id)
-        self._set_line(line_id, status="done", spent=spent)
-        mill = ln["mill_id"]
-        if mill:
-            self.town.world.set_status(mill, "idle", line_id)
-        self._say(line_id, None, f"论文出厂了：{ln['title']}。总花费 ${spent:.4f}。"
-                  + ("".join(f" {c['note']}。" for c in changes)), kind="paper", files=files)
-        self._publish(line_id)
+    def survey_text(self, line_id: str) -> str:
+        sv = self.survey(line_id)
+        out = [f"查重（用代码算，{sv['method']}）：{sv['verdict']}。{sv['summary']}", f"检索词：{', '.join(sv['terms'][:12])}", "", "图书馆里最接近的："]
+        out += [f"- {h['paper_id']}（相似度 {h['similarity']:.2f}，{h.get('year') or '?'}）{h['title']}\n  {_text(h.get('snippet'), 300)}" for h in sv["hits"]]
+        out += ["", "读完后用 `pt library \"<英文关键词>\"` 换几个说法再找一找，然后用 `pt output hatch '<JSON>'` 交撞车报告。"]
+        return "\n".join(out)

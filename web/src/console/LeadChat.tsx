@@ -3,12 +3,12 @@
 // one; what it waits on you for, pinned above the message box.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, type Agent, type AssistantConv, type Report, type StartOpts } from '../api';
-import { fold, PaseoLog, PaseoPick, usePaseoTalk } from '../components/AgentRoom';
+import { api, type Agent, type AgentEvent, type AssistantConv, type Report, type StartOpts } from '../api';
+import { fold, PaseoLog, PaseoPick, PiLog, usePiTalk, usePaseoTalk } from '../components/AgentRoom';
 import { HostedRoom } from '../agents/Terminal';
 import { TerminalPick } from '../agents/TerminalPick';
 import { Compose } from '../agents/Compose';
-import { AGENT_STATUS } from '../components/MillRoom';
+import { ResidentControl, ResidentMark, useResidentLine } from '../components/Resident';
 import { tr, trx } from '../i18n';
 import { Earlier, History } from './Convs';
 import { Icon } from './icons';
@@ -26,6 +26,15 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
   const [history, setHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   const a = v?.agent ?? null;
+  const [line] = useResidentLine(lineId);
+  const [events, setEvents] = useState<AgentEvent[]>([]);
+  const [eventError, setEventError] = useState('');
+  useEffect(() => {
+    let alive = true;
+    setEvents([]); setEventError('');
+    if (a && v?.resident.state !== 'running') api.events(a.id).then(es => { if (alive) setEvents(es); }, e => { if (alive) setEventError((e as Error).message); });
+    return () => { alive = false; };
+  }, [a?.id, a?.updated_at, v?.resident.state]);
   const run = async (fn: () => Promise<unknown>) => {
     setHistory(false);
     try { await fn(); again(); } catch (e) { toast((e as Error).message); }
@@ -35,6 +44,7 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
     try {
       const x = a ?? await api.openAgent(lineId, 'lead');
       await api.startAgent(x.id, { ...o, runtime: o.runtime ?? runtime });
+      await api.setLead(lineId, { on: true });
       again();
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
@@ -42,10 +52,10 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
 
   const head = (x: Agent | null) => (
     <header className="as-head">
-      <span className={`dot s-${x?.started ? x.status : 'stopped'}`} />
+      {v && <ResidentMark resident={v.resident} />}
       <div className="as-who">
         <b>{tr('项目负责人')}{layout === 'side' ? ` · #${seq}` : ''}</b>
-        {x?.started && <span>{AGENT_STATUS[x.status] ?? x.status}{x.model ? ` · ${x.model}` : ''}</span>}
+        {x?.started && <span>{x.model}</span>}
       </div>
       {x?.runtime === 'paseo' && <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('之前的对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>}
       {x?.started && x.runtime === 'paseo' && <button className="ib" title={tr('新对话：负责人用同一个模型重新开始')} onClick={() => run(() => api.newConv(x.id))}><Icon n="compose" size={16} /></button>}
@@ -57,22 +67,38 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
   return (
     <div className={`asst lc lc-${layout}`}>
       {!v ? <>{head(null)}<p className="as-wait">{tr('加载中…')}</p></>
-        : !a?.started ? (
+        : !a?.started || v.resident.state !== 'running' ? (
           <>
             {head(a)}
             <div className="as-start">
+              {events.length > 0 && <section className="resident-history">
+                <h3>{line?.sample ? tr('样例对话（占位内容）') : tr('历史对话')}</h3>
+                <PiLog rows={events.filter(e => ['user', 'assistant', 'note'].includes(e.kind)).map(ev => ({ ev }))} live="" working={false} />
+              </section>}
+              {eventError && <p className="note err">{eventError}</p>}
+              <ResidentControl lineId={lineId} resident={v.resident} sample={line?.sample} model={a?.model} toast={toast} onChanged={again} />
+              {v.resident.state === 'starting' && <p className="as-wait">{tr('正在等待负责人启动。')}</p>}
               <p className="as-lead">{tr('负责人跟进项目进度、分派任务并汇报。工作目录是 Papertown 自己的目录。')}</p>
               {a && <Earlier agent={a.id} at={a.ext_id} limit={3} title={tr('接着之前的对话')} onPick={resume} />}
-              <div className="hire-card">
+              {['off', 'blocked'].includes(v.resident.state) && <details className="hire-card">
+                <summary>{tr('手动启动')}</summary>
                 <h3>{runtime === 'paseo' ? 'Paseo' : tr('终端')}</h3>
                 {runtime === 'paseo' ? <PaseoPick busy={busy} onStart={start} role="lead" /> : <TerminalPick busy={busy} onStart={start} role="lead" />}
-              </div>
+              </details>}
             </div>
           </>
-        ) : a.term ? <HostedRoom agent={a} toast={toast} /> : <Talk key={a.ext_id ?? a.id} agent={a} asks={v.asks} head={head} toast={toast} onAnswered={again} />}
+        ) : a.term ? <>{head(a)}<HostedRoom agent={a} toast={toast} /></> : a.runtime === 'pi' ? <PiTalk agent={a} head={head} toast={toast} /> : <Talk key={a.ext_id ?? a.id} agent={a} asks={v.asks} head={head} toast={toast} onAnswered={again} />}
       {history && a && <History agent={a.id} onPick={resume} onClose={() => setHistory(false)} />}
     </div>
   );
+}
+
+function PiTalk({ agent, head, toast }: { agent: Agent; head: (a: Agent) => React.ReactNode; toast: (s: string) => void }) {
+  const t = usePiTalk(agent);
+  return <>{head(t.agent)}<div className="as-mid"><div className="as-log lc-log" ref={t.readRef}>
+    {t.err && <p className="note err">{t.err}</p>}
+    <PiLog rows={fold(t.items, i => i.ev.kind === 'tool')} live={t.live} working={t.agent.status === 'working'} />
+  </div></div><Compose agent={t.agent} queued={t.queued} toast={toast} onChanged={t.reload} /></>;
 }
 
 function Talk({ agent: initial, asks, head, toast, onAnswered }: {

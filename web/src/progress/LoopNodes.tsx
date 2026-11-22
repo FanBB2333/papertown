@@ -76,7 +76,7 @@ function StageNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   return (
     <div className={`cv-n cv-st st-${st}${n.locked ? ' locked' : ''}${selected ? ' on' : ''}`} {...refOf(n)}>
       <span className="cv-ring" style={{ ['--pct' as string]: `${pct}%` }}>
-        {n.locked ? <Icon n="lock" size={13} /> : st === 'done' ? <Icon n="check" size={14} /> : st === 'wait' ? <Icon n="bell" size={13} /> : st === 'fail' ? <Icon n="close" size={13} /> : <b>{pct}<small>%</small></b>}
+        {n.locked ? <Icon n="lock" size={13} /> : st === 'done' ? <Icon n="check" size={14} /> : <b>{pct}<small>%</small></b>}
       </span>
       <div className="cv-st-b">
         <small>STAGE {String(STAGES.indexOf(n.ref ?? '') + 1).padStart(2, '0')}</small>
@@ -85,7 +85,7 @@ function StageNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
       </div>
       {n.role && <em className="cv-who" title={who?.there ? '' : tr('还没启动')}><i className={`dot s-${who?.there ? who.status : 'stopped'}`} />{ROLE[n.role as TaskTo]}</em>}
       {st === 'run' && <span className="cv-st-bar"><i style={{ width: `${pct}%` }} /></span>}
-      <Far t={n.title} x={n.locked ? tr('锁住') : st === 'run' ? `${pct}%` : st === 'wait' ? tr('等你') : st === 'fail' ? tr('出错') : ''} />
+      <Far t={n.title} x={n.locked ? tr('锁住') : st === 'run' ? `${pct}%` : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
@@ -175,8 +175,8 @@ function SpecNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
 }
 
 function ClampNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
-  const rules = n.rules ?? [], b = n.budget;
-  const what = rules.length ? rules.slice(0, 2).map(r => clip(r.text, 16)).join(' · ') : b?.budget ? tr('小镇 API 预算 ≤${0}', b.budget) : tr('还没有绑定动作的边界');
+  const rules = n.rules ?? [];
+  const what = rules.length ? rules.slice(0, 2).map(r => clip(r.text, 16)).join(' · ') : tr('还没有绑定动作的边界');
   return (
     <div className={`cv-n cv-clamp${selected ? ' on' : ''}`} {...refOf(n)}>
       <header><i /><span>HARD CLAMP · {tr('代码硬边界')}</span></header>

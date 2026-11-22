@@ -131,7 +131,7 @@ def test_gpus_and_a_linked_project(tmp_path):
         assert [(r["title"], r["url"]) for r in refs] == [("Merging Things", "https://arxiv.org/abs/2501.01234"),
                                                           ("Other", "https://scholar.google.com/scholar?q=Other")]
         assert c.get(f"/api/lines/{line['id']}/linked/pdf").status_code == 404
-        assert c.post(f"/api/lines/{line['id']}/resume").status_code == 400
+        assert c.post(f"/api/lines/{line['id']}/resume").status_code in (404, 405)
         assert c.post("/api/jobs", json={"name": "x", "command": "true", "backend": "nvidb", "line_id": line["id"]}).status_code == 400
 
         a = town.agents.ensure(line["id"], "coder")

@@ -20,7 +20,6 @@ import { useOverview } from './agents/overview';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
 import { follow, go, href, path, PATHS, type Route, type View } from './route';
 import { getSettings, useSettings } from './settings';
-import { HatchDialog } from './usage/Usage';
 import { DEMO } from './demo';
 import { enterFull, holdEscape, leaveFull } from './fullscreen';
 import { tr } from './i18n';
@@ -30,7 +29,7 @@ const Town3D = lazy(() => import('./components/Town3D'));
 
 type Dim = '2d' | 'to3d' | '3d' | 'to2d';
 const PHASE = { '2d': 'off', to3d: 'enter', '3d': 'live', to2d: 'leave' } as const;
-const TICK_EVENTS = new Set(['line', 'world', 'building', 'bank', 'power', 'workers', 'library', 'skills']);
+const TICK_EVENTS = new Set(['line', 'world', 'building', 'agent', 'library', 'skills']);
 
 function useToasts() {
   const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
@@ -151,38 +150,35 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     return n;
   }, [world]);
 
-  // the floating assistant, opened to ask it, to write a new idea, or to rewrite a waiting one
+  // The floating assistant, opened for a question or a new idea.
   const openDock = useCallback((t: Target) => {
     setChatOpen(true);
     setTarget(t);
     setFocusKey(k => k + 1);
   }, []);
 
-  async function act(fn: () => Promise<unknown>) {
+  const onIdea = async (text: string) => {
     try {
-      await fn();
+      const line = await api.idea(text);
       load();
+      setSheet(null);
+      push(tr('项目 #{0} 已创建，负责人正在启动。', line.seq));
+      setChatOpen(false);
+      go(`/progress/${line.seq}`);
       return true;
-    } catch (e) {
-      push((e as Error).message);
-      return false;
-    }
-  }
-  const onIdea = async (text: string, budget: number) =>
-    (await act(() => api.idea(text, budget))) && (push(tr('孵化员去图书馆和 arXiv 查重了，结果出来后在「进展」里决定。')), true);
-  const onAdjust = async (lineId: string, text: string) =>
-    (await act(() => api.adjust(lineId, text))) && (push(tr('孵化员按改过的 idea 重新查重了。')), true);
-
-  const [hatching, setHatching] = useState<string | null>(null);
-  const hatch = (id: string) => setHatching(id);
-  const resume = (id: string) => act(() => api.resume(id));
-  const newIdea = () => openDock({ kind: 'idea' });
-  const askAt = (_id: string, name: string) => openDock({ kind: 'assistant', draft: tr('关于{0}：', name) });
-  const adjust = (id: string) => {
-    const l = lines.find(x => x.id === id);
-    if (l) openDock({ kind: 'adjust', line: { id, seq: l.seq, idea: l.idea } });
+    } catch (e) { push((e as Error).message); return false; }
   };
-  const decide = { onHatch: hatch, onResume: resume, onAdjust: adjust };
+  const newIdea = () => openDock({ kind: 'idea' });
+  const askAt = async (id: string, name: string) => {
+    const draft = tr('关于{0}：', name);
+    const q = new URLSearchParams({ draft });
+    try {
+      const staff = await api.staffAt(id);
+      if (staff.who === 'lead' && staff.line) { setSheet(null); setChatOpen(false); go(`/progress/${staff.line.seq}/ask?${q}`); return; }
+      if ((staff.who === 'coder' || staff.who === 'writer') && staff.agent) { setSheet(null); setChatOpen(false); go(`/agents/${encodeURIComponent(staff.agent.id)}?${q}`); return; }
+    } catch { /* The assistant remains available when staff lookup fails. */ }
+    openDock({ kind: 'assistant', draft });
+  };
 
   const [door, setDoor] = useState<{ x: number; y: number } | null>(null);
   const [leaving, setLeaving] = useState(false);
@@ -206,7 +202,6 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (hatching) return;
       if (e.key === ',' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing(e)) {
         e.preventDefault();
         if (settingsOpen) closeSettings();
@@ -220,7 +215,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
-  }, [sheet, chatOpen, settingsOpen, leaveRoom, openSettings, closeSettings, hatching]);
+  }, [sheet, chatOpen, settingsOpen, leaveRoom, openSettings, closeSettings]);
 
   useEffect(() => holdEscape(dim === '3d' && (!!sheet || chatOpen || settingsOpen)), [dim, sheet, chatOpen, settingsOpen]);
 
@@ -367,13 +362,12 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
             onFail={msg => { push(msg); leaveFull(); setWant3d(false); setDim('2d'); }} />
         </Suspense>
       )}
-      <Progress active={view === 'cards' && !covered} seq={route.view === 'cards' ? route.seq : undefined} sub={route.view === 'cards' ? route.sub : undefined} page={route.view === 'cards' ? route.page : undefined} toast={push} onOpen={openProject}
-        decide={decide} />
+      <Progress active={view === 'cards' && !covered} seq={route.view === 'cards' ? route.seq : undefined} sub={route.view === 'cards' ? route.sub : undefined} page={route.view === 'cards' ? route.page : undefined} toast={push} onOpen={openProject} />
       {view === 'agents' && <Agents id={route.agent} active={!covered && !settingsOpen} lines={lines} toast={push} />}
       {consoleUp && (
         <Console active={view === 'console' && !covered} at={route.view === 'console' ? route : undefined} onPlace={onPlace}
           lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
-          onRoom={room} onIdea={newIdea} onAsk={askAt} onHatch={hatch} onResume={resume} onAdjust={adjust} />
+          onRoom={room} onIdea={newIdea} onAsk={askAt} />
       )}
 
       <header className="hud">
@@ -392,13 +386,13 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           ))}
         </div>
         {hud && <div className="hud-quiet">
-          <span><b>{hud.lines.running}</b> {tr('个项目在跑')}</span>
-          <span>{tr('小镇 API 本周')} <b>${hud.bank.week.toFixed(2)}</b></span>
+          <span><b>{hud.lines.running}</b> {tr('个项目在做')}</span>
+          <span>{tr('{0}/{1} 位负责人在岗', hud.leads.running, hud.leads.on)}</span>
         </div>}
         <div className="hud-r">
           {!!overview?.counts.needs && <a className="chip warn aw-count" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('等你 {0}', overview.counts.needs)}</a>}
-          {hud && <span className={`chip ${!online ? 'bad' : hud.offline ? 'warn' : 'ok'}`} title={hud.offline ? tr('没有配置模型 key，流水线的员工按 skill 的步骤调用真实工具，文字部分用模板。仓库和印刷厂的 pi 用 pi 自己的设置') : hud.model}>
-            {!online ? tr('连接断开') : DEMO ? tr('静态演示') : hud.offline ? tr('离线模式') : hud.provider}</span>}
+          {hud && <span className={`chip ${!online ? 'bad' : 'ok'}`}>
+            {!online ? tr('连接断开') : DEMO ? tr('静态演示') : tr('已连接')}</span>}
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>
           <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('问这一页的事、请它帮你办，或者写一个新 idea（/）')}
@@ -412,7 +406,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
             <div key={r.id} className="rn" style={{ ['--i' as string]: i }} data-open={r.mill_id ?? r.building} data-line={r.id}>
               <div>
                 <b>#{r.seq} {r.title}</b>
-                <div className="rn-row">{r.status === 'waiting' ? tr('等你决定') : r.status === 'paused' ? tr('已暂停') : r.stage}<div className="bar"><i style={{ width: `${r.pct}%` }} /></div></div>
+                <div className="rn-row">{r.stage}<div className="bar"><i style={{ width: `${r.pct}%` }} /></div></div>
               </div>
             </div>
           ))}
@@ -422,15 +416,14 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
       {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('走动 · 到门口按')} <kbd>F</kbd> {tr('进去 · 也可以直接点建筑')}</div>}
 
       <Dock view={view} open={chatOpen} setOpen={setChatOpen} away={!!sheet || (view === 'world' && dim !== '2d')}
-        target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} onAdjust={onAdjust} toast={push} />
+        target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} toast={push} />
 
       {sheet && (
         <Interior key={`${sheet}:${swap}`} id={sheet} focus={focus} tick={tick} placements={world?.placements ?? []} lines={lines}
           motion={leaving ? 'leave' : swap ? 'swap' : 'enter'} onClose={leaveRoom}
-          onOpen={room} onIdea={newIdea} onAsk={askAt} onHatch={hatch} onResume={resume} onAdjust={adjust} toast={push} />
+          onOpen={room} onIdea={newIdea} onAsk={askAt} toast={push} />
       )}
       {settingsOpen && <SettingsPage section={at.mod} hud={hud ?? null} onClose={closeSettings} />}
-      {hatching && <HatchDialog key={hatching} lineId={hatching} onDone={load} onClose={() => setHatching(null)} />}
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>
       {DEMO && <DemoWelcome />}
     </div>

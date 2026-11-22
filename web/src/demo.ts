@@ -48,11 +48,48 @@ async function ragSearch(q: string, k: number): Promise<RagResult> {
   return { query: q, expanded: q, terms: ts, method: 'coverage', hits };
 }
 
+// Migrate snapshots at the demo boundary only. Old fictional crews never become real agents.
+function normalizeDemo(value: unknown): any {
+  if (Array.isArray(value)) return value.map(normalizeDemo);
+  if (!value || typeof value !== 'object') return value;
+  const v = Object.fromEntries(Object.entries(value).map(([k, x]) => [k, normalizeDemo(x)]));
+  const off = (ended = false) => ({ on: false, state: ended ? 'ended' : 'off', note: null, agent: null, runtime: null, status: null });
+  const stageStatus = (s: string) => s === 'fail' ? 'run' : s === 'wait' ? 'todo' : s;
+  if (v.key && 'pct' in v && 'building' in v) {
+    v.status = stageStatus(v.status);
+    v.owner ??= v.key === 'write' ? 'writer' : v.key === 'exp' ? 'coder' : 'lead';
+    v.agents ??= [];
+    v.started_at ??= null; v.ended_at ??= null;
+    delete v.workers;
+  }
+  if (v.kind === 'stage') v.status = stageStatus(v.status);
+  if ('id' in v && 'seq' in v && 'status' in v) {
+    if (['hatching', 'waiting', 'paused', 'failed'].includes(v.status)) v.status = 'running';
+    if (Array.isArray(v.stages)) {
+      v.lead ??= off(['done', 'dropped'].includes(v.status));
+      v.sample ??= true;
+      v.stages = v.stages.map((s: any) => ({ ...s, status: stageStatus(s.status) }));
+      if (v.stage && typeof v.stage === 'object') v.stage.status = stageStatus(v.stage.status);
+      if ('team' in v && !Array.isArray(v.team)) v.team = [];
+    }
+  }
+  if ('settings' in v && 'reports' in v && 'asks' in v) {
+    v.resident ??= off();
+    v.settings.on ??= v.resident.on;
+  }
+  if ('day' in v && 'lines' in v) {
+    v.leads ??= { on: 0, running: 0 };
+    delete v.lines.waiting;
+  }
+  if (v.defaults && 'assistant' in v.defaults && 'lead' in v.defaults) v.defaults.worker ??= { ...v.defaults.lead };
+  return v;
+}
+
 export async function demoCall(method: string, url: string): Promise<unknown> {
   if (method !== 'GET') throw new Error(tr('这是只读的演示：要让小镇真的跑起来，请到 GitHub 上克隆 Papertown，在本机启动。'));
   const u = new URL(url, location.href);
   const p = u.searchParams;
   if (u.pathname === '/api/library') return library(p.get('q') ?? '', p.get('topic') ?? '', Number(p.get('limit') ?? 60));
   if (u.pathname === '/api/rag/search') return ragSearch(p.get('q') ?? '', Number(p.get('k') ?? 8));
-  return load(demoKey(u.pathname, u.search)).catch(() => load(demoKey(u.pathname)));
+  return normalizeDemo(await load(demoKey(u.pathname, u.search)).catch(() => load(demoKey(u.pathname))));
 }

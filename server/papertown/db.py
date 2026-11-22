@@ -123,6 +123,7 @@ ADDED += [("agents", "seen_at", "text")]
 ADDED += [("lines", "usage_budget", "real"), ("agents", "session_id", "text")]
 
 ADDED += [("agents", "term", "text")]
+ADDED += [("lines", "sample", "integer")]
 
 JSON_COLS = {"term", "team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result", "linked"}
 

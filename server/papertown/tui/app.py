@@ -28,7 +28,7 @@ from .views.ide import Editor, Ide, LookPicker
 from .widgets import Bar, Help, Place
 
 # events after which the numbers and the lists are fetched again
-TICK = {"line", "world", "building", "bank", "power", "workers", "library", "skills", "job", "agent"}
+TICK = {"line", "world", "building", "library", "skills", "job", "agent"}
 LOGO = ["   ▗▖      ", "  ▐▀▀▙▖ ▗▌", " ▐▀▀▀▀▀▀▀▌", " ▐▬▬▬▬  ▄▌", " ▝▀▀▀▀▀▀▘ "]
 
 
@@ -48,7 +48,7 @@ class Masthead(Static):
 
     def __init__(self) -> None:
         super().__init__(id="masthead")
-        self.n = {k: Tween() for k in ("running", "waiting", "total", "week", "gpus", "idle")}
+        self.n = {k: Tween() for k in ("running", "total", "leads_on", "leads_running", "gpus", "idle")}
 
     def line(self, t: float) -> Text:
         town: Papertown = self.app  # type: ignore[assignment]
@@ -62,14 +62,10 @@ class Masthead(Static):
         out.append("   ")
         out.append(f"{v['running']:.0f}", style=f"bold {p['run']}")
         out.append(" 在跑  ", style=p["muted"])
-        out.append(f"{v['waiting']:.0f}", style=f"bold {mix(p['warn'], p['hi'], breathe(t) * 0.5) if hud and hud['lines']['waiting'] else p['muted']}")
-        out.append(" 等你决定  ", style=p["muted"])
         out.append(f"{v['total']:.0f}", style=f"bold {p['ink']}")
         out.append(" 个项目", style=p["muted"])
         if hud:
-            out.append("   本周 ", style=p["muted"])
-            out.append(f"${v['week']:.2f}", style=f"bold {p['ink']}")
-            out.append(f" / ${hud['bank'].get('budget', 0):.0f}", style=p["muted"])
+            out.append(f"   负责人 {v['leads_running']:.0f} 位运行 / {v['leads_on']:.0f} 位开启", style=p["muted"])
         if town.gpu_summary:
             out.append("   GPU ", style=p["muted"])
             out.append(f"{v['gpus']:.0f}", style=f"bold {p['ink']}")
@@ -77,9 +73,6 @@ class Masthead(Static):
             out.append(f"{v['idle']:.0f}", style=f"bold {p['ok']}")
             out.append(" 张空闲", style=p["muted"])
         right = Text()
-        if hud:
-            right.append(" 离线模式 " if hud.get("offline") else f" {hud.get('provider', '')} ", style=f"{p['warn'] if hud.get('offline') else p['ok']} on {p['raised']}")
-            right.append("  ")
         right.append("● " if town.online else f"{star(t, 8)} ", style=p["ok"] if town.online else p["bad"])
         right.append("已连接" if town.online else "重连中", style=p["muted"])
         right.append(f"  {datetime.now():%H:%M} ", style=p["muted"])
@@ -93,9 +86,9 @@ class Masthead(Static):
         hud = town.hud
         if hud:
             self.n["running"].set(hud["lines"]["running"])
-            self.n["waiting"].set(hud["lines"]["waiting"])
             self.n["total"].set(hud["lines"]["total"])
-            self.n["week"].set(hud["bank"].get("week", 0))
+            self.n["leads_on"].set(hud["leads"]["on"])
+            self.n["leads_running"].set(hud["leads"]["running"])
         if town.gpu_summary:
             self.n["gpus"].set(town.gpu_summary.get("total", town.gpu_summary.get("gpus", 0)))
             self.n["idle"].set(town.gpu_summary.get("idle", 0))
@@ -123,7 +116,7 @@ class Ribbon(Static):
             if now - last < 10:
                 out.append((f"{town.agent_name(aid)}在写：{clip(text.strip().splitlines()[-1] if text.strip() else '', 40)}", t0))
         for ln in town.lines:
-            if ln["status"] in ("running", "hatching"):
+            if ln["status"] == "running":
                 cur = ln.get("current") or {}
                 started = parse_ts(cur.get("started_at"))
                 out.append((f"#{ln['seq']}「{clip(ln['title'], 18)}」{cur.get('name', '')}中", started.timestamp() if started else None))
@@ -183,8 +176,7 @@ class Nav(Static):
         town: Papertown = self.app  # type: ignore[assignment]
         p = town.pal
         if key == "projects" and town.hud:
-            w = town.hud["lines"]["waiting"]
-            return (f"◐{w}", p["warn"]) if w else (str(town.hud["lines"]["total"]), p["muted"])
+            return str(town.hud["lines"]["total"]), p["muted"]
         if key == "jobs":
             n = sum(len(d.get("jobs") or []) for d in town.depts)
             return (str(n), p["run"]) if n else ("", p["muted"])
@@ -346,7 +338,6 @@ class Papertown(App):
         self.place = "projects"
         self.targets: list[Target] = []
         self.target_i = 0
-        self.budget = 1.0
         self.say_mode = "steer"
         self._refetch: asyncio.TimerHandle | None = None
         self._last_frame = time.monotonic()
@@ -463,14 +454,9 @@ class Papertown(App):
                 pass
 
     async def read_gpus(self) -> None:
-        """the GPU counts up top: nvidb's, read here; without nvidb, the town's simulated plant"""
+        """Show the real GPU counts supplied by nvidb."""
         g = await self.local.gpus()
-        if g.get("ok"):
-            self.gpu_summary = g.get("summary")
-            return
-        power = next((d for d in self.depts if d["id"] == "power"), None)
-        if power and isinstance(power.get("gpus"), dict):
-            self.gpu_summary = power["gpus"].get("summary") or power["gpus"]
+        self.gpu_summary = g.get("summary") if g.get("ok") else None
 
     def schedule_refetch(self) -> None:
         if self._refetch:
@@ -564,7 +550,7 @@ class Papertown(App):
         p = self.pal
         out = Text(" ")
         if getattr(self.focused, "id", None) == "say":
-            option = {"idea": [("Ctrl+B", "换预算")], "say": [("Ctrl+B", "插话 / 排队")]}.get(self.target.kind if self.targets else "", [])
+            option = {"say": [("Ctrl+B", "插话 / 排队")]}.get(self.target.kind if self.targets else "", [])
             keys = [("Enter", "发出去"), ("Tab", "换对象"), *option, ("Esc", "离开框")]
         else:
             own = self.current.hints()
@@ -580,8 +566,8 @@ class Papertown(App):
         self.push_screen(Help([
             (f"这里（{dict(PLACES)[self.place]}）", self.current.hints()),
             ("到处都能用", [("1 … 7", "项目 / 任务 / 电厂 / 员工 / 对话 / 日报 / 配置"), ("i", "到底下的框里写点什么"),
-                         ("Tab（在框里）", "换说话的对象：新 idea、问部门、调整项目、对员工说、小助手"),
-                         ("Ctrl+B（在框里）", "新 idea 的预算 / 对员工说时插话还是排队"), ("Esc", "离开框"),
+                         ("Tab（在框里）", "换说话的对象：新 idea、问部门、对员工说、小助手"),
+                         ("Ctrl+B（在框里）", "对员工说时插话还是排队"), ("Esc", "离开框"),
                          ("Ctrl+R", "全部重新拉一遍"), ("W", "在浏览器里打开网页版的同一处"),
                          ("T", "外观：界面的深色 / 纸色、编辑器配色、文件图标（↑↓ 试，Enter 用，Esc 不换）"), ("q", "退出")]),
         ]))
@@ -616,7 +602,6 @@ class Papertown(App):
         if line:
             b = ctx.get("building") or (line.get("current") or {}).get("building") or line.get("mill_id") or "mill"
             ts.append(Target("ask", f"问{self.building_name(b)}", line=line["id"], building=b))
-            ts.append(Target("adjust", f"调整 #{line['seq']}", line=line["id"]))
         elif ctx.get("building"):
             ts.append(Target("ask", f"问{self.building_name(ctx['building'])}", building=ctx["building"]))
         ts.append(Target("assistant", "小助手"))
@@ -641,11 +626,9 @@ class Papertown(App):
     def paint_target(self) -> None:
         p, tg = self.pal, self.target
         out = Text()
-        sign = {"idea": "✎", "ask": "?", "adjust": "↻", "say": "→", "assistant": "✦"}[tg.kind]
+        sign = {"idea": "✎", "ask": "?", "say": "→", "assistant": "✦"}[tg.kind]
         out.append(star(self.t, 8) if self._sending else sign, style=f"bold {p['brand']}")
         out.append(f" {tg.label}", style=f"bold {p['ink']}")
-        if tg.kind == "idea":
-            out.append(f" · ${self.budget:.2f}", style=p["muted"])
         if tg.kind == "say":
             out.append(" · 插话" if self.say_mode == "steer" else " · 排队", style=p["muted"])
         out.append(" ❯ ", style=p["brand"])
@@ -655,8 +638,8 @@ class Papertown(App):
         try:
             self.screen.query_one("#target", Static).update(out)
             box = self.screen.query_one("#say", Input)
-            box.placeholder = {"idea": "一句话写下想法，Enter 交给孵化场查重", "ask": "问这个部门，它的员工会在对话里回答",
-                               "adjust": "一句话说怎么改方向，项目会按新方向接着做", "say": "对这个员工说，它在忙时插进去或排在后面",
+            box.placeholder = {"idea": "输入研究想法，Enter 创建项目并交给负责人", "ask": "向此建筑对应的员工提问",
+                               "say": "对这个员工说，它在忙时插进去或排在后面",
                                "assistant": "问中控屏的小助手"}[tg.kind]
         except Exception:
             pass
@@ -671,10 +654,7 @@ class Papertown(App):
             self.paint_hints()
 
     def action_cycle_option(self) -> None:
-        if self.target.kind == "idea":
-            steps = [0.5, 1.0, 2.0, 5.0, 10.0]
-            self.budget = steps[(steps.index(self.budget) + 1) % len(steps)]
-        elif self.target.kind == "say":
+        if self.target.kind == "say":
             self.say_mode = "queue" if self.say_mode == "steer" else "steer"
 
     def action_leave_box(self) -> None:
@@ -696,14 +676,18 @@ class Papertown(App):
         self._sending = True
         try:
             if tg.kind == "idea":
-                r = await self.api.post("/api/ideas", {"text": text, "budget": self.budget})
-                self.notify(f"孵化场收下了，项目 #{r.get('seq', '?')} 正在查重", title="新 idea")
+                r = await self.api.post("/api/ideas", {"text": text})
+                self.notify(f"已创建项目 #{r.get('seq', '?')}，负责人将从查重开始", title="新 idea")
             elif tg.kind == "ask":
-                await self.api.post("/api/chat", {"text": text, "building": tg.building})
-                self.asking = (tg.building or "", time.time())
-            elif tg.kind == "adjust":
-                await self.api.post(f"/api/lines/{tg.line}/adjust", {"text": text})
-                self.notify("按新方向接着做", title=f"调整 {tg.label[2:]}")
+                staff = await self.api.get(f"/api/buildings/{tg.building}/staff")
+                message = f"关于{self.building_name(tg.building)}：{text}"
+                agent = staff.get("agent")
+                aid = agent.get("id") if isinstance(agent, dict) else agent
+                if staff.get("who") == "assistant" or not aid:
+                    await self.api.post("/api/assistant/say", {"text": message, "page": {"view": self.place, **self.current.context()}})
+                else:
+                    await self.api.post(f"/api/agents/{aid}/say", {"text": message, "mode": self.say_mode})
+                self.notify("已发送", title=staff.get("name") or tg.label)
             elif tg.kind == "say":
                 await self.api.post(f"/api/agents/{tg.agent}/say", {"text": text, "mode": self.say_mode})
                 self.notify("已插进它正在做的事" if self.say_mode == "steer" else "排在它手头这件事后面", title=tg.label)
@@ -732,7 +716,7 @@ class Papertown(App):
             return "小助手"
         role, _, line = aid.partition("-")
         seq = self.line_seq(line)
-        name = {"coder": "代码员工", "writer": "写作员工", "monitor": "看田员"}.get(role, role)
+        name = {"lead": "项目负责人", "coder": "代码员工", "writer": "写作员工", "monitor": "看田员"}.get(role, role)
         return f"{name} #{seq}" if seq else name
 
     async def on_unmount(self) -> None:

@@ -36,12 +36,12 @@ async function hallData(pl: Placement): Promise<HallData> {
   const t = pl.type, soft = <T,>(p: Promise<T>) => p.catch(() => null);
   const [sheet, lines, board, gpus, shelf, roster] = await Promise.all([
     soft(api.building(pl.id)), soft(api.lines()),
-    t === 'farm' || t === 'power_sim' ? soft(api.jobs()) : null,
+    t === 'farm' ? soft(api.jobs()) : null,
     t === 'power' ? soft(api.gpus()) : null,
     t === 'library' ? soft(api.library('', '', 1)) : null,
     t === 'depot' ? soft(api.roster('coder')) : null,
   ]);
-  return { sheet, lines: lines ?? [], jobs: board?.jobs ?? [], gpus, plant: board?.plant ?? null, shelf, roster };
+  return { sheet, lines: lines ?? [], jobs: board?.jobs ?? [], gpus, shelf, roster };
 }
 
 const K = ({ k }: { k: string }) => <kbd>{k}</kbd>;

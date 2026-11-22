@@ -61,7 +61,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
   const keys = new Set(top.map(([k]) => k)), topNames = tails(top.map(([k]) => k));
 
   const where = nv ? (nv.node ? `${nv.node}${nv.gpu_ids.length ? ` · GPU ${nv.gpu_ids.join(',')}` : ` · ${tr('不占卡')}`}` : nv.lane ?? (nv.pool ? tr('池 {0}', nv.pool) : tr('等分配')))
-    : farm ? (farm.backend === 'sim' ? tr('模拟电厂') : farm.backend) : '';
+    : farm ? farm.backend : '';
   const started = nv?.started_at ?? farm?.started_at ?? null;
   const ended = nv?.finished_at ?? farm?.ended_at ?? null;
   const took = st === 'running' && started ? (now - Date.parse(started)) / 1000

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from papertown.api import create_app
 from papertown.paseo import PaseoError
 from papertown.town import Town
-from .conftest import make_settings, wait_for
+from .conftest import make_settings
 from .test_farm_agents import FakeLink, IDEA
 
 
@@ -55,7 +55,7 @@ def flow(tmp_path, monkeypatch):
     monkeypatch.setattr(town.agents, 'watch', lambda: None)
     with TestClient(app) as client:
         lid = client.post('/api/ideas', json={'text': IDEA}).json()['id']
-        wait_for(town, lid, {'waiting'})
+
         yield client, town, link, lid
 
 

@@ -3,7 +3,6 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from .conftest import wait_for
 from .test_farm_agents import IDEA, wait_job, with_paseo
 
 # a Paseo whose agents each get an id of their own, all idle
@@ -32,7 +31,7 @@ def test_a_lead_urges_its_workers_reports_and_asks_within_its_bounds(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, lid, {"waiting"})
+
         lead = c.post("/api/agents", json={"line_id": lid, "role": "lead"}).json()
         assert lead["id"] == f"lead-{lid}" and lead["status"] == "stopped" and lead["name"] == "项目负责人"
         assert c.post(f"/api/agents/{lead['id']}/start", json={"runtime": "pi"}).status_code == 400
@@ -96,7 +95,7 @@ def test_a_lead_hears_when_its_project_moves(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, lid, {"waiting"})
+
         for role in ("lead", "coder"):
             a = c.post("/api/agents", json={"line_id": lid, "role": role}).json()
             c.post(f"/api/agents/{a['id']}/start", json={"runtime": "paseo", "provider": "codex"})
@@ -141,7 +140,7 @@ def test_the_assistant_speaks_for_you_to_the_projects(tmp_path):
         town = app.state.town
         line = c.post("/api/ideas", json={"text": IDEA}).json()
         lid = line["id"]
-        wait_for(town, lid, {"waiting"})
+
         assert c.get("/api/paseo").json()["defaults"]["assistant"] == {"provider": "codex", "model": "gpt-6.1-terra", "thinking": "xhigh", "set": False}
         c.get("/api/assistant")
         c.post("/api/agents/assistant/start", json={"runtime": "paseo"})

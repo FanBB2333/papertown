@@ -74,7 +74,7 @@ def main() -> int:
     if args.times < 1 or args.every < 0:
         parser.error("--times must be positive and --every must be nonnegative")
     with tempfile.TemporaryDirectory(prefix="papertown-usage-") as folder:
-        settings = Settings(data_dir=Path(folder), usage_poll=0, usage_logs=True)
+        settings = Settings(lead_resident=False, data_dir=Path(folder), usage_poll=0, usage_logs=True)
         paseo = Paseo(settings.paseo_bin, settings.paseo_url, settings.paseo_host)
         if not daemon_running(paseo):
             print("Refusing to run: paseo daemon status did not confirm a running daemon.", flush=True)

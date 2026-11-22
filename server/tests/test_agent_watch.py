@@ -12,7 +12,6 @@ import pytest
 from papertown.db import DB
 from papertown.paseo import Feed, PaseoError
 from .test_canvas_agents import bind, flow, node
-from .conftest import wait_for
 
 
 def snapshot(town, link, agent, **fields):
@@ -197,7 +196,7 @@ def test_overview_groups_counts_and_loose_sessions_survive_an_outage(flow, monke
     c, town, link, lid = flow
     a = bind(c, lid, node(c, lid))
     newer = c.post('/api/ideas', json={'text': 'Another research project'}).json()['id']
-    wait_for(town, newer, {'waiting'})
+
     b = bind(c, newer, node(c, newer))
     town.agents.ensure(lid, 'writer')
     assistant = town.assistant.row()

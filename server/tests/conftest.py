@@ -9,11 +9,11 @@ from papertown.town import Town
 
 
 def make_settings(tmp: Path, **kw) -> Settings:
-    """Mock settings under tmp: tests never start a real pi or touch Paseo, nor read your agents' conversations."""
+    """Isolated settings under tmp: tests never start a real pi or touch Paseo, nor read your agents' conversations."""
     skills = tmp / "skills"
     if not skills.exists():
         shutil.copytree(SERVER_DIR / "skills", skills)
-    base = dict(provider="mock", data_dir=tmp / "var", skills_dir=skills, arxiv_port=False, sim_gpu_seconds=0.05,
+    base = dict(lead_resident=False, data_dir=tmp / "var", skills_dir=skills, arxiv_port=False,
                 compile_tex=False, samples=False, pi_bin=str(tmp / "no-pi"), nvidb_bin=str(tmp / "no-nvidb"), skim_bin=str(tmp / "no-skim"),
                 tmux_bin=str(tmp / "no-tmux"),
                 claude_bin=str(tmp / "no-claude-bin"), codex_bin=str(tmp / "no-codex-bin"),
@@ -31,12 +31,3 @@ def town(tmp_path):
     yield t
     t.stop()
 
-
-def wait_for(town: Town, line_id: str, until: set[str], timeout: float = 60) -> dict:
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        ln = town.pipeline.line(line_id)
-        if ln["status"] in until and not town.pipeline.running(line_id):
-            return ln
-        time.sleep(0.05)
-    raise TimeoutError(f"{line_id} stuck at {town.pipeline.line(line_id)['status']}")

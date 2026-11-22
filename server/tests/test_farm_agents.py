@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from papertown.api import create_app
 
-from .conftest import make_settings, wait_for
+from .conftest import make_settings
 
 IDEA = "用检索增强做论文的新颖性评估"
 
@@ -25,7 +25,7 @@ def wait_job(town, job_id, timeout=20):
 
 
 def test_local_job_reports_progress_and_result(town):
-    line = town.pipeline.submit_idea(IDEA)
+    line = town.pipeline.create(IDEA)
     cmd = "echo PROGRESS 30; echo PROGRESS 70; echo 'RESULT {\"acc\": 0.91}'"
     j = wait_job(town, town.farm.submit(line["id"], "main", cmd)["id"])
     assert j["status"] == "done" and j["result"] == {"acc": 0.91} and j["progress"] == 100
@@ -42,7 +42,7 @@ def test_bridge_mirrors_a_pi_session(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         line_id = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, line_id, {"waiting"})
+
         a = c.post("/api/agents", json={"line_id": line_id, "role": "coder"}).json()
         assert a["status"] == "stopped" and "token" not in a and a["attach"].startswith("tmux -L papertown")
         assert c.post(f"/api/agents/{a['id']}/say", json={"text": "hi"}).status_code == 400
@@ -78,7 +78,7 @@ def test_bridge_reports_state_and_runs_commands(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         line_id = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, line_id, {"waiting"})
+
         a = c.post("/api/agents", json={"line_id": line_id, "role": "writer"}).json()
         h = {"x-papertown-token": town.agents.get(a["id"])["token"]}
         state = {"t": "state", "model": {"provider": "p", "id": "m1"}, "thinking": "high", "levels": ["off", "high"],
@@ -118,8 +118,8 @@ def test_pi_start_uses_node_entrypoint_and_resumes_session(town, tmp_path, monke
         return subprocess.CompletedProcess(args, int(args[0] == "has-session"), "", "")
 
     monkeypatch.setattr(agents, "_tmux", tmux)
-    line = town.pipeline.submit_idea(IDEA)
-    wait_for(town, line["id"], {"waiting"})
+    line = town.pipeline.create(IDEA)
+
     agent = agents.ensure(line["id"], "coder")
     started = agents.start(agent["id"], runtime="pi")
     assert started["status"] == "starting" and started["runtime"] == "pi"
@@ -165,7 +165,7 @@ def test_paseo_agents_are_created_driven_and_followed(tmp_path):
     with TestClient(app) as c:
         town = app.state.town
         line_id = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, line_id, {"waiting"})
+
         info = c.get("/api/paseo").json()
         assert info["status"]["ok"] and [p["id"] for p in info["providers"]] == ["pi"] and info["providers"][0]["models"][0]["thinking"] == ["off", "high"]
 
@@ -253,8 +253,8 @@ def test_paseo_conversations_are_imported_read_and_answered(tmp_path):
             setattr(town.agents.paseo, name, getattr(link, name))
         first = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
         second = c.post("/api/ideas", json={"text": "用小模型给论文图表自动写说明文字"}).json()["id"]
-        wait_for(town, first, {"waiting"})
-        wait_for(town, second, {"waiting"})
+
+
 
         a = c.post("/api/agents/import", json={"line_id": first, "role": "coder", "ext_id": "conv-1"}).json()
         assert a["runtime"] == "paseo" and a["ext_id"] == "conv-1" and a["model"] == "claude/claude-haiku-5-5"
@@ -303,7 +303,7 @@ def test_a_leads_conversations_are_listed_renewed_and_resumed(tmp_path):
         for name in ("conversations", "status", "create", "send", "interrupt", "list", "project", "workspace"):
             setattr(town.agents.paseo, name, getattr(link, name))
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, lid, {"waiting"})
+
         lead = c.post("/api/agents", json={"line_id": lid, "role": "lead"}).json()["id"]
         c.post(f"/api/agents/{lead}/start", json={"runtime": "paseo", "provider": "claude", "model": "claude-opus-5-5", "thinking": "high"})
         c.post(f"/api/agents/{lead}/brief")

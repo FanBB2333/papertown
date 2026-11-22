@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { api, type Agent, type AgentEvent, type SayMode } from '../api';
+import { go, path, query, usePath } from '../route';
 import { tr } from '../i18n';
 import { useSettings } from '../settings';
 import { markSeen } from './overview';
@@ -28,11 +29,23 @@ export function Compose({ agent, queued = [], permission = false, toast, onSent,
   adapter?: ComposeAdapter;
 }) {
   const settings = useSettings();
+  const routePath = usePath();
   const [mode, setMode] = useState<SayMode>(settings.agentSend);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const pending = useRef(false), box = useRef<HTMLTextAreaElement | null>(null);
   const hint = useId(), text = value ?? draft, setText = onChange ?? setDraft;
+  useEffect(() => {
+    // Only the route's selected conversation consumes a draft, even with other panels mounted.
+    const p = path().split('?')[0];
+    if (!(p.startsWith('/progress/') && p.endsWith('/ask') && box.current?.closest('.lc-page')) && p !== `/agents/${encodeURIComponent(agent.id)}`) return;
+    const q = query(), incoming = q.get('draft');
+    if (incoming === null) return;
+    setText(incoming);
+    q.delete('draft');
+    go(`${p}${q.size ? `?${q}` : ''}`, true); // history.replaceState, preserving other parameters
+    box.current?.focus();
+  }, [routePath, agent.id]);
   const current = useRef(text); current.current = text;
   const working = isWorking(agent) || permission, off = !!agent.down || ['offline', 'stopped'].includes(agent.status ?? '');
   const choice = MODES.find(x => x[0] === mode) ?? MODES[0];

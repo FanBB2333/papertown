@@ -1,5 +1,5 @@
 """配置: how the town is set up: its staff's skills, the MCP servers behind their tools, the library
-they search and the models they use."""
+they search."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from ..look import clip
 from ..widgets import Bar, Confirm, Form, Pane, Place, Prompt, row_key, sync_rows
 from . import cycle, tabs
 
-PAGES = [("skills", "技能"), ("mcp", "MCP"), ("library", "图书馆"), ("models", "模型")]
+PAGES = [("skills", "技能"), ("mcp", "MCP"), ("library", "图书馆")]
 
 
 class Setup(Place):
@@ -41,7 +41,6 @@ class Setup(Place):
         self.rag: dict = {}
         self.hits: list[dict] = []
         self.query_text = ""
-        self.llm: dict = {}
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -58,7 +57,6 @@ class Setup(Place):
                     with Horizontal():
                         yield DataTable(id="su-hits", cursor_type="row", classes="list-col wide")
                         yield Pane(id="su-hit", classes="detail-col")
-                yield Pane(id="models")
 
     def on_mount(self) -> None:
         s = self.query_one("#su-skills", DataTable)
@@ -90,9 +88,6 @@ class Setup(Place):
             elif self.page == "library":
                 self.rag = await api.get("/api/rag")
                 self.paint_library()
-            else:
-                self.llm = await api.get("/api/llm")
-                self.paint_models()
         except ApiError as e:
             self.town.notify(str(e), severity="error")
 
@@ -168,9 +163,9 @@ class Setup(Place):
         p, r = self.pal, self.rag
         st, opts = r.get("stats") or {}, r.get("opts") or {}
         src = " · ".join(f"{k} {v}" for k, v in (st.get("sources") or {}).items())
-        line = Text.assemble((f" 馆藏 {st.get('papers', 0)} 篇", f"bold {p['ink']}"), (f"（{src}） · 向量 {st.get('vectors', 0)} · 词 {st.get('terms', 0)}", p["muted"]),
+        line = Text.assemble((f" 馆藏 {st.get('papers', 0)} 篇", f"bold {p['ink']}"), (f"（{src}） · 词 {st.get('terms', 0)}", p["muted"]),
                              (f"\n {r.get('index', '')}", p["faint"]),
-                             (f"\n 召回 {opts.get('candidates')} 篇候选，取前 {opts.get('top_k')} 篇 · 向量 {'开' if opts.get('vectors') else '关'}", p["muted"]),
+                             (f"\n 召回 {opts.get('candidates')} 篇候选，取前 {opts.get('top_k')} 篇 · BM25 + 关键词覆盖率", p["muted"]),
                              ("    /", f"bold {p['brand']}"), (" 检索  ", p["muted"]), ("e", f"bold {p['brand']}"), (" 改召回参数", p["muted"]))
         if self.query_text:
             line.append(f"\n 「{self.query_text}」找到 {len(self.hits)} 篇", style=p["brand"])
@@ -204,21 +199,6 @@ class Setup(Place):
         if h and h.get("url"):
             self.town.open_url(h["url"])
 
-    def paint_models(self) -> None:
-        p, m = self.pal, self.llm
-        parts: list[Any] = [Text.assemble(("现在用  ", p["muted"]), (f"{m.get('provider')}", f"bold {p['ink']}"),
-                                          ("（离线：员工按 skill 的步骤调用真实工具，文字部分用模板）" if m.get("offline") else "", p["warn"])),
-                            Text.assemble(("强模型  ", p["muted"]), (m.get("model_strong") or "—", p["ink"])),
-                            Text.assemble(("便宜模型  ", p["muted"]), (m.get("model_cheap") or "—", p["ink"])),
-                            Text.assemble(("思考强度  ", p["muted"]), (m.get("effort") or "—", p["ink"]))]
-        if m.get("openai_base_url"):
-            parts.append(Text.assemble(("OpenAI 兼容地址  ", p["muted"]), (m["openai_base_url"], p["faint"])))
-        parts += [Text(), Text("可选", style=f"bold {p['ink']}")]
-        for pr in m.get("providers") or []:
-            parts.append(Text.assemble((f"  {pr.get('name')}", p["ink"]), (f"  {pr.get('id')} · {'、'.join((pr.get('models') or [])[:6])}", p["muted"])))
-        parts += [Text(), Text.assemble(("e", f"bold {p['brand']}"), (" 换模型（key 放在 ~/.secrets.zsh 之类的环境里，这里不收）", p["muted"]))]
-        self.query_one("#models", Pane).show(Padding(Group(*parts), (1, 2)))
-
     def tick(self, t: float) -> None:
         if self.page == "mcp" and self.town.beat:
             table = self.query_one("#su-mcp", DataTable)
@@ -227,7 +207,7 @@ class Setup(Place):
                     table.update_cell(s["name"], "mark", self.mcp_mark(s, t))
 
     def on_town_event(self, ev: dict) -> None:
-        if self.is_mounted and self.town.place == "setup" and ev.get("type") in ("skills", "llm", "library"):
+        if self.is_mounted and self.town.place == "setup" and ev.get("type") in ("skills", "library"):
             self.reload()
 
     @work(exclusive=True, group="su-load")
@@ -236,7 +216,7 @@ class Setup(Place):
 
     def hints(self) -> list[tuple[str, str]]:
         return {"skills": [("[ ]", "换页")], "mcp": [("[ ]", "换页"), ("t", "启用/停用"), ("r", "重连"), ("n", "添加"), ("d", "删除")],
-                "library": [("[ ]", "换页"), ("/", "检索"), ("e", "召回参数"), ("Enter", "打开")], "models": [("[ ]", "换页"), ("e", "换模型")]}[self.page]
+                "library": [("[ ]", "换页"), ("/", "检索"), ("e", "召回参数"), ("Enter", "打开")]}[self.page]
 
     def context(self) -> dict[str, Any]:
         return {"building": {"skills": "academy", "mcp": "exchange", "library": "library"}.get(self.page)}
@@ -310,21 +290,11 @@ class Setup(Place):
             o, lim = self.rag.get("opts") or {}, self.rag.get("limits") or {}
             v = await self.app.push_screen_wait(Form("召回参数", [
                 ("top_k", f"取前几篇（{'–'.join(str(x) for x in lim.get('top_k') or [])}）", o.get("top_k")),
-                ("candidates", f"候选多少篇（{'–'.join(str(x) for x in lim.get('candidates') or [])}）", o.get("candidates")),
-                ("vectors", "向量召回", bool(o.get("vectors")), [("开", True), ("关", False)])]))
+                ("candidates", f"候选多少篇（{'–'.join(str(x) for x in lim.get('candidates') or [])}）", o.get("candidates"))]))
             if v:
                 try:
-                    body = {"top_k": int(v["top_k"]), "candidates": int(v["candidates"]), "vectors": v["vectors"]}
+                    body = {"top_k": int(v["top_k"]), "candidates": int(v["candidates"])}
                 except (TypeError, ValueError):
                     self.town.notify("要填数字", severity="error")
                     return
                 await self._post("/api/rag", body, "召回参数改好了")
-        elif self.page == "models":
-            m = self.llm
-            providers = [(f"{pr.get('name')}（{pr.get('id')}）", pr["id"]) for pr in m.get("providers") or []]
-            v = await self.app.push_screen_wait(Form("换模型", [
-                ("provider", "用哪家", m.get("provider"), providers),
-                ("model_strong", "强模型", m.get("model_strong")), ("model_cheap", "便宜模型", m.get("model_cheap")),
-                ("effort", "思考强度", m.get("effort") or "medium", [("低", "low"), ("中", "medium"), ("高", "high")])]))
-            if v:
-                await self._post("/api/llm", {k: v[k] for k in ("provider", "model_strong", "model_cheap", "effort") if v.get(k)}, "换好了")

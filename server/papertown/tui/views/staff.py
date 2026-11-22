@@ -7,7 +7,6 @@ from typing import Any
 
 from rich.console import Group
 from rich.padding import Padding
-from rich.table import Table
 from rich.text import Text
 from textual import events, on, work
 from textual.app import ComposeResult
@@ -17,7 +16,7 @@ from textual.widgets import DataTable
 
 from ..anim import gleam
 from ..client import ApiError
-from ..look import AGENT, DEPT, JOB, LINE, WORKER, busy_mark, clip, doing, line_mark, money, wait_mark
+from ..look import AGENT, DEPT, JOB, LINE, busy_mark, clip, doing, line_mark, money, wait_mark
 from ..widgets import Confirm, Pane, Place, row_key, sync_rows, transcript, writing
 
 
@@ -32,7 +31,6 @@ class Staff(Place):
         super().__init__(id="staff")
         self.sel: tuple[str, str] | None = None
         self.timeline: dict | None = None
-        self.roster: list[dict] = []
         self._polled = 0.0
         self._tx: tuple[Any, list[Any]] = (None, [])  # the drawn conversation, cached: Markdown is slow to build
         self._shown: tuple[str, str] | None = None
@@ -96,8 +94,6 @@ class Staff(Place):
                 if tl == self.timeline and self._shown == self.sel:
                     return
                 self.timeline = tl
-            elif key == "market":
-                self.roster = await self.town.api.get("/api/workers")
         except ApiError as e:
             self.timeline = {"items": [{"kind": "error", "text": str(e)}], "agent": next((a for a in self.agents() if a["id"] == key), {})}
         self.paint_detail()
@@ -148,9 +144,6 @@ class Staff(Place):
         head.append(f" {d['name']}", style=f"bold {p['ink']}")
         head.append(f"  {d.get('district', '')} · {DEPT.get(d.get('state', ''), d.get('state', ''))}", style=p["muted"])
         parts: list[Any] = [head, gleam(doing(d), t, p["run"], p["hi"]) if d.get("state") == "busy" else Text(doing(d), style=p["ink"]), Text()]
-        if d.get("worker"):
-            w = d["worker"]
-            parts.append(Text(f"当班：{w.get('id')} · {w.get('role')} · Lv.{w.get('level')}", style=p["muted"]))
         if d.get("lines"):
             parts += [Text(), Text("手上的项目", style=f"bold {p['ink']}")]
             for ln in d["lines"]:
@@ -165,15 +158,6 @@ class Staff(Place):
             for a in d["agents"]:
                 parts.append(Text.assemble("  ", self.agent_mark(a, t), (f" {self.town.agent_name(a['id'])}", p["ink"]),
                                            (f"  {AGENT.get(a.get('status') or '', a.get('status'))} · {a.get('model') or ''}", p["muted"])))
-        if d["id"] == "market" and self.roster:
-            parts += [Text(), Text("人才市场", style=f"bold {p['ink']}")]
-            tb = Table(box=None, header_style=p["muted"], padding=(0, 2), pad_edge=False)
-            for c in ("员工", "岗位", "等级", "状态", "接单", "近期 ROI"):
-                tb.add_column(c, justify="right" if c in ("等级", "接单", "近期 ROI") else "left")
-            for w in self.roster:
-                tb.add_row(w["id"], w.get("role", ""), f"Lv.{w.get('level')}", WORKER.get(w.get("status") or "", w.get("status") or ""), str(w.get("runs", 0)),
-                           f"{w.get('trailing_roi') or 0:.1f}")
-            parts.append(tb)
         parts += [Text(), Text.assemble(("i", f"bold {p['brand']}"), (" 在底下的框里问这个部门", p["faint"]))]
         self.query_one("#st-detail", Pane).show(Padding(Group(*parts), (0, 1)), layout=layout)
 

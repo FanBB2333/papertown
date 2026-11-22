@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Callable
 
 from .db import read_json, write_json
 from .usage_logs import COUNTS, Ownership, Scanner
-from .llm.pricing import token_cost
+from .pricing import token_cost
 from .usage_readers import LABELS, Readers, UsageError, iso, stamp
 
 if TYPE_CHECKING:

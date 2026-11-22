@@ -7,7 +7,7 @@ import { tr } from '../i18n';
 import { Icon } from './icons';
 import { gist, points, useFetch } from './util';
 
-interface Props { line: Line | null; tick: number; onHatch: (id: string) => void; onAdjust: (id: string) => void }
+interface Props { line: Line | null; tick: number }
 
 // the verdict arrives in the page's language, hence the tr()'d keys
 const tone = (verdict: string) => ({ [tr('可孵化')]: 'ok', [tr('需调整')]: 'warn', [tr('已被做过')]: 'bad' } as Record<string, string>)[verdict] ?? 'warn';
@@ -58,10 +58,6 @@ export function Survey(p: Props) {
             <p className="sv-line">{gist(besides(h.summary, h.verdict), 70) || gist(h.gap, 70)}</p>
             <span className="muted small">{[h.sources?.library != null && tr('图书馆 {0}', h.sources.library), h.sources?.arxiv != null && `arXiv ${h.sources.arxiv}`].filter(Boolean).join(' · ')}</span>
           </div>
-          {l.status === 'waiting' && <div className="sv-act">
-            <button className="btn pri" onClick={() => p.onHatch(l.id)}>{tr('孵化并立项')}</button>
-            <button className="btn" onClick={() => p.onAdjust(l.id)}>{tr('调整 idea')}</button>
-          </div>}
         </section>
       ) : lp ? (
         <section className="sv-tldr t-ok">
@@ -75,7 +71,7 @@ export function Survey(p: Props) {
       ) : (
         <div className="cm-empty in">
           <Icon n="lens" size={30} />
-          <h3>{l.status === 'hatching' ? tr('孵化场正在查重…') : tr('这个项目还没有调研')}</h3>
+          <h3>{tr('这个项目还没有调研')}</h3>
           <p>{tr('放入 idea 后孵化场会先查重：找最相近的工作、空白点和建议，结果整理在这里。')}</p>
         </div>
       )}

@@ -9,10 +9,10 @@ import { tr } from '../i18n';
 import { typing } from './walk';
 import '../dock.css';
 
-export function Dock({ view, open, setOpen, away, target, setTarget, focusKey, onIdea, onAdjust, toast }: {
+export function Dock({ view, open, setOpen, away, target, setTarget, focusKey, onIdea, toast }: {
   view: string; open: boolean; setOpen: (open: boolean) => void; away: boolean;
   target: Target; setTarget: (t: Target) => void; focusKey: number;
-  onIdea: (text: string, budget: number) => Promise<boolean>; onAdjust: (lineId: string, text: string) => Promise<boolean>;
+  onIdea: (text: string) => Promise<boolean>;
   toast: (t: string) => void;
 }) {
   const lens = useLens<HTMLDivElement>(14, 30);
@@ -48,7 +48,7 @@ export function Dock({ view, open, setOpen, away, target, setTarget, focusKey, o
             {shown && (
               <div className="dk-in">
                 <Assistant toast={toast} onClose={() => setOpen(false)} target={target} setTarget={setTarget} focusKey={focusKey + nudge}
-                  onIdea={onIdea} onAdjust={onAdjust} />
+                  onIdea={onIdea} />
               </div>
             )}
           </div>

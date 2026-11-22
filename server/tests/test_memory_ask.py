@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 
 from papertown.api import create_app
 
-from .conftest import wait_for
 from .test_cards import CARD
 from .test_farm_agents import IDEA
 from .test_leads import started
@@ -108,7 +107,7 @@ def test_cards_with_plans_outputs_runs_and_panes_and_the_lead_publishes(tmp_path
         assert c.post("/api/cards/layout", json={}).json()["panes"][0] == "summary"
 
         lid = c.post("/api/ideas", json={"text": IDEA}).json()["id"]
-        wait_for(town, lid, {"waiting"})
+
         lead = c.post("/api/agents", json={"line_id": lid, "role": "lead"}).json()
         c.post(f"/api/agents/{lead['id']}/start", json={"runtime": "paseo", "provider": "codex"})
         h = {"x-papertown-token": town.agents.get(lead["id"])["token"]}
