@@ -42,8 +42,7 @@ def linked(tmp_path, monkeypatch):
     code, paper = tmp_path / "proj-code", tmp_path / "proj-paper"
     git_repo(code, {"README.md": "# Proj\n", "src/run.py": "def run():\n    return 1\n"})
     git_repo(paper, {"main.tex": "\\section{Intro}\nWe show $x^2$.\n", "refs.bib": "@article{a,\n  title = {T},\n}\n"})
-    s = linked_settings(tmp_path, code, paper)
-    s.lead_resident = False
+    s = linked_settings(tmp_path, code, paper, lead_resident=False)
     with serving(s, monkeypatch) as url:
         yield url, code, s.data_dir
 

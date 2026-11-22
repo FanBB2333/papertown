@@ -424,7 +424,7 @@ function millHall(k: Kit, pl: Placement, data: HallData) {
   const p = k.p;
   const movers: ((t: number, dt: number) => void)[] = [];
   const slots = [...Array(n).keys()].sort((a, b) => Math.abs(a - (n - 1) / 2) - Math.abs(b - (n - 1) / 2) || a - b);
-  if (!lines.length) k.sign([tr('还没有项目：在市政厅写下一个 idea，这里就会开出一条流水线')], { at: [3.2, 0.9, D / 2], w: 3.2, size: 0.1, wrap: true, rot: -Math.PI / 2 });
+  if (!lines.length) k.sign([tr('还没有项目：在市政厅写下一个 idea，这里就会多出一个项目的八道工序')], { at: [3.2, 0.9, D / 2], w: 3.2, size: 0.1, wrap: true, rot: -Math.PI / 2 });
   lines.forEach((ln, i) => {
     const z = D / 2 + (slots[i] - (n - 1) / 2) * GAP, x0 = 2.6, x1 = W - 0.6, len = x1 - x0, moving = RUNS.has(ln.status);
     p.block(x0, 0.24, z - 0.21, len, 0.07, 0.04, 'metal');

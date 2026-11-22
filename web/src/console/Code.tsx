@@ -24,7 +24,7 @@ export function Code(p: Props) {
       <Icon n="code" size={34} />
       <h3>{tr('这个项目还没有代码仓库')}</h3>
       <p>{p.info.linked ? tr('projects.json 里没有给它配代码目录，或者那个目录不在了。')
-        : tr('流水线项目的代码由仓库里的代码员工来写：给它配一个员工，代码会出现在这里。')}</p>
+        : tr('idea 项目的代码由代码员工来写：项目负责人启动它之后，代码会出现在这里。')}</p>
       {!p.info.linked && <button className="btn" onClick={p.onAgents}>{tr('去配代码员工')}</button>}
     </div>
   );

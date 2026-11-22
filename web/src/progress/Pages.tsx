@@ -107,7 +107,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
       {nav && <div className="ak-scrim" onClick={() => setNav(false)} />}
       <aside className={`ak-side${nav ? ' open' : ''}`}>
         <a className="ak-back" href={href(back)} onClick={e => follow(e, back)}><Icon n="left" size={15} />{tr('回到项目')}</a>
-        <button className={`ak-new${asking ? ' on' : ''}`} onClick={() => setAsking(a => !a)} disabled={!lead} title={lead ? '' : tr('这个项目还没有负责人')}>
+        <button className={`ak-new${asking ? ' on' : ''}`} onClick={() => setAsking(a => !a)} disabled={!lead} title={lead ? '' : tr('这个项目的负责人还没有启动')}>
           <Icon n="compose" size={16} />{tr('请负责人写一页')}
         </button>
         {asking && lead && <Request lineId={line.id} toast={toast} onDone={() => setAsking(false)} />}
@@ -173,7 +173,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
               <h1>{pid ? tr('没有这一页了') : tr('还没有汇报和讲解')}</h1>
               <p>{tr('项目负责人汇报、讲解时，会把内容写成一页 HTML：表格、图、对比和分步的解释。写好的页面都放在这里，也可以全屏演示。')}</p>
               {lead ? <div className="pv-ask"><Request lineId={line.id} toast={toast} big /></div>
-                : <p className="ak-mem">{tr('这个项目还没有负责人。')} <a href={href(back)} onClick={e => follow(e, back)}>{tr('在项目页配一个')}</a></p>}
+                : <p className="ak-mem">{tr('这个项目的负责人还没有启动。')} <a href={href(back)} onClick={e => follow(e, back)}>{tr('在项目页打开开关')}</a></p>}
             </div>
           </div>
         )}

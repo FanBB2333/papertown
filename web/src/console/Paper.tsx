@@ -27,7 +27,7 @@ export function Paper(p: Props) {
       <Icon n="doc" size={34} />
       <h3>{tr('这个项目还没有论文')}</h3>
       <p>{p.info.linked ? tr('projects.json 里没有给它配论文目录，或者那个目录不在了。')
-        : tr('流水线走到「写作」这一站，印刷厂排出 main.tex 之后，论文就出现在这里。也可以先给它配一个写作员工。')}</p>
+        : tr('项目进行到「写作排版」时，写作员工在印刷厂写出 main.tex，论文就出现在这里。写作员工由项目负责人启动。')}</p>
       {!p.info.linked && <button className="btn" onClick={p.onAgents}>{tr('去配写作员工')}</button>}
     </div>
   );

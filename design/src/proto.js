@@ -21,7 +21,7 @@ const BUILDING_FLOWS = {
     note: '拉取 arXiv 当天的新论文列表，下载元数据和 TeX 源码。',
     skills: [], mcp: ['arxiv.list_new', 'arxiv.get_source'],
     from: [], to: [['customs', 'notes'], ['press', 'tex']],
-    real: 'arXiv API，每天定时拉取；TeX 源码包同时供印刷厂参考别人的写法（arXivTeXplorer）。' },
+    real: 'arXiv API，每天定时拉取。TeX 源码包同时供印刷厂参考别人的写法（arXivTeXplorer）。' },
   dock_github: { job: '3 个仓库有更新',
     stations: [st('同步', 'crate', 'done'), st('拆包分拣', 'crate', 'run', ['keeper']), st('发往仓库', 'crate', 'todo')],
     note: '拉取关注仓库的 star、issue 和 PR，按仓库分拣。',
@@ -41,32 +41,32 @@ const BUILDING_FLOWS = {
     from: [], to: [['newspaper', 'notes']],
     real: '定时任务 + arXiv 检索。' },
   hatchery: { job: 'idea #12「VLA × 结构化场景图」',
-    stations: [st('收蛋', 'egg', 'done'), st('检索相似工作', 'notes', 'done', ['hatcher']), st('写撞车报告', 'notes', 'done', ['hatcher']), st('等你决定', 'egg', 'run'), st('建厂', 'draft', 'todo')],
-    note: '撞车报告已经发到对话框，点「孵化并建厂」就会进入造纸厂。',
+    stations: [st('收蛋', 'egg', 'done'), st('检索相似工作', 'notes', 'done', ['hatcher']), st('写撞车报告', 'notes', 'done', ['hatcher']), st('等你决定', 'egg', 'run'), st('推进工序', 'draft', 'todo')],
+    note: '负责人已提交查重报告，等待你在对话中决定是否继续。',
     skills: ['novelty-check'], mcp: ['arxiv.search', 'library.search'],
     from: [['cityhall', 'egg'], ['library', 'notes'], ['genealogy', 'notes']], to: [['mill', 'notes']],
-    real: 'RAG（图书馆的向量库）+ novelty-check skill。' },
+    real: 'BM25 与关键词检索 + novelty-check 代码判定。' },
   farm: { job: '造纸厂 #1 的 2 块田',
     stations: [st('领种子', 'crate', 'done', ['experimenter']), st('备料', 'dataset', 'done'), st('接电', 'energy', 'run', ['experimenter']), st('生长', 'table', 'todo'), st('收割', 'table', 'todo')],
     note: '代码和数据都到了，正在算力电厂排队，第 2 位。',
     skills: ['experiment-runner'], mcp: ['nvidb.submit', 'nvidb.status'],
     from: [...repoGoods('farm'), ['coldstore', 'dataset'], ['power', 'energy']], to: [['mill', 'table'], ['press', 'table']],
-    real: 'nvidb 任务队列；没有 GPU 时由模拟电厂（FakeGPU）兜底。' },
+    real: '代码员工提交真实实验，nvidb 队列在此只读展示。' },
   press: { job: '造纸厂 #2 的稿子 v0.6',
     stations: [st('排铅字', 'tex', 'done', ['writer']), st('校样', 'tex', 'run', ['writer']), st('开机印刷', 'pdf', 'todo'), st('送质检', 'pdf', 'todo')],
-    note: '在检查引用和图表编号，然后编译 PDF。',
+    note: '写作员工检查引用和图表编号，然后编译 PDF。',
     skills: ['latex-writing'], mcp: ['downleaf.compile'],
     from: [['mill', 'draft'], ['farm', 'table'], ...repoGoods('press')], to: [['qa', 'pdf']],
-    real: 'downleaf 本地编译 TeX；arXivTeXplorer 用来参考别人论文的 TeX 写法。' },
+    real: '写作员工准备 TeX，latexmk 本地编译 PDF，交回论文产出。' },
   qa: { job: '造纸厂 #2 · 稀疏注意力加速',
     stations: [st('格式检查', 'pdf', 'done'), st('审稿人打分', 'pdf', 'done', ['reviewer', 'reviewer']), st('汇总意见', 'pdf', 'run', ['reviewer']), st('退回或放行', 'pdf', 'todo')],
-    note: '3 个审稿 persona 已打分，发现 1 处匿名问题。',
+    note: '负责人已提交审稿意见，硬检查发现 1 处匿名问题。',
     skills: ['paper-review', 'anonymity-check'], mcp: [],
     from: [['press', 'pdf']], to: [['dock_arxiv', 'pdf'], ['press', 'tex']],
-    real: '多个审稿 persona 的 Skills；检查规则来自会议的投稿要求。' },
+    real: '负责人用 Skills 审稿，代码执行投稿规则的硬检查。' },
   depot: { job: '仓库',
     stations: [st('入库', 'crate', 'done'), st('上架', 'crate', 'done'), st('盘点', 'crate', 'run', ['keeper']), st('出货', 'crate', 'todo')],
-    note: 'commit 入库，按目录上架建索引；盘点就是看 issue 和 CI。',
+    note: 'commit 入库，按目录上架建索引。盘点就是看 issue 和 CI。',
     skills: ['repo-maintain'], mcp: ['github.get_repo'],
     from: [['dock_github', 'crate']], to: [['workshop', 'crate']],
     real: '一座仓库就是一个 GitHub repo，README 和代码进 RAG，可以直接问"这个函数在哪"。' },
@@ -84,34 +84,34 @@ const BUILDING_FLOWS = {
     real: '依赖图谱：repo 之间、repo 和论文之间的引用关系。' },
   library: { job: '馆藏 1.2 万篇',
     stations: [st('收书', 'notes', 'done'), st('切段', 'notes', 'done'), st('编目', 'notes', 'run'), st('借阅', 'notes', 'todo')],
-    note: '今天放行的 6 篇正在向量化。',
+    note: '今天放行的 6 篇正在建立全文索引。',
     skills: [], mcp: ['library.search'],
     from: [['customs', 'notes']], to: [['hatchery', 'notes'], ['mill', 'notes'], ['newspaper', 'notes']],
-    real: 'RAG 主库：论文分块 + 向量检索，作业要求的 RAG 落在这里。' },
+    real: '图书馆：BM25 与关键词覆盖率检索，向负责人提供相关论文。' },
   genealogy: { job: 'idea #12 的 23 个祖先节点',
     stations: [st('抽引用', 'notes', 'done'), st('连边', 'notes', 'done'), st('查族谱', 'notes', 'run', ['scout']), st('出报告', 'notes', 'todo')],
     note: '从你的 idea 往上找 2 代：谁引用谁、方法从哪里继承。',
     skills: [], mcp: ['genealogy.expand'],
     from: [['library', 'notes']], to: [['hatchery', 'notes']],
     real: '引用知识图谱 + GraphRAG。' },
-  market: { job: '造纸厂 #1 编了 3 人小队',
-    stations: [st('列岗位', 'notes', 'done'), st('按预算编队', 'notes', 'done', ['scout']), st('上岗', 'notes', 'done', ['designer', 'writer']), st('结算 ROI', 'notes', 'todo')],
-    note: '方法设计师 D-03 升到 Lv.3；审稿人 V-02 漏检 2 次，降为 Lv.1。',
+  market: { job: '项目 #1 已启动代码和写作员工',
+    stations: [st('列岗位', 'notes', 'done'), st('启动员工', 'notes', 'done', ['scout']), st('上岗', 'notes', 'done', ['designer', 'writer']), st('查看状态', 'notes', 'todo')],
+    note: '负责人已启动代码员工和写作员工，可在名册查看各自状态。',
     skills: ['team-builder'], mcp: [],
     from: [['cityhall', 'egg']], to: [['mill', 'notes']],
-    real: 'Capitalist 的员工系统：每个 agent 带一组 Skills，按产出和花费评级。' },
+    real: '负责人用 pt hire 启动员工，名册展示实际会话、模型和运行方式。' },
   cityhall: { job: '你的个人中心',
-    stations: [st('写下 idea', 'egg', 'done'), st('设预算', 'egg', 'done'), st('送孵化场', 'egg', 'done'), st('等报告', 'notes', 'run')],
+    stations: [st('写下 idea', 'egg', 'done'), st('建项目', 'egg', 'done'), st('送孵化场', 'egg', 'done'), st('等报告', 'notes', 'run')],
     note: '对话框里写下的 idea 都从这里出发。',
     skills: [], mcp: [],
     from: [], to: [['hatchery', 'egg'], ['market', 'egg']],
-    real: '项目总览、预算和待办。' },
-  bank: { job: '本周 $3.10 / $10',
-    stations: [st('记账', 'notes', 'done'), st('预算提醒', 'notes', 'run'), st('结算', 'notes', 'todo')],
-    note: '每次 LLM / MCP 调用记一笔；超过预算 80% 会提醒。',
+    real: '项目总览、负责人开关和待办。' },
+  bank: { job: '项目用量 $3.10 / $10',
+    stations: [st('记账', 'notes', 'done'), st('预算提醒', 'notes', 'run'), st('用量明细', 'notes', 'todo')],
+    note: '从会话日志统计 token 用量，达到项目预算 80% 时提醒。',
     skills: [], mcp: [],
     from: [['mill', 'notes'], ['farm', 'energy']], to: [],
-    real: '计费日志，HUD 上的余额就是这里的数字。' },
+    real: '订阅额度和会话用量，项目金额按模型价格折算。' },
   newspaper: { job: '第 12 期日报',
     stations: [st('收稿', 'notes', 'done'), st('写摘要', 'notes', 'done'), st('排版', 'notes', 'run'), st('送报', 'notes', 'todo')],
     note: '「运行状态」页就是这份报纸。',
@@ -120,16 +120,16 @@ const BUILDING_FLOWS = {
     real: 'RAG + 摘要 skill。' },
   power: { job: 'GPU 负荷 63%',
     stations: [st('接单', 'energy', 'done'), st('分卡', 'energy', 'run'), st('发电', 'energy', 'todo'), st('抄表', 'energy', 'todo')],
-    note: '按显存挑卡；停电就是 OOM。',
+    note: '按显卡查看占用、显存和真实队列。',
     skills: [], mcp: ['nvidb.submit', 'nvidb.status'],
     from: [], to: [['farm', 'energy']],
     real: 'nvidb 管理的自有 GPU 服务器。' },
-  power_sim: { job: '待机',
-    stations: [st('待机', 'energy', 'run'), st('接管', 'energy', 'todo'), st('模拟输出', 'energy', 'todo')],
-    note: '真 GPU 不可用时接管，模拟出训练过程。',
+  power_sim: { job: '预制样例',
+    stations: [st('读样例', 'energy', 'run'), st('开负责人', 'energy', 'todo'), st('继续项目', 'energy', 'todo')],
+    note: '样例展示预制产出，负责人开关默认关闭。',
     skills: [], mcp: [],
     from: [], to: [['farm', 'energy']],
-    real: 'FakeGPU，保证现场 demo 没有显卡也能跑完。' },
+    real: '预制样例可随时放入，打开负责人后由真实 agent 推进。' },
   coldstore: { job: '14 个数据集',
     stations: [st('登记', 'dataset', 'done'), st('下载', 'dataset', 'done'), st('出库', 'dataset', 'run')],
     note: '记录每个数据集的大小、格式和存放位置。',
@@ -164,8 +164,8 @@ const RUNNING = [
 ];
 
 const HUD = {
-  world: [['世界时间', '第 12 天 · 09:41'], ['银行', '$4.20 <em>/ $10</em>'], ['流水线', '2 <em>条运行中</em>'], ['算力电厂', '63% <em>负荷</em>']],
-  status: [['时间', '10 月 29 日 09:41'], ['本周预算', '$4.20 <em>/ $10</em>'], ['项目', '2 <em>个运行中</em>'], ['GPU', '63% <em>占用</em>']],
+  world: [['世界时间', '第 12 天 · 09:41'], ['负责人', '2 <em>位运行中</em>'], ['流水线', '2 <em>条运行中</em>'], ['算力电厂', '63% <em>负荷</em>']],
+  status: [['时间', '10 月 29 日 09:41'], ['负责人', '2 <em>位运行中</em>'], ['项目', '2 <em>个运行中</em>'], ['GPU', '63% <em>占用</em>']],
 };
 
 const app = document.getElementById('app');
@@ -249,7 +249,7 @@ function openDetail(key) {
   let html;
   if (pl.type === 'mill') {
     html = head('造纸厂 #1「VLA × 结构化场景图规划」', '一篇论文一座厂。下面是这篇论文从灵感到出港的 8 道工序，点工序可以跳到它所在的建筑。',
-      `<span class="chip">${b.tech}</span><span class="chip pri">方法设计 60%</span><span class="chip">预算 $0.42 / $1.00</span>`) +
+      `<span class="chip">${b.tech}</span><span class="chip pri">方法设计 60%</span><span class="chip">用量 $0.42 / $1.00</span>`) +
       pipelineHTML(STAGES) + `<section class="detail">${millPanels()}</section>`;
   } else {
     const f = BUILDING_FLOWS[pl.type];
@@ -326,7 +326,7 @@ function send() {
   addMsg(esc(v), 'mine');
   const typing = addMsg('<span class="typing"><i></i><i></i><i></i></span>', 'bot');
   setTimeout(() => {
-    typing.innerHTML = `<div class="who">${ava('hatcher', 2)}<b>孵化员 H-01</b></div>
+    typing.innerHTML = `<div class="who">${ava('hatcher', 2)}<b>项目负责人</b></div>
       <p>收到。我先去图书馆和 arXiv 码头查有没有撞车的工作，报告出来会贴在这里。</p>
       <div class="cost">原型里这是一条预设回复</div>`;
     chatEl.scrollTop = chatEl.scrollHeight;
@@ -443,7 +443,7 @@ root.addEventListener('click', e => {
   else {
     const act = c.dataset.act;
     if (act === 'chat') root.classList.contains('chat-open') ? closeChat() : openChat();
-    if (act === 'newidea') openChat({ focus: true, placeholder: '写下你的 idea，孵化员会先帮你查重…' });
+    if (act === 'newidea') openChat({ focus: true, placeholder: '写下你的 idea，项目负责人从查重开始推进…' });
     if (act === 'drawer-close') closeChat();
     if (act === 'legend') $('legend').hidden = !$('legend').hidden;
     if (act === 'close') closeDetail();

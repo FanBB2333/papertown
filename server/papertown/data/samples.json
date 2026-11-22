@@ -996,7 +996,7 @@
     },
     {
      "kind": "assistant",
-     "text": "收到，先查重。图书馆里最接近的是「LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback」，相似度 0.83。结论：需调整。最相近的工作里没有出现：retrieval。"
+     "text": "收到，先查重。图书馆里最接近的是「LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback」，相似度 0.83。结论：需调整。撞车报告里写了它和这个 idea 的差别。"
     },
     {
      "kind": "assistant",
@@ -1858,7 +1858,7 @@
     },
     {
      "kind": "assistant",
-     "text": "收到，先查重。图书馆里最接近的是「Vela: Scaling Vision-Language-Action Models with Adaptive Action Curve Parametrization」，相似度 0.57。结论：需调整。最相近的工作里没有出现：accumulation。"
+     "text": "收到，先查重。图书馆里最接近的是「Vela: Scaling Vision-Language-Action Models with Adaptive Action Curve Parametrization」，相似度 0.57。结论：需调整。撞车报告里写了它和这个 idea 的差别。"
     },
     {
      "kind": "assistant",
@@ -2171,11 +2171,11 @@
     },
     {
      "kind": "assistant",
-     "text": "收到，先查重。图书馆里最接近的是「Game-Theoretic Multi-Agent Control for Robust Contextual Reasoning in LLMs」，相似度 0.85。结论：已被做过。最相近的工作里没有出现：use。"
+     "text": "收到，先查重。图书馆里最接近的是「Game-Theoretic Multi-Agent Control for Robust Contextual Reasoning in LLMs」，相似度 0.85。结论：已被做过。撞车报告里写了它和这个 idea 的差别。"
     },
     {
      "kind": "assistant",
-     "text": "撞车报告已交。是否立项需要你决定，问题在这个项目的对话上方。"
+     "text": "撞车报告已交。是否立项需要你决定，问题已经发给你，在这段对话下面。"
     }
    ],
    "reports": [

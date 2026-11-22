@@ -8,7 +8,6 @@ from typing import Any
 
 from rich.console import Group
 from rich.padding import Padding
-from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from textual import on, work
@@ -19,7 +18,7 @@ from textual.widgets import ContentSwitcher, DataTable, Static
 
 from ..anim import bar, clock, dur, gleam, mix, seconds_since
 from ..client import ApiError
-from ..look import JOB, LEAD, LINE, STAGE, clip, job_mark, job_state, line_mark, money, stage_mark
+from ..look import JOB, LEAD, LINE, STAGE, clip, job_mark, job_state, line_mark, stage_mark
 from ..widgets import Bar, Confirm, Pane, Place, Prompt, row_key, sync_rows
 from . import cycle, tabs
 from .ide import Editor, Ide
@@ -108,7 +107,7 @@ class Projects(Place):
         for ln in self.visible():
             cur = ln.get("current") or {}
             glow = self.town.glow.k(("line", ln["id"]), t)
-            title = Text(clip(ln["title"], 26), style=f"bold {p['ink']}" if ln["status"] == "waiting" else p["ink"])
+            title = Text(clip(ln["title"], 26), style=p["ink"])
             if glow:
                 title.stylize(f"on {mix(p['bg'], p['brand'], glow * 0.45)}")
             pct = bar(ln.get("pct", 0) / 100, 7, p["done"] if ln["status"] == "done" else p["brand"], p["raised"])
@@ -152,7 +151,7 @@ class Projects(Place):
                         table.update_cell(key, "title", cells[2])
                     except Exception:
                         pass
-        if self.tab == "overview" and self.line and any(s["status"] in ("run", "wait") for s in self.line.get("stages", [])):
+        if self.tab == "overview" and self.line and any(s["status"] == "run" for s in self.line.get("stages", [])):
             self.paint_overview(layout=False)
 
     def on_town_event(self, ev: dict) -> None:
@@ -249,7 +248,6 @@ class Projects(Place):
         parts: list[Any] = [self.head()]
         if ln.get("idea"):
             parts.append(Text(clip(ln["idea"], 400), style=p["muted"]))
-        hatch = (ln.get("outputs") or {}).get("hatch") or {}
         lead = ln.get("lead") or {}
         state = LEAD.get(lead.get("state"), lead.get("state") or "—")
         parts.append(Text(f"负责人：{state} · {'开启' if lead.get('on') else '关闭'} · {lead.get('runtime') or '—'}", style=p["ink"]))
@@ -283,8 +281,8 @@ class Projects(Place):
                          Text(self.town.building_name(s.get("building")), style=p["muted"]), state, when)
         parts.append(grid)
         facts = []
-        if hatch.get("verdict"):
-            facts.append(("查重", f"{hatch['verdict']}（最接近 {len(hatch.get('similar') or [])} 篇）"))
+        if ln.get("verdict"):
+            facts.append(("查重", ln["verdict"]))
         if c := self.ws.get("code"):
             facts.append(("代码", f"{c.get('name')} · {c.get('branch') or ''} · {'%d 处改动' % c['dirty'] if c.get('dirty') else '无改动'}"))
         if pp := self.ws.get("paper"):
@@ -395,8 +393,8 @@ class Projects(Place):
         res = d.get("results") or {}
         if res.get("rows"):
             parts.append(Text())
-            if res.get("simulated"):
-                parts.append(Text("⚠ 模拟电厂的模拟结果，不是真实实验", style=p["warn"]))
+            if self.line.get("sample") or res.get("simulated"):
+                parts.append(Text("样例实验结果（预制数据）", style=p["warn"]))
             tb = Table(box=None, header_style=f"bold {p['muted']}", pad_edge=False, padding=(0, 2))
             if "values" in res["rows"][0]:
                 metrics = res.get("metrics") or [f"#{i + 1}" for i in range(len(res["rows"][0]["values"]))]

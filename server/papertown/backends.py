@@ -69,15 +69,16 @@ class TmuxBackend(TerminalBackend):
         exists = self.call('has-session', '-t', '=' + session, check=False).returncode == 0
         args = ['new-window', '-t', session + ':'] if exists else ['new-session', '-s', session, '-x', '160', '-y', '48']
         args += ['-d', '-n', spec['name'], '-P', '-F', '#{window_id} #{pane_id}', '-c', spec['cwd']]
-        for k, v in spec['env'].items():
-            args += ['-e', f'{k}={v}']
+        env = [arg for k, v in spec['env'].items() for arg in ('-e', f'{k}={v}')]
+        args += env
         # Create an empty pane first, set remain-on-exit, then exec the CLI. Even an immediate failure stays visible.
         window, pane = self.call(*args, '/bin/sleep', '60').stdout.strip().split()
         handle = {'session': session, 'window': window, 'pane': pane, 'identity': uuid4().hex}
         try:
             self.call('set-option', '-p', '-t', pane, '@papertown_id', handle['identity'])
             self.call('set-window-option', '-t', window, 'remain-on-exit', 'on')
-            self.call('respawn-pane', '-k', '-t', pane, '-c', spec['cwd'], *spec['argv'])
+            # A respawn otherwise inherits the session's first employee, including its bridge identity.
+            self.call('respawn-pane', '-k', '-t', pane, '-c', spec['cwd'], *env, *spec['argv'])
         except Exception:
             self.call('kill-window', '-t', window, check=False)
             raise

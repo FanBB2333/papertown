@@ -45,14 +45,14 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
         <div className="pj-title">
           <span className="pc-seq">#{line.seq}</span>
           <h1>{line.title}</h1>
-          <StatusTag status={line.status} />
+          <StatusTag status={line.status} sample={line.sample} />
         </div>
         <div className="pj-acts">
           <a className="btn pri" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={14} />{tr('对话')}</a>
           <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏里看这个项目的细节')}><Icon n="board" size={14} />{tr('中控屏')}</button>
         </div>
       </header>
-      <ResidentControl lineId={line.id} resident={liveLine?.lead ?? line.lead} sample={liveLine?.sample ?? line.sample} model={r.lead?.model} talk={ask} toast={toast} onChanged={reloadLead} />
+      <ResidentControl lineId={line.id} resident={liveLine?.lead ?? line.lead} sample={liveLine?.sample ?? line.sample} model={liveLine?.team.find(a => a.role === 'lead')?.model ?? r.lead?.model} talk={ask} toast={toast} onChanged={reloadLead} />
       <LoopCard r={r} toast={toast} />
 
       <div className="pj-grid">

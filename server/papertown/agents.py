@@ -153,7 +153,7 @@ PAGE_GUIDE = """
 """
 
 LEAD_LINKED = """
-这个项目是从本机接入的：代码在 `{code}`，论文在 `{paper}`。你可以读这两个目录、看 `git status` 和 `git log`，但不要改文件，也不要提交。
+这个项目是从本机接入的：代码在 `{code}`，论文在 `{paper}`。你可以读这两个目录、看 `git status` 和 `git log`，但不要改文件，也不要提交。员工的工作目录就是这两个仓库，所以 `pt hire` 会先问用户，他同意后 Papertown 替你启动。项目已经在进行中，先弄清它走到了哪一步，不要从头重做。
 """
 
 # for a linked repository, which Papertown does not write into: the guide goes with the brief

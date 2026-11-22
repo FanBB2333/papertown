@@ -321,3 +321,19 @@ def test_a_leads_conversations_are_listed_renewed_and_resumed(tmp_path):
         assert c.post(f"/api/agents/{lead}/conversations/pa-1").json()["ext_id"] == "pa-1"
         assert c.post(f"/api/agents/{lead}/conversations/conv-1").status_code == 400
         assert c.get("/api/agents/nobody/conversations").status_code == 404
+
+
+def test_pi_usage_updates_agent_without_executor_ledger(town):
+    lid = town.pipeline.create(IDEA)["id"]
+    a = town.agents.ensure(lid, "coder")
+    town.agents._charge(a["id"], "local-test", {"cost": .25, "input": 100, "output": 20})
+    assert town.agents.get(a["id"])["cost"] == .25
+    assert town.db.val("select count(*) from ledger") == 0
+    assert town.pipeline.line(lid)["spent"] == 0
+
+
+def test_historical_sim_jobs_still_list(town):
+    from papertown.db import now
+    town.db.insert("jobs", {"id": "old-sim", "name": "Historical", "backend": "sim", "status": "done", "created_at": now()})
+    assert town.farm.list()[0]["backend"] == "sim"
+    assert "sim" not in {b["id"] for b in town.farm.backends()}

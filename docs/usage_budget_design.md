@@ -2,7 +2,7 @@
 
 ## 1. 要解决的问题
 
-项目里的 agent 跑在用户自己的订阅上：Claude Code 用 Claude Max，Codex 用 ChatGPT 套餐，Antigravity 用 Google 的套餐。这些订阅不按美元计费，而是按时间窗口限额：5 小时窗口、每周窗口，用完就要等重置。Papertown 原有的预算（`lines.budget`、`PAPERTOWN_WEEKLY_BUDGET`）只管小镇自己调用 API 的美元花费，看不到订阅的余量。
+项目里的 agent 跑在用户自己的订阅上：Claude Code 用 Claude Max，Codex 用 ChatGPT 套餐，Antigravity 用 Google 的套餐。这些订阅不按美元计费，而是按时间窗口限额：5 小时窗口、每周窗口，用完就要等重置。Papertown 展示订阅余量，并从 agent 的本机会话日志统计各项目的用量。
 
 用户要两件事：
 
@@ -42,17 +42,16 @@ Paseo 启动的 agent 和用户在终端里开的会话都写这些日志。Pase
 项目的用量直接取它的 agent 自己记录的 token，按 API 价格折算成美元，不再把订阅额度分摊到项目。
 
 - **会话归属**：会话 id 属于项目的某个员工（Paseo agent 或节点 agent），就算这个员工的。否则按工作目录归属：目录落在项目的代码目录、论文目录、`projects.json` 登记的仓库或员工工作目录里，算作这个项目的其他会话（例如 herdr 里手动开的终端会话）。都不符合的，属于「本机其他会话」。
-- **折算**：每个模型按价格表计算。缓存写入分两档：5 分钟的按输入价的 1.25 倍，1 小时的按 2 倍（Claude Code 的缓存写入都是 1 小时档）。缓存读取按各模型公布的价格，未公布单独价格的按输入价的十分之一。价格表在 `llm/pricing.py`，注明了来源和核对日期，促销价写明截止日期，可用 `PAPERTOWN_PRICES` 覆盖。缺价格的模型照常计 token，金额栏注明「缺价格」。Codex 的审批复核模型 `codex-auto-review` 用 ChatGPT 登录时免费，计为 0。
+- **折算**：每个模型按价格表计算。缓存写入分两档：5 分钟的按输入价的 1.25 倍，1 小时的按 2 倍（Claude Code 的缓存写入都是 1 小时档）。缓存读取按各模型公布的价格，未公布单独价格的按输入价的十分之一。价格表在 `papertown/pricing.py`，注明了来源和核对日期，促销价写明截止日期，可用 `PAPERTOWN_PRICES` 覆盖。缺价格的模型照常计 token，金额栏注明「缺价格」。Codex 的审批复核模型 `codex-auto-review` 用 ChatGPT 登录时免费，计为 0。
 - **口径**：从项目开启时算起的累计值，另显示本周的部分。本周从本机时区的周一零点起算。订阅本身不按美元收费，这里的美元只是统一的计量单位，便于和预算比较。
 
 ### 3.3 项目预算
 
-- **开启时设置**：孵化后点「开启项目」，弹出一个小表单：「预计 Agent 用量（按 API 价格折算，美元）」，预填设置里的默认值，留空表示不设。
+- **项目创建后设置**：在项目页「用量与预算」中填写：「预计 Agent 用量（按 API 价格折算，美元）」，预填设置里的默认值，留空表示不设。
 - **随时修改**：项目页的「用量与预算」块里可以改。
 - **状态**：低于预算的 80% 为正常，达到 80% 为接近，达到 100% 为超出。
 - **提醒**：达到 80% 和 100% 时各给项目记一条汇报，改了预算后重新计。项目负责人用 `pt brief` 和 `pt status` 时也会看到本项目的用量和预算。Papertown 不为此主动给 agent 发消息。
 - 这一版只提醒，不自动暂停 agent 或拦截任务。
-- 小镇自己调用 API 的预算（`lines.budget`）不变，界面上两者分开标注。
 
 ### 3.4 页面
 
@@ -80,12 +79,12 @@ Paseo 启动的 agent 和用户在终端里开的会话都写这些日志。Pase
 - `POST /api/usage/refresh`：强制刷新一次。
 - `GET /api/lines/{id}/usage`：`{budget, spent, state, since, week, providers: [{id, cost, tokens}], models: [{provider, model, cost, tokens, priced}], sessions: [{session, provider, owner: {kind: agent | terminal | dir, id, name}, cwd, cost, tokens, last_at}]}`，`state` 为 `ok`、`near`、`over`，没有预算时为 `none`。`tokens` 含 `input`、`cache_write`、`cache_read`、`output`。
 - `PUT /api/lines/{id}/usage_budget`：`{usd: 数值或 null}`。
-- `POST /api/lines/{id}/hatch` 可带 `{usage_budget: 数值或 null}`。
+- `POST /api/ideas {text}` 创建项目后，用上述用量预算接口单独设置预算。
 - 总线事件 `usage`：每次读数完成后发出。
 
 ## 6. 测试
 
-- **单元测试**：用临时目录放三种日志的样例和 Paseo、agy 的报告样例，覆盖 token 去重与累计差值、会话按员工和按目录的归属、按模型折算金额（含缺价格的模型）、预算状态和提醒只发一次（改预算后重新计）、开启项目时带预算、接口形状、订阅读数的保留与出错处理。
+- **单元测试**：用临时目录放三种日志的样例和 Paseo、agy 的报告样例，覆盖 token 去重与累计差值、会话按员工和按目录的归属、按模型折算金额（含缺价格的模型）、预算状态和提醒只发一次（改预算后重新计）、项目创建后设置用量预算、接口形状、订阅读数的保留与出错处理。
 - **真实读取**：`server/scripts/verify_usage.py` 用本机正在运行的 Paseo、agy 和会话日志，按间隔读若干次，检查每个订阅都读到了窗口、百分比在 0 到 100 之间、重置时间在未来、日志扫描得到本周各订阅的 token 和折合金额，并打印每次的读数。它不启动任何守护进程，不向任何 agent 发消息，不消耗额度。
 
 ### 6.1 真实读取结果

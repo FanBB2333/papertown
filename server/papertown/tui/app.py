@@ -110,8 +110,6 @@ class Ribbon(Static):
         town: Papertown = self.app  # type: ignore[assignment]
         now = time.time()
         out: list[tuple[str, float | None]] = []
-        if town.asking:
-            out.append((f"{town.building_name(town.asking[0])}在想怎么回答你", town.asking[1]))
         for aid, (text, t0, last) in town.streaming.items():
             if now - last < 10:
                 out.append((f"{town.agent_name(aid)}在写：{clip(text.strip().splitlines()[-1] if text.strip() else '', 40)}", t0))
@@ -332,7 +330,6 @@ class Papertown(App):
         self.messages: list[dict] = []
         self.trace: list[dict] = []
         self.unread = 0
-        self.asking: tuple[str, float] | None = None
         self.streaming: dict[str, tuple[str, float, float]] = {}
         self.glow = Glow()
         self.place = "projects"
@@ -485,11 +482,6 @@ class Papertown(App):
                 self.messages = [*self.messages, m][-400:]
                 if self.place != "chat":
                     self.unread += 1
-            body = m.get("body") or {}
-            if self.asking and (body.get("from") == self.asking[0] or m.get("kind") == "error"):
-                who = m.get("worker_id") or "员工"
-                self.notify(f"{who} 回答了：{clip(body.get('text'), 60)}", title=self.building_name(self.asking[0]))
-                self.asking = None
         elif kind == "trace":
             self.trace = [*self.trace, ev["row"]][-300:]
         elif kind == "agent_delta":

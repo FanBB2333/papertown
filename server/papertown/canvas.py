@@ -605,8 +605,6 @@ class Canvas:
     def blocked(self, line_id: str, stage: str) -> str:
         """Why a stage cannot close yet: the blocking hard checks of its gate, by name; empty when it may (the gate
         passes, or you waived it)."""
-        if not self._path(line_id).exists():
-            return ""
         g = next((n["gate"] for n in self.view(line_id)["nodes"] if n["kind"] == "gate" and n.get("ref") == stage), None)
         if not g or g["state"] != "block" or g["waived"]:
             return ""

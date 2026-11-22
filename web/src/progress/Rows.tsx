@@ -62,7 +62,7 @@ function ProjectRow({ r, i, cols, defs, toast, onChange }: { r: ProjectCard; i: 
         <span className="pc-seq">#{line.seq}</span>
         <div className="pr-t">
           {o.title}
-          <span className="pr-sub"><StatusTag status={line.status} /><UsageMark state={line.usage_state} /><Who r={r} /></span>
+          <span className="pr-sub"><StatusTag status={line.status} sample={line.sample} /><UsageMark state={line.usage_state} /><Who r={r} /></span>
         </div>
       </div>
       <div className="pr-stage" role="cell"><Stages r={r} /></div>

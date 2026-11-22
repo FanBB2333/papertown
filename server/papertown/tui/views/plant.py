@@ -98,7 +98,7 @@ class Plant(Place):
         pane = self.query_one("#pl-nodes", Pane)
         nodes = self.g.get("nodes") or []
         if not nodes:
-            pane.show(Padding(Text(self.g.get("note") or "没有接入 nvidb：这里显示模拟电厂", style=p["muted"]), (1, 2)))
+            pane.show(Padding(Text(self.g.get("note") or "接入 nvidb 后显示真实 GPU 与队列", style=p["muted"]), (1, 2)))
             return
         parts: list[Any] = []
         room = max(0, min(20, pane.content_size.width - 76))

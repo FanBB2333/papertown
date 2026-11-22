@@ -100,11 +100,11 @@ class Town:
         self.usage.start()
 
     def stop(self) -> None:
+        self.leads.stop()
         self.usage.stop()
         self.terminals.shutdown()
         self.agents.shutdown()
         self.paseo_models.stop()
-        self.leads.stop()
         self.checks.stop()
         self.relay.stop()
         self.nvidb.stop()

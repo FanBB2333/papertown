@@ -6,6 +6,7 @@ in a stage's output with `pt output`; the hard gates of the research loop (canva
 
 from __future__ import annotations
 
+import math
 import threading
 from typing import TYPE_CHECKING
 
@@ -124,12 +125,19 @@ class Pipeline:
 
     def _stage(self, line_id: str, key: str, status: str, pct: int | None = None, note: str | None = None) -> None:
         f: dict = {"status": status}
+        if status != "done":
+            f["ended_at"] = None
+        if status == "todo":
+            f["started_at"] = None
         if pct is not None:
             f["pct"] = pct
         if note is not None:
             f["note"] = note
         if status == "run":
             f["started_at"] = now()
+            if pct is None:
+                previous = self.db.one("select status, pct from stages where line_id = ? and key = ?", line_id, key)
+                f["pct"] = previous["pct"] if previous and previous["status"] == "run" else 0
         if status == "done":
             f["ended_at"], f["pct"] = now(), 100
         self.db.update("stages", {"line_id": line_id, "idx": INDEX[key]}, **f)
@@ -152,9 +160,9 @@ class Pipeline:
             seq = (self.db.val("select max(seq) from lines") or 0) + 1
             line_id = f"line_{seq}"
             self.db.insert("lines", {"id": line_id, "seq": seq, "title": _short(text), "idea": text, "status": "running", "stage": "idea",
-                                     "mill_id": "mill", "revisions": 0, "created_at": now(), "updated_at": now()})
+                                     "mill_id": "mill", "created_at": now(), "updated_at": now()})
             for i, (key, _, b, _) in enumerate(STAGES):
-                self.db.insert("stages", {"line_id": line_id, "idx": i, "key": key, "status": "todo", "building": b, "workers": [], "pct": 0})
+                self.db.insert("stages", {"line_id": line_id, "idx": i, "key": key, "status": "todo", "building": b, "pct": 0})
         self.town.save_item(line_id, "egg", "idea", "cityhall", f"idea #{seq}", {"text": text})
         self._stage(line_id, "idea", "done")
         self._stage(line_id, "hatch", "run")
@@ -169,8 +177,8 @@ class Pipeline:
             self.db.update("lines", {"id": ln["id"]}, status="running", note=None, hold=None, sample=1 if ln["idea"] in ideas else ln["sample"])
         self.db.x("update stages set status = 'run' where status = 'fail'")
         self.db.x("update stages set status = 'todo' where status = 'wait'")
-        for ln in self.db.q("select id, idea from lines where sample is null"):
-            self.db.update("lines", {"id": ln["id"]}, sample=1 if ln["idea"] in ideas else 0)
+        for ln in self.db.q("select id, idea, sample from lines"):
+            self.db.update("lines", {"id": ln["id"]}, sample=1 if ln["idea"] in ideas else ln["sample"] or 0)
 
     # the stages, as the lead moves them
 
@@ -190,7 +198,7 @@ class Pipeline:
                 self._set_line(line_id, status="running")
             self._stage(line_id, key, status, pct=0 if status == "todo" else max(0, min(99, int(pct))) if pct is not None else None, note=note)
             return self.snapshot(line_id)
-        if key in NEEDED and not ln["linked"] and not self.item(line_id, key):
+        if key in NEEDED and not self.item(line_id, key):
             raise LineError(f"「{NAMES[key]}」还没有交产出，先用 `pt output {key} '<JSON>'` 交上来（`pt stage` 写着格式）")
         self.town.checks.run(line_id, True)
         why = self.town.canvas.blocked(line_id, key)
@@ -205,7 +213,7 @@ class Pipeline:
         nxt = self.db.one("select key, status from stages where line_id = ? and idx = ?", line_id, INDEX[key] + 1)
         if nxt and nxt["status"] == "todo":
             self._stage(line_id, nxt["key"], "run")
-        if key == "ship" and not ln["linked"]:
+        if key == "ship":
             self._set_line(line_id, status="done")
             self._publish(line_id)
         return self.snapshot(line_id)
@@ -232,6 +240,12 @@ class Pipeline:
         miss = [k for k in need if not body.get(k)]
         if miss:
             raise LineError(f"还缺 {'、'.join(miss)}。格式：{how}")
+        for key in need:
+            if key not in ("metrics", "rows") and (not isinstance(body[key], str) or not body[key].strip()):
+                raise LineError(f"{key} 应为非空文本。格式：{how}")
+        for key in {"hatch": ("similar",), "method": ("baselines",), "exp": ("metrics", "rows"), "review": ("reviews",)}.get(stage, ()):
+            if key in body and not isinstance(body[key], list):
+                raise LineError(f"{key} 应为列表。格式：{how}")
         out = getattr(self, f"_out_{stage}")(ln, body)
         self.town.save_item(line_id, kind, stage, STAGES[INDEX[stage]][2], _text(out.get("title"), 120) if stage in ("method", "write") else title, out)
         self._publish(line_id)
@@ -249,6 +263,9 @@ class Pipeline:
         if not similar:  # the closest by code, so the novelty check always has something to read
             similar = [{"paper_id": h["paper_id"], "title": h["title"], "similarity": h["similarity"], "url": h.get("url"), "year": h.get("year"),
                         "note": ""} for h in sv["hits"][:3]]
+        # Keep the closest code-scored work visible to the hard check even when the lead picked other papers.
+        seen = {s["paper_id"] for s in similar}
+        similar += [{**h, "note": ""} for h in sv["hits"][:3] if h["paper_id"] not in seen]
         self._set_line(ln["id"], verdict=sv["verdict"])
         return {"verdict": sv["verdict"], "similar": similar, "gap": _text(body["gap"]), "suggestions": _list(body.get("suggestions")),
                 "summary": _text(body.get("summary"), 600) or sv["summary"], "sources": {"library": len(sv["hits"]), "method": sv["method"]},
@@ -265,6 +282,12 @@ class Pipeline:
 
     def _out_exp(self, ln: dict, body: dict) -> dict:
         metrics = _list(body.get("metrics"), 80)
+        for row in body["rows"]:
+            values = row.get("values") if isinstance(row, dict) else None
+            if (not isinstance(row, dict) or not isinstance(row.get("method"), str) or not row["method"].strip()
+                    or not isinstance(values, list) or len(values) != len(metrics)
+                    or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values)):
+                raise LineError("结果表每行应有方法名，与指标数量一致的有限数值。")
         rows = [{"method": _text(r.get("method"), 120), "values": [v for v in (r.get("values") or [])[:len(metrics)] if isinstance(v, (int, float))],
                  "ours": bool(r.get("ours"))} for r in (body.get("rows") or [])[:40] if isinstance(r, dict) and r.get("method")]
         if not metrics or not rows:

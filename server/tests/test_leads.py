@@ -64,7 +64,7 @@ def test_a_lead_urges_its_workers_reports_and_asks_within_its_bounds(tmp_path):
         q = c.post(f"/api/bridge/{coder['id']}/ask", json={"question": "用哪个数据集？", "choices": ["A", "B"]}, headers=hc).json()
         v = c.get(f"/api/lines/{lid}/lead").json()
         assert v["reports"][0]["data"] == {"text": "基线复现完了，差 0.3", "key": True, "who": "项目负责人"} and v["asks"][0]["data"]["choices"] == ["A", "B"]
-        assert v["settings"] == {"supervise": True, "every": 60}
+        assert v["settings"] == {"supervise": True, "every": 60, "on": True}
         ask = v["asks"][0]
         assert str(ask["id"]) in q["text"]
         c.post(f"/api/reports/{ask['id']}/answer", json={"text": "B"})
@@ -120,7 +120,7 @@ def test_a_lead_hears_when_its_project_moves(tmp_path):
         assert len(said) == 1 and said[0].startswith("<checkin>") and "代码员工结束了一轮" in said[0]
         assert f"任务 {job['id']} train" in said[0] and "→ 失败" in said[0] and "现在的情况：" in said[0]
 
-        town.db.update("lines", {"id": lid}, status="running")
+        town.db.update("stages", {"line_id": lid, "key": "method"}, status="run")
         look()
         assert len(checkins()) == 2
         for _ in range(5):

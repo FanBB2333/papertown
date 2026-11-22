@@ -147,7 +147,7 @@ export function repoLine(x: CardRepo, which: 'code' | 'paper') {
 
 // what a project without a card says in its place
 export const noCardText = (r: ProjectCard) =>
-  r.lead?.started ? tr('还没有卡片。按「更新」，负责人读完项目后会写第一张。') : tr('这个项目还没有负责人。配一个以后，按「更新」让它把进展写成卡片。');
+  r.lead?.started ? tr('还没有卡片。按「更新」，负责人读完项目后会写第一张。') : tr('负责人还没有启动。打开它的开关后，按「更新」由它把进展写成卡片。');
 
 // a card or row opens its project's page on a click, Enter or Space; its title links there
 export function opens(line: ProjectCard['line']) {
@@ -170,13 +170,13 @@ export function AskButton({ seq }: { seq: number }) {
 export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?: boolean }) {
   const c: Card | null = r.card;
   const none = (t: string) => <span className="pp-none" title={bare ? t : undefined}>{bare ? '—' : t}</span>;
-  const noCard = () => none(r.lead?.started ? tr('负责人还没写') : tr('配负责人后由它填写'));
+  const noCard = () => none(r.lead?.started ? tr('负责人还没写') : tr('负责人启动后由它填写'));
   switch (pane) {
     case 'summary':
       return (
         <section className="pp pp-summary">
           {c ? <><Meter r={r} /><p className="pc-sum">{c.summary}</p></>
-            : bare ? <p className="pc-empty muted small">{r.lead?.started ? tr('还没有卡片') : tr('还没有负责人')}</p>
+            : bare ? <p className="pc-empty muted small">{r.lead?.started ? tr('还没有卡片') : tr('负责人还没有启动')}</p>
             : <p className="pc-empty muted small">{noCardText(r)}</p>}
         </section>
       );

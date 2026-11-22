@@ -2,7 +2,7 @@
 
 ## 1. 要解决的问题
 
-Papertown 的员工（代码员工、写作员工、项目负责人、节点 agent、小助手）目前跑在 Paseo 里，或者以 pi 的形式跑在 Papertown 自己的 tmux 里。用户希望 Claude Code、Codex、Antigravity 这三种 CLI 也能直接跑在终端里，由 Papertown 启动和管理：
+Papertown 的员工（代码员工、写作员工、项目负责人、节点 agent、小助手）可以跑在 Paseo 里，也可由 Papertown 在终端里启动和管理 Claude Code、Codex、Antigravity。项目负责人按项目开关常驻，代码员工和写作员工可由负责人用 `pt hire` 启动：
 
 - **herdr**：每个员工一个 herdr 标签页，用户在自己的 herdr 里能看到、能接手。
 - **tmux**：最原生的做法，每个员工一个 tmux 窗口，用户可以 `tmux attach` 进去。
@@ -16,13 +16,13 @@ Papertown 的员工（代码员工、写作员工、项目负责人、节点 age
 | CLI | 启动参数 | 状态信号 | 会话 id |
 | --- | --- | --- | --- |
 | Claude Code | `--model`、`--effort low\|medium\|high\|xhigh\|max`、`--add-dir`、`--settings <文件>` | `--settings` 里的 hooks：`SessionStart`（只用来拿会话 id）、`UserPromptSubmit` 和 `PreToolUse`（工作中）、`PermissionRequest` 和 `Notification` 的 `permission_prompt`、`elicitation_dialog`（等你）、`Stop`（这一轮结束）。带 `agent_id` 的是子 agent 的事件，忽略 | `--session-id <uuid>` 由 Papertown 预先指定 |
-| Codex | `-m`、`-c model_reasoning_effort="…"`、`-c notify=[…]` | `notify` 只在一轮结束时调用（`agent-turn-complete`）。等批准没有不经信任确认的信号：新 hooks 会弹「Hooks need review」，`--dangerously-bypass-hook-trust` 会连带放行用户自己未审核的 hooks，两者都不用 | `notify` 载荷里的 `thread-id`，或按工作目录和启动时间找到的会话日志里第一条 `session_meta` |
+| Codex | `-m`、`-c model_reasoning_effort="…"`、`-c notify=[…]` | `notify` 只在一轮结束时调用（`agent-turn-complete`）。等批准没有不经信任确认的信号：新 hooks 会弹「Hooks need review」，`--dangerously-bypass-hook-trust` 会连带放行用户自己未审核的 hooks，采用现有 notify 和终端画面识别 | `notify` 载荷里的 `thread-id`，或按工作目录和启动时间找到的会话日志里第一条 `session_meta` |
 | Antigravity | `--model`（id 自带思考强度，如 `gemini-3.8-flash-low`）、`--add-dir`、`--settings <JSON>`（只对本次会话生效） | `--settings` 里的状态栏命令：每次状态变化收到 `agent_state`（`idle`、`working`、`tool_use` 等）和 `tool_confirmation_pending`，至多每 300 毫秒一次 | 状态栏载荷里的 `conversation_id` |
 
 另外两条通用信号：
 
 - **画面不动**：三种 CLI 工作时都有计时或动画。员工处于工作中，画面却连续 15 秒没有变化，就判为「等你」（终端里可能有对话框）。画面一变就回到工作中。Codex 的等批准只能靠这一条。
-- **进程退出**：tmux 窗口设 `remain-on-exit`，用 `#{pane_dead}` 判断；herdr 看 agent 是否还在列表里。
+- **进程退出**：tmux 窗口设 `remain-on-exit`，用 `#{pane_dead}` 判断。herdr 看 agent 是否还在列表里。
 
 herdr 后端里 Claude Code 和 Codex 的状态直接用 herdr 自己识别的 `agent_status` 和 `completion_seq`，和员工页里的 herdr 终端会话一致，上面的 hooks 和 notify 只用来拿会话 id。Antigravity 例外：没装 herdr 自己的集成时，herdr 能看出它在工作和停下，却从不把一轮计入 `completion_seq`，所以 Antigravity 在 herdr 里也按状态栏回报判断状态。
 
@@ -116,7 +116,7 @@ Claude Code 的会话 id 在启动时就写进 `agent_sessions`。Codex 和 Anti
 - **员工页**：终端员工的行带后端标签（herdr、tmux）。选中后中栏与 herdr 终端会话相同，分「对话」「终端」两个标签（见 3.9），下方是共用的输入框（插话、排队、打断并发送、停止，排队的消息可现在发或撤回）。右栏显示后端、CLI、模型、会话 id、接入方式（tmux 为 `tmux -L papertown attach -t <会话>:<窗口>`，herdr 为工作区和标签页）和「关闭终端」，可收起，窗口窄于 1180px 时改为抽屉。
 - **新建员工**：员工页左上角的按钮打开弹窗，依次选择项目、岗位（代码员工、写作员工、项目负责人）、运行方式（Paseo、herdr、tmux、pi，不可用的置灰并写明原因）和模型，直接启动。该岗位的员工已在运行时改为「打开对话」。
 - 由 herdr 后端启动的员工不再出现在「终端」或「其他终端」里。
-- **设置 › 员工 Agent**：新增「默认运行方式」（Paseo、herdr、tmux），节点任务派发和项目负责人启动时使用。模型仍按各岗位的默认设置。
+- **设置 › 员工 Agent**：新增「默认运行方式」（Paseo、herdr、tmux），节点任务派发、负责人常驻和 `pt hire` 启动员工时使用。模型按各岗位默认设置，`PAPERTOWN_WORKER_MODEL` 留空时沿用负责人默认值。
 
 ### 3.9 对话记录与提示弹窗
 

@@ -269,7 +269,7 @@ class Jobs(Place):
         self.paint_list()
 
     def action_backend(self) -> None:
-        keys = ["all", *[b["id"] for b in self.backends]] if self.backends else ["all", "local", "sim", "nvidb"]
+        keys = ["all", *[b["id"] for b in self.backends]] if self.backends else ["all", "local", "nvidb"]
         self.backend = keys[(keys.index(self.backend) + 1) % len(keys)] if self.backend in keys else "all"
         self.paint_list()
 

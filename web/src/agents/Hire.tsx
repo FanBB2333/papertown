@@ -10,7 +10,7 @@ type Runtime = NonNullable<StartOpts['runtime']>;
 const POSTS: [Post, string, string][] = [
   ['coder', tr('代码员工'), tr('在项目的代码目录里写代码、跑测试并提交实验。')],
   ['writer', tr('写作员工'), tr('在项目的论文目录里撰写和修改稿件。')],
-  ['lead', tr('项目负责人'), tr('跟进项目进度、分派任务并汇报。')],
+  ['lead', tr('项目负责人'), tr('推进项目：启动员工、分派任务、收尾工序并汇报。')],
 ];
 const RUNTIMES: [Runtime, string, string][] = [
   ['paseo', 'Paseo', tr('对话在 Paseo 中进行，桌面端和手机同步可见。')],

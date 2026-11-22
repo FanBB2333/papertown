@@ -473,7 +473,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/health")
     def health():
-        return {"ok": True, "provider": town.provider.name, "offline": town.s.offline, "ports": town.mcp.status}
+        return {"ok": True, "ports": town.mcp.status}
 
     @app.get("/api/world")
     def world():
@@ -501,7 +501,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return snap
 
     @app.post("/api/ideas")
-    def submit_idea(body: IdeaIn):
+    def create_idea(body: IdeaIn):
         return guard(town.pipeline.create, body.text)
 
     @app.get("/api/usage")
@@ -617,7 +617,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         sheet = town.world.sheet(b["id"]) or {}
         line_id = b["line_id"] or sheet.get("active_line")
         ln = town.db.one("select id, seq, title, status from lines where id = ?", line_id) if line_id else None
-        if not ln or ln["status"] == "dropped":
+        if not ln or ln["status"] not in ("running", "linked"):
             return {"who": ASSISTANT, "agent": town.agents.public(town.agents.get(ASSISTANT)), "line": None, "name": "小助手"}
         role = STAFF_AT.get(b["type"], "lead")
         a = town.leads.agent(ln["id"], role) or town.leads.agent(ln["id"], "lead") or town.agents.ensure(ln["id"], "lead")
@@ -1267,11 +1267,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         a = bridged(agent_id, x_papertown_token)
         if not a["line_id"]:
             raise HTTPException(400, "你没有自己的项目")
-        if a["role"] != "lead" and OWNER.get(body.stage) != a["role"]:
-            raise HTTPException(403, f"「{body.stage}」的产出由{ROLES[OWNER.get(body.stage, 'lead')]['name']}或项目负责人交")
+        owner, name = OWNER.get(body.stage, "lead"), STAGE_NAMES.get(body.stage, body.stage)
+        if a["role"] != "lead" and owner != a["role"]:
+            who = "项目负责人" if owner == "lead" else f"{ROLES[owner]['name']}或项目负责人"
+            raise HTTPException(403, f"「{name}」的产出由{who}交")
         out = guard(town.pipeline.output, a["line_id"], body.stage, body.body)
         tail = f"查重结论（用代码算）：{out['verdict']}，最接近的一篇相似度 {max((x['similarity'] for x in out['similar']), default=0):.2f}。" if body.stage == "hatch" else ""
-        return {"text": f"「{STAGE_NAMES[body.stage]}」的产出记下了，用户在项目页和中控屏里能看到。{tail}这道工序做完了就用 `pt stage done {body.stage}` 收尾。"}
+        then = (f"这道工序做完了就用 `pt stage done {body.stage}` 收尾。" if a["role"] == "lead"
+                else "收尾由项目负责人来做，用 `pt tell lead \"…\"` 告诉它产出已交。")
+        return {"text": f"「{name}」的产出记下了，用户在项目页和中控屏里能看到。{tail}{then}"}
 
     @app.get("/api/bridge/{agent_id}/survey")
     def bridge_survey(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):

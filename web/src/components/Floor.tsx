@@ -22,7 +22,7 @@ export type CoreType = 'mill' | 'depot' | 'farm' | 'press';
 const THEME: Record<CoreType, { title: string; how: string; empty: string }> = {
   mill: { title: tr('生产车间'), how: tr('每条生产线是一篇论文，八道工序排在传送带上，工位上站的是负责这道工序的 Agent，论文跟着传送带走到它现在的工序。'), empty: tr('提交 idea 后，项目负责人将在这里推进各道工序。') },
   depot: { title: tr('货架区'), how: tr('每个项目一排货架：读代码、写代码、跑测试，打包好的实验箱子发往实验农场。站在货架前的是这个项目的代码员工。'), empty: tr('还没有项目。项目立项后，仓库会给它一排货架和一位代码员工。') },
-  farm: { title: tr('试验田'), how: tr('每个项目一垄田，每个实验任务是一块地：排队是种子，运行中按进度长高，跑完结穗，失败就枯了。看田员在田边盯着。'), empty: tr('田里还空着。流水线跑到实验工序、或代码员工提交任务后，这里就会种上。') },
+  farm: { title: tr('试验田'), how: tr('每个项目一垄田，每个实验任务是一块地：排队是种子，运行中按进度长高，跑完结穗，失败就枯了。看田员在田边盯着。'), empty: tr('田里还空着。代码员工提交实验任务后，这里就会种上。') },
   press: { title: tr('印刷车间'), how: tr('每篇论文一台印刷机：排字、开印、校对、装订出厂。机器旁是写这篇论文的员工，纸张停在它正在做的那一步。'), empty: tr('还没有稿子。项目立项后，印刷厂会给它一台印刷机和一位写作员工。') },
 };
 
@@ -168,7 +168,7 @@ function farmLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
       id, seq: ln?.seq ?? row?.line.seq ?? 0, title: ln?.title ?? row?.line.title ?? id, status: running >= 0 ? 'running' : all.some(j => j.status === 'queued') ? 'waiting' : all.length ? 'done' : '',
       tag: running >= 0 ? tr('有实验在跑') : all.some(j => j.status === 'queued') ? tr('在排队') : all.length ? tr('收了 {0} 茬', all.filter(j => j.status === 'done').length) : tr('还没种'),
       note: row?.agent?.last?.data?.text ? String(row.agent.last.data.text).split('\n')[0].slice(0, 60)
-        : ln?.linked ? ln.stages.find(s => s.key === 'exp')?.note ?? tr('nvidb 里还没有它的任务') : tr('流水线跑到实验工序、或代码员工提交任务后就会种上'),
+        : ln?.linked ? ln.stages.find(s => s.key === 'exp')?.note ?? tr('nvidb 里还没有它的任务') : tr('代码员工提交实验任务后就会种上'),
       stations, at, moving: running >= 0,
     };
   }).sort((a, b) => b.seq - a.seq);

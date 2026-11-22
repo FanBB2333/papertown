@@ -57,7 +57,7 @@ export function AgentRoom(p: Props) {
     return (
       <div className="room-empty">
         <h2>{tr('还没有项目')}</h2>
-        <p>{tr('项目在造纸厂立项后，')}{r.place}{tr('会为它配一个')}{r.name}{tr('。')}</p>
+        <p>{tr('项目立项后，由项目负责人启动{0}。', r.name)}</p>
         <button className="btn pri" onClick={p.onIdea}>{tr('放入一颗新 idea')}</button>
       </div>
     );

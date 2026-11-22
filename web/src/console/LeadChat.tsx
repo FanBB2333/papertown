@@ -76,9 +76,10 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
                 <PiLog rows={events.filter(e => ['user', 'assistant', 'note'].includes(e.kind)).map(ev => ({ ev }))} live="" working={false} />
               </section>}
               {eventError && <p className="note err">{eventError}</p>}
+              {v.asks.length > 0 && <div className="lc-asks">{v.asks.slice(0, 3).map(q => <AskCard key={q.id} q={q} toast={toast} onDone={again} />)}</div>}
               <ResidentControl lineId={lineId} resident={v.resident} sample={line?.sample} model={a?.model} toast={toast} onChanged={again} />
               {v.resident.state === 'starting' && <p className="as-wait">{tr('正在等待负责人启动。')}</p>}
-              <p className="as-lead">{tr('负责人跟进项目进度、分派任务并汇报。工作目录是 Papertown 自己的目录。')}</p>
+              <p className="as-lead">{tr('负责人推进这个项目：启动员工、派活、交工序产出、收尾工序并向你汇报。工作目录是 Papertown 自己的目录。')}</p>
               {a && <Earlier agent={a.id} at={a.ext_id} limit={3} title={tr('接着之前的对话')} onPick={resume} />}
               {['off', 'blocked'].includes(v.resident.state) && <details className="hire-card">
                 <summary>{tr('手动启动')}</summary>
@@ -87,7 +88,7 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
               </details>}
             </div>
           </>
-        ) : a.term ? <>{head(a)}<HostedRoom agent={a} toast={toast} /></> : a.runtime === 'pi' ? <PiTalk agent={a} head={head} toast={toast} /> : <Talk key={a.ext_id ?? a.id} agent={a} asks={v.asks} head={head} toast={toast} onAnswered={again} />}
+        ) : a.term ? <HostedRoom agent={a} toast={toast} /> : a.runtime === 'pi' ? <PiTalk agent={a} head={head} toast={toast} /> : <Talk key={a.ext_id ?? a.id} agent={a} asks={v.asks} head={head} toast={toast} onAnswered={again} />}
       {history && a && <History agent={a.id} onPick={resume} onClose={() => setHistory(false)} />}
     </div>
   );

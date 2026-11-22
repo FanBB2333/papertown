@@ -6,7 +6,7 @@ import time
 
 import pytest
 import uvicorn
-from textual.widgets import Input
+from textual.widgets import DataTable, Input
 
 from papertown.api import create_app
 from papertown.tui.app import PLACES, Main, Papertown
@@ -53,8 +53,26 @@ async def until(pilot, ok, timeout: float = 20) -> None:
 
 
 def test_tui_places_idea_and_job(server):
+    class RecordingApi(Api):
+        def __init__(self):
+            super().__init__(server)
+            self.posts = []
+            self.staff_reply = None
+
+        async def get(self, path, **params):
+            if self.staff_reply and path.endswith("/staff"):
+                return self.staff_reply
+            return await super().get(path, **params)
+
+        async def post(self, path, body=None):
+            self.posts.append((path, body))
+            if self.staff_reply and path.endswith("/say"):
+                return {}  # exercise routing without delivering a message or starting an agent
+            return await super().post(path, body)
+
     async def go():
-        app = Papertown(Api(server), start_server=False, events=False)
+        api = RecordingApi()
+        app = Papertown(api, start_server=False, events=False)
         async with app.run_test(size=(170, 46)) as pilot:
             await until(pilot, lambda: isinstance(app.screen, Main))
             for i, (key, _) in enumerate(PLACES):
@@ -71,12 +89,48 @@ def test_tui_places_idea_and_job(server):
                 assert getattr(app.current, attr) == tabs[-1][0]
                 await pilot.press("right_square_bracket")
 
+            assert [key for key, _ in PAGES] == ["skills", "mcp", "library"]
             await pilot.press("1", "i")
             app.screen.query_one("#say", Input).value = "TUI 冒烟测试：小模型的工具路由"
             await pilot.press("enter")
             await until(pilot, lambda: any("冒烟" in (ln.get("idea") or ln.get("title") or "") for ln in app.lines))
 
-            await pilot.press("escape", "2", "n")
+            assert ("/api/ideas", {"text": "TUI 冒烟测试：小模型的工具路由"}) in api.posts
+            line = next(ln for ln in app.lines if "冒烟" in ln.get("idea", ""))
+            assert line["status"] == "running"
+            assert line["team"] == []
+            assert "bank" not in app.hud and "leads" in app.hud
+            await pilot.press("escape")
+            projects = app.current
+            await until(pilot, lambda: projects.line and projects.line["id"] == line["id"])
+            table = app.screen.query_one("#pj-table", DataTable)
+            table.focus()
+            before = projects.line["lead"]["on"]
+            await pilot.press("l")
+            await until(pilot, lambda: projects.line["lead"]["on"] is not before)
+            assert (f"/api/lines/{line['id']}/lead", {"on": not before}) in api.posts
+            await pilot.press("l")
+            await until(pilot, lambda: projects.line["lead"]["on"] is before)
+            assert projects.line["team"] == []  # resident startup is disabled throughout this test
+
+            for staff, endpoint in [
+                ({"who": "coder", "name": "代码员工", "agent": {"id": "coder-test"}}, "/api/agents/coder-test/say"),
+                ({"who": "assistant", "name": "小助手", "agent": None}, "/api/assistant/say"),
+            ]:
+                api.staff_reply = staff
+                table.focus()
+                await pilot.press("a")
+                box = app.screen.query_one("#say", Input)
+                box.value = "请说明此处的进展"
+                await pilot.press("enter")
+                await until(pilot, lambda: box.value == "")
+                path, body = api.posts[-1]
+                assert path == endpoint
+                assert body["text"].startswith("关于") and body["text"].endswith("：请说明此处的进展")
+                await pilot.press("escape")
+            api.staff_reply = None
+
+            await pilot.press("2", "n")
             await until(pilot, lambda: isinstance(app.screen, Form))
             app.screen.query_one("#f-name", Input).value = "tui-smoke"
             app.screen.query_one("#f-command", Input).value = "sleep 30"

@@ -27,7 +27,7 @@ export function DemoWelcome() {
     <div className="demo-veil" role="dialog" aria-modal="true" onClick={e => { if (e.target === e.currentTarget) close(); }}>
       <div className="demo-card pnl">
         <h2>{tr('欢迎来到 Papertown')}</h2>
-        <p>{tr('一个开源的科研流水线：idea 经过查重、立项、方法设计、实验、写作和审稿，最后成为一篇论文。每个项目走同一套研究流程，agent 员工做事，你在关键处监督、纠错和拍板。')}</p>
+        <p>{tr('一个开源的科研小镇：idea 经过查重、立项、方法设计、实验、写作和审稿，最后成为一篇论文。每个项目由一位常驻的项目负责人推进，它启动员工并派活，你在关键处监督、纠错和拍板。')}</p>
         <p className="muted">{tr('这是只读的静态演示，五个预制样例项目展示不同阶段，包含占位内容。项目负责人默认关闭。')}</p>
         <ul>
           <li>{tr('「进展」里每个项目一张卡片，点开项目页，再进入「研究回路」')}</li>

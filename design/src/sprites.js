@@ -322,7 +322,7 @@ export const BUILDINGS = {
 
   hatchery: {
     name: '孵化场', en: 'Hatchery', district: 'plaza', w: 2, d: 2, h: 2.4, accent: '#e2b84a',
-    rep: 'idea 蛋在这里查重、孵化，通过后才建厂', tech: 'RAG + Skill · 查重',
+    rep: '负责人在这里查重、交报告，再询问是否推进', tech: 'RAG + Skill · 查重',
     draw(p) {
       p.box(0, 0, 0, 2, 2, 0.12, 'm-base');
       p.box(0.2, 0.2, 0.12, 1.6, 1.6, 0.5, 'm-wall');
@@ -336,7 +336,7 @@ export const BUILDINGS = {
   },
   mill: {
     name: '造纸厂', en: 'Paper Mill', district: 'camp', w: 3, d: 2, h: 3.6, accent: '#a8743f',
-    rep: '一篇论文一座厂：调研、方法、写作都在这条流水线上', tech: 'Capitalist 编队 + Skills',
+    rep: '项目共用造纸厂：负责人派活、交产出并推进工序', tech: '常驻负责人 + Skills',
     draw(p) {
       p.box(0, 0, 0, 3, 2, 0.12, 'm-base');
       p.box(0.1, 0.15, 0.12, 2.75, 1.65, 1.15, 'm-wall');
@@ -351,7 +351,7 @@ export const BUILDINGS = {
   },
   farm: {
     name: '实验农场', en: 'Experiment Farm', district: 'field', w: 3, d: 3, h: 1.8, accent: '#6f9a4a',
-    rep: '每块田是一组实验，收成是结果表；用的电来自算力电厂', tech: 'MCP · nvidb',
+    rep: '每块田是一组实验，收成是结果表。用的电来自算力电厂', tech: 'MCP · nvidb',
     draw(p) {
       p.box(0, 0, 0, 3, 3, 0.08, 'm-soil');
       for (let i = 0; i < 6; i++) p.box(0.2, 0.25 + i * 0.42, 0.08, 1.75, 0.26, 0.07, i < 3 ? 'm-crop' : 'm-crop2');
@@ -366,7 +366,7 @@ export const BUILDINGS = {
   },
   press: {
     name: '印刷厂', en: 'TeX Press', district: 'print', w: 2, d: 2, h: 2.5, accent: '#4b5f9e',
-    rep: 'TeX 源码的存放、排版和编译；.tex 是铅字版，编译是开机印刷', tech: 'downleaf · arXivTeXplorer',
+    rep: '写作员工整理 TeX 源码、排版和编译，交回论文产出', tech: '写作员工 · latexmk',
     draw(p) {
       p.box(0, 0, 0, 2, 2, 0.12, 'm-base');
       p.box(0.2, 0.2, 0.12, 1.6, 1.55, 1.3, 'm-wall');
@@ -379,7 +379,7 @@ export const BUILDINGS = {
   },
   qa: {
     name: '质检所', en: 'Review Lab', district: 'harbour', w: 2, d: 2, h: 2.6, accent: '#3f8f7f',
-    rep: '多个审稿人 persona 打分，检查页数、匿名和模板', tech: 'Skills · 审稿',
+    rep: '负责人交审稿产出，代码检查页数、匿名和模板', tech: 'Skills · 审稿',
     draw(p) {
       p.box(0, 0, 0, 2, 2, 0.12, 'm-base');
       p.box(0.2, 0.25, 0.12, 1.55, 1.45, 1.15, 'm-wall');
@@ -443,7 +443,7 @@ export const BUILDINGS = {
 
   library: {
     name: '图书馆', en: 'Library', district: 'harbour', w: 3, d: 3, h: 2.3, accent: '#5f7f9e',
-    rep: '全世界共享的知识库：读过的论文、笔记和摘要', tech: 'RAG 主库 · 向量检索',
+    rep: '全世界共享的知识库：读过的论文、笔记和摘要', tech: 'BM25 · 关键词检索',
     draw(p) {
       p.box(0, 0, 0, 3, 3, 0.1, 'm-base');
       p.box(0.15, 0.15, 0.1, 2.7, 2.7, 0.1, 'm-base');
@@ -511,7 +511,7 @@ export const BUILDINGS = {
   },
   market: {
     name: '人才市场', en: 'Talent Market', district: 'wharf', w: 3, d: 2, h: 1.6, accent: '#c25b56',
-    rep: 'Agent 员工池：按任务编队，按 ROI 升职或降级', tech: 'Capitalist + Skills',
+    rep: '项目负责人启动代码和写作员工，显示真实名册', tech: 'pt hire + Skills',
     draw(p) {
       p.box(0, 0, 0, 3, 2, 0.06, 'm-plaza');
       p.box(0.15, 0.15, 0.06, 2.7, 0.12, 1.15, 'm-wall');
@@ -531,7 +531,7 @@ export const BUILDINGS = {
   },
   cityhall: {
     name: '市政厅', en: 'City Hall', district: 'plaza', w: 3, d: 3, h: 3.8, accent: '#b07d4f',
-    rep: '你的个人中心：项目总览、预算、待办，也是写下新 idea 的地方', tech: '—',
+    rep: '你的个人中心：项目总览、负责人、待办和新 idea', tech: '—',
     draw(p) {
       p.box(0, 0, 0, 3, 3, 0.12, 'm-base');
       p.box(0.2, 0.3, 0.12, 2.6, 2.4, 1.05, 'm-wall');
@@ -551,7 +551,7 @@ export const BUILDINGS = {
   },
   bank: {
     name: '银行', en: 'Bank', district: 'press_row', w: 2, d: 2, h: 2.0, accent: '#c9a227',
-    rep: 'token 预算和 API 成本；每条流水线结束时在这里结算', tech: '计费日志',
+    rep: '订阅额度与项目 agent 用量，对照各项目用量预算', tech: '会话用量统计',
     draw(p) {
       p.box(0, 0, 0, 2, 2, 0.1, 'm-base');
       p.box(0.12, 0.12, 0.1, 1.76, 1.76, 0.1, 'm-base');
@@ -582,7 +582,7 @@ export const BUILDINGS = {
 
   power: {
     name: '算力电厂', en: 'GPU Power Plant', district: 'grid', w: 3, d: 3, h: 2.6, accent: '#e0a030',
-    rep: 'GPU：负荷就是显卡占用，停电就是 OOM', tech: 'MCP · nvidb',
+    rep: 'GPU：查看 nvidb 的显卡占用、显存和队列', tech: 'MCP · nvidb',
     draw(p) {
       p.box(0, 0, 0, 3, 3, 0.1, 'm-base');
       p.cooling(0.85, 0.85, 0.1, 0.62, 2.1, 'm-white');
@@ -602,8 +602,8 @@ export const BUILDINGS = {
     },
   },
   power_sim: {
-    name: '模拟电厂', en: 'FakeGPU Backup', district: 'grid', w: 2, d: 2, h: 1.6, accent: '#7a8fa6',
-    rep: '没有真 GPU 时的备用电源，现场 demo 的兜底', tech: 'FakeGPU',
+    name: '样例项目', en: 'Sample Projects', district: 'grid', w: 2, d: 2, h: 1.6, accent: '#7a8fa6',
+    rep: '预制项目展示工序和产出，开启负责人后继续', tech: '预制样例',
     draw(p) {
       p.box(0, 0, 0, 2, 2, 0.1, 'm-base');
       p.box(0.2, 0.2, 0.1, 0.95, 0.85, 0.8, 'm-wall');
@@ -696,7 +696,7 @@ export const ITEMS = {
     '<path class="m-egg f-r" d="M24 5c9 0 14 14 14 23 0 8-6 13-14 13 5-3 7-8 7-14C31 18 28 8 24 5Z"/>' +
     '<circle class="m-acc f-l" cx="19" cy="25" r="2.6"/><circle class="m-acc f-l" cx="27" cy="31" r="2"/><circle class="m-acc f-l" cx="26" cy="18" r="1.6"/>' +
     '<ellipse class="hl" cx="17.5" cy="15" rx="2.6" ry="4.5"/>' },
-  notes: { name: '调研笔记', rep: '孵化员和调研员从图书馆带回的摘录', accent: '#5f7f9e', svg:
+  notes: { name: '调研笔记', rep: '项目负责人从图书馆检索得到的摘录', accent: '#5f7f9e', svg:
     `<g transform="rotate(-8 24 24)">${sheet(9, 8, 24, 30, 'm-sign')}</g>${sheet(14, 10, 24, 30)}` +
     '<path class="ln m-acc" d="M18 18h16M18 23h16M18 28h11M18 33h14"/>' },
   draft: { name: '方法草案', rep: '方法设计车间产出的问题定义和机制', accent: '#7a5aa6', svg:
@@ -720,13 +720,13 @@ export const ITEMS = {
 };
 
 export const WORKERS = {
-  hatcher: { name: '孵化员', rep: '查重、写撞车报告', accent: '#e2b84a', mark: '<ellipse class="m-acc f-l" cx="36.5" cy="35.5" rx="3.2" ry="4.2"/>' },
-  scout: { name: '调研员', rep: '检索文献、整理 related work', accent: '#5f7f9e', mark: '<circle class="ln m-acc" cx="35.5" cy="34" r="3.2"/><path class="ln m-acc" d="M38 36.5l3 3"/>' },
-  designer: { name: '方法设计师', rep: '把 idea 写成可验证的方法', accent: '#7a5aa6', mark: '<path class="ln m-acc" d="M33 40l3.5-9 3.5 9M34.5 37h4"/>' },
-  experimenter: { name: '实验员', rep: '排 GPU、跑实验、收结果', accent: '#6f9a4a', mark: '<path class="ln m-acc" d="M35 30v4l-3.5 6h10L38 34v-4"/>' },
-  writer: { name: '写手', rep: '在印刷厂里写 TeX', accent: '#4b5f9e', mark: '<path class="ln2 m-acc" d="M33 39l7-7"/>' },
-  reviewer: { name: '审稿人', rep: '在质检所里打分、挑毛病', accent: '#3f8f7f', mark: '<path class="ln2 m-acc" d="M32.5 35l3 3 5-6"/>' },
-  keeper: { name: '仓管员', rep: '维护仓库：回 issue、管 release', accent: '#c47a3a', mark: '<rect class="ln m-acc" x="32.5" y="31.5" width="8" height="7" rx="1"/><path class="ln m-acc" d="M32.5 34.5h8"/>' },
+  hatcher: { name: '项目负责人', rep: '查重、写撞车报告', accent: '#e2b84a', mark: '<ellipse class="m-acc f-l" cx="36.5" cy="35.5" rx="3.2" ry="4.2"/>' },
+  scout: { name: '项目负责人', rep: '检索文献、整理 related work', accent: '#5f7f9e', mark: '<circle class="ln m-acc" cx="35.5" cy="34" r="3.2"/><path class="ln m-acc" d="M38 36.5l3 3"/>' },
+  designer: { name: '项目负责人', rep: '把 idea 写成可验证的方法', accent: '#7a5aa6', mark: '<path class="ln m-acc" d="M33 40l3.5-9 3.5 9M34.5 37h4"/>' },
+  experimenter: { name: '代码员工', rep: '排 GPU、跑实验、收结果', accent: '#6f9a4a', mark: '<path class="ln m-acc" d="M35 30v4l-3.5 6h10L38 34v-4"/>' },
+  writer: { name: '写作员工', rep: '在印刷厂里写 TeX', accent: '#4b5f9e', mark: '<path class="ln2 m-acc" d="M33 39l7-7"/>' },
+  reviewer: { name: '项目负责人', rep: '在质检所里打分、挑毛病', accent: '#3f8f7f', mark: '<path class="ln2 m-acc" d="M32.5 35l3 3 5-6"/>' },
+  keeper: { name: '代码员工', rep: '维护仓库：回 issue、管 release', accent: '#c47a3a', mark: '<rect class="ln m-acc" x="32.5" y="31.5" width="8" height="7" rx="1"/><path class="ln m-acc" d="M32.5 34.5h8"/>' },
 };
 
 const withHTML = s => ({ ...s, html: `<svg class="sp-svg" viewBox="${s.vb}" xmlns="http://www.w3.org/2000/svg">${s.body}</svg>` });

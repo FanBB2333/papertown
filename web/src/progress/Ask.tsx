@@ -46,7 +46,7 @@ export function AskPage({ r, rows, toast }: { r: ProjectCard; rows: ProjectCard[
           <section>
             <h4>{tr('对话')}</h4>
             {lv?.agent ? <Earlier agent={lv.agent.id} at={lv.agent.ext_id} onPick={(c: AssistantConv) => lead && run(() => api.resumeConv(lead.id, c.id))} />
-              : <p className="ak-none">{tr('还没有负责人。')}</p>}
+              : <p className="ak-none">{tr('负责人还没有启动。')}</p>}
           </section>
           {reports.length > 0 && (
             <section className="ak-reps">
@@ -84,7 +84,7 @@ export function AskPage({ r, rows, toast }: { r: ProjectCard; rows: ProjectCard[
           <button className="ib ak-menu" onClick={() => setNav(true)} title={tr('之前的对话')} aria-label={tr('之前的对话')}><Icon n="sidebar" size={18} /></button>
           <div className="ak-title">
             <span className="pc-seq">#{line.seq}</span><b title={line.title}>{line.title}</b>
-            <StatusTag status={line.status} />
+            <StatusTag status={line.status} sample={line.sample} />
           </div>
           <a className="ib ak-x" href={href(back)} onClick={e => follow(e, back)} title={tr('回到项目')} aria-label={tr('关闭')}><Icon n="close" size={18} /></a>
         </header>
@@ -113,7 +113,7 @@ export function ChatBox({ r, toast }: { r: ProjectCard; toast: (t: string) => vo
       {asks.length > 2 && <a className="small" href={href(page)} onClick={e => follow(e, page)}>{tr('还有 {0} 件等你回答', asks.length - 2)}</a>}
       {lead ? (
         <QuickCompose agent={lead} page={page} toast={toast} />
-      ) : lv && <p className="muted small">{tr('还没有负责人。打开对话就能给这个项目配一个。')}</p>}
+      ) : lv && <p className="muted small">{tr('负责人还没有启动。在项目页上打开它的开关。')}</p>}
       {reports.length > 0 && (
         <ul className="pj-recent">
           {reports.map(x => (

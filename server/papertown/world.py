@@ -202,8 +202,14 @@ class World:
         return self._mill(b)["job"] if b["type"] == "mill" else self._job(b, self._active(b["type"]))
 
     def _active(self, btype: str) -> dict | None:
-        return self.db.one("select s.*, l.title, l.seq from stages s join lines l on l.id = s.line_id"
-                           " where s.building = ? and s.status = 'run' order by s.started_at desc limit 1", btype)
+        active = self.db.one("select s.*, l.title, l.seq from stages s join lines l on l.id = s.line_id"
+                             " where s.building = ? and s.status = 'run' and l.status in ('running', 'linked')"
+                             " order by s.started_at desc limit 1", btype)
+        if active or btype not in STAFF_AT:
+            return active
+        return self.db.one("select a.line_id, l.title, l.seq, 0 as pct from agents a join lines l on l.id = a.line_id"
+                           " where a.role = ? and a.runtime is not null and a.node_id is null"
+                           " and l.status in ('running', 'linked') order by a.updated_at desc limit 1", STAFF_AT[btype])
 
     def _goods(self, pairs: list) -> list[list[str]]:
         return [[target, item] for target, item in pairs if self.get(target)]
@@ -215,7 +221,7 @@ class World:
         t, town = b["type"], self.town
         if t not in LIVE:
             return "未接入"
-        if active:
+        if active and t not in ("market", "bank"):
             return f"项目 #{active['seq']}「{active['title']}」"
         if t == "library":
             return f"馆藏 {town.library.count()} 篇"
@@ -256,6 +262,6 @@ class World:
         return "空闲"
 
     def _mill(self, b: dict) -> dict:
-        n = self.db.val("select count(*) from lines where status = 'running'")
+        n = self.db.val("select count(*) from lines where status in ('running', 'linked')")
         total = self.db.val("select count(*) from lines where status != 'dropped'")
-        return {"job": f"{n} 个项目在跑，共 {total} 个" if total else "空闲 · 放入一颗 idea 后开工", "line": None, "stations": []}
+        return {"job": f"{n} 个项目在跑，共 {total} 个" if total else "空闲 · 放入一颗 idea 后开工", "line": None, "active_line": (self._active("mill") or {}).get("line_id"), "stations": []}

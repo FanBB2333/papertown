@@ -26,7 +26,7 @@ ACTIONS = {
     "job.submit": "提交实验任务",
     "job.cancel": "取消实验任务",
     "agent.start": "启动代码员工或写作员工",
-    "stage.move": "收尾工序，或把工序放回去重做",
+    "stage.move": "开工、收尾工序，或把工序放回去重做",
     "lead.switch": "开关项目的负责人",
     "idea.submit": "放入新 idea",
     "agent.brief": "给员工重发项目简报",

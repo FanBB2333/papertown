@@ -108,7 +108,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
     setBusy(true);
     try {
       const r = await api.updateCards();
-      toast(r.sent.length ? tr('已经请 {0} 个项目的负责人更新卡片，写好后卡片会自己换上。', r.sent.length) : tr('没有可以更新的：先给项目配负责人。'));
+      toast(r.sent.length ? tr('已经请 {0} 个项目的负责人更新卡片，写好后卡片会自己换上。', r.sent.length) : tr('没有可以更新的：先打开项目负责人的开关。'));
       setRows((await api.cards()).cards);
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
@@ -208,7 +208,7 @@ function ProjectBox({ r, i, panes, defs, toast, onChange }: {
     <article className={`pc${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} {...o.box}>
       <header className="pc-head">
         <span className="pc-name"><span className="pc-seq">#{line.seq}</span>{o.title}</span>
-        <StatusTag status={line.status} />
+        <StatusTag status={line.status} sample={line.sample} />
         <UsageMark state={line.usage_state} />
       </header>
       <Stages r={r} />

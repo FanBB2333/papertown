@@ -98,6 +98,9 @@ class Leads:
         p.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
         if on is not None and d["on"] != was:
             self._switched(line_id, d["on"])
+        elif on:  # switched on again while it is on: try the start once more now
+            self._retry.pop(line_id, None)
+            self.wake(line_id)
         return d
 
     def view(self, line_id: str) -> dict:
@@ -252,6 +255,13 @@ class Leads:
         if kind == "ask":
             q = self.ask(sender_id, f"{self._who(s)}想启动{NAMES[role]}，可以吗？", ["可以", "不可以"], act=act)
             return f"按你的工作边界（{rule['text']}），启动员工要先问用户。已经问了（问题 {q['id']}），他同意后会替你启动，结果会告诉你。"
+        home = self.town.linked.workdir(s["line_id"], role)
+        worker = self.town.agents.get(f"{role}-{s['line_id']}")
+        if home and not (worker and self._up(worker)):
+            # a linked project's worker edits the user's own repository: starting it is the user's call
+            q = self.ask(sender_id, f"{self._who(s)}想启动{NAMES[role]}，它会在你自己的仓库 `{home}` 里工作，改动都是真的，可以吗？", ["可以", "不可以"], act=act)
+            return (f"这个项目是从本机接入的，{NAMES[role]}的工作目录是用户自己的仓库，启动前要先问用户。"
+                    f"已经问了（问题 {q['id']}），他同意后会替你启动，结果会告诉你。")
         return self._hire(s, act)
 
     def _hire(self, s: dict, act: dict) -> str:

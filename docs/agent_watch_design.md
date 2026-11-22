@@ -32,7 +32,7 @@
 
 - 生命周期（`initializing` / `idle` / `running` / `error` / `closed`）和注意力（`pendingPermissions`、`requiresAttention`、`attentionReason`）分开保存，展示时合成一个分桶。
 - 发送行为三选一：打断（interrupt）、插话（steer）、排队（queue）。排队由客户端保存，轮结束后再发。
-- SDK 可以订阅 agent 更新和对话流，不必轮询。
+- SDK 可以订阅 agent 更新和对话流，通过事件接收变化。
 
 **herdr**：持有真实终端，靠读屏幕判断状态。它的列表排序规则值得采用：等用户的排最前，其次是完成未读、工作中、空闲，同级按最近一次状态变化倒序。「完成」不是独立状态，是「空闲加未读」。agent 在等用户批准时，它拒绝把普通消息打进去，避免文字被当成对话框的回答。
 
@@ -43,9 +43,10 @@
 Papertown 不自己实现三套协议。所有可以介入的 agent 都由宿主持有：
 
 - **Paseo**（推荐）：Claude Code、Codex、Antigravity 以及 ACP 目录里的 agent。Papertown 通过 `paseo` CLI 和 `@getpaseo/client` SDK 对接。
+- **herdr / tmux**：直接运行 Claude Code、Codex、Antigravity，详见 [`agent_backends_design.md`](agent_backends_design.md)。项目负责人可随小镇常驻，并在项目主页切换开关。
 - **pi**：本机 tmux 里的 pi，经 `bridge.ts` 对接，已有排队、插话和中止。
 
-在 Paseo 里手动启动、工作目录落在某个项目仓库里的会话，在员工页列为「未接入的会话」，可以接入成这个项目的员工（已有的导入流程）。Paseo 以外的终端会话先用 `paseo import` 接管。
+在 Paseo 里手动启动、工作目录落在某个项目仓库里的会话，在员工页列为「未接入的会话」，可以接入成这个项目的员工（已有的导入流程）。终端员工可由 Papertown 经 herdr 或 tmux 启动，已有的 herdr 会话仍在终端组中操作。
 
 ### 4.2 状态模型：一个分桶，六种取值
 
@@ -132,7 +133,7 @@ agent 工作中时，一条消息有三种交法，在所有对话入口用同�
 
 ## 7. 这一版不做
 
-- 不直接对接 Claude Agent SDK、Codex app-server 或 ACP，统一经 Paseo。
+- Claude Agent SDK、Codex app-server 和 ACP 的协议对接交给 Paseo，终端后端另经 herdr 或 tmux 管理 CLI。
 - 不读终端屏幕判断状态（herdr 的做法），只用协议事件。
 - 系统通知、声音和手机推送留给 Paseo 自己的客户端。
 - 不改 Paseo 里的已读状态，Papertown 只记自己的 `seen_at`。
@@ -156,7 +157,7 @@ agent 工作中时，一条消息有三种交法，在所有对话入口用同�
 - Claude Code 会把 `sleep 90` 这类命令转入后台并结束本轮，这时打断和停止无从测起。标准流程因此用 `python3 -c "import time; time.sleep(90)"` 并要求在前台执行，Claude Code 的打断和停止按这个流程补测通过。
 - 2026-11-22 与 Paseo 的连接改为直接使用 `DaemonClient`（同一连接还读取订阅用量）后，用 `verify_watch.py` 对同样三个 agent 重跑完整标准流程，六步全部通过，每个 agent 的会话 id 都记入了 `agent_sessions`。排队计数的判定原先在撤回后覆盖了上一个值，改为每次操作后各记一次，三个 agent 均为 1、2、1。
 
-标准流程和预期结果归档在 `server/scripts/watch_flow.json`，用 `server/scripts/verify_watch.py` 对真实 agent 运行（需要 Paseo 守护进程已在运行，脚本不会启动它）：
+标准流程和预期结果归档在 `server/scripts/watch_flow.json`，用 `server/scripts/verify_watch.py` 对真实 agent 运行（Paseo 模式需要守护进程已在运行，脚本以 `lead_resident=False` 关闭自动常驻，只启动验证用的 agent）：
 
 ```bash
 cd server
@@ -177,7 +178,7 @@ cd server
 
 ## 9. herdr 接入
 
-[herdr](https://github.com/herdrdev/herdr) 是终端复用器，持有用户手动开的 Claude Code、Codex 等终端会话，并通过读屏幕和 agent 自己上报的 hook 判断状态。Paseo 托管 Papertown 启动的 agent，herdr 补上用户在终端里自己开的那部分。两者并存。
+[herdr](https://github.com/herdrdev/herdr) 是终端复用器，持有用户手动开的 Claude Code、Codex 等终端会话，并通过读屏幕和 agent 自己上报的 hook 判断状态。Paseo 托管会话，herdr 同时支持用户已有的终端会话和 Papertown 启动的员工。两者并存。
 
 ### 9.1 对接方式
 
@@ -191,7 +192,7 @@ herdr 的服务在 `~/.config/herdr/herdr.sock` 提供 JSON API（协议 22）�
 | 发消息 | `agent.prompt`。agent 停在批准或提问对话框时，herdr 以 `agent_blocked` 拒绝 |
 | 打断、按键 | `agent.send_keys`，例如 `esc`、`enter`、`1` |
 
-Papertown 只读写 herdr 已有的会话，不启动 herdr 服务，不新建窗格，不安装 herdr 的 hook。herdr 没在运行时，员工页照常工作，只是没有终端会话。
+这里的终端组读写 herdr 已有的会话。Papertown 管理的员工通过终端后端另建标签页，herdr 服务由用户启动。herdr 没在运行时，员工页照常工作，只是没有终端会话。
 
 ### 9.2 状态
 

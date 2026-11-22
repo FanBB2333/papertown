@@ -139,7 +139,7 @@ export function McpRoom(p: Props) {
         </div>
         <div className="pnl-s">
           <h4>{tr('把小镇接到别的 agent 上')}</h4>
-          <p className="muted small">{tr('Papertown 自己也是一个只读的 MCP server，别的 agent 能用它查论文库和流水线：')}</p>
+          <p className="muted small">{tr('Papertown 自己也是一个只读的 MCP server，别的 agent 能用它查论文库和项目的工序：')}</p>
           <pre className="code small-code">{JSON.stringify(v.self, null, 2)}</pre>
           <button className="btn" onClick={() => navigator.clipboard?.writeText(JSON.stringify(v.self, null, 2)).then(() => p.toast(tr('已复制')), () => {})}>{tr('复制')}</button>
         </div>
