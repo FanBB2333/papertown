@@ -56,8 +56,9 @@ function until(at: string | null): string {
 }
 const order = (w: UsageWindow) => (scope(w) ? 10 : 0) + (isFive(w) ? 0 : isWeek(w) ? 1 : 2);
 
+// ten cells like the Claude Code status bar: ▰ for each tenth used (rounded half up, so 3% draws none), ▱ for the rest
 function Segments({ value, label, wide }: { value: number; label: string; wide?: boolean }) {
-  const on = value <= 0 ? 0 : Math.min(10, Math.max(1, Math.round(value / 10)));
+  const on = Math.min(10, Math.max(0, Math.floor((Math.round(value) * 10 + 50) / 100)));
   return <span className={`usage-seg${wide ? ' wide' : ''}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100}
     aria-valuenow={Math.min(100, value)} aria-valuetext={pct(value)}>
     {Array.from({ length: 10 }, (_, i) => <i key={i} className={i < on ? 'on' : undefined} style={{ ['--i' as string]: i }} />)}
@@ -136,7 +137,7 @@ export function UsageStrip({ active }: { active: boolean }) {
         <span className={`usage-q-name${sub ? ' sub' : ''}`}>{name}</span>
         <span className="usage-q-span">{span(w) || tr(w.label)}</span>
         <Segments value={w.used} label={tr('{0} · {1}', full, windowName(w))} />
-        <b>{pct(w.used)}</b>
+        <b>{Math.round(w.used)}%</b>
         <small>{until(w.resets_at)}</small>
       </li>)}
       {view?.providers.filter(p => !p.windows.length || p.error).map(p => <li key={p.id} className="usage-mini-note"><span>{p.label}</span><small>{p.error ? tr(p.error) : tr('尚无用量读数')}</small></li>)}

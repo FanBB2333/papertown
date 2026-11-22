@@ -72,22 +72,27 @@ p.usage-warn { margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; font-size
 .usage-strip.open .usage-chevron { transform: rotate(135deg) translate(-1px, 1px); }
 .usage-mini { list-style: none; margin: 0; padding: 0 16px 12px; display: grid; gap: 7px; }
 /* A window as a status line: name, 5h or 7d, ten segments, the percent coloured by level, the time to reset. */
-.usage-q-low { --q: var(--ok); }
-.usage-q-mid { --q: var(--warn); }
-.usage-q-high { --q: var(--bad); }
-.usage-seg { display: inline-flex; align-items: center; gap: 2px; }
-.usage-seg > i { width: 4px; height: 9px; border-radius: 1.5px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 22%, transparent);
+/* Drawn like the Claude Code status bar: slanted cells, ▰ in the level's colour and ▱ as a faint outline, with
+   Gruvbox Material's soft green, yellow and red (the status bar's warm theme; darker steps of the same hues on light pages). */
+html { --uq-ok: #6c782e; --uq-warn: #b47109; --uq-crit: #c14a4a; }
+html[data-mode=dark] { --uq-ok: #a9b665; --uq-warn: #d8a657; --uq-crit: #ea6962; }
+.usage-q-low { --q: var(--uq-ok); }
+.usage-q-mid { --q: var(--uq-warn); }
+.usage-q-high { --q: var(--uq-crit); }
+.usage-seg { display: inline-flex; align-items: center; gap: 1.5px; padding: 0 2px; }
+.usage-seg > i { width: 5px; height: 10px; border-radius: 1px; transform: skewX(-20deg); box-shadow: inset 0 0 0 1.2px color-mix(in srgb, var(--ink) 26%, transparent);
   transition: background .35s var(--out, ease-out) calc(var(--i) * 28ms), box-shadow .35s var(--out, ease-out) calc(var(--i) * 28ms); }
 .usage-seg > i.on { background: var(--q, var(--brand)); box-shadow: none; }
-.usage-seg.wide { display: flex; gap: 3px; margin-top: 7px; }
-.usage-seg.wide > i { flex: 1; height: 6px; border-radius: 2px; }
+.usage-seg.wide { display: flex; gap: 3px; margin-top: 7px; padding: 0 3px; }
+.usage-seg.wide > i { flex: 1; height: 7px; }
 .usage-mini { gap: 5px; }
 .usage-mini li { display: grid; align-items: center; gap: 10px; }
-.usage-mini li.usage-q { grid-template-columns: minmax(0, 1fr) 20px 58px 38px 42px; gap: 6px; font-variant-numeric: tabular-nums; }
+.usage-mini li.usage-q { grid-template-columns: minmax(0, 1fr) 20px 70px 38px 42px; gap: 6px; font-variant-numeric: tabular-nums; }
 .usage-q-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); }
 .usage-q-name.sub { font-weight: 500; color: var(--muted); padding-left: 10px; }
 .usage-q-span, .usage-q > small, .usage-q-num > small { font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: 11.5px; color: var(--muted); }
-.usage-q > b, .usage-q-num > b { text-align: right; font-weight: 600; color: var(--q); }
+.usage-q > b, .usage-q-num > b { text-align: right; font-weight: 500; color: var(--q); }
+.usage-q-high > b, .usage-q-high .usage-q-num > b { font-weight: 700; }
 .usage-q > small { text-align: right; white-space: nowrap; }
 .usage-q-num { display: inline-flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
 .usage-window > small { font-variant-numeric: tabular-nums; }
