@@ -33,8 +33,8 @@ export function lineOf(j: Job) {
   const s = stj(j), n = j.nvidb;
   if (s === 'running') return n?.progress || placeOf(j);
   if (s === 'queued') return n?.held ? n.held_reason || tr('挂起') : n?.depends_on?.length ? tr('等 {0}', n.depends_on.map(x => `#${x}`).join(' '))
-    : n?.lane ? tr('排在 {0}', n.lane) : tr('等一张放得下它的卡');
-  if (s === 'failed') return lastLine(n?.last_error) || (n?.exit_code != null ? tr('退出码 {0}', n.exit_code) : tr('没有留下出错信息'));
+    : n?.lane ? tr('排在 {0}', n.lane) : tr('等待有余量的显卡');
+  if (s === 'failed') return lastLine(n?.last_error) || (n?.exit_code != null ? tr('退出码 {0}', n.exit_code) : tr('未记录错误信息'));
   return '';
 }
 
@@ -64,7 +64,7 @@ export function byName(jobs: Job[]): Group[] {
     out.set(key, [...(out.get(key) ?? []), j]);
   }
   return [...out.entries()].map(([key, js]) => ({
-    key: key || '·', label: key ? `${key}*` : tr('其他'), hint: key ? tr('名字以 {0} 开头', key) : tr('名字和别的任务都不像的'), jobs: js,
+    key: key || '·', label: key ? `${key}*` : tr('其他'), hint: key ? tr('名称以 {0} 开头', key) : tr('名称与其他任务均不相似'), jobs: js,
   }));
 }
 
@@ -79,7 +79,7 @@ export function byBatch(jobs: Job[]): Group[] {
   return out.map(js => {
     const at = t(js[0].created_at), common = commonStart(js.map(j => j.name));
     const time = Number.isFinite(at) ? `${dayName(dayOf(at))} ${new Date(at).toTimeString().slice(0, 5)}` : '';
-    return { key: `b${js[0].id}`, label: common ? `${common}* · ${time}` : tr('{0} 提交的一批', time), hint: tr('{0} 前后几分钟里提交的', time), jobs: js };
+    return { key: `b${js[0].id}`, label: common ? `${common}* · ${time}` : tr('{0} 提交的批次', time), hint: tr('{0} 前后数分钟内提交', time), jobs: js };
   });
 }
 

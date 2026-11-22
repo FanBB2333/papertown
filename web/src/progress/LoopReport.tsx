@@ -19,14 +19,14 @@ export function LoopReport({ v, onPick, onClose, toast }: { v: CanvasView; onPic
     try {
       const r = await api.loopReport(v.line_id);
       await navigator.clipboard.writeText(r.markdown);
-      toast(tr('复制好了：Markdown 表格'));
+      toast(tr('已复制：Markdown 表格'));
     } catch (e) { toast((e as Error).message); }
   };
   const publish = async () => {
     setBusy(true);
     try {
       const p = await api.publishReport(v.line_id);
-      toast(tr('发布成了汇报页「{0}」', p.title));
+      toast(tr('已发布为汇报页「{0}」', p.title));
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   };
   return (
@@ -34,7 +34,7 @@ export function LoopReport({ v, onPick, onClose, toast }: { v: CanvasView; onPic
       <header className="lr-h">
         <div>
           <h3>{tr('前后对比')}<small>{tr('第 {0} 轮', v.rounds)}{f.first != null && f.now != null && ` · ${tr('硬卡口违规 {0} → {1} 处', f.first, f.now)}${f.first > f.now ? ` ↓${drop(f.first, f.now)}%` : ''}`}</small></h3>
-          <p className="small muted">{tr('硬卡口每条规则第一轮查出的和现在的，加上负责人对每项软巡检最新的判断：就是这一轮进展汇报里质控的部分。')}</p>
+          <p className="small muted">{tr('硬卡口各规则首轮检出与当前结果，加上负责人对各项软巡检的最新判断，即构成此轮进展汇报的质控部分。')}</p>
         </div>
         <button className="btn" onClick={copy}><Icon n="copy" size={13} />{tr('复制 Markdown')}</button>
         <button className="btn pri" disabled={busy} onClick={publish}><Icon n="doc" size={13} />{tr('发布为汇报页')}</button>
@@ -56,7 +56,7 @@ export function LoopReport({ v, onPick, onClose, toast }: { v: CanvasView; onPic
                     <td>{c.prio} · ≤{c.max ?? 0}</td>
                     <td>{c.first?.value ?? '—'}</td>
                     <td><b>{c.last?.value ?? '—'}</b></td>
-                    <td><span className={`gp-st l-${lv}`}>{lv === 'pass' ? tr('放行 ✓') : lv === 'none' ? tr('还没查') : `${LEVEL[lv]}${lv === 'block' ? ' ✗' : ' !'}`}</span></td>
+                    <td><span className={`gp-st l-${lv}`}>{lv === 'pass' ? tr('放行 ✓') : lv === 'none' ? tr('尚未检查') : `${LEVEL[lv]}${lv === 'block' ? ' ✗' : ' !'}`}</span></td>
                     <td>{i === 0 && g.ticket ? <button className="lnk" onClick={() => onPick(g.ticket!)}>{g.ticket} · {tr('第 {0} 轮', g.round)}</button> : ''}</td>
                   </tr>
                 );
@@ -84,7 +84,7 @@ export function LoopReport({ v, onPick, onClose, toast }: { v: CanvasView; onPic
           </tbody>
         </table>
       </section>
-      <p className="small muted">{tr('发布的汇报页在')} <a className="lnk" href={href(pages)} onClick={e => follow(e, pages)}>{tr('汇报与讲解')}</a>{tr('，可以全屏演示。')}</p>
+      <p className="small muted">{tr('汇报页已发布至')} <a className="lnk" href={href(pages)} onClick={e => follow(e, pages)}>{tr('汇报与讲解')}</a>{tr('，可全屏演示。')}</p>
     </div>
   );
 }

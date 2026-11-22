@@ -22,13 +22,13 @@ import './progress.css';
 type Filter = 'all' | 'you' | 'run' | 'done';
 const FILTERS: [Filter, string, (c: ProjectCard) => boolean][] = [
   ['all', tr('全部'), () => true],
-  ['you', tr('等你'), youNeeded],
-  ['run', tr('在做'), c => ['running', 'linked'].includes(c.line.status)],
+  ['you', tr('待处理'), youNeeded],
+  ['run', tr('进行中'), c => ['running', 'linked'].includes(c.line.status)],
   ['done', tr('已完成'), c => c.line.status === 'done'],
 ];
 // what needs you first, then what is stuck, then what is moving; finished ones last
 const rank = (c: ProjectCard) => (c.line.status === 'done' ? 9 : youNeeded(c) ? 0 : c.card?.health === 'blocked' ? 1 : c.card?.health === 'risk' ? 2 : 3);
-const STATE: Record<number, string> = { 0: tr('等你'), 1: tr('卡住了'), 2: tr('有风险'), 3: tr('在做'), 9: tr('已完成') };
+const STATE: Record<number, string> = { 0: tr('待处理'), 1: tr('受阻'), 2: tr('有风险'), 3: tr('进行中'), 9: tr('已完成') };
 const moved = (c: ProjectCard) => Math.max(Date.parse(c.line.updated_at) || 0, Date.parse(c.card?.at ?? '') || 0);
 // how far along: what its lead says, else the share of its stages that are done
 const far = (c: ProjectCard) => c.card?.progress ?? Math.round(100 * c.line.stages.filter(x => x.status === 'done').length / Math.max(1, c.line.stages.length));
@@ -108,7 +108,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
     setBusy(true);
     try {
       const r = await api.updateCards();
-      toast(r.sent.length ? tr('已经请 {0} 个项目的负责人更新卡片，写好后卡片会自己换上。', r.sent.length) : tr('没有可以更新的：先打开项目负责人的开关。'));
+      toast(r.sent.length ? tr('已请 {0} 个项目的负责人更新卡片，完成后将自动刷新。', r.sent.length) : tr('暂无可更新项：请先开启项目负责人。'));
       setRows((await api.cards()).cards);
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
@@ -124,22 +124,22 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
         {seq != null ? (
           project && sub ? null
           : project ? <Project key={project.line.id} r={project} defs={defs} toast={toast} onChange={put} onConsole={onOpen} />
-            : <p className="muted pg-none">{rows ? <>{tr('没有项目 #{0}。', seq)} <a href={href('/progress')} onClick={e => follow(e, '/progress')}>{tr('看全部项目')}</a></> : tr('加载中…')}</p>
+            : <p className="muted pg-none">{rows ? <>{tr('未找到项目 #{0}。', seq)} <a href={href('/progress')} onClick={e => follow(e, '/progress')}>{tr('查看全部项目')}</a></> : tr('加载中…')}</p>
         ) : (
           <>
             <header className="pg-head">
               <div className="pg-title">
                 <h1>{tr('项目进展')}</h1>
                 <p className="muted small">
-                  {rows ? tr('{0} 个项目', rows.length) : '…'}{waiting > 0 && <> · <b className="pg-wait">{tr('{0} 个等你', waiting)}</b></>}
-                  {' · '}{tr('卡片由各项目的负责人填写，按「更新」才会改')}
+                  {rows ? tr('{0} 个项目', rows.length) : '…'}{waiting > 0 && <> · <b className="pg-wait">{tr('{0} 项待处理', waiting)}</b></>}
+                  {' · '}{tr('卡片由各项目负责人填写，点击「更新」后刷新')}
                 </p>
               </div>
               <div className="pg-tools">
                 <div className="seg mini" role="tablist">
                   {FILTERS.map(([k, name, f]) => <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{name}{rows && k !== 'all' ? ` ${rows.filter(f).length}` : ''}</button>)}
                 </div>
-                <div className="seg mini pg-view" role="radiogroup" aria-label={tr('怎么排')}>
+                <div className="seg mini pg-view" role="radiogroup" aria-label={tr('排列方式')}>
                   {(['blocks', 'rows'] as const).map(v => (
                     <button key={v} role="radio" aria-checked={s.pgView === v} className={s.pgView === v ? 'on' : ''} onClick={() => setSettings({ pgView: v })}
                       title={v === 'blocks' ? tr('每个项目一张卡片') : tr('每个项目一行')}><Icon n={v === 'blocks' ? 'cards' : 'rows'} size={14} />{v === 'blocks' ? tr('块') : tr('行')}</button>
@@ -153,8 +153,8 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
             </header>
             {err && <p className="warn-box small">{err}</p>}
             {!rows && !err && <p className="muted">{tr('加载中…')}</p>}
-            {rows && !rows.length && <p className="muted pg-none">{tr('还没有项目。在中控屏里放入 idea，或者在 projects.json 里接入你自己的项目。')}</p>}
-            {rows && rows.length > 0 && !shown.length && <p className="muted pg-none">{tr('没有符合的项目。')}</p>}
+            {rows && !rows.length && <p className="muted pg-none">{tr('暂无项目。在中控屏中放入 idea，或在 projects.json 中接入自有项目。')}</p>}
+            {rows && rows.length > 0 && !shown.length && <p className="muted pg-none">{tr('暂无匹配项目。')}</p>}
             {shown.length > 0 && (s.pgView === 'rows' ? <ProjectRows groups={groups} cols={rowCols(s)} defs={defs} toast={toast} onChange={put} />
               : groups.map(g => (
                 <section key={g.key} className="pg-sec">
@@ -184,7 +184,7 @@ function Fresh() {
   if (!ps.length) return null;
   return (
     <section className="pg-sec pg-fresh">
-      <h2 className="pg-gh">{tr('新论文')}<span>{tr('按和进行中项目的相关度排')}</span></h2>
+      <h2 className="pg-gh">{tr('新论文')}<span>{tr('按进行中项目相关度排序')}</span></h2>
       <ul>
         {ps.map(p => (
           <li key={p.paper_id}>

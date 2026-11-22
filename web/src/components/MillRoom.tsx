@@ -15,18 +15,18 @@ interface Props extends RoomActions {
 }
 
 export const STATUS: Record<string, string> = {
-  running: tr('在做'), done: tr('已出厂'), dropped: tr('已放弃'),
+  running: tr('进行中'), done: tr('已出厂'), dropped: tr('已放弃'),
   linked: tr('本地项目'),
 };
 export function StatusTag({ status, sample }: { status: string; sample?: boolean }) {
   const tag = <span className={`pst pst-${status}`}>{STATUS[status] ?? status}</span>;
-  return sample ? <>{tag}<span className="pst pst-sample" title={tr('预制的样例项目，内容是占位的')}>{tr('样例')}</span></> : tag;
+  return sample ? <>{tag}<span className="pst pst-sample" title={tr('预制样例项目，内含占位内容')}>{tr('样例')}</span></> : tag;
 }
 export const AGENT_STATUS: Record<string, string> = {
   stopped: tr('未启动'), starting: tr('启动中'), idle: tr('待命'), working: tr('工作中'), error: tr('出错'), watching: tr('值守'), offline: tr('连不上'),
 };
 
-const REAL = tr('工序按顺序走：方法设计在造纸厂，代码和实验在仓库与实验农场，写作在印刷厂，最后经质检所出厂。');
+const REAL = tr('工序依次推进：方法设计在造纸厂，代码与实验在仓库和实验农场，写作在印刷厂，最终经质检所出厂。');
 
 export function MillRoom(p: Props) {
   const [sel, setSel] = useState<string | null>(p.focus);
@@ -66,7 +66,7 @@ export function MillRoom(p: Props) {
   if (!lines.length) {
     return (
       <div className="room-empty">
-        <h2>{tr('还没有项目')}</h2>
+        <h2>{tr('暂无项目')}</h2>
         <p>{tr('提交 idea 后，项目负责人自动启动并推进项目。')}</p>
         <button className="btn pri" onClick={p.onIdea}>{tr('放入一颗新 idea')}</button>
       </div>
@@ -77,7 +77,7 @@ export function MillRoom(p: Props) {
     <div className="room room-mill">
       <aside className="room-side">
         <div className="tally">
-          <div><b>{count(['running'])}</b><span>{tr('在跑')}</span></div>
+          <div><b>{count(['running'])}</b><span>{tr('运行中')}</span></div>
           <div><b>{count(['done'])}</b><span>{tr('已出厂')}</span></div>
         </div>
         <div className="plist">
@@ -113,9 +113,9 @@ export function MillRoom(p: Props) {
                 <p>{line.idea}</p>
               </div>
               <div className="go-row">
-                <button className="btn" onClick={() => p.onOpen('depot', line.id)}>{tr('去仓库 · 代码')}</button>
-                <button className="btn" onClick={() => p.onOpen('farm', line.id)}>{tr('去农场 · 实验')}</button>
-                <button className="btn" onClick={() => p.onOpen('press', line.id)}>{tr('去印刷厂 · 论文')}</button>
+                <button className="btn" onClick={() => p.onOpen('depot', line.id)}>{tr('前往仓库 · 代码')}</button>
+                <button className="btn" onClick={() => p.onOpen('farm', line.id)}>{tr('前往农场 · 实验')}</button>
+                <button className="btn" onClick={() => p.onOpen('press', line.id)}>{tr('前往印刷厂 · 论文')}</button>
               </div>
             </div>
             <div className="lc">

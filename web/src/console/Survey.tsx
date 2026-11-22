@@ -26,7 +26,7 @@ function Point({ text, n = 64, i }: { text: string; n?: number; i: number }) {
   const short = gist(text, n);
   const more = short !== text.replace(/\s+/g, ' ').trim();
   return (
-    <li style={{ ['--i' as string]: i }} className={more ? 'more' : ''} onClick={() => more && setOpen(o => !o)} title={more && !open ? tr('点开看全文') : undefined}>
+    <li style={{ ['--i' as string]: i }} className={more ? 'more' : ''} onClick={() => more && setOpen(o => !o)} title={more && !open ? tr('点击查看全文') : undefined}>
       {open ? text : short}
     </li>
   );
@@ -64,23 +64,23 @@ export function Survey(p: Props) {
           <span className="sv-verdict">{tr('本地项目')}</span>
           <div>
             <p className="sv-line">{[lp.sections?.length && tr('{0} 节', lp.sections.length), lp.figures && tr('{0} 张图', lp.figures), lp.tables && tr('{0} 张表', lp.tables),
-              lp.words && tr('约 {0} 词', lp.words), lp.bib && tr('{0} 条参考文献', lp.bib)].filter(Boolean).join(' · ') || tr('论文还是空的')}</p>
+              lp.words && tr('约 {0} 词', lp.words), lp.bib && tr('{0} 条参考文献', lp.bib)].filter(Boolean).join(' · ') || tr('论文暂无内容')}</p>
             {lp.title && lp.title !== l.title && <span className="muted small">{lp.title}</span>}
           </div>
         </section>
       ) : (
         <div className="cm-empty in">
           <Icon n="lens" size={30} />
-          <h3>{tr('这个项目还没有调研')}</h3>
-          <p>{tr('放入 idea 后孵化场会先查重：找最相近的工作、空白点和建议，结果整理在这里。')}</p>
+          <h3>{tr('该项目暂无调研')}</h3>
+          <p>{tr('放入 idea 后，孵化场将先查重，识别最相近的工作、空白点与建议，并汇总在此处。')}</p>
         </div>
       )}
 
       {h && (
         <div className="sv-cards">
-          <Card title={tr('空白点')} icon="◎" tone="brand" items={points(h.gap)} empty={tr('没有找到明显的空白点。')} />
-          <Card title={tr('建议')} icon="→" tone="ok" items={h.suggestions ?? []} empty={tr('没有建议。')} />
-          <Card title={tr('风险')} icon="!" tone="bad" items={m?.risks ?? []} empty={m ? tr('没有列出风险。') : tr('方法设计之后才有。')} />
+          <Card title={tr('空白点')} icon="◎" tone="brand" items={points(h.gap)} empty={tr('未找到明显的空白点。')} />
+          <Card title={tr('建议')} icon="→" tone="ok" items={h.suggestions ?? []} empty={tr('暂无建议。')} />
+          <Card title={tr('风险')} icon="!" tone="bad" items={m?.risks ?? []} empty={m ? tr('未列出风险。') : tr('方法设计后生成。')} />
         </div>
       )}
 
@@ -145,10 +145,10 @@ function Reading({ got, why }: { got: { survey: PaperCard[]; references: PaperCa
       <div className="cs-h">
         <h3>{tr('文献')}</h3>
         <div className="seg mini" role="tablist">
-          {got.survey.length > 0 && <button className={tab === 'survey' ? 'on' : ''} onClick={() => setTab('survey')}>{tr('调研到的 · {0}', got.survey.length)}</button>}
+          {got.survey.length > 0 && <button className={tab === 'survey' ? 'on' : ''} onClick={() => setTab('survey')}>{tr('调研所得 · {0}', got.survey.length)}</button>}
           {got.references.length > 0 && <button className={tab === 'references' ? 'on' : ''} onClick={() => setTab('references')}>{tr('论文引用的 · {0}', got.references.length)}</button>}
         </div>
-        <input className="ide-filter sv-q" placeholder={tr('搜标题、作者')} value={q} onChange={e => setQ(e.target.value)} />
+        <input className="ide-filter sv-q" placeholder={tr('搜索标题、作者')} value={q} onChange={e => setQ(e.target.value)} />
       </div>
       <table className="ctab sv-refs">
         <thead><tr><th>{tr('标题')}</th><th>{tr('年份')}</th><th>{tr('方向')}</th>{tab === 'survey' && <th>{tr('相似度')}</th>}</tr></thead>
@@ -165,7 +165,7 @@ function Reading({ got, why }: { got: { survey: PaperCard[]; references: PaperCa
           </tr>
         ))}</tbody>
       </table>
-      {shown.length > 80 && <p className="muted small">{tr('只列出前 80 篇。')}</p>}
+      {shown.length > 80 && <p className="muted small">{tr('仅列出前 80 篇。')}</p>}
     </section>
   );
 }

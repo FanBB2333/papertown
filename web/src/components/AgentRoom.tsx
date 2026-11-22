@@ -26,11 +26,11 @@ interface Props extends RoomActions {
 }
 
 const ROLE = {
-  coder: { name: tr('代码员工'), place: tr('仓库'), job: tr('写代码、跑测试，再把实验提交到实验农场') },
-  writer: { name: tr('写作员工'), place: tr('印刷厂'), job: tr('读实验结果，在 main.tex 里写论文并编译') },
+  coder: { name: tr('代码员工'), place: tr('仓库'), job: tr('编写代码、运行测试，并将实验提交至实验农场') },
+  writer: { name: tr('写作员工'), place: tr('印刷厂'), job: tr('读取实验结果，在 main.tex 撰写论文并编译') },
   monitor: { name: tr('看田员'), place: tr('实验农场'), job: '' },
   assistant: { name: tr('小助手'), place: tr('中控屏'), job: '' },
-  lead: { name: tr('项目负责人'), place: tr('造纸厂'), job: tr('盯进度、催员工、向你汇报') },
+  lead: { name: tr('项目负责人'), place: tr('造纸厂'), job: tr('跟进进度、督促员工、向你汇报') },
 } as const;
 
 // a role's roster, read again on that role's agent events and on refresh()
@@ -56,7 +56,7 @@ export function AgentRoom(p: Props) {
   if (roster && !rows.length) {
     return (
       <div className="room-empty">
-        <h2>{tr('还没有项目')}</h2>
+        <h2>{tr('暂无项目')}</h2>
         <p>{tr('项目立项后，由项目负责人启动{0}。', r.name)}</p>
         <button className="btn pri" onClick={p.onIdea}>{tr('放入一颗新 idea')}</button>
       </div>
@@ -70,11 +70,11 @@ export function AgentRoom(p: Props) {
         {rows.map(({ line, agent }, i) => (
           <button key={line.id} className={`mon${cur?.line.id === line.id ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={() => setSel(line.id)}>
             <div className="proj-top"><b>#{line.seq} {line.title}</b><span className={`dot s-${agent?.status ?? 'none'}`} title={agent ? AGENT_STATUS[agent.status] : tr('未创建')} /></div>
-            <p className="mon-note">{agent?.last ? lastLine(agent.last) : agent ? tr('还没有对话。') : tr('还没有配员工。')}</p>
+            <p className="mon-note">{agent?.last ? lastLine(agent.last) : agent ? tr('暂无对话。') : tr('尚未配置员工。')}</p>
             <span className="muted small">{STATUS[line.status] ?? line.status}{agent ? ` · ${AGENT_STATUS[agent.status]}` : ''}</span>
           </button>
         ))}
-        {roster && !roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，没法启动 pi。装好后重启服务即可。')}</p>}
+        {roster && !roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
       </aside>
       {cur && <Seat {...p} row={cur} ok={!!roster?.available.ok} onDone={refresh} />}
     </div>
@@ -99,8 +99,8 @@ export function AgentDesk(p: Props & { lineId: string }) {
   if (!roster) return <p className="muted">{tr('加载中…')}</p>;
   return (
     <div className="room room-agents desk">
-      {!roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，没法启动 pi。装好后重启服务即可。')}</p>}
-      {row ? <Seat {...p} row={row} ok={roster.available.ok} onDone={refresh} /> : <p className="muted">{tr('这个项目还不能配员工。')}</p>}
+      {!roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
+      {row ? <Seat {...p} row={row} ok={roster.available.ok} onDone={refresh} /> : <p className="muted">{tr('该项目暂无法配置员工。')}</p>}
     </div>
   );
 }
@@ -137,24 +137,24 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
   return (
     <section className="room-main hire">
       <div className="hire-wrap">
-        <h2>#{line.seq} {tr('还没有')}{r.name}</h2>
+        <h2>#{line.seq} {tr('暂无')}{r.name}</h2>
         {lead ? (
-          <p className="muted">{tr('负责人跟进项目进度、分派任务并汇报。工作目录是 Papertown 自己的目录。')}</p>
+          <p className="muted">{tr('负责人跟进项目进度、分派任务并汇报。工作目录为 Papertown 自有目录。')}</p>
         ) : repo ? (
-          <p className="warn-box">{tr('这是从本地接入的项目：员工会直接在')} <code>{repo}</code> {tr('里改文件，改动是真的。启动时会让它先看 git status、提交和推送前问你。它的说明和 pt 工具放在 Papertown 自己的目录里，不写进仓库。')}</p>
-        ) : <p className="muted">{tr('选一种运行方式。工作目录都是这个项目在')}{r.place}{tr('的目录，启动时会先把项目简报发给它。')}</p>}
+          <p className="warn-box">{tr('该项目从本地接入：员工将直接在')} <code>{repo}</code> {tr('中修改文件且真实生效。启动时令其先检查 git status，提交和推送前需先确认。说明与 pt 工具置于 Papertown 自有目录，不写入仓库。')}</p>
+        ) : <p className="muted">{tr('选择运行方式。工作目录均为该项目在')}{r.place}{tr('的目录，启动时将先发送项目简报。')}</p>}
         <div className="hire-opts">
           <div className="hire-card">
             <h3>Paseo <span className="chip">{tr('推荐')}</span></h3>
-            <p className="muted small">{tr('Claude Code、Codex、OpenCode、Pi 等都可以。对话用的是 Paseo 自己的界面，命令、模型切换和权限审批都照旧。')}</p>
+            <p className="muted small">{tr('支持 Claude Code、Codex、OpenCode、Pi 等，采用 Paseo 自有界面，命令、模型切换与权限审批均保持不变。')}</p>
             <PaseoPick busy={busy} onStart={go} onReady={setPaseo} role={lead ? 'lead' : undefined} />
           </div>
           <div className="hire-card"><h3>{tr('终端')}</h3><TerminalPick busy={busy} onStart={go} role={role} /></div>
           {!lead && <div className="hire-card">
             <h3>{tr('pi · 后台终端')}</h3>
-            <p className="muted small">{tr('本机的 pi 跑在 tmux 里，终端和这里的对话实时同步。这里能切换模型和思考强度，输入 / 可以用 pi 的命令。它用 pi 自己的模型设置和登录。')}</p>
+            <p className="muted small">{tr('本机 pi 运行于 tmux 中，终端与此处对话实时同步。支持在此切换模型与思考强度，输入 / 可调用 pi 命令，沿用 pi 自身的模型设置与登录。')}</p>
             <button className="btn" disabled={!ok || busy} onClick={() => go({ runtime: 'pi' })}>{busy ? tr('启动中…') : tr('启动 pi')}</button>
-            {!ok && <p className="muted small">{tr('本机没有 pi 或 tmux。')}</p>}
+            {!ok && <p className="muted small">{tr('本机未安装 pi 或 tmux。')}</p>}
           </div>}
           {paseo && !lead && <ImportCard busy={busy} onPick={id => act(() => api.importAgent(line.id, role, id))} />}
         </div>
@@ -180,7 +180,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
       const d = role ? i.defaults?.[role] : undefined, own = i.providers.find(x => x.id === d?.provider);
       if (own) pick(i, own.id, d?.model, d?.thinking);
       else pick(i, (i.providers.find(x => x.id === 'claude') ?? i.providers[0])?.id ?? '');
-    }).catch(e => setInfo({ status: { ok: false, note: tr('连不上 Paseo：{0}', (e as Error).message) }, providers: [] }));
+    }).catch(e => setInfo({ status: { ok: false, note: tr('无法连接 Paseo：{0}', (e as Error).message) }, providers: [] }));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function pick(i: PaseoInfo, id: string, mid?: string | null, th?: string | null) {
@@ -191,12 +191,12 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
   }
 
   const pv = info?.providers.find(x => x.id === prov), m = pv?.models.find(x => x.id === model);
-  if (!info) return <p className="muted small">{tr('正在连本机的 Paseo…')}</p>;
+  if (!info) return <p className="muted small">{tr('正在连接本机 Paseo…')}</p>;
   if (!info.status.ok) return <p className="warn-box small">{info.status.note}</p>;
   const d = role ? info.defaults?.[role] : undefined;
   return (
     <>
-      {d?.provider && <p className="muted small">{tr('Papertown 给它配的是 {0}', [d.provider, d.model, d.thinking].filter(Boolean).join(' / '))}{info.providers.some(x => x.id === d.provider) ? '' : tr('，但 Paseo 里没有这个供应商')}</p>}
+      {d?.provider && <p className="muted small">{tr('Papertown 为其配置了 {0}', [d.provider, d.model, d.thinking].filter(Boolean).join(' / '))}{info.providers.some(x => x.id === d.provider) ? '' : tr('，但 Paseo 中无此供应商')}</p>}
       <label className="field">{tr('供应商')}
         <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.error ? tr('{0}（模型列表读取失败）', x.label) : x.label }))} onChange={id => pick(info, id)} />
       </label>
@@ -211,7 +211,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
           <Select value={think} options={m.thinking.map(x => ({ value: x, label: x }))} onChange={setThink} />
         </label>
       )}
-      {!info.status.web && <p className="muted small">{tr('Paseo 网页端未开启。这里仍可对话，也可在 Paseo 桌面端打开。')}</p>}
+      {!info.status.web && <p className="muted small">{tr('Paseo 网页端未开启。此处仍可对话，也可在 Paseo 桌面端打开。')}</p>}
       <button className="btn pri" disabled={busy || !prov} onClick={() => onStart({ runtime: 'paseo', provider: prov, model: model || undefined, thinking: think || undefined })}>
         {busy ? tr('启动中…') : tr('在 Paseo 里启动')}
       </button>
@@ -229,20 +229,20 @@ export function ImportCard({ busy, onPick }: { busy: boolean; onPick: (id: strin
   const shown = (list ?? []).filter(c => !k || `${c.title ?? ''} ${c.provider} ${c.model ?? ''} ${c.cwd}`.toLowerCase().includes(k));
   return (
     <div className="hire-card import-card">
-      <h3>{tr('导入 Paseo 里已有的对话')}</h3>
-      <p className="muted small">{tr('选一段本机 Paseo 里的对话交给这个项目，之后在这里接着聊。它的工作目录不变。')}</p>
-      {err ? <p className="warn-box small">{err}</p> : !list ? <p className="muted small">{tr('正在读取 Paseo 的对话…')}</p> : !list.length ? <p className="muted small">{tr('Paseo 里还没有对话。')}</p> : (
+      <h3>{tr('导入 Paseo 中的已有对话')}</h3>
+      <p className="muted small">{tr('选择本机 Paseo 对话关联至该项目，随后可在此继续对话，工作目录保持不变。')}</p>
+      {err ? <p className="warn-box small">{err}</p> : !list ? <p className="muted small">{tr('正在读取 Paseo 的对话…')}</p> : !list.length ? <p className="muted small">{tr('Paseo 中暂无对话。')}</p> : (
         <>
           {list.length > 5 && <input className="conv-q" value={q} placeholder={tr('按标题、供应商或目录筛选')} onChange={e => setQ(e.target.value)} />}
           <div className="conv-list">
             {shown.map(c => (
               <button key={c.id} className="conv" disabled={busy || !!c.linked || !c.cwd} onClick={() => onPick(c.id)} title={c.cwd ?? undefined}>
                 <b>{c.title || tr('（无标题）')}</b>
-                <span className="muted small">{[c.provider, c.model].filter(Boolean).join(' · ')} · {c.cwd ? short(c.cwd) : tr('会话没有工作目录，无法导入')} · {ago(c.last_user ?? c.updated)}</span>
-                {c.linked && <em>{tr('已导入给')} {c.linked}</em>}
+                <span className="muted small">{[c.provider, c.model].filter(Boolean).join(' · ')} · {c.cwd ? short(c.cwd) : tr('会话无工作目录，无法导入')} · {ago(c.last_user ?? c.updated)}</span>
+                {c.linked && <em>{tr('已导入至')} {c.linked}</em>}
               </button>
             ))}
-            {!shown.length && <p className="muted small">{tr('没有匹配的对话。')}</p>}
+            {!shown.length && <p className="muted small">{tr('无匹配的对话。')}</p>}
           </div>
         </>
       )}
@@ -254,11 +254,11 @@ const short = (p: string) => p.replace(/^\/Users\/[^/]+/, '~').split('/').slice(
 
 // pi's slash commands: [name, what it does, needs pi's terminal UI]
 const PI_COMMANDS: [string, string, boolean?][] = [
-  ['model', tr('切换模型：/model 供应商/模型')], ['thinking', tr('思考强度：/thinking high')], ['compact', tr('压缩上下文，可以附一句要求')],
-  ['new', tr('开始新会话')], ['clone', tr('复制当前会话，在副本里继续')], ['name', tr('给会话起名')], ['session', tr('会话信息：消息数、token 和花费')],
-  ['reload', tr('重新加载扩展、skills、提示模板和上下文文件')], ['copy', tr('把最后一条回复复制到剪贴板'), true],
-  ['export', tr('导出会话（HTML 或 .jsonl）'), true], ['fork', tr('从某条消息分叉出新会话'), true], ['tree', tr('在会话树里跳转'), true],
-  ['resume', tr('恢复别的会话'), true], ['settings', tr('设置'), true], ['scoped-models', tr('Ctrl+P 循环的模型'), true],
+  ['model', tr('切换模型：/model 供应商/模型')], ['thinking', tr('思考强度：/thinking high')], ['compact', tr('压缩上下文，可附加说明')],
+  ['new', tr('开始新会话')], ['clone', tr('复制当前会话并在副本中继续')], ['name', tr('命名会话')], ['session', tr('会话信息：消息数、token 与费用')],
+  ['reload', tr('重新加载扩展、skills、提示模板和上下文文件')], ['copy', tr('复制最后一条回复至剪贴板'), true],
+  ['export', tr('导出会话（HTML 或 .jsonl）'), true], ['fork', tr('从指定消息分叉新会话'), true], ['tree', tr('在会话树中跳转'), true],
+  ['resume', tr('恢复其他会话'), true], ['settings', tr('设置'), true], ['scoped-models', tr('Ctrl+P 循环的模型'), true],
   ['login', tr('登录供应商'), true], ['logout', tr('退出登录'), true], ['hotkeys', tr('快捷键'), true], ['changelog', tr('更新日志'), true],
   ['share', tr('分享会话'), true], ['import', tr('导入 .jsonl 会话'), true], ['trust', tr('项目信任设置'), true], ['quit', tr('停止 pi')],
 ];
@@ -290,8 +290,8 @@ function Aside({ agent, role, line, onOpen, toast, children }: { agent: Agent; r
       {role === 'lead' ? <LeadAside lineId={lid} seq={line?.seq} toast={toast} /> : <ConvSkills lineId={lid} agentId={agent.id} onOpen={onOpen} />}
       {role === 'coder' && (
         <div className="pnl-s">
-          <h4>{tr('提交到农场的实验')}</h4>
-          {!jobs.length && <p className="muted small">{tr('还没有。')}{agent.runtime === 'paseo' ? tr('它用 .papertown/pt submit 提交。') : tr('pi 会用 papertown_submit_job 提交。')}</p>}
+          <h4>{tr('提交至农场的实验')}</h4>
+          {!jobs.length && <p className="muted small">{tr('暂无。')}{agent.runtime === 'paseo' ? tr('通过 .papertown/pt submit 提交。') : tr('pi 通过 papertown_submit_job 提交。')}</p>}
           {jobs.slice(0, 8).map(j => (
             <button key={j.id} className={`job mini s-${j.status}`} onClick={() => onOpen('farm', lid)}>
               <span className="job-name"><b>{j.name}</b><small>{j.backend}</small></span>
@@ -303,7 +303,7 @@ function Aside({ agent, role, line, onOpen, toast, children }: { agent: Agent; r
       {role === 'coder' && repos.length > 0 && (
         <div className="pnl-s">
           <h4>{tr('参考仓库')} <span className="chip">{tr('示例数据')}</span></h4>
-          <p className="muted small">{tr('文档进了检索库，方法设计时从这里找 baseline 和指标。')}</p>
+          <p className="muted small">{tr('文档已入检索库，方法设计时从中检索 baseline 与指标。')}</p>
           {repos.map(x => <div key={x.id} className="repo"><b>{x.label}</b><span className="muted small">{x.desc}</span></div>)}
         </div>
       )}
@@ -312,13 +312,13 @@ function Aside({ agent, role, line, onOpen, toast, children }: { agent: Agent; r
           <h4>{tr('稿子')}</h4>
           <p className="muted small path">{line.linked.paper.path}{line.linked.paper.main ? ` · ${line.linked.paper.main}` : ''}</p>
           {line.linked.paper.pdf ? <div className="btns"><a className="btn pri" href={linkedPdfUrl(line.id)} target="_blank" rel="noreferrer">{tr('看 PDF')}</a></div>
-            : <p className="muted small">{tr('论文仓库里还没有编译好的 PDF。')}</p>}
+            : <p className="muted small">{tr('论文仓库中暂无已编译的 PDF。')}</p>}
         </div>
       )}
       {role === 'writer' && !line?.linked?.paper && (
         <div className="pnl-s">
           <h4>{tr('稿子')}</h4>
-          {!files.length && <p className="muted small">{tr('印刷厂目录里还没有文件。')}</p>}
+          {!files.length && <p className="muted small">{tr('印刷厂目录中暂无文件。')}</p>}
           <FileLinks lineId={lid} files={files} />
         </div>
       )}
@@ -374,7 +374,7 @@ export function PaseoLog({ rows, sent, asks, working, onPermit, children }: {
       {children}
       {asks.map(q => (
         <div key={q.id} className="ask">
-          <p><b>{tr('它想')}{q.name === 'Bash' ? tr('运行命令') : tr('用 {0}', q.name)}</b>{q.title && q.title !== q.name ? ` · ${q.title}` : ''}</p>
+          <p><b>{tr('请求')}{q.name === 'Bash' ? tr('运行命令') : tr('使用 {0}', q.name)}</b>{q.title && q.title !== q.name ? ` · ${q.title}` : ''}</p>
           {q.arg && <pre className="code">{q.arg}</pre>}
           <div className="btns">
             <button className="btn pri" onClick={() => onPermit(q.id, true)}>{tr('允许')}</button>
@@ -423,9 +423,9 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
             <div><b>{agentName(agent)}{line ? ` · #${line.seq}` : ''}</b><span className="muted small">{agent.model ?? 'Paseo'}</span><TurnTime agent={agent} /></div>
           </div>
           <div className="btns">
-            <button className={`btn as-hist${hist ? ' on' : ''}`} aria-expanded={hist} onClick={() => setHist(h => !h)}>{tr('之前的对话')}</button>
-            <button className="btn" title={tr('新对话：用同一个模型重新开始')} onClick={() => run(() => api.newConv(agent.id))}>{tr('新对话')}</button>
-            <button className="btn" disabled={!agent.web} title={agent.web ? tr('Paseo 自己的界面：命令、模型切换、权限审批') : tr('Paseo 的网页端没开')} onClick={() => setFull(f => !f)}>{full ? tr('精简视图') : tr('完整界面')}</button>
+            <button className={`btn as-hist${hist ? ' on' : ''}`} aria-expanded={hist} onClick={() => setHist(h => !h)}>{tr('历史对话')}</button>
+            <button className="btn" title={tr('新对话：使用同一模型重新开始')} onClick={() => run(() => api.newConv(agent.id))}>{tr('新对话')}</button>
+            <button className="btn" disabled={!agent.web} title={agent.web ? tr('Paseo 自有界面：命令、模型切换、权限审批') : tr('Paseo 网页端未开启')} onClick={() => setFull(f => !f)}>{full ? tr('精简视图') : tr('完整界面')}</button>
             <button className="btn" onClick={() => run(() => api.openInPaseo(agent.id))}>{tr('桌面端')}</button>
             {tools}
             {hist && <History agent={agent.id} onPick={c => { setHist(false); run(() => api.resumeConv(agent.id, c.id)); }} onClose={() => setHist(false)} />}
@@ -440,7 +440,7 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
                 stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
               }}>
                 {err && <div className="note err">{err}</div>}
-                {items && !items.length && !sent.length && <div className="room-empty small-empty"><p>{tr('还没有对话。')}</p></div>}
+                {items && !items.length && !sent.length && <div className="room-empty small-empty"><p>{tr('暂无对话。')}</p></div>}
                 <PaseoLog rows={rows} sent={sent} asks={asks} working={working}
                   onPermit={(id, allow) => run(async () => { await api.permit(agent.id, id, allow); answered(id); })} />
               </div>
@@ -452,7 +452,7 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
       {onOpen && <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
         <div className="pnl-s">
           <h4>Paseo</h4>
-          <p className="muted small">{tr('同一段对话也在 Paseo 的桌面端和手机上。权限审批在这里就能点，命令和模型切换在「完整界面」里。')}</p>
+          <p className="muted small">{tr('同一对话同步至 Paseo 桌面端与手机端。权限审批可在此直接操作，命令与模型切换位于「完整界面」。')}</p>
           <div className="btns"><button className="btn" onClick={() => run(() => api.brief(agent.id))}>{tr('发送项目简报')}</button></div>
           {agent.cwd && <p className="muted small path">{tr('目录：')}{agent.cwd}</p>}
         </div>
@@ -470,7 +470,7 @@ const someone = (w: string) => { const m = /^#(\d+) 的(.+)$/.exec(w); return m 
 function tagged(t: string) {
   const m = TAGGED.exec(t.trim());
   if (!m) return null;
-  const label = m[1] === 'msg' ? tr('{0}发来的消息', someone(m[2] ?? '')) : { checkin: tr('Papertown：项目的近况'), answer: tr('你的回答'), bounds: tr('工作边界改了'), card: tr('你请它更新项目卡片') }[m[1]]!;
+  const label = m[1] === 'msg' ? tr('{0}发来的消息', someone(m[2] ?? '')) : { checkin: tr('Papertown：项目近况'), answer: tr('你的回答'), bounds: tr('工作边界已修改'), card: tr('你请求更新项目卡片') }[m[1]]!;
   return { k: m[1], label, body: m[3] };
 }
 
@@ -497,7 +497,7 @@ function FullPaseo({ src, title }: { src: string; title: string }) {
     <div className="paseo-wrap">
       <iframe className="paseo-frame" src={src} title={title} allow="clipboard-read; clipboard-write; microphone"
         onLoad={() => window.setTimeout(() => setReady(true), 7000)} />
-      <div className={`paseo-veil${ready ? ' gone' : ''}`}><span className="thinking"><i /><i /><i /></span><p>{tr('正在打开 Paseo 的界面…')}</p></div>
+      <div className={`paseo-veil${ready ? ' gone' : ''}`}><span className="thinking"><i /><i /><i /></span><p>{tr('正在打开 Paseo 界面…')}</p></div>
     </div>
   );
 }
@@ -523,7 +523,7 @@ export function Trail({ tools, children }: { tools: { name: string; arg?: string
         <span className="t-ic">{busy ? '…' : bad ? '!' : '✓'}</span>
         <b>{tools.length > 1 ? tr('{0} 个工具', tools.length) : last.name}</b>
         <span className="t-arg">{tools.length > 1 ? `${last.name} ${last.arg ?? ''}` : last.arg}</span>
-        {bad > 0 && <em>{bad} {tr('个出错')}</em>}
+        {bad > 0 && <em>{bad} {tr('个错误')}</em>}
       </button>
       {open && (children ?? <ul>{tools.map((t, i) => <li key={i} className={`t-${t.st}`}><b>{t.name}</b><span>{t.arg}</span>{t.note && <em>{t.note}</em>}</li>)}</ul>)}
     </div>
@@ -620,11 +620,11 @@ function AgentChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         }}>
           {err && <p className="note err">{err}</p>}
-          {!items.length && !live && <div className="room-empty small-empty"><p>{tr('还没有对话。可以先「发送项目简报」，让它读一遍项目再开始。')}</p></div>}
+          {!items.length && !live && <div className="room-empty small-empty"><p>{tr('暂无对话。可先「发送项目简报」，待其读取项目信息后再开始。')}</p></div>}
           <PiLog rows={rows} live={live} working={agent.status === 'working'} />
         </div>
         <Compose agent={agent} queued={queued} toast={toast} onChanged={reload} value={text} onChange={setText}
-          placeholder={tr('对{0}说点什么，输入 / 用 pi 的命令，Enter 发送', r.name)}
+          placeholder={tr('向{0}输入内容，输入 / 调用 pi 命令，Enter 发送', r.name)}
           onSent={() => { stick.current = true; }} onKeyDown={e => {
             if (e.key === 'Tab' && menu.length) { e.preventDefault(); setText(`/${menu[0][0]} `); }
           }}>
@@ -638,7 +638,7 @@ function AgentChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
       {onOpen && <Aside agent={agent} role={role} line={line} onOpen={onOpen} toast={toast}>
         <div className="pnl-s">
           <h4>{tr('终端')}</h4>
-          <p className="muted small">{tr('pi 在后台的 tmux 里运行，接上就能看到同一段对话，在那里输入也会同步到这里。')}</p>
+          <p className="muted small">{tr('pi 在后台 tmux 中运行，接入即可查看同一对话，终端内的输入也将同步至此。')}</p>
           {agent.attach && <div className="copy"><code>{agent.attach}</code><button className="btn" onClick={() => {
             navigator.clipboard?.writeText(agent.attach!).then(() => toast(tr('已复制')), () => toast(agent.attach!));
           }}>{tr('复制')}</button></div>}

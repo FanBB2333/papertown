@@ -23,26 +23,26 @@ const TOWN: [string, string, string, (r: ProjectCard[]) => string][] = [
   ['depot', tr('代码仓库'), tr('每次提交、改动和分支'), r => {
     const code = r.map(x => x.repos.code).filter(c => c && !c.missing);
     const dirty = code.reduce((n, c) => n + (c!.dirty ?? 0), 0);
-    return dirty ? tr('{0} 个仓库 · {1} 处没提交', code.length, dirty) : tr('{0} 个仓库，都提交了', code.length);
+    return dirty ? tr('{0} 个仓库 · {1} 处未提交', code.length, dirty) : tr('{0} 个仓库，均已提交', code.length);
   }],
-  ['farm', tr('实验'), tr('在跑的、排队的、规划中的'), r => {
+  ['farm', tr('实验'), tr('运行中、排队中、规划中'), r => {
     const [run, q] = jobsIn(r);
-    return run || q ? tr('{0} 个在跑 · {1} 个排队', run, q) : tr('现在没有实验在跑');
+    return run || q ? tr('{0} 个运行中 · {1} 个排队', run, q) : tr('当前暂无实验运行');
   }],
   ['press', tr('论文'), tr('LaTeX 仓库，字数和页数'), r => {
     const papers = r.map(x => x.repos.paper).filter(c => c && !c.missing);
     const words = papers.reduce((n, c) => n + (c!.words ?? 0), 0);
     return words ? tr('{0} 篇 · 共 {1} 词', papers.length, words.toLocaleString()) : tr('{0} 篇', papers.length);
   }],
-  ['mill', tr('负责人'), tr('一个 agent 盯一个项目'), r => tr('{0}/{1} 个项目有负责人', r.filter(x => x.lead?.started).length, r.length)],
+  ['mill', tr('负责人'), tr('一个 agent 跟进一个项目'), r => tr('{0}/{1} 个项目有负责人', r.filter(x => x.lead?.started).length, r.length)],
 ];
 
 const greeting = (h = new Date().getHours()) =>
   h < 5 ? tr('夜深了') : h < 11 ? tr('早上好') : h < 13 ? tr('中午好') : h < 18 ? tr('下午好') : tr('晚上好');
 const FEATURES: [Parameters<typeof Icon>[0]['n'], string, string][] = [
-  ['cards', tr('进展'), tr('每个项目一张卡片：在跑的实验、预期产出、代码和论文仓库，负责人按你说的更新。')],
-  ['chat', tr('对话'), tr('问一个项目任何事，或者交代它的负责人去办。负责人的汇报和要你决定的事也在这里。')],
-  ['board', tr('小镇'), tr('每个项目的细节：代码、实验、论文和员工在中控屏的面板里管和改，也可以在小镇里走动。')],
+  ['cards', tr('进展'), tr('每个项目一张卡片：运行中实验、预期产出、代码与论文仓库，负责人按你要求更新。')],
+  ['chat', tr('对话'), tr('可询问项目任意事项，或向负责人派发任务。负责人的汇报与待你决定的事项也在此处。')],
+  ['board', tr('小镇'), tr('项目详情：代码、实验、论文与员工可在中控屏面板中管理与修改，也可在小镇中穿行。')],
 ];
 
 export function Landing({ auth, err, reload }: { auth: AuthState | null; err: string; reload: () => Promise<AuthState | null> }) {
@@ -67,7 +67,7 @@ export function Landing({ auth, err, reload }: { auth: AuthState | null; err: st
         <section className="ld-card pnl" aria-label={tr('登录')}>
           <Door auth={auth} err={err} reload={reload} enter={enter} />
         </section>
-        <ol className="ld-town" aria-label={tr('小镇里的四座建筑')}>
+        <ol className="ld-town" aria-label={tr('小镇的四座建筑')}>
           {TOWN.map(([type, name, desc, now], i) => (
             <li key={type} style={{ ['--i' as string]: i }}>
               <span className="ld-sp"><Sprite type={type} /></span>
@@ -81,7 +81,7 @@ export function Landing({ auth, err, reload }: { auth: AuthState | null; err: st
           ))}
         </ul>}
       </main>
-      <footer className="ld-foot small muted">{DEMO ? tr('只读的演示：数据是一份快照') : location.host}</footer>
+      <footer className="ld-foot small muted">{DEMO ? tr('只读演示：数据为快照') : location.host}</footer>
     </div>
   );
 }
@@ -110,8 +110,8 @@ function useOneLine(text: string) {
 function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] | null }) {
   const hi = greeting();
   const n = rows?.length ?? 0, wait = rows?.filter(youNeeded).length ?? 0;
-  const status = !rows ? (auth && !auth.authed ? tr('登录后看看项目到哪了。') : '')
-    : !n ? tr('还没有项目。') : wait ? tr('{0} 个项目，{1} 个在等你决定。', n, wait) : tr('{0} 个项目，没有在等你的。', n);
+  const status = !rows ? (auth && !auth.authed ? tr('登录后查看项目进展。') : '')
+    : !n ? tr('暂无项目。') : wait ? tr('{0} 个项目，{1} 个待你决定。', n, wait) : tr('{0} 个项目，无待你决定事项。', n);
   const line = useOneLine(status);
   const head = <><span className="ld-hi">{tr('{0}。', hi)}</span>{status && <span className="ld-st" ref={line}>{status}</span>}</>;
   if (!rows) return <h1>{head}</h1>;
@@ -119,7 +119,7 @@ function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] 
   const shown = marked.slice(0, 3);
   const [run, q] = jobsIn(rows);
   const last = rows.map(r => r.card?.at).filter(Boolean).sort().pop();
-  const facts = [run ? tr('{0} 个实验在跑', run) : tr('没有实验在跑'), q ? tr('{0} 个排队', q) : '', last ? tr('最近一次更新：{0}', ago(last)) : ''].filter(Boolean);
+  const facts = [run ? tr('{0} 个实验运行中', run) : tr('暂无实验运行'), q ? tr('{0} 个排队', q) : '', last ? tr('最近一次更新：{0}', ago(last)) : ''].filter(Boolean);
   return (
     <>
       <h1>
@@ -130,12 +130,12 @@ function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] 
               <>
                 {shown.map((r, i) => (
                   <span key={r.line.id}>{i > 0 && tr('，')}<a className={`h-${r.card!.health}`} href={href(`/progress/${r.line.seq}`)} onClick={e => follow(e, `/progress/${r.line.seq}`)}>
-                    {r.card!.health === 'blocked' ? tr('#{0} 卡住了', r.line.seq) : tr('#{0} 有风险', r.line.seq)}</a></span>
+                    {r.card!.health === 'blocked' ? tr('#{0} 已受阻', r.line.seq) : tr('#{0} 有风险', r.line.seq)}</a></span>
                 ))}
                 {marked.length > shown.length && tr('，还有 {0} 个', marked.length - shown.length)}
-                {marked.length < n ? tr('，其余照常。') : tr('。')}
+                {marked.length < n ? tr('，其余正常。') : tr('。')}
               </>
-            ) : rows.some(r => r.card) ? tr('都在照常推进。') : tr('还没有负责人写过进展卡片。')}
+            ) : rows.some(r => r.card) ? tr('均在正常推进。') : tr('尚无负责人撰写进展卡片。')}
           </span>
         )}
       </h1>
@@ -164,14 +164,14 @@ function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: strin
   if (DEMO) {
     return (
       <>
-        <h2>{tr('看看演示')}</h2>
-        <p className="muted">{tr('这是只读的演示，数据是一个离线小镇的快照。要让它真的跑起来，请克隆仓库在本机启动。')}</p>
+        <h2>{tr('查看演示')}</h2>
+        <p className="muted">{tr('此为只读演示，数据为离线小镇快照。如需实际启动运行，请克隆仓库并在本机启动。')}</p>
         <button className="btn pri ld-go" onClick={enter}>{tr('进入演示')}<Icon n="right" size={16} /></button>
       </>
     );
   }
   if (!auth) {
-    return <p className="muted ld-wait">{err ? tr('连不上服务器：{0}', err) : tr('正在确认…')}</p>;
+    return <p className="muted ld-wait">{err ? tr('无法连接服务器：{0}', err) : tr('确认中…')}</p>;
   }
 
   async function login(e: React.FormEvent) {
@@ -190,25 +190,25 @@ function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: strin
     return auth.password ? (
       <form onSubmit={login}>
         <h2>{tr('登录')}</h2>
-        <p className="muted">{tr('输入访问密码。它是在运行 Papertown 的电脑上设置的。')}</p>
+        <p className="muted">{tr('输入访问密码。该密码在运行 Papertown 的电脑上设置。')}</p>
         <label className="ld-field">
           <span>{tr('访问密码')}</span>
           <input ref={field} type="password" autoComplete="current-password" value={pw} onChange={e => setPw(e.target.value)} disabled={busy} />
         </label>
         {msg && <p className="ld-err" role="alert">{msg}</p>}
         <button className="btn pri ld-go" type="submit" disabled={busy || !pw}>{busy ? tr('登录中…') : tr('登录')}<Icon n="right" size={16} /></button>
-        <p className="small muted">{tr('登录会保持 30 天，或者到你在设置里退出。')}</p>
+        <p className="small muted">{tr('登录保持 30 天，或直至你在设置中退出。')}</p>
       </form>
     ) : (
       <>
-        <h2>{tr('还进不去')}</h2>
-        <p className="muted">{tr('还没有设置访问密码，所以只有运行 Papertown 的那台电脑能打开。')}</p>
+        <h2>{tr('暂无法进入')}</h2>
+        <p className="muted">{tr('尚未设置访问密码，仅运行 Papertown 的电脑可打开。')}</p>
         <ol className="ld-steps">
           <li>{tr('在那台电脑上打开 Papertown（{0}）', 'http://127.0.0.1:8000')}</li>
-          <li>{tr('在这一页设置一个访问密码')}</li>
-          <li>{tr('回到这里，用它登录')}</li>
+          <li>{tr('在该页面设置访问密码')}</li>
+          <li>{tr('返回此处用密码登录')}</li>
         </ol>
-        <button className="btn" onClick={() => reload()}><Icon n="refresh" size={14} />{tr('设置好了，再看一次')}</button>
+        <button className="btn" onClick={() => reload()}><Icon n="refresh" size={14} />{tr('已设置，重新检查')}</button>
       </>
     );
   }
@@ -217,7 +217,7 @@ function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: strin
     <>
       <h2>{auth.local ? tr('欢迎回来') : tr('已登录')}</h2>
       <p className="muted">
-        {auth.local ? tr('这是运行 Papertown 的电脑，直接就能进。') : tr('这台设备用访问密码登录了。')}
+        {auth.local ? tr('此为运行 Papertown 的电脑，可直接进入。') : tr('此设备已通过访问密码登录。')}
       </p>
       <button className="btn pri ld-go" onClick={enter}>{tr('进入')}<Icon n="right" size={16} /></button>
       {auth.local ? <Password auth={auth} reload={reload} /> : (
@@ -236,7 +236,7 @@ function Password({ auth, reload }: { auth: AuthState; reload: () => Promise<Aut
   const [busy, setBusy] = useState(false);
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (a !== b) { setMsg(tr('两次输入的不一样')); return; }
+    if (a !== b) { setMsg(tr('两次输入不一致')); return; }
     setBusy(true);
     setMsg('');
     try {
@@ -250,13 +250,13 @@ function Password({ auth, reload }: { auth: AuthState; reload: () => Promise<Aut
     <div className="ld-pw">
       <p className="small">
         <Icon n="lock" size={14} />
-        {auth.password ? tr('手机和其他电脑用访问密码登录。') : tr('还没有访问密码：设置一个，手机和其他电脑就能登录。')}
-        {!open && <button className="ld-link" onClick={() => setOpen(true)}>{auth.password ? tr('改密码') : tr('设置密码')}</button>}
+        {auth.password ? tr('手机与其他电脑通过访问密码登录。') : tr('尚未设置访问密码：设置后，手机与其他电脑即可登录。')}
+        {!open && <button className="ld-link" onClick={() => setOpen(true)}>{auth.password ? tr('修改密码') : tr('设置密码')}</button>}
       </p>
       {open && (
         <form onSubmit={save} className="ld-pwf">
           <input type="password" autoComplete="new-password" placeholder={tr('新的访问密码（至少 6 位）')} value={a} onChange={e => setA(e.target.value)} autoFocus />
-          <input type="password" autoComplete="new-password" placeholder={tr('再输一次')} value={b} onChange={e => setB(e.target.value)} />
+          <input type="password" autoComplete="new-password" placeholder={tr('再次输入')} value={b} onChange={e => setB(e.target.value)} />
           {msg && <p className="ld-err" role="alert">{msg}</p>}
           <div className="btns">
             <button className="btn pri" type="submit" disabled={busy || a.length < 6 || !b}>{tr('保存')}</button>

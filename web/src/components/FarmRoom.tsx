@@ -17,7 +17,7 @@ const JOB_STATUS: Record<string, string> = { queued: tr('排队'), running: tr('
 const WHO = (by: string | null) => !by ? '—' : by === 'you' ? tr('你') : by.startsWith('coder-') ? tr('代码员工') : by;
 
 // a linked project's experiments are its jobs in nvidb, counted on its experiment stage
-const linkedNote = (l?: Line) => l?.linked ? l.stages.find(s => s.key === 'exp')?.note ?? tr('nvidb 里还没有它的任务。') : undefined;
+const linkedNote = (l?: Line) => l?.linked ? l.stages.find(s => s.key === 'exp')?.note ?? tr('nvidb 中暂无其任务。') : undefined;
 
 function ago(ts: string | null) {
   if (!ts) return '';
@@ -49,8 +49,8 @@ function JobDetail({ id, onClose, toast }: { id: string; onClose: () => void; to
       {j.nvidb && <NvidbJob n={j.nvidb} />}
       {j.command && <><h4>{tr('命令')}</h4><pre className="code">{j.command}</pre></>}
       {j.result && <><h4>{tr('结果')}{j.result.simulated ? tr('样例结果（占位内容）') : ''}</h4><Result r={j.result} /></>}
-      {j.nvidb ? <><h4>{tr('日志')}</h4><p className="muted small">{tr('日志留在 nvidb 里，这里不去节点上读：')}<code>nvidb job logs {j.nvidb.id} -n 200</code></p></>
-        : j.backend !== 'sim' && <><h4>{tr('日志')}</h4><pre className="code log-box">{j.log || tr('（还没有输出）')}</pre></>}
+      {j.nvidb ? <><h4>{tr('日志')}</h4><p className="muted small">{tr('日志保存在 nvidb 中，本页不从节点读取：')}<code>nvidb job logs {j.nvidb.id} -n 200</code></p></>
+        : j.backend !== 'sim' && <><h4>{tr('日志')}</h4><pre className="code log-box">{j.log || tr('（暂无输出）')}</pre></>}
     </div>
   );
 }
@@ -64,13 +64,13 @@ function dur(s: number | null) {
 function NvidbJob({ n }: { n: NonNullable<Job['nvidb']> }) {
   return (
     <>
-      <p className="muted small">{tr('nvidb 队列里的任务，在这里只读。要取消、改预留或看事件，用')} <code>nvidb job show {n.id}</code>{tr('。')}</p>
+      <p className="muted small">{tr('nvidb 队列中的任务在此只读。取消、修改预留或查看事件请用')} <code>nvidb job show {n.id}</code>{tr('。')}</p>
       <dl className="kv">
-        <dt>{tr('在哪')}</dt><dd>{n.node ? `${n.node} · GPU ${n.gpu_ids.join(', ') || '—'}` : n.lane ? tr('排在 {0}', n.lane) : tr('还没分配')}</dd>
+        <dt>{tr('在哪')}</dt><dd>{n.node ? `${n.node} · GPU ${n.gpu_ids.join(', ') || '—'}` : n.lane ? tr('排在 {0}', n.lane) : tr('尚未分配')}</dd>
         <dt>{tr('预留显存')}</dt><dd>{n.vram_mb ? gb(n.vram_mb) : tr('不占显存')}</dd>
         {n.progress && <><dt>{tr('状态行')}</dt><dd>{n.progress}</dd></>}
         <dt>{tr('用时')}</dt><dd>{dur(n.elapsed_s)}{n.exit_code != null ? tr(' · 退出码 {0}', n.exit_code) : ''}</dd>
-        {n.held && <><dt>{tr('卡住了')}</dt><dd className="warn">{tr('依赖的任务没有成功结束，在等人决定')}</dd></>}
+        {n.held && <><dt>{tr('受阻')}</dt><dd className="warn">{tr('依赖任务未成功结束，待决定')}</dd></>}
         {n.workdir && <><dt>{tr('目录')}</dt><dd className="brk">{n.workdir}</dd></>}
       </dl>
       {n.notes && <><h4>{tr('说明')}</h4><p className="small nv-notes">{n.notes}</p></>}
@@ -122,7 +122,7 @@ export function FarmRoom(p: Props) {
   return (
     <div className="room room-farm">
       <aside className="room-side">
-        <h4 className="side-h">{tr('看田员')} <span className="muted small">{tr('每个项目一位，盯实验进度')}</span></h4>
+        <h4 className="side-h">{tr('看田员')} <span className="muted small">{tr('各项目一位，监测实验进度')}</span></h4>
         <button className={`mon${!only ? ' on' : ''}`} onClick={() => setOnly(null)}>
           <b>{tr('全部项目')}</b><span className="muted small">{tr('{0} 个任务', all.length)}</span>
         </button>
@@ -130,7 +130,7 @@ export function FarmRoom(p: Props) {
           <button key={line.id} className={`mon${only === line.id ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={() => setOnly(line.id)}>
             <div className="proj-top"><b>#{line.seq} {line.title}</b>
               <span className={`pulse${all.some(j => j.line_id === line.id && j.status === 'running') ? ' on' : ''}`} /></div>
-            <p className="mon-note">{agent?.last?.data?.text ?? linkedNote(p.lines.find(l => l.id === line.id)) ?? tr('还没有实验。代码员工提交任务后，这里会写下进度。')}</p>
+            <p className="mon-note">{agent?.last?.data?.text ?? linkedNote(p.lines.find(l => l.id === line.id)) ?? tr('暂无实验。代码员工提交任务后，此处将记录进度。')}</p>
             {agent?.last && <span className="muted small">{ago(agent.last.ts)}</span>}
           </button>
         ))}
@@ -139,14 +139,14 @@ export function FarmRoom(p: Props) {
         <div className="backends">
           {(board?.backends ?? []).map(b => (
             <div key={b.id} className={`backend${b.ready ? '' : ' off'}`}>
-              <div className="proj-top"><b>{b.name}</b><span className={`pst ${b.ready ? 'pst-running' : 'pst-paused'}`}>{b.ready ? tr('{0} 个在跑', b.id === 'nvidb' ? b.active : active(b.id)) : tr('未接入')}</span></div>
+              <div className="proj-top"><b>{b.name}</b><span className={`pst ${b.ready ? 'pst-running' : 'pst-paused'}`}>{b.ready ? tr('{0} 个运行中', b.id === 'nvidb' ? b.active : active(b.id)) : tr('未接入')}</span></div>
               <p className="muted small">{b.note}</p>
             </div>
           ))}
         </div>
         <GpuBoard />
         <div className="board">
-          {!jobs.length && <div className="room-empty small-empty"><p>{tr('还没有任务。仓库里的代码员工提交实验（pi 用')} <code>papertown_submit_job</code>{tr('，Paseo 里的 agent 用')} <code>.papertown/pt submit</code>{tr('），或者流水线跑到实验工序时，任务会出现在这里。')}</p></div>}
+          {!jobs.length && <div className="room-empty small-empty"><p>{tr('暂无任务。仓库中的代码员工提交实验（pi 使用')} <code>papertown_submit_job</code>{tr('，Paseo 中的 agent 使用')} <code>.papertown/pt submit</code>{tr('），或流水线推进至实验工序时，任务将显示在此处。')}</p></div>}
           {groups.map(([name, list]) => list.length > 0 && (
             <div key={name} className="jgroup">
               <h4>{name} <span className="muted">{list.length}</span></h4>

@@ -149,9 +149,9 @@ export function Agents({ id, active, lines, toast }: { id?: string; active: bool
       <div className="aw-rows">
         {error && <div className="aw-notice" role="alert"><p>{error}</p><button className="btn" onClick={() => refreshOverview()}>{tr('重试')}</button></div>}
         {!data && !error && <p className="aw-empty">{tr('加载中…')}</p>}
-        {data && !data.paseo.ok && <p className="aw-notice">{tr('连不上 Paseo：{0}', data.paseo.note)}</p>}
+        {data && !data.paseo.ok && <p className="aw-notice">{tr('无法连接 Paseo：{0}', data.paseo.note)}</p>}
         {data && !groups.length && <div className="aw-empty">
-          <p>{search || filter ? tr('没有符合条件的员工。') : tr('尚无已启动的员工。')}</p>
+          <p>{search || filter ? tr('暂无符合条件的员工。') : tr('暂无已启动的员工。')}</p>
           {!search && !filter && <button className="btn" onClick={() => setHiring(true)}>{tr('新建员工')}</button>}
         </div>}
         {sort === 'project' ? groups.map(g => <section key={g.line?.id ?? (g.other ? 'terminals' : 'assistant')} className="aw-group">
@@ -168,8 +168,8 @@ export function Agents({ id, active, lines, toast }: { id?: string; active: bool
         <Conversation key={selected.id} agent={selected} toast={toast} tools={sideButton} />
       </div> : <div className="aw-blank">
         <div className="aw-blank-art" aria-hidden="true"><span><Icon n="code" size={20} /></span><span><Icon n="chat" size={22} /></span><span><Icon n="doc" size={20} /></span></div>
-        <h2>{id && data ? tr('未找到这名员工') : tr('选择员工，查看对话')}</h2>
-        <p>{tr('左侧按项目列出员工和终端会话。选中后可查看对话、发送指令并处理它的请求。')}</p>
+        <h2>{id && data ? tr('未找到该员工') : tr('选择员工，查看对话')}</h2>
+        <p>{tr('左侧按项目列出员工与终端会话。选中后可查看对话、发送指令并处理其请求。')}</p>
         <div className="btns"><button className="btn pri" onClick={() => setHiring(true)}><Icon n="plus" size={15} />{tr('新建员工')}</button></div>
         <p className="aw-keys">{tr('↑/↓ 或 j/k 选择，Enter 输入消息')}</p>
       </div>}
@@ -185,7 +185,7 @@ export function Agents({ id, active, lines, toast }: { id?: string; active: bool
     {hiring && <HireDialog lineId={selectedGroup?.line?.id} onClose={() => setHiring(false)}
       onStarted={a => { void refreshOverview().then(() => go(agentsPath(a.id))); }} onOpen={a => go(agentsPath(a.id))} />}
     {asking && selected && permission && <PromptDialog id={permissionKey} who={`${agentName(selected)}${selectedGroup?.line ? ` · #${selectedGroup.line.seq}` : ''}`}
-      title={permission.name === 'Bash' ? tr('它请求运行一条命令') : tr('它请求使用 {0}', permission.name)}
+      title={permission.name === 'Bash' ? tr('请求运行命令') : tr('请求使用 {0}', permission.name)}
       body={permission.title && permission.title !== permission.name ? [permission.title] : []} code={permission.arg || undefined}
       choices={[{ label: tr('允许'), tone: 'primary', pick: () => permit(true) }, { label: tr('拒绝'), tone: 'danger', pick: () => permit(false) }]}
       onClose={() => setAsking(false)} />}
@@ -245,7 +245,7 @@ function LooseRow({ session: s, line, toast, onJoined }: { session: Loose; line:
     catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
   return <div className="aw-loose-row">
-    <b>{s.title || tr('（没有标题）')}</b><span>{s.provider} · {s.model} · {AGENT_STATUS[s.status] ?? s.status}</span>
+    <b>{s.title || tr('（无标题）')}</b><span>{s.provider} · {s.model} · {AGENT_STATUS[s.status] ?? s.status}</span>
     <small className="path">{s.cwd}</small>
     <div className="btns"><select aria-label={tr('接入岗位')} value={role} onChange={e => setRole(e.target.value as AgentRole)} disabled={busy}>
       <option value="coder">{tr('代码员工')}</option><option value="writer">{tr('写作员工')}</option>

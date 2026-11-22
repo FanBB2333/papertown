@@ -19,10 +19,10 @@ export function Earlier({ agent = 'assistant', at, onPick, limit, title }: {
       {title && <h4>{title}</h4>}
       {err ? <p className="as-none">{err}</p>
         : !list ? <p className="as-none">{tr('加载中…')}</p>
-          : !shown.length ? <p className="as-none">{tr('还没有之前的对话。')}</p>
+          : !shown.length ? <p className="as-none">{tr('暂无历史对话。')}</p>
             : shown.map(c => (
               <button key={c.id} className={`as-conv${c.current ? ' on' : ''}`} disabled={c.current} onClick={() => onPick(c)}>
-                <b>{c.title || tr('（没有标题）')}</b>
+                <b>{c.title || tr('（无标题）')}</b>
                 <span>{c.current ? tr('正在进行') : ago(c.at)}{c.model ? ` · ${c.model}` : ''}</span>
               </button>
             ))}
@@ -44,8 +44,8 @@ export function History({ agent, onPick, onClose }: { agent?: string; onPick: (c
     return () => { removeEventListener('pointerdown', down, true); removeEventListener('keydown', key, true); };
   }, [onClose]);
   return (
-    <div className="as-pop" ref={ref} role="dialog" aria-label={tr('之前的对话')}>
-      <h5>{tr('之前的对话')}</h5>
+    <div className="as-pop" ref={ref} role="dialog" aria-label={tr('历史对话')}>
+      <h5>{tr('历史对话')}</h5>
       <Earlier agent={agent} onPick={onPick} />
     </div>
   );

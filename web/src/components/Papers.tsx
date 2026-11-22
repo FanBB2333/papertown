@@ -16,7 +16,7 @@ function Card({ p, i }: { p: PaperCard; i: number }) {
       <span className="pc-au">{p.authors}</span>
       {p.note ? <p className="pc-note">{p.note}</p> : <p className="pc-snip">{p.snippet}</p>}
       {p.similarity != null && (
-        <span className="pc-sim" title={tr('和这篇论文的 idea 有多接近')}>
+        <span className="pc-sim" title={tr('与本论文 idea 的接近程度')}>
           <i style={{ ['--v' as string]: Math.max(0, Math.min(1, p.similarity)) }} />{p.similarity.toFixed(2)}
         </span>
       )}
@@ -46,7 +46,7 @@ export function LibraryShelf({ tick }: { tick: number }) {
     <section className="shelf">
       <div className="shelf-head">
         <h4>{tr('馆藏 ·')} {tr('{0} 篇', shelf?.total ?? '…')}</h4>
-        <input className="shelf-q" placeholder={tr('搜标题和摘要，中文也行：稀疏注意力、审稿、场景图…')} value={q} onChange={e => setQ(e.target.value)} />
+        <input className="shelf-q" placeholder={tr('检索标题摘要，中文也可：稀疏注意力、审稿、场景图…')} value={q} onChange={e => setQ(e.target.value)} />
       </div>
       <div className="shelf-topics">
         <button className={!topic ? 'on' : ''} onClick={() => setTopic('')}>{tr('全部')}</button>
@@ -59,7 +59,7 @@ export function LibraryShelf({ tick }: { tick: number }) {
       {err && <p className="warn-box small">{err}</p>}
       <div className="pcards">
         {shelf?.papers.map((p, i) => <Card key={p.paper_id} p={p} i={Math.min(i, 12)} />)}
-        {shelf && !shelf.papers.length && <p className="muted">{tr('这一格是空的。')}</p>}
+        {shelf && !shelf.papers.length && <p className="muted">{tr('此处为空。')}</p>}
       </div>
     </section>
   );
@@ -83,12 +83,12 @@ export function LinePapers({ lineId, tick }: { lineId: string; tick: number }) {
       <div className="shelf-head">
         <h4>{tr('调研文章')}</h4>
         <div className="out-tabs">
-          <a className={shown === 'survey' ? 'on' : ''} onClick={() => setTab('survey')}>{tr('孵化场查到的 ·')} {got.survey.length}</a>
-          <a className={shown === 'references' ? 'on' : ''} onClick={() => setTab('references')}>{tr('论文里引用的 ·')} {got.references.length}</a>
+          <a className={shown === 'survey' ? 'on' : ''} onClick={() => setTab('survey')}>{tr('孵化场检出的 ·')} {got.survey.length}</a>
+          <a className={shown === 'references' ? 'on' : ''} onClick={() => setTab('references')}>{tr('论文中引用的 ·')} {got.references.length}</a>
         </div>
       </div>
       {list.length ? <div className="pcards">{list.map((p, i) => <Card key={p.paper_id} p={p} i={i} />)}</div>
-        : <p className="muted small">{shown === 'references' ? tr('还没写到论文，印刷厂排版后这里会列出 refs.bib 里的文章。') : '—'}</p>}
+        : <p className="muted small">{shown === 'references' ? tr('尚未撰写论文，印刷厂排版后此处将列出 refs.bib 中的文献。') : '—'}</p>}
     </section>
   );
 }

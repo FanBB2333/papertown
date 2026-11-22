@@ -48,7 +48,7 @@ export function PromptDialog({ id, who, title, body = [], code, choices, hint, c
       <Dialog.Title>{title}</Dialog.Title>
       {!!body.length && <div className="aw-prompt-body">{paragraphs(body).map((line, i) => <p key={i}>{line}</p>)}</div>}
       {code && <pre className="aw-prompt-code">{code}</pre>}
-      {!!choices.length && <div className="aw-prompt-choices" role="group" aria-label={tr('可选的回答')}>
+      {!!choices.length && <div className="aw-prompt-choices" role="group" aria-label={tr('可选回答')}>
         {choices.map((c, i) => <Button key={i} className="aw-prompt-choice" variant={c.tone === 'primary' ? 'primary' : c.tone === 'danger' ? 'secondary-destructive' : 'secondary'}
           loading={busy === i} disabled={busy >= 0 && busy !== i} onClick={() => run(i)}>
           <kbd aria-hidden="true">{i + 1}</kbd><span>{c.label}</span>

@@ -12,7 +12,7 @@ function ago(ts: string | null | undefined) {
 }
 
 function Commits({ list }: { list?: Commit[] }) {
-  if (!list?.length) return <p className="muted small">{tr('还没有提交。')}</p>;
+  if (!list?.length) return <p className="muted small">{tr('暂无提交。')}</p>;
   return (
     <ul className="commits">
       {list.map(c => (
@@ -25,7 +25,7 @@ function Commits({ list }: { list?: Commit[] }) {
 }
 
 function Dirty({ n }: { n?: number }) {
-  return n ? <span className="chip warn" title={tr('git status 里没有提交的改动')}>{n} {tr('处没提交')}</span> : <span className="chip ok">{tr('工作区干净')}</span>;
+  return n ? <span className="chip warn" title={tr('git status 中未提交的改动')}>{n} {tr('处未提交')}</span> : <span className="chip ok">{tr('工作区干净')}</span>;
 }
 
 function CodeCard({ c, onGo }: { c: LinkedCode; onGo: () => void }) {
@@ -33,10 +33,10 @@ function CodeCard({ c, onGo }: { c: LinkedCode; onGo: () => void }) {
     <div className="pnl lk-card">
       <div className="lk-head">
         <h4>{tr('代码仓库 ·')} {c.name}</h4>
-        <button className="btn" onClick={onGo}>{tr('去仓库')}</button>
+        <button className="btn" onClick={onGo}>{tr('前往仓库')}</button>
       </div>
       <p className="muted small lk-path">{c.path}</p>
-      {c.missing ? <p className="warn-box small">{tr('这个目录不存在了，检查 projects.json 里的路径。')}</p> : (
+      {c.missing ? <p className="warn-box small">{tr('此目录不存在，请检查 projects.json 中的路径。')}</p> : (
         <>
           <div className="lk-chips">
             <span className="chip">{c.branch}</span>
@@ -63,22 +63,22 @@ function PaperCard({ p, lineId, onGo }: { p: LinkedPaper; lineId: string; onGo: 
         <h4>{tr('论文仓库 ·')} {p.name}</h4>
         <div className="btns">
           {p.pdf && <a className="btn pri" href={linkedPdfUrl(lineId)} target="_blank" rel="noreferrer" title={tr('编译于 {0}', p.pdf_at)}>{tr('看 PDF')}</a>}
-          <button className="btn" onClick={onGo}>{tr('去印刷厂')}</button>
+          <button className="btn" onClick={onGo}>{tr('前往印刷厂')}</button>
         </div>
       </div>
       <p className="muted small lk-path">{p.path}{p.main ? ` · ${p.main}` : ''}</p>
-      {p.missing ? <p className="warn-box small">{tr('这个目录不存在了，检查 projects.json 里的路径。')}</p>
-        : !p.main ? <p className="muted small">{tr('没找到带 \\documentclass 的 .tex 文件。')}</p> : (
+      {p.missing ? <p className="warn-box small">{tr('此目录不存在，请检查 projects.json 中的路径。')}</p>
+        : !p.main ? <p className="muted small">{tr('未找到含 \\documentclass 的 .tex 文件。')}</p> : (
           <>
             <div className="lk-chips">
               <span className="chip">{tr('约')} {p.words} {tr('词')}</span>
               <span className="chip">{p.figures} {tr('图 ·')} {p.tables} {tr('表')}</span>
               <span className="chip">{tr('引用')} {tr('{0} 篇', p.bib)}</span>
-              {p.pdf ? <span className="chip ok">PDF {ago(p.pdf_at)}{tr('编译')}</span> : <span className="chip">{tr('还没有 PDF')}</span>}
+              {p.pdf ? <span className="chip ok">PDF {ago(p.pdf_at)}{tr('编译')}</span> : <span className="chip">{tr('暂无 PDF')}</span>}
               <Dirty n={p.dirty} />
             </div>
             {p.title && <b className="lk-title">{p.title}</b>}
-            {p.abstract ? <p className="lk-text">{p.abstract}</p> : <p className="muted small">{tr('摘要还没写。')}</p>}
+            {p.abstract ? <p className="lk-text">{p.abstract}</p> : <p className="muted small">{tr('摘要未填写。')}</p>}
             {!!p.sections?.length && <ol className="lk-secs">{p.sections.map(s => <li key={s}>{s}</li>)}</ol>}
             <h5>{tr('最近的提交')}</h5>
             <Commits list={p.commits} />
@@ -95,7 +95,7 @@ export function LinkedRepos({ line, onOpen }: { line: Line; onOpen: (id: string)
     <section className="linked">
       <div className="shelf-head">
         <h4>{tr('本地仓库')}</h4>
-        <span className="muted small">{tr('只读展示。给它配的代码员工和写作员工直接在这两个仓库里工作，提交和推送由你决定。')}</span>
+        <span className="muted small">{tr('只读展示。为其配置的代码员工与写作员工直接在这两个仓库中工作，提交与推送由你决定。')}</span>
       </div>
       <div className="lk-grid">
         {l.code && <CodeCard c={l.code} onGo={() => onOpen('depot')} />}

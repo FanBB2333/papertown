@@ -10,7 +10,7 @@ import { tr } from '../i18n';
 interface Props extends RoomActions { tick: number }
 
 const SOURCE: Record<McpServer['source'], string> = { builtin: tr('内置'), file: 'PAPERTOWN_MCP_CONFIG', town: tr('在小镇里添加') };
-const STATE: Record<McpServer['state'], string> = { ok: tr('接通'), error: tr('接不通'), connecting: tr('正在接'), off: tr('已停用') };
+const STATE: Record<McpServer['state'], string> = { ok: tr('接通'), error: tr('无法连接'), connecting: tr('连接中'), off: tr('已停用') };
 
 interface Draft { name: string; command: string; args: string; env: string }
 const EMPTY: Draft = { name: '', command: '', args: '', env: '' };
@@ -59,7 +59,7 @@ export function McpRoom(p: Props) {
     if (done) { setSel(d.name.trim()); setDraft(null); }
   }
 
-  if (!v) return <div className="room-empty"><p>{tr('正在看总机…')}</p></div>;
+  if (!v) return <div className="room-empty"><p>{tr('检查总机中…')}</p></div>;
   const cur = v.servers.find(s => s.name === sel) ?? (draft ? null : v.servers[0]);
   const tools = v.servers.reduce((n, s) => n + s.tools.length, 0);
 
@@ -74,21 +74,21 @@ export function McpRoom(p: Props) {
             <span className="muted small">{SOURCE[s.source]} · {tr('{0} 个工具', s.tools.length)}</span>
           </button>
         ))}
-        {!v.servers.length && <p className="muted small">{tr('还没有接任何 MCP server。')}</p>}
-        <button className="btn pri" onClick={() => { setDraft(EMPTY); setSel(null); }}>{tr('接一条新线')}</button>
+        {!v.servers.length && <p className="muted small">{tr('尚未接入任何 MCP server。')}</p>}
+        <button className="btn pri" onClick={() => { setDraft(EMPTY); setSel(null); }}>{tr('添加新线路')}</button>
       </aside>
 
       <section className="room-main">
         {draft ? (
           <div className="mcp-form">
-            <h2 className="cr-title">{v.servers.some(s => s.name === draft.name && s.source === 'town') ? tr('改 {0}', draft.name) : tr('接一条新线')}</h2>
-            <p className="muted">{tr('用 stdio 启动的 MCP server，写法和 Claude Desktop 的')} <code>mcpServers</code> {tr('一样。保存后立刻接通，工具会以')} <code>{tr('名字.工具')}</code> {tr('出现在员工的工具箱里。')}</p>
+            <h2 className="cr-title">{v.servers.some(s => s.name === draft.name && s.source === 'town') ? tr('修改 {0}', draft.name) : tr('添加新线路')}</h2>
+            <p className="muted">{tr('以 stdio 启动的 MCP server，写法与 Claude Desktop 的')} <code>mcpServers</code> {tr('相同。保存后立即接通，工具将以')} <code>{tr('名字.工具')}</code> {tr('出现在员工的工具箱中。')}</p>
             <label className="field">{tr('名字')}<input value={draft.name} placeholder="github" onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
             <label className="field">{tr('启动命令')}<input value={draft.command} placeholder="npx" onChange={e => setDraft({ ...draft, command: e.target.value })} /></label>
             <label className="field">{tr('参数（一行一个）')}<textarea rows={3} value={draft.args} placeholder={'-y\n@modelcontextprotocol/server-github'} onChange={e => setDraft({ ...draft, args: e.target.value })} /></label>
             <label className="field">{tr('环境变量（一行一个 KEY=VALUE）')}
               <textarea rows={3} value={draft.env} placeholder="GITHUB_TOKEN=${GITHUB_TOKEN}" onChange={e => setDraft({ ...draft, env: e.target.value })} />
-              <span className="muted small">{tr('密钥不要直接写在这里：写成')} <code>{tr('${变量名}')}</code>{tr('，值放在')} <code>~/.secrets.zsh</code>{tr('，启动时从环境里取。改已有的线时，值留空就是不改。')}</span>
+              <span className="muted small">{tr('密钥请勿直接填在此处，应写为')} <code>{tr('${变量名}')}</code>{tr('，值存放在')} <code>~/.secrets.zsh</code>{tr('，启动时从环境读取。修改已有线路时，留空即保持不变。')}</span>
             </label>
             <div className="btns">
               <button className="btn pri" disabled={busy || !draft.name.trim() || !draft.command.trim()} onClick={() => save(draft)}>{busy ? tr('接通中…') : tr('保存并接通')}</button>
@@ -108,7 +108,7 @@ export function McpRoom(p: Props) {
                 <button className="btn" disabled={busy} onClick={() => run(() => api.mcpToggle(cur.name, !cur.enabled))}>{cur.enabled ? tr('停用') : tr('启用')}</button>
                 {cur.source === 'town' && <button className="btn" disabled={busy} onClick={() => setDraft(draftOf(cur))}>{tr('修改')}</button>}
                 {cur.source === 'town' && <button className="btn danger" disabled={busy} onClick={() => {
-                  if (confirm(tr('删掉 {0} 这条线？它的工具会从员工的工具箱里拿掉。', cur.name))) run(() => api.mcpRemove(cur.name), tr('已删除')).then(() => setSel(null));
+                  if (confirm(tr('删除线路 {0}？其工具将从员工工具箱中移除。', cur.name))) run(() => api.mcpRemove(cur.name), tr('已删除')).then(() => setSel(null));
                 }}>{tr('删除')}</button>}
               </div>
             </div>
@@ -121,25 +121,25 @@ export function McpRoom(p: Props) {
                 {cur.tools.map((t, i) => (
                   <div key={t.name} className="tool-card" style={{ ['--i' as string]: Math.min(i, 12) }}>
                     <code>{cur.name}.{t.name}</code>
-                    <p className="muted small">{t.description || tr('没有说明')}</p>
+                    <p className="muted small">{t.description || tr('暂无说明')}</p>
                   </div>
                 ))}
               </div>
-            ) : <p className="muted small">{cur.state === 'off' ? tr('停用了，工具已经从员工的工具箱里拿掉。') : cur.state === 'connecting' ? tr('正在接…') : tr('没有拿到工具。')}</p>}
+            ) : <p className="muted small">{cur.state === 'off' ? tr('已停用，其工具已从员工工具箱中移除。') : cur.state === 'connecting' ? tr('连接中…') : tr('未获取到工具。')}</p>}
           </div>
-        ) : <div className="room-empty small-empty"><p>{tr('选一条线，或者接一条新线。')}</p></div>}
+        ) : <div className="room-empty small-empty"><p>{tr('请选择线路，或添加新线路。')}</p></div>}
       </section>
 
       <aside className="room-aside">
         <div className="pnl-s">
-          <h4>{tr('线从哪来')}</h4>
-          <p className="muted small"><b>{tr('内置')}</b>{tr('：arXiv 码头（')}<code>PAPERTOWN_ARXIV=0</code> {tr('关掉）。')}</p>
-          <p className="muted small"><b>PAPERTOWN_MCP_CONFIG</b>{tr('：')}{v.config_file ? <code>{v.config_file}</code> : tr('没有设置')}{tr('，在这里只能停用。')}</p>
-          <p className="muted small"><b>{tr('在小镇里添加')}</b>{tr('：')}<code>{v.town_file}</code>{tr('，可以改、可以删。')}</p>
+          <h4>{tr('线路来源')}</h4>
+          <p className="muted small"><b>{tr('内置')}</b>{tr('：arXiv 码头（')}<code>PAPERTOWN_ARXIV=0</code> {tr('关闭）。')}</p>
+          <p className="muted small"><b>PAPERTOWN_MCP_CONFIG</b>{tr('：')}{v.config_file ? <code>{v.config_file}</code> : tr('没有设置')}{tr('，在此仅可停用。')}</p>
+          <p className="muted small"><b>{tr('在小镇里添加')}</b>{tr('：')}<code>{v.town_file}</code>{tr('，可修改或删除。')}</p>
         </div>
         <div className="pnl-s">
-          <h4>{tr('把小镇接到别的 agent 上')}</h4>
-          <p className="muted small">{tr('Papertown 自己也是一个只读的 MCP server，别的 agent 能用它查论文库和项目的工序：')}</p>
+          <h4>{tr('将小镇接入其他 agent')}</h4>
+          <p className="muted small">{tr('Papertown 本身也是只读 MCP server，其他 agent 可通过其查询论文库与项目工序：')}</p>
           <pre className="code small-code">{JSON.stringify(v.self, null, 2)}</pre>
           <button className="btn" onClick={() => navigator.clipboard?.writeText(JSON.stringify(v.self, null, 2)).then(() => p.toast(tr('已复制')), () => {})}>{tr('复制')}</button>
         </div>

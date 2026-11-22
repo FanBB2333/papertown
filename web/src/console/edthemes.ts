@@ -181,7 +181,7 @@ export type IconTheme = 'dots' | 'glyphs' | 'badges' | 'none';
 export const ICON_THEMES: [IconTheme, string, string][] = [
   ['dots', tr('色点'), tr('文件名前一个小色块，最安静（默认）')],
   ['glyphs', tr('字标'), tr('彩色的类型缩写，像 Seti')],
-  ['badges', tr('徽章'), tr('实心的文件和文件夹图标，常见文件夹各有颜色')],
+  ['badges', tr('徽章'), tr('实心文件和文件夹图标，常见文件夹采用不同颜色')],
   ['none', tr('无图标'), tr('只有文件名')],
 ];
 

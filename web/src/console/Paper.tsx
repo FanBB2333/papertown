@@ -25,10 +25,10 @@ export function Paper(p: Props) {
   if (!p.info.paper) return (
     <div className="cm-empty">
       <Icon n="doc" size={34} />
-      <h3>{tr('这个项目还没有论文')}</h3>
-      <p>{p.info.linked ? tr('projects.json 里没有给它配论文目录，或者那个目录不在了。')
-        : tr('项目进行到「写作排版」时，写作员工在印刷厂写出 main.tex，论文就出现在这里。写作员工由项目负责人启动。')}</p>
-      {!p.info.linked && <button className="btn" onClick={p.onAgents}>{tr('去配写作员工')}</button>}
+      <h3>{tr('该项目暂无论文')}</h3>
+      <p>{p.info.linked ? tr('projects.json 中未配置论文目录，或该目录不存在。')
+        : tr('项目进入「写作排版」后，写作员工在印刷厂生成 main.tex，论文将在此显示。写作员工由项目负责人启动。')}</p>
+      {!p.info.linked && <button className="btn" onClick={p.onAgents}>{tr('配置写作员工')}</button>}
     </div>
   );
   return <Tex {...p} />;
@@ -69,7 +69,7 @@ function Tex(p: Props) {
   useEffect(() => { if (!f.open.length && place.main) f.show(place.main); }, [place.main]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function compile() {
-    if (DEMO) { p.toast(tr('这是只读的演示，不能编译。')); return; }
+    if (DEMO) { p.toast(tr('此为只读演示，无法编译。')); return; }
     if (busy) return;
     setBusy(true);
     try {
@@ -120,12 +120,12 @@ function Tex(p: Props) {
           {!phone && <button className={layout === 'split' ? 'on' : ''} onClick={() => setLayout('split')}>{tr('对照')}</button>}
           <button className={layout === 'pdf' ? 'on' : ''} onClick={() => setLayout('pdf')}>PDF</button>
         </div>
-        {run && <span className={`tex-run ${run.ok ? 'ok' : 'bad'}`} onClick={() => setLogOpen(o => !o)} title={tr('看编译日志')}>
-          {run.ok ? tr('编译完成 · {0} 秒', run.seconds.toFixed(1)) + (run.pages ? tr(' · {0} 页', run.pages) : '') : tr('编译失败 · 看日志')}
+        {run && <span className={`tex-run ${run.ok ? 'ok' : 'bad'}`} onClick={() => setLogOpen(o => !o)} title={tr('查看编译日志')}>
+          {run.ok ? tr('编译完成 · {0} 秒', run.seconds.toFixed(1)) + (run.pages ? tr(' · {0} 页', run.pages) : '') : tr('编译失败 · 查看日志')}
         </span>}
         {hasPdf && <a className="ib" href={paperPdfUrl(p.lineId, v)} target="_blank" rel="noreferrer" title={tr('在新标签页打开 PDF')}><Icon n="ext" size={15} /></a>}
         <button className={`btn pri tex-go${busy ? ' busy' : ''}`} disabled={busy || DEMO || noTex} onClick={compile}
-          title={noTex ? tr('本机没有 latexmk，装上 TeX 发行版后才能编译') : tr('保存并重新编译（⌘↵）')}>
+          title={noTex ? tr('本机未安装 latexmk，安装 TeX 发行版后才能编译') : tr('保存并重新编译（⌘↵）')}>
           <Icon n={busy ? 'refresh' : 'play'} size={14} />{busy ? tr('编译中…') : tr('重新编译')}
         </button>
       </div>
@@ -143,11 +143,11 @@ function Tex(p: Props) {
           <section className="tex-src">
             <Tabs f={f} />
             <div className="ide-ed">
-              <FileView f={f} goto={goto} onRun={compile} onCursor={(line, _c, picked) => setAt({ line, picked })} empty={<div className="fv-note"><Icon n="doc" size={30} /><p className="muted small">{tr('从左边挑一个文件打开。')}</p></div>} />
+              <FileView f={f} goto={goto} onRun={compile} onCursor={(line, _c, picked) => setAt({ line, picked })} empty={<div className="fv-note"><Icon n="doc" size={30} /><p className="muted small">{tr('从左侧选择文件打开。')}</p></div>} />
             </div>
             {run && !run.ok && logOpen && d && (
               <div className="tex-log">
-                <div className="diff-h"><b>{tr('LaTeX 报错 · {0} 处 · 警告 {1} 条', d.errs.length, d.warns)}</b>
+                <div className="diff-h"><b>{tr('LaTeX 错误 · {0} 处 · 警告 {1} 条', d.errs.length, d.warns)}</b>
                   <button className="ib" onClick={() => setLogOpen(false)} aria-label={tr('关闭')}><Icon n="close" size={14} /></button></div>
                 {d.errs.map((x, i) => <pre key={i} className="tex-err">{x}</pre>)}
                 <details><summary>{tr('完整日志')}</summary><pre>{run.log.slice(-12000)}</pre></details>
@@ -157,7 +157,7 @@ function Tex(p: Props) {
           <div className="tex-gutter" onPointerDown={onDrag} role="separator" aria-orientation="vertical" title={tr('拖动调整左右宽度')}><i /></div>
           <section className="tex-pdf" data-ref="pdf" data-ref-label={tr('编译出的 PDF')}>
             {hasPdf ? <iframe key={v} src={url} title="PDF" /> : (
-              <div className="fv-note"><Icon n="doc" size={30} /><b>{tr('还没有 PDF')}</b><p className="muted small">{tr('点「重新编译」排出第一版。')}</p></div>
+              <div className="fv-note"><Icon n="doc" size={30} /><b>{tr('暂无 PDF')}</b><p className="muted small">{tr('点击「重新编译」生成初版。')}</p></div>
             )}
             {busy && <div className="tex-busy"><span />{tr('正在编译…')}</div>}
           </section>

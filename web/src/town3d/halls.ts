@@ -424,7 +424,7 @@ function millHall(k: Kit, pl: Placement, data: HallData) {
   const p = k.p;
   const movers: ((t: number, dt: number) => void)[] = [];
   const slots = [...Array(n).keys()].sort((a, b) => Math.abs(a - (n - 1) / 2) - Math.abs(b - (n - 1) / 2) || a - b);
-  if (!lines.length) k.sign([tr('还没有项目：在市政厅写下一个 idea，这里就会多出一个项目的八道工序')], { at: [3.2, 0.9, D / 2], w: 3.2, size: 0.1, wrap: true, rot: -Math.PI / 2 });
+  if (!lines.length) k.sign([tr('暂无项目：在市政厅填写一个 idea，此处将出现一个项目的八道工序')], { at: [3.2, 0.9, D / 2], w: 3.2, size: 0.1, wrap: true, rot: -Math.PI / 2 });
   lines.forEach((ln, i) => {
     const z = D / 2 + (slots[i] - (n - 1) / 2) * GAP, x0 = 2.6, x1 = W - 0.6, len = x1 - x0, moving = RUNS.has(ln.status);
     p.block(x0, 0.24, z - 0.21, len, 0.07, 0.04, 'metal');
@@ -592,7 +592,7 @@ function farmHall(k: Kit, pl: Placement, data: HallData) {
   const p = k.p;
   const sway: { g: THREE.Group; ph: number; amp: number }[] = [];
   const lights: { m: THREE.Mesh; ph: number }[] = [];
-  if (!jobs.length) k.sign([tr('这里还没有实验：方法定下来以后，实验会在这里一畦一畦长出来')], { at: [W / 2, 0.8, D - 2.8], w: 3.0, size: 0.1, wrap: true });
+  if (!jobs.length) k.sign([tr('此处暂无实验：方法确定后，实验将在此逐畦生长')], { at: [W / 2, 0.8, D - 2.8], w: 3.0, size: 0.1, wrap: true });
   for (let i = 0; i < Math.max(jobs.length, 4); i++) {
     const job = jobs[i], c = i % cols, r = Math.floor(i / cols);
     const x = 1.0 + c * (BW + GX), z = D - 2.8 - BD - r * (BD + GZ);
@@ -855,14 +855,14 @@ function gpuHall(k: Kit, pl: Placement, data: HallData) {
     const jobs = [...new Set(gpus.flatMap(procNames))].slice(0, 2).join(' · ');
     const real = !dark, lanes = real ? (data.gpus?.lanes ?? []).filter(l => l.node === node.name) : [];
     const waiting = (on?: number) => lanes.filter(l => on == null || l.gpu_ids.includes(on)).reduce((a, l) => a + l.queued.length, 0);
-    const more = (n: number) => (n ? tr('队列里还有 {0} 个', n) : '');
+    const more = (n: number) => (n ? tr('队列中尚有 {0} 个', n) : '');
     rack(k, F, fx, x0 + i * (RW + gap), z, {
       name: dark ? '—' : node.name, up, gpus, util,
       card: dark ? undefined : {
         title: node.name,
         sub: `${gpus.length} GPU · ${node.state} · ${util}% · ${gb(used)}/${gb(total)} GB`,
         note: [jobs, more(waiting())].filter(Boolean).join(' · ') || node.last_error || undefined,
-        verb: real ? tr('看这台机器') : undefined,
+        verb: real ? tr('查看此机器') : undefined,
         act: { kind: 'open', building: pl.id, line: real ? `node:${node.name}` : null },
       },
       gpuCard: g => ({
@@ -870,20 +870,20 @@ function gpuHall(k: Kit, pl: Placement, data: HallData) {
         sub: `${cut(g.name, 22)} · ${g.util_percent}% · ${(g.mem_used_mb / 1024).toFixed(1)}/${gb(g.mem_total_mb)} GB`,
         note: [procNames(g).slice(0, 2).join(' · '), more(waiting(g.index))].filter(Boolean).join(' · ')
           || (g.temperature_c != null ? `${g.temperature_c}°C` : undefined),
-        verb: real ? tr('看这张卡') : undefined,
+        verb: real ? tr('查看此卡') : undefined,
         act: { kind: 'open', building: pl.id, line: real ? `node:${node.name}/${g.index}` : null },
       }),
     });
   });
   rack(k, F, fx, x0 + nodes.length * (RW + gap), z, {
     name: tr('网络'), up: !dark, gpus: [], net: true, util: 0,
-    card: { title: tr('网络机柜'), sub: tr('交换机、配线架和路由，把各台机器连在一起'), act: { kind: 'open', building: pl.id } },
+    card: { title: tr('网络机柜'), sub: tr('交换机、配线架和路由，连接各台机器'), act: { kind: 'open', building: pl.id } },
   });
   p.block(x0 - 0.1, 1.18, z - 0.18, row + 0.2, 0.04, 0.24, 'metal');
   for (const s of [x0 - 0.05, x0 + row + 0.05]) p.tube([s, H, z - 0.06], [s, 1.22, z - 0.06], 0.008, 'dark');
   for (let c = 0; c < 3; c++) p.tube([x0 - 0.1, 1.24, z - 0.13 + c * 0.07], [x0 + row + 0.1, 1.24, z - 0.13 + c * 0.07], 0.016, ['#d9574a', '#e0a030', '#4f8ac9'][c]);
-  const lines = dark ? [data.gpus?.note || tr('nvidb 没有连上：电厂里还是黑的')]
-    : nodes.map(m => `${m.name} · ${m.state} · ${m.gpus.filter(g => g.util_percent > 10).length}/${m.gpus.length} ${tr('张卡在忙')}`);
+  const lines = dark ? [data.gpus?.note || tr('nvidb 未连接：电厂内仍一片漆黑')]
+    : nodes.map(m => `${m.name} · ${m.state} · ${m.gpus.filter(g => g.util_percent > 10).length}/${m.gpus.length} ${tr('张卡忙碌')}`);
   k.sign(lines.slice(0, 6), { at: [0.06, 1.62, 3.75], w: 1.5, size: 0.075, bg: '#2f3a35', color: '#cdeccf', align: 'left', wrap: true, rot: Math.PI / 2 });
   const update = (t: number, dt: number) => {
     for (const f of fx.fans) f.m.rotation.z -= dt * f.v;
@@ -931,11 +931,11 @@ function depotHall(k: Kit, pl: Placement, data: HallData) {
     k.sign([`#${row.line.seq} ${cut(row.line.title, 16)}`], { at: [x + 0.45, 0.87, z + 0.12], w: 0.52, size: 0.034 });
     k.thing(x, 0, z, 0.9, 0.82, 0.5, {
       title: `#${row.line.seq} ${cut(row.line.title, 30)}`,
-      sub: a ? `${a.name || tr('代码员工')} · ${a.status}` : tr('还没有代码员工'),
+      sub: a ? `${a.name || tr('代码员工')} · ${a.status}` : tr('暂无代码员工'),
       act: { kind: 'open', building: pl.id, line: row.line.id },
     });
   });
-  if (!desks.length) k.sign([tr('还没有项目在这里写代码')], { at: [W / 2, 0.7, D - 2.4], w: 2.0, size: 0.1 });
+  if (!desks.length) k.sign([tr('暂无项目在此编写代码')], { at: [W / 2, 0.7, D - 2.4], w: 2.0, size: 0.1 });
   for (let i = 0; i < rows; i++) {
     const r = repos[i], z = D - 4.2 - i * 1.35, x0 = 1.0, len = W - 2.6;
     for (let x = x0; x <= x0 + len + 0.01; x += len / 3) for (const dz of [0, 0.5]) p.block(x - 0.03, 0, z + dz - 0.03, 0.06, 1.5, 0.06, '#d27a2c');
@@ -1025,7 +1025,7 @@ function libraryHall(k: Kit, pl: Placement, data: HallData) {
     k.sign([tp.label, tr('{0} 篇', tp.n)], { at: [x + w / 2, 1.16, z + 0.2], w: w - 0.06, size: 0.06 });
     k.thing(x, 0, z, w, 1.07, 0.34, { title: tp.label, sub: tr('{0} 篇', tp.n), act: { kind: 'open', building: pl.id } });
   });
-  if (!topics.length) k.sign([tr('书架还空着：调研过的论文会按主题上架')], { at: [W / 2, 0.8, D - 3.7], w: 2.4, size: 0.1, wrap: true });
+  if (!topics.length) k.sign([tr('书架为空：已调研的论文将按主题上架')], { at: [W / 2, 0.8, D - 3.7], w: 2.4, size: 0.1, wrap: true });
   const dx = W - 1.1, dz = D - 1.4;
   p.block(dx - 0.5, 0, dz - 0.25, 0.9, 0.42, 0.5, 'wood');
   p.block(dx - 0.2, 0.42, dz - 0.1, 0.36, 0.24, 0.03, '#2f2b28');
@@ -1087,7 +1087,7 @@ export function buildHall(pl: Placement, data: HallData, mats: Materials, font: 
   const r = t === 'mill' ? millHall(k, pl, data) : t === 'press' ? pressHall(k, pl, data) : t === 'farm' ? farmHall(k, pl, data)
     : t === 'power' ? gpuHall(k, pl, data) : t === 'depot' ? depotHall(k, pl, data)
       : t === 'library' ? libraryHall(k, pl, data) : plainHall(k, pl, data);
-  const d = k.door, out = { title: tr('出口'), sub: tr('回到小镇'), act: { kind: 'exit' as const } };
+  const d = k.door, out = { title: tr('出口'), sub: tr('返回小镇'), act: { kind: 'exit' as const } };
   const exit = d.side === 'west' ? k.thing(-0.02, 0, d.z - 0.42, 0.12, 1.0, 0.84, out, false) : k.thing(d.x - 0.42, 0, d.z - 0.1, 0.84, 1.0, 0.12, out, false);
   const spawn = d.side === 'west' ? { x: 1.15, y: d.z, heading: 0, pitch: 0.06 } : { x: d.x, y: d.z - 1.15, heading: -Math.PI / 2, pitch: -0.1 };
   return k.finish(r.W, r.D, r.H, pl, spawn, exit, r.update);

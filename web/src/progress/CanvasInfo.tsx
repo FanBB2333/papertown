@@ -12,8 +12,8 @@ import { ago, base, gist } from '../console/util';
 import { tr } from '../i18n';
 import { noCardText, OUT_STATE, repoLine, runText } from './parts';
 
-const HEALTH: Record<Health, string> = { ok: tr('顺利'), risk: tr('有风险'), blocked: tr('卡住了') };
-const JOBS: [string, string, string][] = [['running', tr('在跑'), 'run'], ['queued', tr('排队'), ''], ['done', tr('完成'), 'ok'], ['failed', tr('失败'), 'bad']];
+const HEALTH: Record<Health, string> = { ok: tr('正常'), risk: tr('有风险'), blocked: tr('受阻') };
+const JOBS: [string, string, string][] = [['running', tr('运行中'), 'run'], ['queued', tr('排队'), ''], ['done', tr('完成'), 'ok'], ['failed', tr('失败'), 'bad']];
 export const INFO_ICON: Record<string, IconName> = { card: 'cards', agent: 'person', runs: 'flask', code: 'code', paper: 'doc', outputs: 'target',
   survey: 'lens', method: 'map', results: 'spark', datasets: 'table' };
 // the console panel behind a card (the results are on the data panel there)
@@ -54,9 +54,9 @@ export function InfoState({ n, r, v }: { n: CanvasNode; r: ProjectCard; v: Canva
   if (k === 'card') return r.card ? <span className={`cg-pill h-${r.card.health}`}>{HEALTH[r.card.health]}</span> : null;
   if (k === 'agent') {
     const a = v.agents[roleOf(n)];
-    return <span className="ci-st"><i className={`dot s-${a.there ? a.status : 'stopped'}`} />{a.there ? AGENT_STATUS[a.status ?? ''] ?? a.status : tr('还没启动')}</span>;
+    return <span className="ci-st"><i className={`dot s-${a.there ? a.status : 'stopped'}`} />{a.there ? AGENT_STATUS[a.status ?? ''] ?? a.status : tr('尚未启动')}</span>;
   }
-  if (k === 'runs') return r.jobs.running ? <span className="cg-pill st-run">{tr('{0} 个在跑', r.jobs.running)}</span> : null;
+  if (k === 'runs') return r.jobs.running ? <span className="cg-pill st-run">{tr('{0} 个运行中', r.jobs.running)}</span> : null;
   if (k === 'code' || k === 'paper') {
     const x = r.repos[k];
     return x && !x.missing && x.dirty ? <span className="cg-pill s-warn">{tr('{0} 处改动', x.dirty)}</span> : null;
@@ -80,7 +80,7 @@ function List({ title, items, cls, most }: { title: string; items: string[]; cls
 }
 
 function Repo({ x, which, full }: { x: CardRepo | null; which: 'code' | 'paper'; full?: boolean }) {
-  if (!x) return <p className="muted">{which === 'code' ? tr('还没有代码仓库') : tr('还没有论文')}</p>;
+  if (!x) return <p className="muted">{which === 'code' ? tr('暂无代码仓库') : tr('暂无论文')}</p>;
   const counts = which === 'paper'
     ? [x.sections && tr('{0} 节', x.sections), x.figures && tr('{0} 图', x.figures), x.tables && tr('{0} 表', x.tables), x.bib && tr('{0} 篇引用', x.bib)].filter(Boolean).join(' · ')
     : (x.langs ?? []).slice(0, full ? 6 : 3).map(l => `${l.ext} ${l.n}`).join(' · ');
@@ -89,7 +89,7 @@ function Repo({ x, which, full }: { x: CardRepo | null; which: 'code' | 'paper';
       <p className="ci-name">{(which === 'paper' && x.title) || x.name}</p>
       <p>{repoLine(x, which)}</p>
       {counts && <p className="muted">{counts}</p>}
-      {which === 'paper' && !x.missing && <p className="muted">{x.pdf_at ? tr('PDF {0}编译', ago(x.pdf_at)) : tr('还没有编译出 PDF')}</p>}
+      {which === 'paper' && !x.missing && <p className="muted">{x.pdf_at ? tr('PDF {0}编译', ago(x.pdf_at)) : tr('尚未编译出 PDF')}</p>}
       {x.commit && <p className="muted ci-commit"><Icon n="branch" size={11} />{x.commit.subject} · {ago(x.commit.when)}</p>}
       {full && <p className="muted ci-path">{x.path}</p>}
     </>
@@ -109,7 +109,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
             {c.progress != null && (
               <div className="ci-prog"><div className="cg-bar"><i style={{ width: `${c.progress}%` }} /></div><small>{c.progress}%{c.milestone && ` · ${c.milestone}`}</small></div>
             )}
-            {(full || first === 'need') && <List title={tr('要你决定')} items={c.need_you} cls="warn" most={full ? 0 : 2} />}
+            {(full || first === 'need') && <List title={tr('待你决定')} items={c.need_you} cls="warn" most={full ? 0 : 2} />}
             {(full || first === 'bad') && <List title={tr('卡点和风险')} items={c.blockers} cls="bad" most={full ? 0 : 2} />}
             {(full || first === 'next') && <List title={tr('接下来')} items={c.next} most={full ? 0 : 2} />}
             {full && <List title={tr('最近完成')} items={c.done} />}
@@ -124,7 +124,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     const found = m.papers?.survey ?? [], cited = m.papers?.references ?? [];
     const near: { title: string; similarity?: number; year?: string }[] = found.length ? found : h?.similar ?? [];
     if (!m.line) return <p className="muted">{tr('加载中…')}</p>;
-    if (!h && !near.length && !cited.length) return <p className="muted">{lp?.abstract ? gist(lp.abstract, 120) : tr('放入 idea 后孵化场会先查重，最接近的工作列在这里。')}</p>;
+    if (!h && !near.length && !cited.length) return <p className="muted">{lp?.abstract ? gist(lp.abstract, 120) : tr('放入 idea 后孵化场先查重，最接近的工作列在此处。')}</p>;
     const line = h ? gist(h.gap || h.summary, full ? 300 : 80) : '';
     return (
       <>
@@ -140,7 +140,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
   if (k === 'method') {
     const md = m.line?.outputs?.method;
     if (!m.line) return <p className="muted">{tr('加载中…')}</p>;
-    if (!md) return <p className="muted">{tr('方法设计完成后，问题、做法和 baseline 列在这里。')}</p>;
+    if (!md) return <p className="muted">{tr('方法设计完成后，问题、方案与 baseline 列在此处。')}</p>;
     const steps: string[] = md.mechanism ?? [], bases: string[] = (md.baselines ?? []).map((b: { name: string } | string) => (typeof b === 'string' ? b : b.name));
     return (
       <>
@@ -156,7 +156,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     if (!d) return <p className="muted">{tr('加载中…')}</p>;
     const res = d.results, runs = d.runs, inRepo = runs.filter(x => x.script).length, scripts = uniq(runs.map(x => x.script ?? '').filter(Boolean));
     const made = d.files.filter(f => f.kind === 'processed').length;
-    if (!res && !runs.length && !made) return <p className="muted">{tr('实验跑完后，结果和产出它的代码列在这里。')}</p>;
+    if (!res && !runs.length && !made) return <p className="muted">{tr('实验运行完成后，结果与产出代码列在此处。')}</p>;
     const ours = res?.rows.find(x => x.ours), others = res?.rows.filter(x => !x.ours) ?? [];
     return (
       <>
@@ -164,15 +164,15 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
           <div className="ci-metrics top">
             {res.metrics.slice(0, full ? 12 : 3).map((name, i) => {
               const best = others.length ? Math.max(...others.map(x => x.values[i])) : null;
-              return <p key={name}><span>{name}</span><b>{fmt(ours.values[i])}</b>{best != null && <small>{tr('baseline 最好 {0}', fmt(best))}</small>}</p>;
+              return <p key={name}><span>{name}</span><b>{fmt(ours.values[i])}</b>{best != null && <small>{tr('最优 baseline {0}', fmt(best))}</small>}</p>;
             })}
           </div>
         )}
-        {res?.simulated && <p className="muted">{tr('模拟结果，不是真实实验')}</p>}
+        {res?.simulated && <p className="muted">{tr('模拟结果，非真实实验')}</p>}
         {(full ? runs.slice(0, 20) : runs.slice(0, res ? 1 : 3)).map(x => (
           <p key={x.id} className={`ci-ran s-${x.state}`}><i /><span>{x.name}</span>
             {x.script ? <code title={x.script}>{full ? x.script : base(x.script)}</code>
-              : x.entry && <code className="out" title={tr('当前关联的代码仓库里没有这个文件')}>{full ? x.entry : base(x.entry).split('.').pop()}</code>}</p>
+              : x.entry && <code className="out" title={tr('当前关联的代码仓库中无此文件')}>{full ? x.entry : base(x.entry).split('.').pop()}</code>}</p>
         ))}
         <p className="muted ci-foot">{[runs.length && (inRepo ? tr('{0} 次运行，{1} 次出自仓库里的 {2} 个脚本', runs.length, inRepo, scripts.length) : tr('{0} 次运行', runs.length)),
           made && tr('{0} 个结果文件', made)].filter(Boolean).join(' · ')}</p>
@@ -184,7 +184,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     if (!d) return <p className="muted">{tr('加载中…')}</p>;
     const sets = uniq(d.meta.datasets), raw = d.files.filter(f => f.kind === 'raw');
     const dirs = uniq(raw.map(f => f.path.split('/').slice(0, 2).join('/')));
-    if (!sets.length && !raw.length) return <p className="muted">{tr('方法设计定下数据集后列在这里，代码仓库 data/ 目录里的文件也会列出来。')}</p>;
+    if (!sets.length && !raw.length) return <p className="muted">{tr('方法设计确定数据集后列在此处，代码仓库 data/ 目录下的文件一并列出。')}</p>;
     return (
       <>
         {sets.length > 0 && <p className="ci-chips">{(full ? sets : sets.slice(0, 6)).map(x => <span key={x}>{x}</span>)}{!full && sets.length > 6 && <em>+{sets.length - 6}</em>}</p>}
@@ -197,11 +197,11 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
   if (k === 'agent') {
     const role = roleOf(n), a = v.agents[role], mine = tasksOf(v, role);
     const by = (s: string) => mine.filter(x => x.status === s).length;
-    const bits = [by('sent') && tr('{0} 件在做', by('sent')), by('blocked') && tr('{0} 件卡住', by('blocked')), by('draft') && tr('{0} 件还没发', by('draft')), by('done') && tr('{0} 件完成', by('done'))].filter(Boolean);
+    const bits = [by('sent') && tr('{0} 件进行中', by('sent')), by('blocked') && tr('{0} 件受阻', by('blocked')), by('draft') && tr('{0} 件未派发', by('draft')), by('done') && tr('{0} 件完成', by('done'))].filter(Boolean);
     return (
       <>
         {a.there && a.model && <p className="muted">{a.model}</p>}
-        <p>{bits.length ? bits.join(' · ') : <span className="muted">{tr('回路上没有给它的任务')}</span>}</p>
+        <p>{bits.length ? bits.join(' · ') : <span className="muted">{tr('回路上暂无对应任务')}</span>}</p>
         {full && mine.length > 0 && (
           <ul className="cv-links">
             {mine.map(t => (
@@ -218,14 +218,14 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     return (
       <>
         {counts.length ? <p className="ci-counts">{counts.map(([key, name, cls]) => <span key={key} className={cls}><b>{r.jobs[key]}</b>{name}</span>)}</p>
-          : <p className="muted">{tr('还没有实验任务')}</p>}
+          : <p className="muted">{tr('暂无实验任务')}</p>}
         {runs.map(j => (
           <div key={j.id} className="ci-run">
             <p><span>{j.name}</span><small>{runText(j)}</small></p>
             {j.progress != null && <div className="cg-bar"><i style={{ width: `${j.progress}%` }} /></div>}
           </div>
         ))}
-        {!full && r.running.length > 3 && <p className="muted">{tr('还有 {0} 个在跑', r.running.length - 3)}</p>}
+        {!full && r.running.length > 3 && <p className="muted">{tr('另有 {0} 个运行中', r.running.length - 3)}</p>}
         {full && r.queued.length > 0 && <List title={tr('排队')} items={r.queued.map(j => [j.name, runText(j)].filter(Boolean).join(' · '))} />}
       </>
     );

@@ -57,8 +57,8 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
         <b>{tr('项目负责人')}{layout === 'side' ? ` · #${seq}` : ''}</b>
         {x?.started && <span>{x.model}</span>}
       </div>
-      {x?.runtime === 'paseo' && <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('之前的对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>}
-      {x?.started && x.runtime === 'paseo' && <button className="ib" title={tr('新对话：负责人用同一个模型重新开始')} onClick={() => run(() => api.newConv(x.id))}><Icon n="compose" size={16} /></button>}
+      {x?.runtime === 'paseo' && <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('历史对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>}
+      {x?.started && x.runtime === 'paseo' && <button className="ib" title={tr('新对话：负责人使用同一模型重新开始')} onClick={() => run(() => api.newConv(x.id))}><Icon n="compose" size={16} /></button>}
       {x?.started && x.runtime === 'paseo' && <button className="ib" title={tr('在 Paseo 桌面端打开这段对话')} onClick={() => api.openInPaseo(x.id).catch(e => toast((e as Error).message))}><Icon n="ext" size={16} /></button>}
       {onClose && <button className="ib" title={tr('收起（⌘J）')} onClick={onClose}><Icon n="sideR" size={16} /></button>}
     </header>
@@ -78,9 +78,9 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
               {eventError && <p className="note err">{eventError}</p>}
               {v.asks.length > 0 && <div className="lc-asks">{v.asks.slice(0, 3).map(q => <AskCard key={q.id} q={q} toast={toast} onDone={again} />)}</div>}
               <ResidentControl lineId={lineId} resident={v.resident} sample={line?.sample} model={a?.model} toast={toast} onChanged={again} />
-              {v.resident.state === 'starting' && <p className="as-wait">{tr('正在等待负责人启动。')}</p>}
-              <p className="as-lead">{tr('负责人推进这个项目：启动员工、派活、交工序产出、收尾工序并向你汇报。工作目录是 Papertown 自己的目录。')}</p>
-              {a && <Earlier agent={a.id} at={a.ext_id} limit={3} title={tr('接着之前的对话')} onPick={resume} />}
+              {v.resident.state === 'starting' && <p className="as-wait">{tr('等待负责人启动。')}</p>}
+              <p className="as-lead">{tr('负责人推进此项目：启动员工、派发任务、提交工序产出、收尾并向你汇报。工作目录为 Papertown 自有目录。')}</p>
+              {a && <Earlier agent={a.id} at={a.ext_id} limit={3} title={tr('继续此前对话')} onPick={resume} />}
               {['off', 'blocked'].includes(v.resident.state) && <details className="hire-card">
                 <summary>{tr('手动启动')}</summary>
                 <h3>{runtime === 'paseo' ? 'Paseo' : tr('终端')}</h3>
@@ -125,7 +125,7 @@ function Talk({ agent: initial, asks, head, toast, onAnswered }: {
         }}>
           {t.err && <div className="note err">{t.err}</div>}
           {t.items === null && !t.err && <p className="as-wait">{tr('加载中…')}</p>}
-          {t.items && !t.items.length && !t.sent.length && <p className="as-wait">{tr('还没有对话。问它项目的事，或者交代它一件事。')}</p>}
+          {t.items && !t.items.length && !t.sent.length && <p className="as-wait">{tr('暂无对话。可向负责人询问项目情况，或派发任务。')}</p>}
           <PaseoLog rows={rows} sent={t.sent} asks={t.asks} working={working}
             onPermit={(id, allow) => { api.permit(t.agent.id, id, allow).then(() => t.answered(id)).catch(e => toast((e as Error).message)); }} />
         </div>
@@ -133,7 +133,7 @@ function Talk({ agent: initial, asks, head, toast, onAnswered }: {
       {asks.length > 0 && (
         <div className="lc-asks">
           {asks.slice(0, 2).map(q => <AskCard key={q.id} q={q} toast={toast} onDone={onAnswered} />)}
-          {asks.length > 2 && <p className="muted small">{tr('还有 {0} 件等你回答', asks.length - 2)}</p>}
+          {asks.length > 2 && <p className="muted small">{tr('尚有 {0} 项待你回复', asks.length - 2)}</p>}
         </div>
       )}
       <Compose agent={t.agent} queued={t.queued} permission={t.asks.length > 0} toast={toast} onChanged={t.reload}
@@ -155,7 +155,7 @@ export function AskCard({ q, toast, onDone }: { q: Report; toast: (t: string) =>
   }
   return (
     <div className="lc-ask">
-      <span className="lc-k"><Icon n="bell" size={13} />{tr('{0}在问你', trx(q.data.who ?? ''))} · {ago(q.ts)}</span>
+      <span className="lc-k"><Icon n="bell" size={13} />{tr('{0}向你提问', trx(q.data.who ?? ''))} · {ago(q.ts)}</span>
       <p>{q.data.question}</p>
       {choices.length > 0 && (
         <div className="lc-choices">
@@ -163,7 +163,7 @@ export function AskCard({ q, toast, onDone }: { q: Report; toast: (t: string) =>
         </div>
       )}
       <div className="lc-reply">
-        <input value={text} disabled={busy} placeholder={choices.length ? tr('或者写几句') : tr('写下你的回答')}
+        <input value={text} disabled={busy} placeholder={choices.length ? tr('或输入内容') : tr('输入你的回答')}
           onChange={e => setText(e.target.value)} onKeyDown={enterSends(() => answer(text))} />
         <button className="btn" disabled={busy || !text.trim()} onClick={() => answer(text)}>{tr('回答')}</button>
       </div>

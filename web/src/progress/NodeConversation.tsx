@@ -16,7 +16,7 @@ export function NodeConversation({ node, lineId, busy, act }: { node: CanvasNode
   const canBind = !node.agent_id && node.status === 'draft';
   return <div className="node-conversation">
     {error && <p role="alert" className="warn-box">{error}</p>}
-    {node.agent_id ? <p className="small muted">{tr('这个任务使用独立会话。派发、补充信息和返工都会回到这里。')}</p>
+    {node.agent_id ? <p className="small muted">{tr('该任务使用独立会话，派发、补充信息与返工均在此处理。')}</p>
       : <p className="small muted">{tr('当前使用项目岗位的共享会话。可为尚未派发的任务创建或导入独立会话。')}</p>}
     {canBind && <button className="btn" disabled={busy} onClick={() => setConfigure(x => !x)}>{configure ? tr('收起') : tr('安排独立 Agent')}</button>}
     {canBind && configure ? <>
@@ -24,7 +24,7 @@ export function NodeConversation({ node, lineId, busy, act }: { node: CanvasNode
         : <TerminalPick busy={busy} fixedBackend={runtime} onStart={options => act(() => api.bindNode(lineId, node.id, options))} />}
       <ImportCard busy={busy} onPick={ext_id => act(() => api.bindNode(lineId, node.id, { ext_id }))} />
     </> : agent?.term ? <><HostedRoom agent={agent} toast={setError} /><HostedContext agent={agent} toast={setError} /></> : agent?.runtime === 'paseo' && agent.ext_id ? <Talk key={agent.ext_id} initial={agent} />
-      : <p className="muted small">{tr('还没有可打开的会话。')}</p>}
+      : <p className="muted small">{tr('暂无可打开的会话。')}</p>}
   </div>;
 }
 

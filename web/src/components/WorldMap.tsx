@@ -249,13 +249,13 @@ export function WorldMap({ placements, notes, active, hidden, api, onOpen }: Pro
       <div className={`zoom-ctl w-only${hidden ? ' is-hidden' : ''}`}>
         <button title={tr('放大')} onClick={() => zoomCenter(0.7)}>{tr('＋')}</button>
         <button title={tr('缩小')} onClick={() => zoomCenter(1.4)}>{tr('－')}</button>
-        <button title={tr('看全图')} onClick={() => fit()}>⟲</button>
+        <button title={tr('查看全图')} onClick={() => fit()}>⟲</button>
       </div>
       {tip && b && !hidden && (
         <div className="ptip pnl" style={{ left: tip.x, top: tip.y }}>
           <b>{tip.pl.name}</b><span>{where(b.district)}</span>
           <p>{b.rep}</p>
-          <em>{tip.pl.live ? tr('{0} · 点击进入', tip.pl.tech) : tr('还没接入 · 点击查看计划')}</em>
+          <em>{tip.pl.live ? tr('{0} · 点击进入', tip.pl.tech) : tr('尚未接入 · 点击查看计划')}</em>
         </div>
       )}
     </>

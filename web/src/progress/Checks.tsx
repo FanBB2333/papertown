@@ -10,8 +10,8 @@ import { ago } from '../console/util';
 import { tr, trx } from '../i18n';
 import type { ConsoleTarget } from './Project';
 
-export const ST: Record<CheckStatus, string> = { pass: tr('通过'), warn: tr('有问题'), fail: tr('没过'), none: tr('没有可查的'), wait: tr('等负责人判断') };
-export const STAGE: Record<string, string> = { todo: tr('没开始'), run: tr('进行中'), wait: tr('等你'), done: tr('完成'), fail: tr('出错') };
+export const ST: Record<CheckStatus, string> = { pass: tr('通过'), warn: tr('有问题'), fail: tr('未通过'), none: tr('没有可查的'), wait: tr('等负责人判断') };
+export const STAGE: Record<string, string> = { todo: tr('没开始'), run: tr('进行中'), wait: tr('待处理'), done: tr('完成'), fail: tr('出错') };
 const EVERY = [6, 12, 24, 48, 72, 168];
 export const status = (c: Check): CheckStatus => c.last?.status ?? (c.kind === 'soft' ? 'wait' : 'none');
 // a count in the unit the check counts in
@@ -49,47 +49,47 @@ export function CheckResult({ c, lead, busy, act, lineId, onConsole, onFix }: {
     <>
       <p className="cg-what">{trx(c.text)}</p>
       {c.kind === 'hard' && (
-        <p className="small muted">{c.gate === 'block' ? tr('阻断级：没过时锁住下一道工序，并打回修补单') : tr('告警级：没过时只提醒，不锁工序')}
-          {c.first?.value != null && last?.value != null && ` · ${tr('R1 {0} → 现在 {1}', c.first.value, last.value)}`}</p>
+        <p className="small muted">{c.gate === 'block' ? tr('阻断级：未通过时锁住下一道工序，并退回修补单') : tr('告警级：未通过仅提醒，不锁工序')}
+          {c.first?.value != null && last?.value != null && ` · ${tr('R1 {0} → 当前 {1}', c.first.value, last.value)}`}</p>
       )}
       {c.kind === 'hard' ? (
         last && last.value != null ? (
           <div className={`cg-meter s-${c.on ? k : 'none'}`}>
-            <p><b>{last.value}</b><span>{tr('最多允许 {0}', most)}{last.note && ` · ${trx(last.note)}`}</span><small>{tr('{0}查过', ago(last.seen))}</small></p>
-            <div className="cg-bar" role="img" aria-label={tr('查出 {0}，最多允许 {1}', count(c.unit, last.value), most)}>
+            <p><b>{last.value}</b><span>{tr('最多允许 {0}', most)}{last.note && ` · ${trx(last.note)}`}</span><small>{tr('{0}检查', ago(last.seen))}</small></p>
+            <div className="cg-bar" role="img" aria-label={tr('检出 {0}，最多允许 {1}', count(c.unit, last.value), most)}>
               <i style={{ width: `${(last.value / scale) * 100}%` }} /><u style={{ left: `${(most / scale) * 100}%` }} />
             </div>
           </div>
-        ) : <p className="cg-now muted">{last ? trx(last.note) || ST.none : tr('还没查过')}</p>
+        ) : <p className="cg-now muted">{last ? trx(last.note) || ST.none : tr('尚未检查')}</p>
       ) : last ? (
         <blockquote className={`cg-verdict s-${last.status}`}>
           <p>{last.note}</p>
           <footer className="small muted">{last.by} · {ago(last.ts)}</footer>
         </blockquote>
       ) : (
-        <p className="cg-now muted">{c.asked ? tr('{0}问过负责人，还没回', ago(c.asked)) : lead ? tr('负责人还没判断过：到期时它会随巡检收到这个问题') : tr('配了负责人才有人判断软检查')}</p>
+        <p className="cg-now muted">{c.asked ? tr('{0}询问负责人，尚未回复', ago(c.asked)) : lead ? tr('负责人尚未判断：到期时将随巡检收到该问题') : tr('配置负责人后才能判断软检查')}</p>
       )}
       {c.on && (
         <div className="cv-row">
-          {bad && <button className="btn pri" onClick={onFix} title={c.kind === 'soft' ? tr('建一个纠偏任务，连回它盯着的工序，你看过再发') : tr('把这道卡口没过的规则写成修补单，发给这道工序的员工')}>
-            <Icon n={c.kind === 'soft' ? 'wand' : 'refresh'} size={13} />{c.kind === 'soft' ? tr('派人纠偏') : tr('派修补单')}</button>}
+          {bad && <button className="btn pri" onClick={onFix} title={c.kind === 'soft' ? tr('创建纠偏任务并关联至监测工序，确认后派发') : tr('将该卡口未通过规则生成修补单，派发给该工序员工')}>
+            <Icon n={c.kind === 'soft' ? 'wand' : 'refresh'} size={13} />{c.kind === 'soft' ? tr('指派纠偏') : tr('派发修补单')}</button>}
           {c.kind === 'soft'
             ? <button className={`btn${bad ? '' : ' pri'}`} disabled={busy || !lead} title={lead ? '' : tr('先配一位项目负责人')}
-              onClick={() => act(() => api.askCheck(lineId, c.id), tr('已经发给负责人，它判断完会出现在这里'))}><Icon n="send" size={13} />{tr('让负责人现在查')}</button>
-            : <button className="btn" disabled={busy} onClick={() => act(() => api.runChecks(lineId), tr('查完了'))}><Icon n="refresh" size={13} />{tr('再查一遍')}</button>}
+              onClick={() => act(() => api.askCheck(lineId, c.id), tr('已发送至负责人，判断完成后将在此显示'))}><Icon n="send" size={13} />{tr('让负责人现在查')}</button>
+            : <button className="btn" disabled={busy} onClick={() => act(() => api.runChecks(lineId), tr('检查完毕'))}><Icon n="refresh" size={13} />{tr('再查一遍')}</button>}
         </div>
       )}
 
       {c.kind === 'hard' && last && last.findings.length > 0 && (
         <section className="cv-sec">
-          <h5>{tr('没过的地方')}{last.total > last.findings.length && <span className="muted"> · {tr('只列出前 {0} 处，共 {1} 处', last.findings.length, last.total)}</span>}</h5>
+          <h5>{tr('未通过位置')}{last.total > last.findings.length && <span className="muted"> · {tr('仅列出前 {0} 处，共 {1} 处', last.findings.length, last.total)}</span>}</h5>
           <ol className="cg-finds">
             {last.findings.map((f, i) => (
               <li key={i}>
                 <span className="cg-num">{i + 1}</span>
                 <div>
                   {(f.file || c.id === 'results') && (
-                    <button className="lnk cg-at" onClick={() => open(f)} title={tr('在中控屏里打开')}>{f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : f.hit}</button>
+                    <button className="lnk cg-at" onClick={() => open(f)} title={tr('在中控屏中打开')}>{f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : f.hit}</button>
                   )}
                   {f.text && <p><Marked text={f.text} hit={f.hit} /></p>}
                   {f.hint && <p className="cg-hint">{trx(f.hint)}</p>}
@@ -134,7 +134,7 @@ function Marked({ text, hit }: { text: string; hit: string }) {
 // a hard check's count over its rounds, with the line it must stay under; a soft check's verdicts in a row
 function History({ c }: { c: Check }) {
   const pts = c.history;
-  if (!pts.length) return <p className="small muted">{tr('还没有记录')}</p>;
+  if (!pts.length) return <p className="small muted">{tr('暂无记录')}</p>;
   if (c.kind === 'soft') {
     return (
       <ol className="cg-verdicts">
@@ -169,17 +169,17 @@ export function CheckSettings({ c, busy, act, lineId }: { c: Check; busy: boolea
     : prompt.trim() !== c.text;
   const save = () => act(() => api.setCheck(lineId, c.id, c.kind === 'hard'
     ? { params: { max: Number(max), ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, Number(v)])) } }
-    : { prompt: prompt.trim() }), tr('保存了'));
+    : { prompt: prompt.trim() }), tr('已保存'));
   return (
     <div className="cg-set">
       <label className="ld-sw">
         <input type="checkbox" checked={c.on} disabled={busy} onChange={e => act(() => api.setCheck(lineId, c.id, { on: e.target.checked }))} />
-        <span>{tr('启用这项检查')}</span>
+        <span>{tr('启用该检查')}</span>
       </label>
       {c.kind === 'hard' && (
-        <label className="field">{tr('没过时')}
-          <Select value={c.gate ?? 'warn'} disabled={busy} onChange={g => act(() => api.setCheck(lineId, c.id, { gate: g }), tr('保存了'))}
-            options={[{ value: 'block' as const, label: tr('阻断：锁住下一道工序并打回') }, { value: 'warn' as const, label: tr('告警：只提醒') }]} />
+        <label className="field">{tr('未通过时')}
+          <Select value={c.gate ?? 'warn'} disabled={busy} onChange={g => act(() => api.setCheck(lineId, c.id, { gate: g }), tr('已保存'))}
+            options={[{ value: 'block' as const, label: tr('阻断：锁住下一道工序并退回') }, { value: 'warn' as const, label: tr('告警：仅提醒') }]} />
         </label>
       )}
       {c.kind === 'hard' ? (
@@ -195,10 +195,10 @@ export function CheckSettings({ c, busy, act, lineId }: { c: Check; busy: boolea
         </div>
       ) : (
         <>
-          <label className="field">{tr('问负责人的问题（写进你的要求）')}
+          <label className="field">{tr('向负责人提问（写入你的要求）')}
             <textarea rows={5} value={prompt} maxLength={2000} onChange={e => setPrompt(e.target.value)} />
           </label>
-          <label className="field">{tr('多久复查一次')}
+          <label className="field">{tr('复查周期')}
             <Select value={c.every ?? 24} onChange={v => act(() => api.setCheck(lineId, c.id, { every: v }))}
               options={EVERY.map(h => ({ value: h, label: h < 24 ? tr('{0} 小时', h) : tr('{0} 天', h / 24) }))} />
           </label>

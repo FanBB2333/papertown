@@ -10,9 +10,9 @@ import { tr } from '../i18n';
 import { setSettings, type Accent, type Settings as S, type Wall } from '../settings';
 
 const LOOKS: [S['ui'], string, string][] = [
-  ['macos', 'macOS', tr('Liquid Glass、壁纸和系统设置的样子，和 Mac 最搭')],
+  ['macos', 'macOS', tr('Liquid Glass、壁纸与系统设置风格，适配 Mac')],
   ['cloudflare', 'Cloudflare', tr('干净的白底、细线和系统字体')],
-  ['paper', tr('纸本'), tr('墨线、水彩和手写字，Papertown 原来的样子')],
+  ['paper', tr('纸本'), tr('墨线、水彩与手写体，Papertown 原始风格')],
 ];
 
 const ACCENTS: [Accent, string][] = [

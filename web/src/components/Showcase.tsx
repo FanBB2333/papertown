@@ -30,8 +30,8 @@ function Material() {
         </div>
       </div>
       <p className="sc-note"><Note>{bends
-        ? tr('玻璃的边缘会折射后面的内容，这个效果在 Chrome 和 Edge 里才有，Safari 和 Mac App 里是模糊和高光。')
-        : tr('这个浏览器不支持折射，这里是模糊和高光。Chrome 和 Edge 里玻璃的边缘还会折射后面的内容。')}</Note></p>
+        ? tr('玻璃边缘将折射背景内容，该效果仅支持 Chrome 与 Edge，Safari 及 Mac App 中呈现为模糊与高光。')
+        : tr('当前浏览器不支持折射，呈现为模糊与高光。在 Chrome 与 Edge 中玻璃边缘可折射背景内容。')}</Note></p>
     </>
   );
 }
@@ -67,7 +67,7 @@ function Controls() {
         <Range label={tr('滑块')} value={v} min={0} max={100} fmt={x => `${x}%`} onChange={setV} />
       </Row>
       <Row label={tr('列表')}>
-        <Select aria-label={tr('列表')} value={list} items={{ need: tr('等你的在前'), recent: tr('最近更新'), number: tr('编号') }} onValueChange={x => x != null && setList(x as string)} className="kc-select" />
+        <Select aria-label={tr('列表')} value={list} items={{ need: tr('待处理优先'), recent: tr('最近更新'), number: tr('编号') }} onValueChange={x => x != null && setList(x as string)} className="kc-select" />
       </Row>
       <Row label={tr('文本框')}><Input aria-label={tr('文本框')} placeholder={tr('写点什么')} className="sc-input" /></Row>
       <Row label={tr('标记和进度')}>
@@ -75,8 +75,8 @@ function Controls() {
           <Badge variant="neutral">{tr('普通')}</Badge>
           <Badge variant="info">{tr('进行中')}</Badge>
           <Badge variant="success">{tr('完成')}</Badge>
-          <Badge variant="warning">{tr('等你')}</Badge>
-          <Badge variant="error">{tr('卡住了')}</Badge>
+          <Badge variant="warning">{tr('待处理')}</Badge>
+          <Badge variant="error">{tr('受阻')}</Badge>
           <Meter label={tr('进度')} value={62} className="sc-meter" />
         </div>
       </Row>
@@ -100,13 +100,13 @@ function Overlays() {
           </Popover.Content>
         </Popover>
       </Row>
-      <Row label={tr('提示')}><Tooltip content={tr('把鼠标停在控件上看到的说明')}><Button variant="secondary">{tr('停在这里')}</Button></Tooltip></Row>
+      <Row label={tr('提示')}><Tooltip content={tr('鼠标悬停在控件上时显示的说明')}><Button variant="secondary">{tr('悬停此处')}</Button></Tooltip></Row>
       <Row label={tr('对话框')}>
         <Dialog.Root open={open} onOpenChange={setOpen}>
           <Dialog.Trigger render={<Button variant="secondary" />}>{tr('打开对话框')}</Dialog.Trigger>
           <Dialog size="sm" className="st-dlg">
             <Dialog.Title>{tr('这是一个对话框')}</Dialog.Title>
-            <Dialog.Description>{tr('需要你确认的事情，都这样问。')}</Dialog.Description>
+            <Dialog.Description>{tr('需确认的事项均以此方式询问。')}</Dialog.Description>
             <div className="st-btns">
               <Button variant="secondary" onClick={() => setOpen(false)}>{tr('取消')}</Button>
               <Button variant="primary" onClick={() => setOpen(false)}>{tr('好')}</Button>
@@ -115,7 +115,7 @@ function Overlays() {
         </Dialog.Root>
       </Row>
       <div className="sc-banners">
-        <Banner size="sm" variant="alert" icon={<WarningIcon />} description={tr('这样提醒你注意一件事。')} />
+        <Banner size="sm" variant="alert" icon={<WarningIcon />} description={tr('以此方式提醒你注意。')} />
       </div>
     </>
   );
@@ -124,11 +124,11 @@ function Overlays() {
 export function Showcase({ s }: { s: S }) {
   return (
     <>
-      <Card title={tr('换一种风格看看')}><LookPicker s={s} /></Card>
+      <Card title={tr('切换其他风格')}><LookPicker s={s} /></Card>
       <Card title="Liquid Glass">
         {s.ui === 'macos'
           ? <Material />
-          : <div className="sc-off"><Note>{tr('这是 macOS 风格的材质：玻璃会模糊和折射后面的内容。')}</Note><Button variant="secondary" onClick={() => setSettings({ ui: 'macos' })}>{tr('换到 macOS 风格')}</Button></div>}
+          : <div className="sc-off"><Note>{tr('这是 macOS 风格材质：玻璃将模糊并折射背景内容。')}</Note><Button variant="secondary" onClick={() => setSettings({ ui: 'macos' })}>{tr('切换 macOS 风格')}</Button></div>}
       </Card>
       <Card title={tr('控件')}><Controls /></Card>
       <Card title={tr('菜单和弹窗')}><Overlays /></Card>
@@ -136,7 +136,7 @@ export function Showcase({ s }: { s: S }) {
         <div className="sc-colors">
           {[['brand', tr('强调')], ['success', tr('成功')], ['warning', tr('注意')], ['danger', tr('危险')]].map(([k, n]) => <span key={k} style={{ ['--c' as string]: `var(--color-kumo-${k})` }}><i />{n}</span>)}
         </div>
-        <div className="sc-type"><b>{tr('标题的样子')}</b><p>{tr('正文的样子，一段讲清楚一件事。')}</p><small>{tr('次要的说明文字')}</small></div>
+        <div className="sc-type"><b>{tr('标题样式')}</b><p>{tr('正文样式，一段阐明一事。')}</p><small>{tr('次要说明文字')}</small></div>
       </Card>
     </>
   );

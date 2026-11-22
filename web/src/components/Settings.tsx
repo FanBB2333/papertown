@@ -30,7 +30,7 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
     ['editor', tr('编辑器'), tr('颜色主题和文件图标'), CodeIcon, '#af52de'],
   ]],
   [tr('小镇'), [
-    ['map', tr('平面地图'), tr('缩放、拖动、建筑名字'), MapTrifoldIcon, '#28a745'],
+    ['map', tr('平面地图'), tr('缩放、拖动、建筑名称'), MapTrifoldIcon, '#28a745'],
     ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质'), CubeIcon, '#30b0c7'],
   ]],
   [tr('模型与员工'), [
@@ -52,9 +52,9 @@ function Look({ s }: { s: S }) {
       <Card title={tr('界面风格')}><LookPicker s={s} /></Card>
       {flat && (
         <Card>
-          <Row label={tr('外观')} desc={tr('自动：电脑切到深色，这里也跟着变')}><ModePicker s={s} /></Row>
+          <Row label={tr('外观')} desc={tr('自动：电脑切换深色时同步切换')}><ModePicker s={s} /></Row>
           {mac && <div className="st-row st-glass">
-            <div className="st-l"><b>Liquid Glass</b><span>{tr('拖到左边更清透，拖到右边着色更多，字也更清楚')}</span></div>
+            <div className="st-l"><b>Liquid Glass</b><span>{tr('左移更清透，右移着色更深、文字更清晰')}</span></div>
             <div className="st-c"><GlassStage /><GlassSlider value={s.glass} /></div>
           </div>}
         </Card>
@@ -63,26 +63,26 @@ function Look({ s }: { s: S }) {
         <Card title={tr('主题')}>
           <Row label={tr('强调色')}><AccentPicker s={s} /></Row>
           <Row label={tr('壁纸')}><WallPicker s={s} /></Row>
-          <Row label={tr('窗口背景跟随壁纸着色')} desc={tr('关掉后窗口是纯色，玻璃也更安静')}>
+          <Row label={tr('窗口背景跟随壁纸着色')} desc={tr('关闭后窗口为纯色，玻璃更素净')}>
             <Toggle label={tr('窗口背景跟随壁纸着色')} value={s.wallTint} onChange={set('wallTint')} />
           </Row>
         </Card>
       )}
       {s.ui === 'paper' && (
         <Card>
-          <Row label={tr('纸纹')} desc={tr('盖在整个页面上的纸张纹理')}>
+          <Row label={tr('纸纹')} desc={tr('覆盖整个页面的纸张纹理')}>
             <Range label={tr('纸纹')} value={s.grain} min={0} max={1} step={0.05} fmt={v => v ? `${Math.round(v * 100)}%` : tr('关')} onChange={set('grain')} />
           </Row>
         </Card>
       )}
       <Card title={tr('语言与动效')}>
-        <Row label={tr('语言')} desc={tr('界面文字的语言，切换后页面会重新载入')}>
+        <Row label={tr('语言')} desc={tr('界面语言，切换后将重新加载页面')}>
           <Pick label={tr('语言')} value={LANG} options={LANGS} onChange={setLang} />
         </Row>
-        <Row label={tr('动画')} desc={tr('柔和：动画更短更轻，适合投影或容易晕的时候')}>
+        <Row label={tr('动画')} desc={tr('柔和：动画更短更轻，适用于投影或易眩晕时')}>
           <Pick label={tr('动画')} value={s.motion} options={[['full', tr('完整')], ['calm', tr('柔和')]]} onChange={set('motion')} />
         </Row>
-        <Row label={tr('打开页面时')} desc={tr('下次打开页面先看到哪种视图：中控屏是一眼看全的面板，小镇可以平面或 3D')}>
+        <Row label={tr('打开页面时')} desc={tr('下次打开页面时的默认视图：中控屏为全局面板总览，小镇支持平面或 3D')}>
           <Pick label={tr('打开页面时')} value={s.start} options={[['cards', tr('进展')], ['console', tr('小镇 · 中控屏')], ['2d', tr('小镇 · 平面')], ['3d', tr('小镇 · 3D 漫游')]]} onChange={set('start')} />
         </Row>
       </Card>
@@ -93,8 +93,8 @@ function Look({ s }: { s: S }) {
 function ProgressPage({ s }: { s: S }) {
   return (
     <>
-      <Card title={tr('项目怎么排')}>
-        <Row label={tr('视图')} desc={tr('块是每个项目一张卡片，行是每个项目一行，能顺着一列往下比。进展页上也能直接换')}>
+      <Card title={tr('排列方式')}>
+        <Row label={tr('视图')} desc={tr('块为每项目一张卡片，行为每项目一行，便于纵向对比，也可在进展页直接切换')}>
           <Pick label={tr('视图')} value={s.pgView} options={[['blocks', tr('块')], ['rows', tr('行')]]} onChange={set('pgView')} />
         </Row>
         {PROGRESS_OPTIONS.slice(0, 2).map(o => <Row key={o.key} label={o.label} desc={o.desc}><OptionControl o={o} s={s} /></Row>)}
@@ -102,7 +102,7 @@ function ProgressPage({ s }: { s: S }) {
       <Card title={tr('显示')}>
         {PROGRESS_OPTIONS.slice(2).map(o => <Row key={o.key} label={o.label} desc={o.desc}><OptionControl o={o} s={s} /></Row>)}
       </Card>
-      <Note>{tr('卡片和每行显示哪些部分，在进展页的「显示」里选。')}</Note>
+      <Note>{tr('卡片与每行的显示字段可在进展页的「显示」中选择。')}</Note>
     </>
   );
 }
@@ -112,7 +112,7 @@ function Editor({ s }: { s: S }) {
   return (
     <>
       <Card title={tr('颜色主题')}>
-        <Note>{tr('代码和论文编辑器的配色，连同文件列表、标签页和状态栏。在编辑器里按 ⌘K ⌘T 可以边看边换')}</Note>
+        <Note>{tr('代码与论文编辑器的配色，含文件列表、标签页及状态栏。在编辑器内按 ⌘K ⌘T 可实时预览切换')}</Note>
         <div className="st-themes" role="radiogroup" aria-label={tr('颜色主题')}>
           {[autoTheme(), ...THEMES].map(th => (
             <button key={th.id} role="radio" aria-checked={th.id === s.edTheme} className={`st-theme${th.id === s.edTheme ? ' on' : ''}`} onClick={() => chooseLook({ theme: th.id })}>
@@ -123,7 +123,7 @@ function Editor({ s }: { s: S }) {
         </div>
       </Card>
       <Card title={tr('文件图标')}>
-        <Note>{tr('文件列表和标签页里，文件名前面的图标')}</Note>
+        <Note>{tr('文件列表与标签页中文件名前的图标')}</Note>
         <div className="st-themes" role="radiogroup" aria-label={tr('文件图标')}>
           {ICON_THEMES.map(([id, name, desc]) => (
             <button key={id} role="radio" aria-checked={id === s.edIcons} className={`st-icon${id === s.edIcons ? ' on' : ''}`} onClick={() => chooseLook({ icons: id })}>
@@ -141,10 +141,10 @@ function LoopSection({ s }: { s: S }) {
   return (
     <>
       <Card title={tr('移动和缩放')}>
-        <Row label={tr('触控板双指和滚轮')} desc={tr('平移：双指移动或滚轮在画布上走，捏合或按住 ⌘（Windows 上是 Ctrl）滚动缩放。缩放：双指移动或滚轮直接缩放。滚轮每格缩放一小步，快慢跟随「滚轮缩放速度」')}>
+        <Row label={tr('触控板双指和滚轮')} desc={tr('平移：双指滑动或滚轮移动画布，捏合或按住 ⌘（Windows 为 Ctrl）滚动缩放。缩放：双指滑动或滚轮直接缩放。滚轮每格步进缩放，速率随「滚轮缩放速度」')}>
           <Pick label={tr('触控板双指和滚轮')} value={s.cvScroll} options={[['pan', tr('平移')], ['zoom', tr('缩放')]]} onChange={set('cvScroll')} />
         </Row>
-        <Row label={tr('随缩放调整节点')} desc={tr('缩小时字跟着放大、细节收起，远看只留名字和一个数字')}>
+        <Row label={tr('随缩放调整节点')} desc={tr('缩小时字体放大、细节折叠，远距仅显示名称与一项数值')}>
           <Toggle label={tr('随缩放调整节点')} value={s.cvAdapt} onChange={set('cvAdapt')} />
         </Row>
       </Card>
@@ -155,36 +155,36 @@ function LoopSection({ s }: { s: S }) {
         <Row label={tr('网格大小')}>
           <Pick label={tr('网格大小')} value={s.cvGap} options={[['16', tr('小')], ['22', tr('中')], ['32', tr('大')]]} onChange={set('cvGap')} />
         </Row>
-        <Row label={tr('对齐网格')} desc={tr('拖动节点时一格一格地走')}>
+        <Row label={tr('对齐网格')} desc={tr('拖动节点时按网格步进')}>
           <Toggle label={tr('对齐网格')} value={s.cvSnapGrid} onChange={set('cvSnapGrid')} />
         </Row>
-        <Row label={tr('吸附到其他节点')} desc={tr('拖动节点时，边或中线靠近别的节点就自动对齐，并画出参考线')}>
+        <Row label={tr('吸附到其他节点')} desc={tr('拖动节点时，边缘或中线靠近其他节点自动对齐并显示参考线')}>
           <Toggle label={tr('吸附到其他节点')} value={s.cvGuides} onChange={set('cvGuides')} />
         </Row>
         {s.cvGuides && (
-          <Row label={tr('吸附距离')} desc={tr('离多近开始吸附，按屏幕上的像素算')}>
+          <Row label={tr('吸附距离')} desc={tr('触发吸附的距离阈值，按屏幕像素计')}>
             <Range label={tr('吸附距离')} value={s.cvGuideDist} min={4} max={16} step={1} fmt={v => `${v}px`} onChange={set('cvGuideDist')} />
           </Row>
         )}
       </Card>
       <Card title={tr('连线')}>
-        <Row label={tr('显示全部连线')} desc={tr('关着时，巡检、规范、边界和升级的线只在指到节点或打开它时出现')}>
+        <Row label={tr('显示全部连线')} desc={tr('关闭时，巡检、规范、边界与升级连线仅在悬停或打开节点时显示')}>
           <Toggle label={tr('显示全部连线')} value={s.cvLines} onChange={set('cvLines')} />
         </Row>
-        <Row label={tr('连线绕开节点')} desc={tr('线碰到两端以外的节点时，从节点之间的空隙绕过去')}>
+        <Row label={tr('连线绕开节点')} desc={tr('连线经过非端点节点时，沿节点间隙绕行')}>
           <Toggle label={tr('连线绕开节点')} value={s.cvAvoid} onChange={set('cvAvoid')} />
         </Row>
-        <Row label={tr('流动动画')} desc={tr('发出去的任务和正在打回的修补单，线上有流动的虚线')}>
+        <Row label={tr('流动动画')} desc={tr('已派发任务与退回中的修补单连线显示流动虚线')}>
           <Toggle label={tr('流动动画')} value={s.cvMarch} onChange={set('cvMarch')} />
         </Row>
       </Card>
       <Card title={tr('画布上显示')}>
-        <Row label={tr('分块')} desc={tr('按「研究流程」的各项给节点加上背景框和标题')}>
+        <Row label={tr('分块')} desc={tr('按「研究流程」分项为节点添加背景框与标题')}>
           <Toggle label={tr('分块')} value={s.cvLanes} onChange={set('cvLanes')} />
         </Row>
         <Row label={tr('图例')}><Toggle label={tr('图例')} value={s.cvLegend} onChange={set('cvLegend')} /></Row>
         <Row label={tr('小地图')}><Toggle label={tr('小地图')} value={s.cvMap} onChange={set('cvMap')} /></Row>
-        <Row label={tr('操作提示')} desc={tr('画布上方那行「双击空白处新建…」')}>
+        <Row label={tr('操作提示')} desc={tr('画布顶部「双击空白处新建…」提示')}>
           <Toggle label={tr('操作提示')} value={s.cvHint} onChange={set('cvHint')} />
         </Row>
       </Card>
@@ -195,14 +195,14 @@ function LoopSection({ s }: { s: S }) {
 function MapSection({ s }: { s: S }) {
   return (
     <Card>
-      <Row label={tr('顺滑缩放和拖动')} desc={tr('缩放带缓动，松手后地图会顺势滑一小段')}>
+      <Row label={tr('顺滑缩放和拖动')} desc={tr('缩放带缓动，停止拖动后地图惯性滑行')}>
         <Toggle label={tr('顺滑缩放和拖动')} value={s.smoothMap} onChange={set('smoothMap')} />
       </Row>
       <Row label={tr('滚轮缩放速度')}>
         <Range label={tr('滚轮缩放速度')} value={s.zoomSpeed} min={0.5} max={2} step={0.1} fmt={v => `${v.toFixed(1)}×`} onChange={set('zoomSpeed')} />
       </Row>
-      <Row label={tr('建筑名字')} desc={tr('「主要」只标四座核心建筑和几处地标，「全部」每栋都标')}>
-        <Pick label={tr('建筑名字')} value={s.mapLabels} options={[['key', tr('主要')], ['all', tr('全部')]]} onChange={set('mapLabels')} />
+      <Row label={tr('建筑名称')} desc={tr('「主要」仅标注四座核心建筑与数处地标，「全部」均标注')}>
+        <Pick label={tr('建筑名称')} value={s.mapLabels} options={[['key', tr('主要')], ['all', tr('全部')]]} onChange={set('mapLabels')} />
       </Row>
       <Row label={tr('走动提示')} desc={tr('地图底部的按键提示')}>
         <Toggle label={tr('走动提示')} value={s.walkHint} onChange={set('walkHint')} />
@@ -215,33 +215,33 @@ function Walk({ s }: { s: S }) {
   return (
     <>
       <Card title={tr('操作')}>
-        <Row label={tr('鼠标灵敏度')} desc={tr('鼠标锁在画面中间时，移动多少转多少')}>
+        <Row label={tr('鼠标灵敏度')} desc={tr('鼠标锁定在画面中心时的视角转动幅度')}>
           <Range label={tr('鼠标灵敏度')} value={s.sensitivity} min={0.3} max={3} step={0.05} fmt={v => `${v.toFixed(2)}×`} onChange={set('sensitivity')} />
         </Row>
-        <Row label={tr('上下反转')} desc={tr('鼠标往前推是低头')}>
+        <Row label={tr('上下反转')} desc={tr('前推鼠标向下俯视')}>
           <Toggle label={tr('上下反转')} value={s.invertY} onChange={set('invertY')} />
         </Row>
-        <Row label={tr('全屏漫游')} desc={tr('进入 3D 时自动全屏。开着面板时 Esc 先关面板，没有面板时退出全屏，再点画面继续时回到全屏')}>
+        <Row label={tr('全屏漫游')} desc={tr('进入 3D 时自动全屏。面板开启时按 Esc 先关闭面板，否则退出全屏，点击画面继续时返回全屏')}>
           <Toggle label={tr('全屏漫游')} value={s.fullscreen3d} onChange={set('fullscreen3d')} />
         </Row>
       </Card>
       <Card title={tr('画面')}>
-        <Row label={tr('视野')} desc={tr('越大看得越广，边缘拉伸也越明显')}>
+        <Row label={tr('视野')} desc={tr('越大视野越广，边缘拉伸越明显')}>
           <Range label={tr('视野')} value={s.fov} min={55} max={95} step={1} fmt={v => `${v}°`} onChange={set('fov')} />
         </Row>
-        <Row label={tr('画质')} desc={tr('低：不画阴影、降低分辨率，老电脑更流畅')}>
+        <Row label={tr('画质')} desc={tr('低：关闭阴影并降低分辨率，旧设备更流畅')}>
           <Pick label={tr('画质')} value={s.quality} options={[['low', tr('低')], ['mid', tr('中')], ['high', tr('高')]]} onChange={set('quality')} />
         </Row>
-        <Row label={tr('显示手')} desc={tr('画面右下角你的手和铅笔，走路时会跟着摆')}>
+        <Row label={tr('显示手')} desc={tr('右下角显示手部与铅笔，行走时随步摆动')}>
           <Toggle label={tr('显示手')} value={s.hand} onChange={set('hand')} />
         </Row>
-        <Row label={tr('走路时晃动')} desc={tr('视角随步子轻轻上下')}>
-          <Toggle label={tr('走路时晃动')} value={s.bob} onChange={set('bob')} />
+        <Row label={tr('行走时晃动')} desc={tr('视角随步伐轻微起伏')}>
+          <Toggle label={tr('行走时晃动')} value={s.bob} onChange={set('bob')} />
         </Row>
-        <Row label={tr('建筑名字')} desc={tr('悬在建筑上方的名字')}>
-          <Toggle label={tr('建筑名字')} value={s.tags3d} onChange={set('tags3d')} />
+        <Row label={tr('建筑名称')} desc={tr('建筑上方悬浮名称')}>
+          <Toggle label={tr('建筑名称')} value={s.tags3d} onChange={set('tags3d')} />
         </Row>
-        <Row label={tr('小地图')} desc={tr('右下角的小地图，点一下就过去')}>
+        <Row label={tr('小地图')} desc={tr('右下角小地图，点击即可前往')}>
           <Toggle label={tr('小地图')} value={s.minimap} onChange={set('minimap')} />
         </Row>
       </Card>
@@ -277,16 +277,16 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
   }
   return (
     <>
-      <Row label={tr('{0}默认用', name)} desc={d.set ? tr('在这里选的，启动时预先选好') : tr('没选过，用环境变量 {0}', ENV[role])}>
+      <Row label={tr('{0}默认使用', name)} desc={d.set ? tr('此处所选将在启动时预选') : tr('未选择，使用环境变量 {0}', ENV[role])}>
         <div className="st-models">
-          <Select aria-label={tr('供应商')} size="sm" placeholder={tr('选供应商')} value={v.provider || undefined} items={Object.fromEntries(info.providers.map(p => [p.id, p.label]))} onValueChange={id => to(String(id))} />
+          <Select aria-label={tr('供应商')} size="sm" placeholder={tr('选择供应商')} value={v.provider || undefined} items={Object.fromEntries(info.providers.map(p => [p.id, p.label]))} onValueChange={id => to(String(id))} />
           {!!pv?.models.length && <Select aria-label={tr('模型')} size="sm" value={v.model} items={Object.fromEntries(pv.models.map(x => [x.id, x.name]))} onValueChange={id => to(v.provider, String(id))} />}
           {!!m && m.thinking.length > 1 && <Select aria-label={tr('思考强度')} size="sm" value={v.thinking} items={Object.fromEntries(m.thinking.map(x => [x, x]))} onValueChange={t => setV(x => ({ ...x, thinking: String(t) }))} />}
           {changed && <Button size="sm" variant="primary" disabled={busy || !v.provider} onClick={() => save({ provider: v.provider, model: v.model || null, thinking: v.thinking || null })}>{tr('保存')}</Button>}
-          {!changed && d.set && <Button size="sm" disabled={busy} onClick={() => save({ provider: null })} title={ENV[role]}>{tr('改回环境变量的')}</Button>}
+          {!changed && d.set && <Button size="sm" disabled={busy} onClick={() => save({ provider: null })} title={ENV[role]}>{tr('恢复环境变量')}</Button>}
         </div>
       </Row>
-      {gone && !changed && <Warn>{tr('Paseo 里现在没有 {0}，启动时会退回到这个供应商的第一个模型。', [d.provider, d.model].filter(Boolean).join(' / '))}</Warn>}
+      {gone && !changed && <Warn>{tr('Paseo 当前无 {0}，启动时将回退至该供应商的首个模型。', [d.provider, d.model].filter(Boolean).join(' / '))}</Warn>}
       {err && <Warn bad>{err}</Warn>}
     </>
   );
@@ -331,7 +331,7 @@ function Agents() {
       </Card>
       <Card title={tr('对话')}>
         <Row label={tr('默认发送方式')} desc={tr('员工工作时使用此方式发送消息，⌘/Ctrl+Enter 始终排队。')}>
-          <Pick label={tr('默认发送方式')} value={s.agentSend} options={[['steer', tr('插话')], ['queue', tr('排队')], ['interrupt', tr('打断并发送')]]} onChange={set('agentSend')} />
+          <Pick label={tr('默认发送方式')} value={s.agentSend} options={[['steer', tr('插话')], ['queue', tr('排队')], ['interrupt', tr('中断并发送')]]} onChange={set('agentSend')} />
         </Row>
       </Card>
       <UsageSettings />
@@ -342,10 +342,10 @@ function Agents() {
         {st && !st.ok && <Warn>{st.note}</Warn>}
         {info?.status.ok && (
           <>
-            <Row label={tr('网页端')} desc={tr('房间里「完整界面」嵌入的就是它')}>
-              <Note>{info.status.web ?? tr('没开：paseo daemon config set features.webUi.enabled true')}</Note>
+            <Row label={tr('网页端')} desc={tr('房间内「完整界面」即嵌入此页面')}>
+              <Note>{info.status.web ?? tr('未开启：paseo daemon config set features.webUi.enabled true')}</Note>
             </Row>
-            <Row label={tr('可用的供应商')} desc={tr('从 Paseo 读出来的，每隔一阵重读一次。有新模型时中控屏会问你要不要换')}>
+            <Row label={tr('可用的供应商')} desc={tr('从 Paseo 读取并定期更新。有新模型时中控屏将询问是否切换')}>
               <span className="st-tags">
                 {info.providers.map(p => <Badge key={p.id} variant="outline">{p.label} · {tr('{0} 个模型', p.models.length)}</Badge>)}
                 <Button size="sm" loading={reading} onClick={again}>{reading ? tr('读取中…') : tr('重新读取')}</Button>
@@ -370,12 +370,12 @@ function Agents() {
         </>}
       </Card>
       <Card title={tr('本机 pi')}>
-        <Row label={tr('状态')} desc={tr('跑在 tmux 里的后台终端 agent')}>
+        <Row label={tr('状态')} desc={tr('运行于 tmux 的后台终端 agent')}>
           <Badge variant={pi?.ok ? 'success' : pi === null ? 'neutral' : 'warning'}>{pi === null ? tr('检查中…') : pi.ok ? tr('可用') : tr('不可用')}</Badge>
         </Row>
         {pi && !pi.ok && <Warn>{pi.note}</Warn>}
       </Card>
-      <Note>{tr('雇员工、导入 Paseo 里已有的对话、切换模型和思考强度，都在仓库和印刷厂的房间里。小助手和项目负责人的默认模型只管以后启动的，已经在跑的保持原样。')}</Note>
+      <Note>{tr('招募员工、导入 Paseo 已有对话、切换模型与思考强度均在仓库和印刷厂房间内完成。小助手和项目负责人的默认模型仅适用于后续启动，运行中的保持不变。')}</Note>
     </>
   );
 }
@@ -401,8 +401,8 @@ function Demo({ hud }: { hud: Hud | null }) {
         <Button variant="primary" loading={busy} onClick={seed}>{busy ? tr('放入中…') : tr('放入样例项目')}</Button>
       </Row>
       {msg && <Note>{msg}</Note>}
-      <Row label={tr('调研文章')} desc={tr('图书馆的馆藏，样例项目查重和写方法时从这里找相近工作')}>
-        <Note>{tr('馆藏')} {tr('{0} 篇 · 在小镇里进图书馆翻看', hud?.library ?? '…')}</Note>
+      <Row label={tr('调研文章')} desc={tr('图书馆馆藏，样例项目查重及方法设计时从中检索相近工作')}>
+        <Note>{tr('馆藏')} {tr('{0} 篇 · 进入小镇图书馆浏览', hud?.library ?? '…')}</Note>
       </Row>
     </Card>
   );
@@ -425,7 +425,7 @@ function Access() {
   }
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (pw !== pw2) { setMsg(tr('两次输入的不一样')); return; }
+    if (pw !== pw2) { setMsg(tr('两次输入不一致')); return; }
     if (await run(() => api.setPassword(pw, a?.local ? undefined : old), tr('访问密码已保存。'))) { setForm(false); setOld(''); setPw(''); setPw2(''); }
   }
   if (err) return <Warn bad>{err}</Warn>;
@@ -433,17 +433,17 @@ function Access() {
   return (
     <>
       <Card>
-        <Row label={tr('这台设备')} desc={a.local ? tr('运行 Papertown 的电脑：直接就能进') : tr('用访问密码登录的设备')}>
+        <Row label={tr('这台设备')} desc={a.local ? tr('运行 Papertown 的电脑：直接进入') : tr('用访问密码登录的设备')}>
           {!a.local && <Button onClick={() => run(api.logout).then(() => go('/'))}>{tr('退出登录')}</Button>}
         </Row>
-        <Row label={tr('访问密码')} desc={a.password ? tr('手机和其他电脑在首页用它登录') : tr('还没有设置：除了这台电脑，别的设备都进不来')}>
-          {!form && <Button onClick={() => setForm(true)}>{a.password ? tr('改密码') : tr('设置密码')}</Button>}
+        <Row label={tr('访问密码')} desc={a.password ? tr('手机及其他设备在首页用此密码登录') : tr('尚未设置：除本机外其他设备无法访问')}>
+          {!form && <Button onClick={() => setForm(true)}>{a.password ? tr('修改密码') : tr('设置密码')}</Button>}
         </Row>
         {form && (
           <form className="st-form" onSubmit={save}>
-            {!a.local && <Input type="password" autoComplete="current-password" label={tr('现在的密码')} value={old} onChange={e => setOld(e.target.value)} />}
+            {!a.local && <Input type="password" autoComplete="current-password" label={tr('当前密码')} value={old} onChange={e => setOld(e.target.value)} />}
             <Input type="password" autoComplete="new-password" label={tr('新的访问密码（至少 6 位）')} value={pw} onChange={e => setPw(e.target.value)} autoFocus />
-            <Input type="password" autoComplete="new-password" label={tr('再输一次')} value={pw2} onChange={e => setPw2(e.target.value)} />
+            <Input type="password" autoComplete="new-password" label={tr('再次输入')} value={pw2} onChange={e => setPw2(e.target.value)} />
             <div className="st-btns">
               <Button variant="primary" type="submit" disabled={pw.length < 6 || !pw2}>{tr('保存')}</Button>
               <Button type="button" onClick={() => setForm(false)}>{tr('取消')}</Button>
@@ -451,20 +451,20 @@ function Access() {
           </form>
         )}
         {a.password && (
-          <Row label={tr('登录过的设备')} desc={tr('{0} 个设备的登录还在有效期内（30 天）', a.sessions ?? 0)}>
-            <Button disabled={!a.sessions} onClick={() => run(api.logoutAll, tr('所有设备都要重新登录了。'))}>{tr('让它们都重新登录')}</Button>
+          <Row label={tr('已登录设备')} desc={tr('{0} 个设备登录仍在有效期内（30 天）', a.sessions ?? 0)}>
+            <Button disabled={!a.sessions} onClick={() => run(api.logoutAll, tr('所有设备均需重新登录。'))}>{tr('全部退出登录')}</Button>
           </Row>
         )}
         {a.local && a.password && (
-          <Row label={tr('取消密码')} desc={tr('之后只有这台电脑能打开 Papertown')}>
+          <Row label={tr('取消密码')} desc={tr('此后仅本机可打开 Papertown')}>
             <Dialog.Root>
               <Dialog.Trigger render={p => <Button {...p} variant="secondary-destructive">{tr('取消密码')}</Button>} />
               <Dialog size="sm" className="st-dlg">
                 <Dialog.Title>{tr('取消访问密码？')}</Dialog.Title>
-                <Dialog.Description>{tr('已经登录的设备也会被退出。')}</Dialog.Description>
+                <Dialog.Description>{tr('已登录设备也将退出登录。')}</Dialog.Description>
                 <div className="st-btns">
                   <Dialog.Close render={p => <Button {...p}>{tr('保留密码')}</Button>} />
-                  <Dialog.Close render={p => <Button {...p} variant="destructive" onClick={() => run(api.clearPassword, tr('访问密码取消了。'))}>{tr('取消密码')}</Button>} />
+                  <Dialog.Close render={p => <Button {...p} variant="destructive" onClick={() => run(api.clearPassword, tr('访问密码已取消。'))}>{tr('取消密码')}</Button>} />
                 </div>
               </Dialog>
             </Dialog.Root>
@@ -472,21 +472,21 @@ function Access() {
         )}
         {msg && <Note>{msg}</Note>}
       </Card>
-      <Note>{tr('Papertown 默认只在本机监听。要用手机打开，先让它能从网络上访问（比如 tailscale serve 8000），再在手机上用这个密码登录。')}</Note>
+      <Note>{tr('Papertown 默认仅监听本机。如需在手机上打开，请先开启网络访问（如 tailscale serve 8000），再在手机上用此密码登录。')}</Note>
     </>
   );
 }
 
 const KEYS: [string, string][] = [
-  [tr('W A S D / 方向键'), tr('走动（3D 里 ←/→ 转身）')], ['Shift', tr('3D 里跑')],
-  [tr('空格'), tr('3D 里跳，连按两下起飞或落地，飞行时按住上升')], ['Ctrl / C', tr('3D 里下蹲，蹲着走到边上不会掉下去。飞行时下降')],
-  ['F', tr('进门口或准星对着的建筑，在建筑里打开准星对着的设备')],
-  [tr('鼠标'), tr('3D 里转视角，平面上拖动地图、滚轮缩放')], [tr('点击'), tr('平面上进建筑，3D 里和 F 一样')],
-  ['V', tr('3D 里切换第一 / 第三人称')], ['T', tr('3D 里切换白天 / 夜晚')],
-  ['M', tr('3D 里回到平面')], ['Esc', tr('放开鼠标（全屏时同时退出全屏）/ 关闭对话 / 回到小镇 / 关闭设置')], [',', tr('打开设置')],
-  ['/', tr('在底部的对话框里开始写')], ['@', tr('对话框里换收件人：部门或员工')],
-  ['⌘K', tr('中控屏里换项目')], ['⌘J', tr('中控屏里打开或收起小助手')], ['1 … 9, 0', tr('中控屏里切换左边的面板')], ['⌘S / ⌘↵', tr('中控屏的编辑器里保存 / 重新编译论文')],
-  ['⌘K ⌘T', tr('中控屏的编辑器里换颜色主题和文件图标')],
+  [tr('W A S D / 方向键'), tr('移动（3D 中 ←/→ 转向）')], ['Shift', tr('3D 奔跑')],
+  [tr('空格'), tr('3D 跳跃，双击起飞或降落，飞行时按住上升')], ['Ctrl / C', tr('3D 下蹲，蹲行至边缘不致坠落。飞行时下降')],
+  ['F', tr('进入门口或准星所指建筑，室内则打开准星所指设备')],
+  [tr('鼠标'), tr('3D 转动视角，平面拖动地图、滚轮缩放')], [tr('点击'), tr('平面进入建筑，3D 中同 F 键')],
+  ['V', tr('3D 切换第一 / 第三人称')], ['T', tr('3D 切换白天 / 夜晚')],
+  ['M', tr('3D 返回平面')], ['Esc', tr('释放鼠标（全屏时退出全屏）/ 关闭对话 / 返回小镇 / 关闭设置')], [',', tr('打开设置')],
+  ['/', tr('在底部输入框开始输入')], ['@', tr('切换对话框收件人：部门或员工')],
+  ['⌘K', tr('中控屏切换项目')], ['⌘J', tr('中控屏展开或收起小助手')], ['1 … 9, 0', tr('中控屏切换左侧面板')], ['⌘S / ⌘↵', tr('中控屏编辑器保存 / 重新编译论文')],
+  ['⌘K ⌘T', tr('中控屏编辑器切换颜色主题与文件图标')],
 ];
 
 function Keys() {
@@ -549,7 +549,7 @@ export function SettingsPage({ section, hud, onClose }: { section?: string; hud:
             {!found.length && <p className="st-none">{tr('没有找到')}</p>}
           </Sidebar.Content>
           <Sidebar.Footer>
-            <Button variant="ghost" size="sm" icon={ArrowCounterClockwiseIcon} disabled={!changed} onClick={resetSettings} title={tr('这个浏览器里的设置都回到默认')}>{tr('恢复默认')}</Button>
+            <Button variant="ghost" size="sm" icon={ArrowCounterClockwiseIcon} disabled={!changed} onClick={resetSettings} title={tr('将当前浏览器设置恢复为默认')}>{tr('恢复默认')}</Button>
           </Sidebar.Footer>
         </Sidebar>
         <main className="st-main">

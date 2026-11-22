@@ -79,7 +79,7 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
         moved: () => { if (helpTimer.current === undefined) helpTimer.current = window.setTimeout(() => setHelp(false), 2500); },
       });
     } catch (e) {
-      cb.current.onFail(tr('这台设备打不开 3D 小镇（WebGL 不可用）：{0}', (e as Error).message));
+      cb.current.onFail(tr('当前设备无法打开 3D 小镇（WebGL 不可用）：{0}', (e as Error).message));
       return;
     }
     return () => { eng.current?.dispose(); eng.current = null; clearTimeout(helpTimer.current); };
@@ -145,22 +145,22 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
       {live && locked && <div className={`t3-cross${hot ? ' hot' : ''}`} />}
       {live && (inside || chips.length > 0) && (
         <div className="t3-top">
-          {inside && <span className="pnl t3-where"><b>{placementName(inside)}</b>{tr('走到门口按')} <K k="F" /> {tr('出去')}</span>}
+          {inside && <span className="pnl t3-where"><b>{placementName(inside)}</b>{tr('行至门口按')} <K k="F" /> {tr('出去')}</span>}
           {chips.map(c => <span key={c} className="t3-chip">{c}</span>)}
-          {mode.fly && <span className="t3-chip soft"><K k={tr('空格')} /> {tr('上升')} · <K k="Ctrl" /> {tr('下降')} · {tr('双击空格落地')}</span>}
+          {mode.fly && <span className="t3-chip soft"><K k={tr('空格')} /> {tr('上升')} · <K k="Ctrl" /> {tr('下降')} · {tr('双击空格降落')}</span>}
         </div>
       )}
       {live && !locked && (
         <div className="pnl t3-resume">
           <b>{tr('点击画面继续漫游')}</b>
-          <span>{tr('鼠标会留在画面中间：移动鼠标转视角，')}<kbd>Esc</kbd> {tr('放开')}</span>
+          <span>{tr('鼠标锁定画面中心：移动鼠标转动视角，')}<kbd>Esc</kbd> {tr('释放')}</span>
         </div>
       )}
       {live && pl && b && (
         <div className="pnl t3-card" key={pl.id}>
           <b>{placementName(pl)}</b><span>{where(b.district)}</span>
           <p>{b.rep}</p>
-          <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : tr('还没接入，进去看计划 · ')}{press(tr('进去'))}</em>
+          <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : tr('尚未接入，进入查看计划 ·')}{press(tr('进去'))}</em>
         </div>
       )}
       {live && target?.kind === 'thing' && (
@@ -168,24 +168,24 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
           <b>{target.thing.title}</b>
           <p>{target.thing.sub}</p>
           {target.thing.note && <p className="muted">{target.thing.note}</p>}
-          <em>{press(target.thing.act.kind === 'exit' ? tr('回到小镇') : target.thing.verb ?? tr('打开面板'))}</em>
+          <em>{press(target.thing.act.kind === 'exit' ? tr('返回小镇') : target.thing.verb ?? tr('打开面板'))}</em>
         </div>
       )}
       {live && target?.kind === 'walker' && (
         <div className="pnl t3-card" key={target.walker.key}>
           <b>{target.walker.name}</b>
           <p>{target.walker.rep}</p>
-          <em>{press(tr('打个招呼'))}</em>
+          <em>{press(tr('问候'))}</em>
         </div>
       )}
       {veil !== null && <div className="t3-veil">{veil && <b>{veil}</b>}</div>}
       {live && locked && st.walkHint && (
         <div className={`walk-hint t3-help${help ? '' : ' gone'}`}>
-          <span>{tr('移动鼠标看四周 ·')} <K k="W" /><K k="A" /><K k="S" /><K k="D" /> {tr('走 ·')} <K k="Shift" /> {tr('跑 ·')} <K k={tr('空格')} /> {tr('跳，双击飞行 ·')} <K k="Ctrl" /> {tr('下蹲')}</span>
-          <span>{tr('对准建筑点击或按')} <K k="F" /> {tr('进去 ·')} <K k="V" /> {tr('视角 ·')} <K k="T" /> {tr('昼夜 ·')} <K k="M" /> {tr('回到平面 ·')} <K k="Esc" /> {tr('放开鼠标')}</span>
+          <span>{tr('移动鼠标环视 ·')} <K k="W" /><K k="A" /><K k="S" /><K k="D" /> {tr('走 ·')} <K k="Shift" /> {tr('跑 ·')} <K k={tr('空格')} /> {tr('跳，双击飞行 ·')} <K k="Ctrl" /> {tr('下蹲')}</span>
+          <span>{tr('对准建筑点击或按')} <K k="F" /> {tr('进入 ·')} <K k="V" /> {tr('视角 ·')} <K k="T" /> {tr('昼夜 ·')} <K k="M" /> {tr('返回平面 ·')} <K k="Esc" /> {tr('释放鼠标')}</span>
         </div>
       )}
-      <div className="pnl t3-mini" title={tr('点一下就过去，点建筑就到它门口')} onClick={onMini}>
+      <div className="pnl t3-mini" title={tr('点击前往该处，点击建筑前往门口')} onClick={onMini}>
         <div dangerouslySetInnerHTML={{ __html: mini }} />
         <svg className="t3-me" viewBox={MINI_VB} preserveAspectRatio="xMidYMid meet">
           <g ref={marker}><path className="cone" d="M0,0L130,-60A143,143 0 0 1 130,60Z" /><circle r="24" /></g>

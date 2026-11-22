@@ -40,14 +40,14 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
   }
   const change = () => done(async () => {
     for (const r of roles) await api.setPaseoDefault(r, { provider: m.provider, model: m.model, thinking: think(defs[r], m) });
-    toast(tr('{0}以后默认用 {1} · {2}。已经在跑的保持原样。', ROLES.filter(r => roles.has(r[0])).map(r => r[1]).join(tr('和')), m.label, m.name));
+    toast(tr('{0}后续默认使用 {1} · {2}。运行中的保持不变。', ROLES.filter(r => roles.has(r[0])).map(r => r[1]).join(tr('和')), m.label, m.name));
   });
   const newest = [...news].reverse().slice(0, SHOWN);
 
   return (
-    <aside className="mnews" role="dialog" aria-label={tr('Paseo 里有新模型')}>
-      <button className="ib mn-x" onClick={() => setHidden(true)} title={tr('先收起，下次打开页面再提醒')}><Icon n="close" size={14} /></button>
-      <span className="mn-k"><Icon n="spark" size={15} />{news.length > 1 ? tr('Paseo 里上线了 {0} 个新模型', news.length) : tr('Paseo 里上线了新模型')}</span>
+    <aside className="mnews" role="dialog" aria-label={tr('Paseo 有新模型')}>
+      <button className="ib mn-x" onClick={() => setHidden(true)} title={tr('暂时收起，下次打开时提醒')}><Icon n="close" size={14} /></button>
+      <span className="mn-k"><Icon n="spark" size={15} />{news.length > 1 ? tr('Paseo 新增 {0} 个新模型', news.length) : tr('Paseo 已上线新模型')}</span>
       <div className="mn-list" role="radiogroup">
         {newest.map(n => (
           <button key={n.key} role="radio" aria-checked={n.key === m.key} className={`mn-m${n.key === m.key ? ' on' : ''}`} onClick={() => setKey(n.key)}>
@@ -55,14 +55,14 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
             {n.thinking.length > 0 && <span className="muted small">{tr('思考强度 {0}', n.thinking.join(' / '))}</span>}
           </button>
         ))}
-        {news.length > SHOWN && <span className="muted small">{tr('还有 {0} 个，在设置的「员工 Agent」里都能选', news.length - SHOWN)}</span>}
+        {news.length > SHOWN && <span className="muted small">{tr('另有 {0} 个，可在设置的「员工 Agent」中选择', news.length - SHOWN)}</span>}
       </div>
-      <p className="mn-q">{tr('要让谁以后默认用 {0}？', m.name)}</p>
+      <p className="mn-q">{tr('谁后续默认使用 {0}？', m.name)}</p>
       <div className="mn-roles">
         {ROLES.map(([r, name]) => (
           <label key={r} className="mn-role">
             <input type="checkbox" checked={roles.has(r)} onChange={e => setRoles(s => { const x = new Set(s); if (e.target.checked) x.add(r); else x.delete(r); return x; })} />
-            <span><b>{name}</b><span className="muted small">{tr('现在：{0}', spec(defs[r]) || tr('未设置'))}{roles.has(r) ? ` → ${[m.model, think(defs[r], m)].filter(Boolean).join(' / ')}` : ''}</span></span>
+            <span><b>{name}</b><span className="muted small">{tr('当前：{0}', spec(defs[r]) || tr('未设置'))}{roles.has(r) ? ` → ${[m.model, think(defs[r], m)].filter(Boolean).join(' / ')}` : ''}</span></span>
           </label>
         ))}
       </div>
@@ -70,7 +70,7 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
         <button className="btn pri" disabled={busy || !roles.size} onClick={change}>{tr('切换')}</button>
         <button className="btn" disabled={busy} onClick={() => done(async () => {})}>{tr('忽略')}</button>
       </div>
-      <p className="muted small">{tr('只改以后启动时的默认。已经在跑的负责人和小助手保持原样，小助手开新对话时换上。')}</p>
+      <p className="muted small">{tr('仅修改后续启动时的默认配置。运行中的负责人与小助手保持不变，小助手新建对话时切换。')}</p>
     </aside>
   );
 }

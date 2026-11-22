@@ -8,7 +8,7 @@ export const POST_NAMES = { lead: tr('项目负责人'), coder: tr('代码员工
 const STATE = { running: tr('在岗'), starting: tr('启动中'), blocked: tr('受阻'), off: tr('暂停'), ended: tr('结束') };
 const LABEL = { running: tr('负责人在岗'), starting: tr('正在启动负责人'), blocked: tr('负责人启动受阻'), off: tr('负责人已暂停'), ended: tr('项目已结束') };
 const ABOUT = {
-  starting: tr('正在启动，它的第一条消息是项目简报。'), off: tr('已暂停。打开开关后，它接着原来的对话推进项目。'),
+  starting: tr('正在启动，首条消息为项目简报。'), off: tr('已暂停。打开开关后，负责人将沿原对话推进项目。'),
   ended: tr('项目已经结束，负责人已停止常驻。'),
 };
 
@@ -56,8 +56,8 @@ export function ResidentControl({ lineId, resident, model, sample, talk, toast, 
     <div className="resident-copy" aria-live="polite">
       <b className="resident-title">{tr('项目负责人')}<ResidentMark resident={resident} /></b>
       {resident.state === 'running' && <p className="muted small">{[resident.runtime, model, resident.status === 'working' ? tr('工作中') : resident.status === 'idle' ? tr('待命') : resident.status].filter(Boolean).join(' · ')}</p>}
-      {resident.state === 'blocked' && <p className="resident-warning">{resident.note ?? tr('负责人没有启动起来。')}</p>}
-      {resident.state === 'off' && sample && <p className="muted small">{tr('这是样例项目，内容是占位的。打开开关后，由真实的负责人接手推进。')}</p>}
+      {resident.state === 'blocked' && <p className="resident-warning">{resident.note ?? tr('负责人启动失败。')}</p>}
+      {resident.state === 'off' && sample && <p className="muted small">{tr('此为样例项目，内含占位内容。打开开关后，将由真实负责人接管推进。')}</p>}
       {(resident.state === 'starting' || resident.state === 'ended' || (resident.state === 'off' && !sample)) && <p className="muted small">{ABOUT[resident.state]}</p>}
     </div>
     {resident.state !== 'ended' && <div className="resident-actions">

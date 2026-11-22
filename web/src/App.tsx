@@ -42,16 +42,16 @@ function useToasts() {
 }
 
 const TABS: ['cards' | 'agents' | 'town', string, string][] = [
-  ['cards', tr('进展'), tr('每个项目的进展、风险和要你决定的事，也能和负责人对话')],
+  ['cards', tr('进展'), tr('每个项目的进展、风险与待你决定的事项，并可与负责人对话')],
   ['agents', tr('员工'), tr('查看员工状态、处理请求并参与对话')],
-  ['town', tr('小镇'), tr('每个项目的细节：中控屏的面板，或者在小镇里走动')],
+  ['town', tr('小镇'), tr('每个项目的详情：中控屏面板，或在小镇中漫游')],
 ];
 
 type Mode = 'board' | '2d' | '3d';
 const MODES: [Mode, 'board' | 'map' | 'cube', string, string][] = [
-  ['board', 'board', tr('中控屏'), tr('每个项目的细节摆成面板，一眼看全')],
-  ['2d', 'map', tr('平面'), tr('小镇的平面地图，走到建筑门口办事')],
-  ['3d', 'cube', tr('3D 漫游'), tr('在 3D 的小镇里走动，人站在同一个地方')],
+  ['board', 'board', tr('中控屏'), tr('以面板展示各项目详情，全局总览')],
+  ['2d', 'map', tr('平面'), tr('小镇平面地图，至建筑门口处理事项')],
+  ['3d', 'cube', tr('3D 漫游'), tr('在 3D 小镇中漫游，立足当前位置')],
 ];
 
 function Gear() {
@@ -120,7 +120,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   }, []);
 
   useEffect(() => {
-    api.world().then(setWorld).catch(e => push(tr('连不上服务器：{0}', e.message)));
+    api.world().then(setWorld).catch(e => push(tr('无法连接服务器：{0}', e.message)));
     api.lines().then(ls => { setLines(ls); setLinesIn(true); }).catch(() => {});
   }, [push]);
 
@@ -146,7 +146,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const notes = useMemo(() => {
     const n: Record<string, string> = {};
     const running = world?.running.filter(r => r.status === 'running').length ?? 0;
-    if (running) n.mill = tr('{0} 个项目在跑', running);
+    if (running) n.mill = tr('{0} 个项目运行中', running);
     return n;
   }, [world]);
 
@@ -371,14 +371,14 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
       )}
 
       <header className="hud">
-        <a className="brand" href={href('/')} onClick={e => follow(e, '/')} title={tr('回到首页')}><Logo /><b>Papertown</b></a>
+        <a className="brand" href={href('/')} onClick={e => follow(e, '/')} title={tr('返回首页')}><Logo /><b>Papertown</b></a>
         <nav className="seg" ref={tabs} aria-label={tr('视图')}>
           {TABS.map(([t, name, tip]) => {
             const on = t === 'town' ? view === 'console' || view === 'world' : view === t, to = t === 'town' ? townAt.current : PATHS[t];
             return <a key={t} href={href(to)} className={on ? 'on' : ''} aria-current={on ? 'page' : undefined} title={tip} onClick={e => follow(e, to)}>{name}</a>;
           })}
         </nav>
-        <div className="seg modes" role="radiogroup" aria-label={tr('怎么看小镇')}>
+        <div className="seg modes" role="radiogroup" aria-label={tr('查看方式')}>
           {MODES.map(([m, icon, name, tip]) => (
             <button key={m} role="radio" aria-checked={mode === m} className={mode === m ? 'on' : ''} title={tip} aria-label={name} onClick={() => show(m)}>
               <Icon n={icon} size={15} /><span>{name}</span>
@@ -386,16 +386,16 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           ))}
         </div>
         {hud && <div className="hud-quiet">
-          <span><b>{hud.lines.running}</b> {tr('个项目在做')}</span>
+          <span><b>{hud.lines.running}</b> {tr('个项目进行中')}</span>
           <span>{tr('{0}/{1} 位负责人在岗', hud.leads.running, hud.leads.on)}</span>
         </div>}
         <div className="hud-r">
-          {!!overview?.counts.needs && <a className="chip warn aw-count" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('等你 {0}', overview.counts.needs)}</a>}
+          {!!overview?.counts.needs && <a className="chip warn aw-count" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('待处理 {0}', overview.counts.needs)}</a>}
           {hud && <span className={`chip ${!online ? 'bad' : 'ok'}`}>
-            {!online ? tr('连接断开') : DEMO ? tr('静态演示') : tr('已连接')}</span>}
+            {!online ? tr('连接已断开') : DEMO ? tr('静态演示') : tr('已连接')}</span>}
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>
-          <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('问这一页的事、请它帮你办，或者写一个新 idea（/）')}
+          <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('询问本页内容、交由小助手处理，或输入新 idea（/）')}
             onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('小助手')}</button>
         </div>
       </header>
@@ -413,7 +413,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
         </aside>
       )}
 
-      {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('走动 · 到门口按')} <kbd>F</kbd> {tr('进去 · 也可以直接点建筑')}</div>}
+      {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('移动 · 至门口按')} <kbd>F</kbd> {tr('进入 · 也可直接点击建筑')}</div>}
 
       <Dock view={view} open={chatOpen} setOpen={setChatOpen} away={!!sheet || (view === 'world' && dim !== '2d')}
         target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} toast={push} />

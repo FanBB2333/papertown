@@ -34,9 +34,9 @@ export type ModId = 'overview' | 'survey' | 'code' | 'exp' | 'data' | 'paper' | 
 // the research flow's parts (flow.ts: the research loop frames its nodes by the same ones), then the town's own panels
 const MODS: { id: ModId; name: string; sub: string; icon: IconName; town?: boolean }[] = [
   ...FLOW,
-  { id: 'depts', name: tr('部门'), sub: tr('小镇各部门在做什么：项目、员工和实验'), icon: 'dots', town: true },
-  { id: 'skills', name: 'Skills', sub: tr('给全局、项目、对话配 skill'), icon: 'spark', town: true },
-  { id: 'mcp', name: 'MCP', sub: tr('小镇接的 MCP server 和它们给的工具'), icon: 'plug', town: true },
+  { id: 'depts', name: tr('部门'), sub: tr('小镇各部门工作概况：项目、员工与实验'), icon: 'dots', town: true },
+  { id: 'skills', name: 'Skills', sub: tr('为全局、项目、对话配置 skill'), icon: 'spark', town: true },
+  { id: 'mcp', name: 'MCP', sub: tr('小镇接入的 MCP server 及提供的工具'), icon: 'plug', town: true },
   { id: 'rag', name: tr('图书馆'), sub: tr('馆藏、RAG 检索设置和检索试验台'), icon: 'books', town: true },
   { id: 'rules', name: tr('工作边界'), sub: tr('全局、项目、员工三层：必须完成、不能做、需要询问'), icon: 'shield', town: true },
   { id: 'trace', name: tr('调用轨迹'), sub: tr('小镇最近的模型和工具调用'), icon: 'clock', town: true },
@@ -57,17 +57,17 @@ const BY_BUILDING: Record<string, ModId> = {
 type Filter = 'all' | 'run' | 'you' | 'done' | 'local';
 const FILTERS: [Filter, string, (l: Line, asked: Set<string>) => boolean][] = [
   ['all', tr('全部'), () => true],
-  ['run', tr('在跑'), l => l.status === 'running'],
-  ['you', tr('等你'), (l, asked) => l.lead.state === 'blocked' || asked.has(l.id)],
+  ['run', tr('运行中'), l => l.status === 'running'],
+  ['you', tr('待处理'), (l, asked) => l.lead.state === 'blocked' || asked.has(l.id)],
   ['done', tr('已完成'), l => l.status === 'done'],
   ['local', tr('本地项目'), l => !!l.linked],
 ];
 const needsYou = FILTERS[2][2];
 // the 员工 panel's tabs: [what the assistant reads, the tab, what it does]
 const ROLES = {
-  lead: ['项目负责人', tr('项目负责人'), tr('盯着项目进度、催员工干活，有要紧的事向你汇报、问你')],
-  coder: ['代码员工', tr('代码员工'), tr('在代码仓库里写代码、跑测试，再把实验提交出去')],
-  writer: ['写作员工', tr('写作员工'), tr('在论文目录里写稿、改稿、排版')],
+  lead: ['项目负责人', tr('项目负责人'), tr('跟进项目进度、督促员工推进，遇重要事项向你汇报请示')],
+  coder: ['代码员工', tr('代码员工'), tr('在代码仓库中编写代码、运行测试，并提交实验')],
+  writer: ['写作员工', tr('写作员工'), tr('在论文目录撰稿、修改文稿并排版')],
 } as const;
 const hasPaper = (l: Line) => !!l.linked?.paper || l.files.includes('main.tex');
 
@@ -137,7 +137,7 @@ export function Console(p: Props) {
     const off = listen(e => {
       if (e.type !== 'report') return;
       const r = e.report as Report, l = p.lines.find(x => x.id === r.line_id);
-      if (r.kind === 'ask' && r.data.open) p.toast(tr('#{0} 的{1}在问你：{2}', l?.seq ?? '?', trx(r.data.who ?? ''), gist(r.data.question, 80)));
+      if (r.kind === 'ask' && r.data.open) p.toast(tr('#{0} 的{1}提问：{2}', l?.seq ?? '?', trx(r.data.who ?? ''), gist(r.data.question, 80)));
       else if (r.kind === 'report' && r.data.key) p.toast(tr('#{0} 的{1}：{2}', l?.seq ?? '?', trx(r.data.who ?? ''), gist(r.data.text, 80)));
       if (r.kind === 'ask') load();
     });
@@ -159,7 +159,7 @@ export function Console(p: Props) {
   const go = useCallback((to: { line?: string; mod?: ModId }, record = true) => {
     const nextLine = to.line ?? id, nextMod = to.mod ?? mod;
     if (nextLine === id && nextMod === mod) return;
-    if (nextLine !== id && unsaved() && !confirm(tr('有文件还没保存，换项目会丢掉这些修改。继续吗？'))) return;
+    if (nextLine !== id && unsaved() && !confirm(tr('有文件尚未保存，切换项目将丢失修改，是否继续？'))) return;
     if (record && id) setHist(h => ({ back: [...h.back.slice(-40), [id, mod]], fwd: [] }));
     setDir(IDS.indexOf(nextMod) >= IDS.indexOf(mod) ? 1 : -1);
     if (nextLine !== id) dirty.current = { code: 0, paper: 0 };
@@ -249,8 +249,8 @@ export function Console(p: Props) {
     <main className="p-console">
       <div className="cm-empty">
         <Icon n="folder" size={40} />
-        <h3>{tr('还没有项目')}</h3>
-        <p>{tr('放入一颗 idea，孵化场会先查重，再按工序做下去。也可以在 projects.json 里接入你自己的代码和论文仓库。')}</p>
+        <h3>{tr('暂无项目')}</h3>
+        <p>{tr('放入一颗 idea，孵化场将先查重，再按工序推进。也可在 projects.json 中接入你自己的代码与论文仓库。')}</p>
         <button className="btn pri" onClick={p.onIdea}><Icon n="plus" size={14} />{tr('放入一颗新 idea')}</button>
       </div>
     </main>
@@ -268,7 +268,7 @@ export function Console(p: Props) {
             <Icon n="folder" size={16} /><span className="crumb-l">{tr('全部项目')}</span>
           </button>
           <Icon n="chevron" size={13} className="fb-sep" />
-          <button className={`crumb cur${rail ? ' open' : ''}`} onClick={() => setRail(r => !r)} title={tr('换一个项目（⌘K）')}>
+          <button className={`crumb cur${rail ? ' open' : ''}`} onClick={() => setRail(r => !r)} title={tr('切换项目（⌘K）')}>
             <i className={`fb-dot d-${cur.status}`} /><b>#{cur.seq}</b><span className="crumb-t">{cur.title}</span>
             <Icon n="down" size={14} className="fb-chev" />
           </button>
@@ -277,19 +277,19 @@ export function Console(p: Props) {
         </nav>
         <div className="fb-r">
           {waiting > 0 && (
-            <button className="fb-wait" onClick={() => { setRailTab('projects'); setFilter('you'); setRail(true); }} title={tr('{0} 个项目等你', waiting)}>
-              <i /><span className="fb-wl">{tr('{0} 个项目等你', waiting)}</span><b className="fb-wn">{waiting}</b>
+            <button className="fb-wait" onClick={() => { setRailTab('projects'); setFilter('you'); setRail(true); }} title={tr('{0} 项目待处理', waiting)}>
+              <i /><span className="fb-wl">{tr('{0} 项目待处理', waiting)}</span><b className="fb-wn">{waiting}</b>
             </button>
           )}
           <label className="fb-q">
             <Icon n="lens" size={15} />
-            <input ref={searchRef} placeholder={tr('找项目或论文')} value={q} onChange={e => { setQ(e.target.value); setRail(true); }}
+            <input ref={searchRef} placeholder={tr('查找项目论文')} value={q} onChange={e => { setQ(e.target.value); setRail(true); }}
               onFocus={() => setRail(true)} />
             <kbd>⌘K</kbd>
           </label>
           <button className="btn pri fb-new" onClick={p.onIdea}><Icon n="plus" size={14} />{tr('新 idea')}</button>
           {cur && (
-            <button className={`fb-side${side ? ' on' : ''}`} onClick={toggleSide} title={side ? tr('收起（⌘J）') : tr('和 #{0} 的负责人对话（⌘J）', cur.seq)}
+            <button className={`fb-side${side ? ' on' : ''}`} onClick={toggleSide} title={side ? tr('收起（⌘J）') : tr('与 #{0} 的负责人对话（⌘J）', cur.seq)}
               aria-pressed={side}><Icon n="person" size={16} /><span>{tr('负责人')}</span></button>
           )}
         </div>
@@ -494,11 +494,11 @@ function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, asked
             <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{name}<span>{counts[k]}</span></button>
           ) : null)}
         </div>}
-        <span className="rail-keys muted small"><kbd>←</kbd><kbd>→</kbd> {tr('挑选')} · <kbd>Enter</kbd> {tr('打开')} · <kbd>Esc</kbd> {tr('收起')}</span>
+        <span className="rail-keys muted small"><kbd>←</kbd><kbd>→</kbd> {tr('选择')} · <kbd>Enter</kbd> {tr('打开')} · <kbd>Esc</kbd> {tr('收起')}</span>
         {phone && (
           <label className="rail-q">
             <Icon n="lens" size={16} />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder={tr('找项目或论文')} enterKeyHint="search" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={tr('查找项目论文')} enterKeyHint="search" />
             {q && <button className="ib" onClick={() => setQ('')} aria-label={tr('清空')}><Icon n="close" size={14} /></button>}
           </label>
         )}
@@ -515,7 +515,7 @@ function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, asked
               <span className="fc-tab" /><span className="fc-body"><Icon n="plus" size={26} /><b>{tr('放入一颗新 idea')}</b></span>
             </button>
           )}
-          {!shown.length && (q || filter !== 'all' || tab === 'papers') && <p className="muted rail-none">{tab === 'papers' && !q ? tr('还没有哪个项目写到论文。') : tr('没有符合的项目。')}</p>}
+          {!shown.length && (q || filter !== 'all' || tab === 'papers') && <p className="muted rail-none">{tab === 'papers' && !q ? tr('暂无项目进入论文阶段。') : tr('暂无匹配项目。')}</p>}
         </div>
         <button className="rail-arrow r" onClick={() => scroll(1)} aria-label={tr('向右')}><Icon n="right" size={18} /></button>
       </div>

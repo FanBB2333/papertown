@@ -26,7 +26,7 @@ export function RagRoom(p: Props) {
     try {
       const r = await api.ragSet(opts);
       setV(r); setOpts(r.opts);
-      p.toast(tr('检索设置已保存，员工下一次检索就按这个来'));
+      p.toast(tr('检索设置已保存，员工下次检索将按此执行'));
     } catch (e) {
       p.toast((e as Error).message);
     }
@@ -38,7 +38,7 @@ export function RagRoom(p: Props) {
     try { setRes(await api.ragSearch(q.trim())); } catch (e) { p.toast((e as Error).message); } finally { setBusy(false); }
   }
 
-  if (!v || !opts) return <div className="room-empty"><p>{tr('正在清点馆藏…')}</p></div>;
+  if (!v || !opts) return <div className="room-empty"><p>{tr('清点馆藏中…')}</p></div>;
   const dirty = JSON.stringify(opts) !== JSON.stringify(v.opts);
 
   return (
@@ -52,9 +52,9 @@ export function RagRoom(p: Props) {
 
       <div className="rag-grid">
         <section className="pnl-s rag-bench">
-          <h4>{tr('试一下检索')}</h4>
+          <h4>{tr('测试检索')}</h4>
           <div className="rag-q">
-            <input className="shelf-q" value={q} placeholder={tr('中文也行：稀疏注意力的 KV cache 压缩')} onChange={e => setQ(e.target.value)}
+            <input className="shelf-q" value={q} placeholder={tr('支持中文：稀疏注意力的 KV cache 压缩')} onChange={e => setQ(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) search(); }} />
             <button className="btn pri" disabled={busy || !q.trim()} onClick={search}>{busy ? tr('检索中…') : tr('检索')}</button>
           </div>
@@ -62,7 +62,7 @@ export function RagRoom(p: Props) {
             <>
               <p className="muted small">
                 {res.method === 'embedding' ? tr('向量排序') : tr('关键词覆盖率排序')} {tr('· 检索词：')}{res.terms.map(t => <code key={t}>{t}</code>)}
-                {res.expanded !== res.query && <> {tr('· 扩展成「')}{res.expanded}{tr('」')}</>}
+                {res.expanded !== res.query && <> {tr('· 扩展为「')}{res.expanded}{tr('」')}</>}
               </p>
               <ol className="rag-hits">
                 {res.hits.map((h, i) => (
@@ -75,28 +75,28 @@ export function RagRoom(p: Props) {
                     </div>
                   </li>
                 ))}
-                {!res.hits.length && <p className="muted small">{tr('没有找到。换几个英文关键词试试。')}</p>}
+                {!res.hits.length && <p className="muted small">{tr('未找到。请尝试更换英文关键词。')}</p>}
               </ol>
             </>
           )}
         </section>
         <details className="pnl-s rag-opts" open={dirty || undefined}>
           <summary>
-            <h4>{tr('检索怎么跑')}</h4>
-            <span className="muted small">{tr('返回 {0} 篇 · 召回 {1} 篇候选再打分 · {2}', v.opts.top_k, v.opts.candidates,
+            <h4>{tr('检索机制')}</h4>
+            <span className="muted small">{tr('返回 {0} 篇 · 召回 {1} 篇候选并评分 · {2}', v.opts.top_k, v.opts.candidates,
               v.opts.vectors && v.embed.configured ? tr('向量排序') : tr('关键词覆盖率排序'))}</span>
           </summary>
-          <p className="muted small">{v.index}{tr('。孵化场查重、造纸厂找 baseline、印刷厂找引用，都走这一套。')}</p>
-          <label className="field">{tr('默认返回几篇')} <b>{opts.top_k}</b>
+          <p className="muted small">{v.index}{tr('。孵化场查重、造纸厂找 baseline、印刷厂找引用均采用此流程。')}</p>
+          <label className="field">{tr('默认返回篇数')} <b>{opts.top_k}</b>
             <input type="range" min={v.limits.top_k[0]} max={v.limits.top_k[1]} value={opts.top_k} onChange={e => setOpts({ ...opts, top_k: +e.target.value })} />
           </label>
-          <label className="field">{tr('全文召回多少篇候选再打分')} <b>{opts.candidates}</b>
+          <label className="field">{tr('评分前全文召回候选篇数')} <b>{opts.candidates}</b>
             <input type="range" min={v.limits.candidates[0]} max={v.limits.candidates[1]} step={5} value={opts.candidates} onChange={e => setOpts({ ...opts, candidates: +e.target.value })} />
           </label>
           <label className={`check${v.embed.configured ? '' : ' off'}`}>
             <input type="checkbox" checked={opts.vectors && v.embed.configured} disabled={!v.embed.configured} onChange={e => setOpts({ ...opts, vectors: e.target.checked })} />
-            <span>{tr('用向量排序候选')}
-              <small className="muted">{v.embed.configured ? `${v.embed.model ?? ''}${v.embed.host ? ` @ ${v.embed.host}` : ''}` : tr('没有配 embeddings 接口（PAPERTOWN_EMBED_*），现在按关键词覆盖率排序')}</small>
+            <span>{tr('按向量排序候选')}
+              <small className="muted">{v.embed.configured ? `${v.embed.model ?? ''}${v.embed.host ? ` @ ${v.embed.host}` : ''}` : tr('未配置 embeddings 接口（PAPERTOWN_EMBED_*），当前按关键词覆盖率排序')}</small>
             </span>
           </label>
           <div className="btns">

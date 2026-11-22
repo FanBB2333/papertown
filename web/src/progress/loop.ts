@@ -7,7 +7,7 @@ import { tr, trx } from '../i18n';
 import { status } from './Checks';
 
 export const loopPath = (seq: number) => `/progress/${seq}/loop`;
-export const GATE_ST: Record<GateState, string> = { pass: tr('放行'), warn: tr('告警'), block: tr('阻断'), none: tr('还没查'), off: tr('已关闭') };
+export const GATE_ST: Record<GateState, string> = { pass: tr('放行'), warn: tr('告警'), block: tr('阻断'), none: tr('尚未检查'), off: tr('已关闭') };
 export const LEVEL: Record<string, string> = { block: tr('阻断'), warn: tr('告警') };
 export const VERDICT: Record<string, string> = { pass: tr('契合'), warn: tr('预警'), fail: tr('偏离'), wait: tr('待判断'), none: tr('待判断') };
 export const ROLE: Record<TaskTo, string> = { lead: tr('负责人'), coder: tr('代码员工'), writer: tr('写作员工') };
@@ -71,7 +71,7 @@ export function blockPills(key: FlowPart, ns: CanvasNode[]): Pill[] {
       tone: stuck ? 'bad' : open ? 'run' : 'pass' });
   }
   const mine = key === 'overview' ? ns.find(n => n.kind === 'human')?.items?.length ?? 0 : 0;
-  if (mine) out.push({ text: tr('{0} 件等你拍板', mine), tone: 'warn' });
+  if (mine) out.push({ text: tr('{0} 件待你拍板', mine), tone: 'warn' });
   return out;
 }
 // what the project has in a part of the flow, as the console's overview says it: its repository, jobs, results, paper, agents
@@ -79,26 +79,26 @@ export function partLine(key: FlowPart, r: ProjectCard, v: CanvasView): string {
   const code = r.repos.code, paper = r.repos.paper, j = r.jobs, c = r.card;
   if (key === 'overview') return c ? [c.progress != null && `${c.progress}%`, c.milestone].filter(Boolean).join(' · ') : '';
   if (key === 'code') return code && !code.missing ? [code.name, code.branch, code.dirty ? tr('{0} 处改动', code.dirty) : ''].filter(Boolean).join(' · ') : tr('暂无代码仓库');
-  if (key === 'exp') return [j.running && tr('{0} 在跑', j.running), j.queued && tr('{0} 排队', j.queued), j.done && tr('{0} 个有结果', j.done), j.failed && tr('{0} 失败', j.failed)].filter(Boolean).join(' · ');
-  if (key === 'paper') return paper && !paper.missing ? [paper.main ?? paper.name, paper.pdf ? 'PDF' : tr('还没编译')].filter(Boolean).join(' · ') : tr('暂无论文仓库');
-  if (key === 'agents') return (['lead', 'coder', 'writer'] as const).filter(x => v.agents[x].there).map(x => ROLE[x]).join(' · ') || tr('还没有 agent');
+  if (key === 'exp') return [j.running && tr('{0} 运行中', j.running), j.queued && tr('{0} 排队', j.queued), j.done && tr('{0} 个有结果', j.done), j.failed && tr('{0} 失败', j.failed)].filter(Boolean).join(' · ');
+  if (key === 'paper') return paper && !paper.missing ? [paper.main ?? paper.name, paper.pdf ? 'PDF' : tr('尚未编译')].filter(Boolean).join(' · ') : tr('暂无论文仓库');
+  if (key === 'agents') return (['lead', 'coder', 'writer'] as const).filter(x => v.agents[x].there).map(x => ROLE[x]).join(' · ') || tr('暂无 agent');
   return '';
 }
 
 // the line a station shows under its name: what its stage has produced, from the project's card
 export function stationLine(n: CanvasNode, r: ProjectCard, v: CanvasView): string {
   const k = n.ref, paper = r.repos.paper, code = r.repos.code;
-  if (n.locked) return tr('等「{0}」卡口清零', trx(n.locked.title));
+  if (n.locked) return tr('待「{0}」卡口清零', trx(n.locked.title));
   if (k === 'exp' && (r.jobs.done || r.jobs.running || r.jobs.queued || r.jobs.failed)) {
-    return [r.jobs.done && tr('{0} 完成', r.jobs.done), r.jobs.running && tr('{0} 在跑', r.jobs.running), r.jobs.queued && tr('{0} 排队', r.jobs.queued),
+    return [r.jobs.done && tr('{0} 完成', r.jobs.done), r.jobs.running && tr('{0} 运行中', r.jobs.running), r.jobs.queued && tr('{0} 排队', r.jobs.queued),
       r.jobs.failed && tr('{0} 失败', r.jobs.failed)].filter(Boolean).join(' · ');
   }
   if ((k === 'write' || k === 'ship') && paper && !paper.missing) {
     const words = paper.words ? (paper.words >= 1000 ? `${(paper.words / 1000).toFixed(1)}k` : String(paper.words)) : '';
     return k === 'write' ? [paper.main, words && tr('{0} 词', words), paper.pdf ? 'PDF' : ''].filter(Boolean).join(' · ')
-      : paper.pdf ? tr('PDF + 源码') : tr('还没有 PDF');
+      : paper.pdf ? tr('PDF + 源码') : tr('暂无 PDF');
   }
   if (k === 'method' && code && !code.missing) return [code.branch, code.files && tr('{0} 个文件', code.files)].filter(Boolean).join(' · ');
-  if (k === 'team') return (['lead', 'coder', 'writer'] as const).filter(x => v.agents[x].there).map(x => ROLE[x]).join(' · ') || tr('还没有 agent');
+  if (k === 'team') return (['lead', 'coder', 'writer'] as const).filter(x => v.agents[x].there).map(x => ROLE[x]).join(' · ') || tr('暂无 agent');
   return trx(n.note ?? '');
 }

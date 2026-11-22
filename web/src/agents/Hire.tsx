@@ -8,15 +8,15 @@ import { kindName } from './watch';
 type Post = 'coder' | 'writer' | 'lead';
 type Runtime = NonNullable<StartOpts['runtime']>;
 const POSTS: [Post, string, string][] = [
-  ['coder', tr('代码员工'), tr('在项目的代码目录里写代码、跑测试并提交实验。')],
-  ['writer', tr('写作员工'), tr('在项目的论文目录里撰写和修改稿件。')],
+  ['coder', tr('代码员工'), tr('在项目代码目录中编写代码、运行测试并提交实验。')],
+  ['writer', tr('写作员工'), tr('在项目论文目录中撰写与修改文稿。')],
   ['lead', tr('项目负责人'), tr('推进项目：启动员工、分派任务、收尾工序并汇报。')],
 ];
 const RUNTIMES: [Runtime, string, string][] = [
   ['paseo', 'Paseo', tr('对话在 Paseo 中进行，桌面端和手机同步可见。')],
-  ['herdr', 'herdr', tr('在 herdr 的标签页里运行 CLI，可随时接入终端。')],
-  ['tmux', 'tmux', tr('在 tmux 窗口里运行 CLI，可随时接入终端。')],
-  ['pi', 'pi', tr('本机的 pi，使用它自己的模型设置和登录。')],
+  ['herdr', 'herdr', tr('在 herdr 标签页中运行 CLI，可随时接入终端。')],
+  ['tmux', 'tmux', tr('在 tmux 窗口中运行 CLI，可随时接入终端。')],
+  ['pi', 'pi', tr('本机 pi，使用其自身的模型设置与登录。')],
 ];
 
 export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
@@ -45,7 +45,7 @@ export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
   const blocked = (r: Runtime) => !backends || !info || !rosters ? ''
     : r === 'paseo' ? (info.status.ok ? '' : info.status.note)
       : r === 'pi' ? (post === 'lead' ? tr('项目负责人暂不支持 pi。') : rosters.coder.available.ok ? '' : rosters.coder.available.note)
-        : !backends[r].ok ? backends[r].note : Object.values(backends.clis).some(Boolean) ? '' : tr('本机没有找到 Claude Code、Codex 或 Antigravity。');
+        : !backends[r].ok ? backends[r].note : Object.values(backends.clis).some(Boolean) ? '' : tr('本机未找到 Claude Code、Codex 或 Antigravity。');
   // the providers a runtime offers: Paseo's own list, or the CLIs found on this machine with Paseo's model catalog
   const providers = useMemo(() => {
     if (!backends || !info) return [];
@@ -81,8 +81,8 @@ export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
   return <Dialog.Root open onOpenChange={v => { if (!v && !busy) onClose(); }}>
     <Dialog size="lg" className="st-dlg aw-hire">
       <Dialog.Title>{tr('新建员工')}</Dialog.Title>
-      <Dialog.Description>{tr('为项目的一个岗位启动员工。工作目录是该项目在小镇里的目录，启动时会收到项目简报。')}</Dialog.Description>
-      {!ready ? <p className="aw-hire-wait">{error || tr('加载中…')}</p> : !rosters.coder.roster.length ? <Banner description={tr('尚无项目。请先在小镇里放入一颗 idea。')} /> : <form onSubmit={start}>
+      <Dialog.Description>{tr('为项目指定岗位启动员工。工作目录为该项目在小镇中的目录，启动时将收到项目简报。')}</Dialog.Description>
+      {!ready ? <p className="aw-hire-wait">{error || tr('加载中…')}</p> : !rosters.coder.roster.length ? <Banner description={tr('暂无项目。请先在小镇中放入一颗 idea。')} /> : <form onSubmit={start}>
         <div className="aw-hire-row">
           <Select label={tr('项目')} value={line} items={Object.fromEntries(rosters.coder.roster.map(r => [r.line.id, `#${r.line.seq} ${r.line.title}`]))} onValueChange={v => setLine(String(v))} disabled={busy} />
         </div>
@@ -92,7 +92,7 @@ export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
           <p className="aw-hire-note">{POSTS.find(p => p[0] === post)![2]}</p>
         </div>
         {existing ? <div className="aw-hire-there">
-          <p>{tr('这个岗位的员工已在运行。')}</p>
+          <p>{tr('该岗位的员工已在运行。')}</p>
           <Button type="button" variant="primary" onClick={() => { onOpen(existing); onClose(); }}>{tr('打开对话')}</Button>
         </div> : <>
           <div className="aw-hire-row">

@@ -101,9 +101,9 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
 
           {loaded && st === 'failed' && (
             <section className="jd-call bad">
-              <h4>{tr('为什么失败')}</h4>
+              <h4>{tr('失败原因')}</h4>
               {error ? <><p className="jd-why mono">{lastLine(error)}</p>{error.trim().includes('\n') && <Tail text={error} />}</>
-                : <p className="jd-why">{exit != null ? tr('退出码 {0}，没有留下出错信息', exit) : tr('没有留下出错信息')}</p>}
+                : <p className="jd-why">{exit != null ? tr('退出码 {0}，未记录错误信息', exit) : tr('未记录错误信息')}</p>}
             </section>
           )}
           {loaded && st === 'running' && (
@@ -111,14 +111,14 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
               <h4>{tr('进度')}{pct != null && <b>{Math.round(pct)}%</b>}</h4>
               {pct != null && <span className="jd-bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></span>}
               {nv?.progress && <p className="mono jd-line">{nv.progress}{nv.progress_at ? <em> · {ago(nv.progress_at)}</em> : null}</p>}
-              {limitBar && <p className="small jd-lim">{limitBar}{tr('已跑 {0} / 上限 {1}', dur(took), dur(limit))}</p>}
+              {limitBar && <p className="small jd-lim">{limitBar}{tr('运行 {0} / 上限 {1}', dur(took), dur(limit))}</p>}
             </section>
           )}
           {nv && st === 'queued' && (
             <section className={`jd-call ${nv.held ? 'warn' : 'wait'}`}>
-              <h4>{nv.held ? tr('挂起：依赖没跑成，等人决定') : tr('在等什么')}</h4>
+              <h4>{nv.held ? tr('挂起：依赖失败，待人工决定') : tr('等待条件')}</h4>
               <p className="jd-line">
-                {deps ? tr('等这些任务先跑完：') : nv.lane ? tr('排在 {0} 这条队列里', nv.lane) : tr('等一张放得下它的卡')}
+                {deps ? tr('等待以下任务完成：') : nv.lane ? tr('正在队列 {0} 中排队', nv.lane) : tr('等待有余量的显卡')}
               </p>
               {deps}
               {nv.held_reason && <p className="small jd-line">{nv.held_reason}</p>}
@@ -135,7 +135,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
               <span><em>{tr('在哪')}</em><b>{where || '—'}</b></span>
               {nv && <span><em>{tr('显存预留')}</em><b>{nv.vram_mb ? bytes(nv.vram_mb * 1024 * 1024) : '—'}{nv.gpus ? ` · ${tr('{0} 张卡', nv.gpus)}` : ''}</b></span>}
               {st !== 'queued' && <span><em>{tr('开始')}</em><b>{started ? when(Date.parse(started)) : '—'}</b></span>}
-              {st !== 'queued' && <span><em>{tr('结束')}</em><b>{ended ? when(Date.parse(ended)) : st === 'running' ? tr('还在跑') : '—'}</b></span>}
+              {st !== 'queued' && <span><em>{tr('结束')}</em><b>{ended ? when(Date.parse(ended)) : st === 'running' ? tr('运行中') : '—'}</b></span>}
               {st === 'queued' && <span><em>{tr('提交')}</em><b>{nv?.created_at ? `${when(Date.parse(nv.created_at))} · ${ago(nv.created_at)}` : '—'}</b></span>}
               <span><em>{st === 'queued' ? tr('上限') : tr('用时')}</em><b>{st === 'queued' ? (limit ? dur(limit) : '—') : <>{dur(took)}{limit ? <i className="muted"> / {dur(limit)}</i> : null}</>}</b>
                 {limitBar}</span>
@@ -158,7 +158,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
               <ResultTable rows={rows.slice(0, 160)} keys={keys} />
             </section>
           )}
-          {cut && <section className="jd-s res"><h4><i />{tr('结果')}<span className="muted small">{tr('太长，nvidb 只交回了前一部分')}</span></h4><pre className="jd-pre">{cut}…</pre></section>}
+          {cut && <section className="jd-s res"><h4><i />{tr('结果')}<span className="muted small">{tr('内容过长，nvidb 仅返回前部分')}</span></h4><pre className="jd-pre">{cut}…</pre></section>}
 
           {(nv?.command || farm?.command) && (
             <section className="jd-s cmd">
@@ -166,7 +166,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
               <pre className="jd-pre code">{nv?.command ?? farm?.command}</pre>
             </section>
           )}
-          {error && st !== 'failed' && <section className="jd-s err"><h4><i />{tr('出错信息')}</h4><pre className="jd-pre bad">{error}</pre></section>}
+          {error && st !== 'failed' && <section className="jd-s err"><h4><i />{tr('错误信息')}</h4><pre className="jd-pre bad">{error}</pre></section>}
           {farm?.log && <section className="jd-s cmd"><h4><i />{tr('日志')}</h4><pre className="jd-pre">{farm.log}</pre></section>}
           {(nv?.events.length ?? 0) > 0 && (
             <section className="jd-s ev">
@@ -178,7 +178,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
               ))}</ol>
             </section>
           )}
-          <p className="muted small jd-ro">{tr('只读：要改这个任务，用 nvidb 的命令（nvidb job …）。')}</p>
+          <p className="muted small jd-ro">{tr('只读：修改此任务请使用 nvidb 命令（nvidb job …）。')}</p>
         </div>
         <i className="jd-edge" />
       </aside>

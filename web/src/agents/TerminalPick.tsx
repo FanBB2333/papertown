@@ -29,12 +29,12 @@ export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBacke
   const clis = Object.keys(backends.clis).filter(p => backends.clis[p]);
   const shown = (['herdr', 'tmux'] as const).filter(b => !fixedBackend || fixedBackend === b);
   return <>
-    <p className="muted small">{tr('Claude Code、Codex 或 Antigravity 在 herdr 的标签页或 tmux 窗口里运行，可随时接入终端查看和操作。')}</p>
+    <p className="muted small">{tr('Claude Code、Codex 或 Antigravity 在 herdr 标签页或 tmux 窗口中运行，可随时接入终端查看并操作。')}</p>
     {shown.length > 1 && <div className="seg mini" role="radiogroup" aria-label={tr('终端后端')}>
       {shown.map(b => <button key={b} role="radio" aria-checked={backend === b} className={backend === b ? 'on' : ''} disabled={!backends[b].ok || busy} onClick={() => setBackend(b)}>{b}</button>)}
     </div>}
     {shown.filter(b => !backends[b].ok).map(b => <p className="warn-box small" key={b}>{b}{tr('：')}{backends[b].note}</p>)}
-    {!clis.length ? <p className="warn-box small">{tr('本机没有找到 Claude Code、Codex 或 Antigravity。')}</p> : <>
+    {!clis.length ? <p className="warn-box small">{tr('本机未找到 Claude Code、Codex 或 Antigravity。')}</p> : <>
       <label className="field">{tr('CLI')}
         <Select value={provider} options={clis.map(p => ({ value: p, label: kindName(p) }))} onChange={v => { setProvider(v); setModel(''); setThinking(''); }} />
       </label>

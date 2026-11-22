@@ -14,7 +14,7 @@ import { ago, base, bytes, ext, flat, headlines, toggled, useFetch } from './uti
 
 interface Props { lineId: string; tick: number; onOpenFile: (path: string) => void }
 
-const KIND_NAME: Record<string, string> = { processed: tr('处理好的结果'), raw: tr('原始数据'), other: tr('其他') };
+const KIND_NAME: Record<string, string> = { processed: tr('已处理结果'), raw: tr('原始数据'), other: tr('其他') };
 const SETTING = /^(config|args|params|hparams|settings|cfg)\./i;
 const SCORE = /(overall|score|acc|pass@|f1|bleu|rouge|exact|mean|avg|win|success|reward|auc|recall|precision)/i;
 
@@ -29,8 +29,8 @@ export function Data(p: Props) {
   const none = !results && !runs.length && !files.length && !meta.datasets.length;
   return (
     <div className="cm-page data">
-      {none && <div className="cm-empty in"><Icon n="table" size={30} /><h3>{tr('还没有实验数据')}</h3>
-        <p>{tr('方法设计定下数据集和指标，实验跑完后结果会出现在这里，代码仓库里的 results/、outputs/ 等目录也会列出来。')}</p></div>}
+      {none && <div className="cm-empty in"><Icon n="table" size={30} /><h3>{tr('暂无实验数据')}</h3>
+        <p>{tr('方法设计确定数据集与指标，实验运行完成后结果将显示在此处，代码仓库的 results/、outputs/ 等目录也会列出。')}</p></div>}
 
       {(meta.datasets.length > 0 || meta.metrics.length > 0) && (
         <div className="meta-line">
@@ -54,8 +54,8 @@ export function Data(p: Props) {
 function Results({ r }: { r: NonNullable<LineData['results']> }) {
   return (
     <section className="cs">
-      <div className="cs-h"><span className="cs-ic"><Icon n="spark" size={15} /></span><h3>{tr('结果')}</h3>{r.simulated && <span className="chip warn">{tr('模拟结果，不是真实实验')}</span>}
-        <span className="muted small">{tr('每个指标一张图，从高到低，橙色是我们的方法')}</span></div>
+      <div className="cs-h"><span className="cs-ic"><Icon n="spark" size={15} /></span><h3>{tr('结果')}</h3>{r.simulated && <span className="chip warn">{tr('模拟结果，非真实实验')}</span>}
+        <span className="muted small">{tr('每个指标一张图，由高到低，橙色为本方法')}</span></div>
       <div className="sm-grid">
         {r.metrics.map((m, i) => {
           const ours = r.rows.find(x => x.ours)?.values[i];
@@ -64,7 +64,7 @@ function Results({ r }: { r: NonNullable<LineData['results']> }) {
           return (
             <div key={m} className="sm" style={{ ['--i' as string]: i }}>
               <h4 title={m}>{m}</h4>
-              {delta != null && <p className={`sm-d ${delta >= 0 ? 'up' : 'down'}`}>{delta >= 0 ? '▲' : '▼'} {delta >= 0 ? tr('比最好的 baseline 高 {0}', fmtNum(delta)) : tr('比最好的 baseline 低 {0}', fmtNum(-delta))}</p>}
+              {delta != null && <p className={`sm-d ${delta >= 0 ? 'up' : 'down'}`}>{delta >= 0 ? '▲' : '▼'} {delta >= 0 ? tr('高于最优 baseline {0}', fmtNum(delta)) : tr('低于最优 baseline {0}', fmtNum(-delta))}</p>}
               <Bars bars={r.rows.map(x => ({ id: x.method, label: x.method, v: x.values[i], hi: x.ours, sub: m })).sort((a, b) => b.v - a.v)} />
             </div>
           );
@@ -86,7 +86,7 @@ function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) =>
   const [pick, setPick] = useState<string | null>(null);
   return (
     <section className="cs">
-      <div className="cs-h"><span className="cs-ic"><Icon n="flask" size={15} /></span><h3>{tr('运行结果 · {0}', runs.length)}</h3><span className="muted small">{tr('nvidb 任务交回的 result.json，点一张卡看全部')}</span></div>
+      <div className="cs-h"><span className="cs-ic"><Icon n="flask" size={15} /></span><h3>{tr('运行结果 · {0}', runs.length)}</h3><span className="muted small">{tr('nvidb 任务返回的 result.json，点击卡片查看全部')}</span></div>
       <div className="rcards">
         {runs.map((r, i) => {
           const h = headlines(r.result, 4);
@@ -96,7 +96,7 @@ function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) =>
               <span className="rc-h"><StateTag s={stOf(r.state)} /><span className="muted small">{ago(r.finished_at)}</span></span>
               <b className="rc-n" title={r.name}>{r.name}</b>
               {h.length ? <span className="rc-m">{h.map(x => <span key={x.k}><strong>{fmtNum(x.v)}</strong><em title={x.k}>{x.name}</em></span>)}</span>
-                : '_truncated' in (r.result as object) ? <span className="muted small rc-s">{tr('结果太长，nvidb 只交回了前一部分，点开看')}</span>
+                : '_truncated' in (r.result as object) ? <span className="muted small rc-s">{tr('结果过长，nvidb 仅返回前一部分，点击查看')}</span>
                   : <span className="muted small rc-s">{JSON.stringify(r.result).slice(0, 120)}</span>}
             </button>
           );
@@ -104,7 +104,7 @@ function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) =>
       </div>
       {shared.length > 0 && (
         <div className="rc-cmp">
-          <span className="ide-t">{tr('按一个指标对比')}</span>
+          <span className="ide-t">{tr('按单个指标对比')}</span>
           <div className="chips">{shared.slice(0, 16).map(s => <button key={s} className={`chip pick${pick === s ? ' on' : ''}`} onClick={() => setPick(x => (x === s ? null : s))}>{s}</button>)}</div>
           {pick && <Bars onPick={onOpen} bars={runs.map(r => ({ id: r.id, label: r.name, v: flat(r.result).find(([x]) => x === pick)?.[1] as number, sub: pick }))
             .filter(b => typeof b.v === 'number').sort((a, b) => b.v - a.v)} />}
@@ -190,7 +190,7 @@ function Files({ lineId, files, onOpen }: { lineId: string; files: DFile[]; onOp
               </div>
             );
           })}
-          {!dirs.length && <p className="muted small">{tr('没有匹配的文件。')}</p>}
+          {!dirs.length && <p className="muted small">{tr('无匹配文件。')}</p>}
         </div>
       </div>
     </section>
@@ -271,7 +271,7 @@ function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen:
             <thead><tr>
               <th className="cmp-tag">{tr('文件夹')}</th>
               {shownCols.map(k => (
-                <th key={k} title={`${k}\n${tr('点一下排序，再点一下换方向，双击画成条形图')}`}
+                <th key={k} title={`${k}\n${tr('点击排序，再次点击切换方向，双击生成条形图')}`}
                   className={`sortable num${sort?.k === k ? ` on ${sort.up ? 'up' : 'down'}` : ''}${focus === k ? ' focus' : ''}`}
                   onClick={() => setSort(s => ({ k, up: s?.k === k ? !s.up : false }))} onDoubleClick={() => setFocus(k)}>{short(k)}</th>
               ))}
@@ -294,8 +294,8 @@ function Compare({ lineId, fam, onOpen }: { lineId: string; fam: Family; onOpen:
             ))}</tbody>
           </table>
         </div>
-      ) : done >= members.length && <p className="muted small">{tr('这些文件里没有在各个文件夹之间不同的数值。')}</p>}
-      <p className="muted small cmp-hint">{tr('颜色越深数值越大（每列各自比较）· 点表头排序 · 双击表头画成条形图 · 点一行打开那个文件')}</p>
+      ) : done >= members.length && <p className="muted small">{tr('这些文件中各文件夹间的数值均无差异。')}</p>}
+      <p className="muted small cmp-hint">{tr('颜色越深数值越大（各列独立比较）· 点击表头排序 · 双击生成条形图 · 点击行打开对应文件')}</p>
       <Tip tip={tip} />
     </div>
   );
@@ -365,7 +365,7 @@ function FileSheet({ lineId, path, onClose, onCode }: { lineId: string; path: st
         <div className="jd-body">
           {f.err ? <p className="warn-box small">{f.err}</p>
             : !f.data ? <p className="muted small">{tr('读取中…')}</p>
-              : f.data.binary || f.data.too_big ? <p className="muted small">{f.data.binary ? tr('二进制文件（{0}），这里不能打开。', bytes(f.data.size)) : tr('文件太大（{0}），请在本地打开。', bytes(f.data.size))}</p>
+              : f.data.binary || f.data.too_big ? <p className="muted small">{f.data.binary ? tr('二进制文件（{0}），此处无法打开。', bytes(f.data.size)) : tr('文件过大（{0}），请在本地打开。', bytes(f.data.size))}</p>
                 : grid ? <Sheet {...grid} /> : <pre className="json">{(f.data.text ?? '').slice(0, 40000)}</pre>}
         </div>
       </aside>
@@ -389,8 +389,8 @@ function Sheet({ head, rows, more }: { head: string[]; rows: string[][]; more: n
   return (
     <div className="sheet">
       <div className="fb-bar">
-        <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('在表里找')} value={q} onChange={e => setQ(e.target.value)} /></label>
-        <span className="muted small">{tr('{0} 行', shown.length)}{more ? ` · ${tr('只读了前面的，还有 {0} 行', more)}` : ''}</span>
+        <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('表内查找')} value={q} onChange={e => setQ(e.target.value)} /></label>
+        <span className="muted small">{tr('{0} 行', shown.length)}{more ? ` · ${tr('仅读取前段，另有 {0} 行', more)}` : ''}</span>
       </div>
       <div className="grid-wrap">
         <table className="ctab grid">
@@ -407,7 +407,7 @@ function Sheet({ head, rows, more }: { head: string[]; rows: string[][]; more: n
           ))}</tbody>
         </table>
       </div>
-      {shown.length > 600 && <p className="muted small">{tr('只显示前 600 行，用上面的搜索缩小范围。')}</p>}
+      {shown.length > 600 && <p className="muted small">{tr('仅显示前 600 行，请用上方搜索缩小范围。')}</p>}
     </div>
   );
 }

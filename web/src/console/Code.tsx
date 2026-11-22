@@ -22,10 +22,10 @@ export function Code(p: Props) {
   if (!place) return (
     <div className="cm-empty">
       <Icon n="code" size={34} />
-      <h3>{tr('这个项目还没有代码仓库')}</h3>
-      <p>{p.info.linked ? tr('projects.json 里没有给它配代码目录，或者那个目录不在了。')
-        : tr('idea 项目的代码由代码员工来写：项目负责人启动它之后，代码会出现在这里。')}</p>
-      {!p.info.linked && <button className="btn" onClick={p.onAgents}>{tr('去配代码员工')}</button>}
+      <h3>{tr('该项目暂无代码仓库')}</h3>
+      <p>{p.info.linked ? tr('projects.json 未为其配置代码目录，或该目录已不存在。')
+        : tr('idea 项目代码由代码员工编写：项目负责人启动后，代码将显示在此处。')}</p>
+      {!p.info.linked && <button className="btn" onClick={p.onAgents}>{tr('配置代码员工')}</button>}
     </div>
   );
   return <Repo {...p} />;
@@ -64,7 +64,7 @@ function Repo(p: Props) {
   const showDiff = () => {
     if (!cur) return;
     if (diff) { setDiff(null); return; }
-    api.wsDiff(p.lineId, 'code', cur.path).then(d => setDiff({ path: d.path, text: d.diff || tr('（和 git 里的一样）') })).catch(e => p.toast((e as Error).message));
+    api.wsDiff(p.lineId, 'code', cur.path).then(d => setDiff({ path: d.path, text: d.diff || tr('（与 git 中一致）') })).catch(e => p.toast((e as Error).message));
   };
 
   return (
@@ -92,7 +92,7 @@ function Repo(p: Props) {
           </div>
         )}
         <Tree files={files} cur={f.cur} onOpen={open} dirty={f.dirtySet} filter={q} root="code" />
-        {f.tree.data?.truncated && <p className="muted small tr-none">{tr('文件太多，只列出前 4000 个。')}</p>}
+        {f.tree.data?.truncated && <p className="muted small tr-none">{tr('文件过多，仅列出前 4000 个。')}</p>}
       </aside>
       <section className="ide-main">
         <Tabs f={f} lead={phone && <button className="ib ide-files" onClick={() => setBrowse(true)}><Icon n="folder" size={16} />{tr('文件')}</button>} extra={cur && <>
@@ -101,7 +101,7 @@ function Repo(p: Props) {
         </>} />
         <div className="ide-ed">
           <FileView f={f} goto={goto} onCursor={(l, c, s) => { setPos([l, c]); setPicked(s); }} empty={
-            <div className="fv-note"><Icon n="code" size={30} /><b>{place.name}</b><p className="muted small">{tr('从左边挑一个文件打开。⌘S 保存，改动直接写回仓库。')}</p></div>} />
+            <div className="fv-note"><Icon n="code" size={30} /><b>{place.name}</b><p className="muted small">{tr('从左侧选择文件打开。⌘S 保存，改动直接写入仓库。')}</p></div>} />
           {diff && <Diff text={diff.text} onClose={() => setDiff(null)} />}
         </div>
         <footer className="ide-status">

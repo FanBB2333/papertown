@@ -52,16 +52,16 @@ function Tools({ n, on }: { n: CanvasNode; on: boolean }) {
   const g = n.gate, hardGate = n.kind === 'hard' && n.check?.stage ? o.v?.nodes.find(x => x.id === `gate:${n.check!.stage}`) : null;
   return (
     <NodeToolbar isVisible={on} position={Position.Top} offset={10} className="cv-tb" onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-      {g && g.state === 'block' && <button className="t" disabled={o.busy} onClick={() => o.gate(g.stage, 'rework')} title={tr('把没过的规则写成修补单，发给这道工序的员工')}><Icon n="refresh" size={13} />{g.ticket ? tr('打回一轮') : tr('派修补单')}</button>}
+      {g && g.state === 'block' && <button className="t" disabled={o.busy} onClick={() => o.gate(g.stage, 'rework')} title={tr('将未通过规则生成修补单，派发给该工序员工')}><Icon n="refresh" size={13} />{g.ticket ? tr('退回一轮') : tr('派发修补单')}</button>}
       {g && g.checks.length > 1 && <button className="t" disabled={o.busy} onClick={() => o.gate(g.stage, g.open ? 'close' : 'open')}>{g.open ? tr('收起') : tr('展开 {0} 条', g.checks.length)}</button>}
-      {hardGate?.gate?.state === 'block' && n.check && bad(n.check) && <button className="t" disabled={o.busy} onClick={() => o.gate(hardGate.gate!.stage, 'rework')}><Icon n="refresh" size={13} />{tr('派修补单')}</button>}
-      {n.kind === 'soft' && n.check && bad(n.check) && <button className="t" onClick={() => o.fix(n)} title={tr('建一个纠偏任务，连回它盯着的工序，你看过再发')}><Icon n="wand" size={13} />{tr('派人纠偏')}</button>}
-      {n.check?.on && n.check.kind === 'soft' && <button className="t" disabled={o.busy} onClick={() => o.ask(n)}><Icon n="send" size={13} />{tr('现在问')}</button>}
+      {hardGate?.gate?.state === 'block' && n.check && bad(n.check) && <button className="t" disabled={o.busy} onClick={() => o.gate(hardGate.gate!.stage, 'rework')}><Icon n="refresh" size={13} />{tr('派发修补单')}</button>}
+      {n.kind === 'soft' && n.check && bad(n.check) && <button className="t" onClick={() => o.fix(n)} title={tr('创建纠偏任务并关联至监测工序，确认后派发')}><Icon n="wand" size={13} />{tr('指派纠偏')}</button>}
+      {n.check?.on && n.check.kind === 'soft' && <button className="t" disabled={o.busy} onClick={() => o.ask(n)}><Icon n="send" size={13} />{tr('立即询问')}</button>}
       {n.kind === 'task' && n.status === 'draft' && (
         <button className="t" disabled={o.busy || !(n.agent_id ? n.agent?.started : o.agents?.[n.to ?? 'lead'].there)} onClick={() => o.send(n)}><Icon n="send" size={13} />{tr('发送')}</button>
       )}
-      <button title={tr('在它旁边派任务')} aria-label={tr('在它旁边派任务')} onClick={() => o.beside(n, 'task')}><Icon n="plus" size={14} /></button>
-      {(n.kind === 'task' || n.kind === 'note') && <button title={tr('复制一个')} aria-label={tr('复制一个')} onClick={() => o.dup(n)}><Icon n="copy" size={13} /></button>}
+      <button title={tr('在旁派发任务')} aria-label={tr('在旁派发任务')} onClick={() => o.beside(n, 'task')}><Icon n="plus" size={14} /></button>
+      {(n.kind === 'task' || n.kind === 'note') && <button title={tr('创建副本')} aria-label={tr('创建副本')} onClick={() => o.dup(n)}><Icon n="copy" size={13} /></button>}
       <button className="danger" title={mine(n) ? tr('删掉') : tr('从回路上拿掉')} aria-label={mine(n) ? tr('删掉') : tr('从回路上拿掉')} onClick={() => o.drop(n)}><Icon n="close" size={13} /></button>
     </NodeToolbar>
   );
@@ -83,7 +83,7 @@ function StageNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
         <b>{n.title}</b>
         {line && <p title={line}>{line}</p>}
       </div>
-      {n.role && <em className="cv-who" title={who?.there ? '' : tr('还没启动')}><i className={`dot s-${who?.there ? who.status : 'stopped'}`} />{ROLE[n.role as TaskTo]}</em>}
+      {n.role && <em className="cv-who" title={who?.there ? '' : tr('尚未启动')}><i className={`dot s-${who?.there ? who.status : 'stopped'}`} />{ROLE[n.role as TaskTo]}</em>}
       {st === 'run' && <span className="cv-st-bar"><i style={{ width: `${pct}%` }} /></span>}
       <Far t={n.title} x={n.locked ? tr('锁住') : st === 'run' ? `${pct}%` : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
@@ -107,8 +107,8 @@ function GateNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
           <b>{one ? trx(one.title) : tr('{0}卡口组', g.name)}</b>
           <span className="cv-num">{one ? (val != null ? `${val} / ≤${one.max ?? 0}` : '—') : tr('{0}/{1} 过', g.pass, g.total)}</span>
         </p>
-        {!one && <span className="cv-matrix">{cs.map(c => <i key={c.id} className={`m-${level(c)}`} title={`${trx(c.title)} · ${c.on ? (level(c) === 'pass' ? tr('放行') : level(c) === 'none' ? tr('还没查') : LEVEL[level(c)]) : tr('已关闭')}`} />)}</span>}
-        <small>{g.before > g.now ? tr('R1:{0}处 → R{1}:{2}处', g.before, o.v.rounds, g.now) : g.now ? tr('还有 {0} 处', g.now) : look === 'none' ? tr('还没有可查的') : tr('全部放行')}
+        {!one && <span className="cv-matrix">{cs.map(c => <i key={c.id} className={`m-${level(c)}`} title={`${trx(c.title)} · ${c.on ? (level(c) === 'pass' ? tr('放行') : level(c) === 'none' ? tr('尚未检查') : LEVEL[level(c)]) : tr('已关闭')}`} />)}</span>}
+        <small>{g.before > g.now ? tr('R1:{0}处 → R{1}:{2}处', g.before, o.v.rounds, g.now) : g.now ? tr('剩余 {0} 处', g.now) : look === 'none' ? tr('暂无可查项') : tr('全部放行')}
           {g.ticket && g.round > 0 && !g.waived && look === 'block' && <> · {tr('第 {0} 轮', g.round)}</>}</small>
         <Far t={one ? trx(one.title) : tr('{0}卡口', g.name)} x={one ? (val != null ? `${val}/${one.max ?? 0}` : '') : g.total ? `${g.pass}/${g.total}` : ''} />
       </div>
@@ -126,9 +126,9 @@ function HardNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   return (
     <div className={`cv-gw g-${lv === 'none' ? 'none' : lv} small${selected ? ' on' : ''}`} {...refOf(n)}>
       <div className="cv-n cv-gate">
-        <header><i className="cv-dia" /><span>HARD · {ruleNo(trx(c.rule))} {c.prio}</span><em className="cv-chip">{lv === 'pass' ? tr('放行') : lv === 'off' ? tr('已关闭') : lv === 'none' ? tr('还没查') : LEVEL[lv]}</em></header>
+        <header><i className="cv-dia" /><span>HARD · {ruleNo(trx(c.rule))} {c.prio}</span><em className="cv-chip">{lv === 'pass' ? tr('放行') : lv === 'off' ? tr('已关闭') : lv === 'none' ? tr('尚未检查') : LEVEL[lv]}</em></header>
         <p className="cv-gate-t"><b>{trx(c.title)}</b><span className="cv-num">{val != null ? `${val} / ≤${c.max ?? 0}` : '—'}</span></p>
-        <small>{first != null && val != null && first !== val ? tr('R1:{0} → 现在:{1}', first, val) : c.last?.findings[0]?.file ? `${c.last.findings[0].file}:${c.last.findings[0].line}` : trx(c.rule)}
+        <small>{first != null && val != null && first !== val ? tr('R1:{0} → 当前:{1}', first, val) : c.last?.findings[0]?.file ? `${c.last.findings[0].file}:${c.last.findings[0].line}` : trx(c.rule)}
           {first && val === 0 ? ` · ${tr('清零')}` : ''}</small>
         <Far t={trx(c.title)} x={val != null ? `${val}/${c.max ?? 0}` : ''} />
       </div>
@@ -149,7 +149,7 @@ function SoftNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   return (
     <div className={`cv-n cv-sen v-${k}${c.on ? '' : ' off'}${selected ? ' on' : ''}`} {...refOf(n)}>
       <header>
-        <i className="cv-ring2" /><span>SOFT · {stage ? tr('盯着{0}', stage.title ?? '') : tr('一直会问')} · {tr('每 {0}h', c.every ?? 24)}</span>
+        <i className="cv-ring2" /><span>SOFT · {stage ? tr('监测{0}', stage.title ?? '') : tr('持续询问')} · {tr('每 {0}h', c.every ?? 24)}</span>
         {c.due && <em className="cv-chip due">{tr('到期')}</em>}
         <em className="cv-chip">{c.on ? VERDICT[k] : tr('已关闭')}</em>
       </header>
@@ -166,8 +166,8 @@ function SpecNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   return (
     <div className={`cv-n cv-spec${selected ? ' on' : ''}`} {...refOf(n)}>
       <header><i className="cv-spdot" /><span>SOFT SPEC · Prompt / AGENTS.md</span></header>
-      <b>{rules.length ? clip(rules[0].text, 30) : tr('项目简报与写给 agent 的要求')}</b>
-      <small>{rules.length ? tr('{0} 条要求 · 概率引导，下游验证', rules.length) : tr('工作边界里还没写要求 · 概率引导')}</small>
+      <b>{rules.length ? clip(rules[0].text, 30) : tr('项目简报与 agent 要求')}</b>
+      <small>{rules.length ? tr('{0} 条要求 · 概率引导，下游验证', rules.length) : tr('工作边界中尚未填写要求 · 概率引导')}</small>
       <Far t={tr('软限制')} x={rules.length ? tr('{0} 条', rules.length) : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
@@ -176,7 +176,7 @@ function SpecNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
 
 function ClampNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   const rules = n.rules ?? [];
-  const what = rules.length ? rules.slice(0, 2).map(r => clip(r.text, 16)).join(' · ') : tr('还没有绑定动作的边界');
+  const what = rules.length ? rules.slice(0, 2).map(r => clip(r.text, 16)).join(' · ') : tr('暂无绑定动作的边界');
   return (
     <div className={`cv-n cv-clamp${selected ? ' on' : ''}`} {...refOf(n)}>
       <header><i /><span>HARD CLAMP · {tr('代码硬边界')}</span></header>
@@ -195,8 +195,8 @@ function HumanNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
     <div className={`cv-hw${items.length ? ' has' : ''}${selected ? ' on' : ''}`} {...refOf(n)}>
       <div className="cv-n cv-human">
         <header><Icon n="person" size={13} /><span>HUMAN GATE · {tr('人类拍板节点')}</span></header>
-        <b>{items.length ? tr('{0} 件等你拍板', items.length) : tr('没有等你拍板的事')}</b>
-        <small>{items.length ? clip(items[0].text, 40) : tr('超轮次的卡口、偏离的巡检、agent 的提问会来这里')}</small>
+        <b>{items.length ? tr('{0} 件待你拍板', items.length) : tr('暂无待你拍板事项')}</b>
+        <small>{items.length ? clip(items[0].text, 40) : tr('超轮次卡口、偏离巡检及 agent 提问将汇集在此处')}</small>
         <Far t={tr('人类拍板')} x={items.length ? tr('{0} 件', items.length) : ''} />
       </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
@@ -208,7 +208,7 @@ function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   const st = (n.status ?? 'draft') as TaskStatus, role = useContext(OpsCtx)?.agents?.[n.to ?? 'lead'];
   const who = n.agent_id ? { there: !!n.agent?.started, status: n.agent?.status } : role;
   const when = st === 'sent' ? n.sent_at : st === 'draft' ? null : n.done_at;
-  const head = n.loop === 'hard' ? tr('硬打回修补单 · 第 {0} 轮', n.round || 1) : n.loop === 'soft' ? tr('软纠偏任务单') : tr('任务');
+  const head = n.loop === 'hard' ? tr('硬退回修补单 · 第 {0} 轮', n.round || 1) : n.loop === 'soft' ? tr('软纠偏任务单') : tr('任务');
   const wait = n.waits?.[0];
   const trail = n.trail ?? [];
   return (
@@ -216,7 +216,7 @@ function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
       <header>
         {n.loop === 'hard' ? <Icon n="refresh" size={11} /> : n.loop === 'soft' ? <Icon n="spark" size={11} /> : <i className={`dot s-${who?.there ? who.status : 'stopped'}`} />}
         <span>{head} · {n.id} · {WHO[n.to ?? 'lead']}</span>
-        <em>{n.converged ? tr('已收敛') : n.escalated ? tr('等你拍板') : TASK[st]}</em>
+        <em>{n.converged ? tr('已收敛') : n.escalated ? tr('待你拍板') : TASK[st]}</em>
       </header>
       <b>{n.title}</b>
       {st === 'queued' && <p className="turn"><Icon n="clock" size={11} />{n.wait_note ? tr('派发失败，将自动重试') : wait?.kind === 'dir' ? tr('等待 {0} 释放工作目录', wait.id) : wait ? tr('等待 {0} {1}', (n.waits ?? []).map(w => w.id).join('、'), wait.stale ? tr('复核') : tr('完成')) : tr('轮到时自动派发')}</p>}
@@ -225,8 +225,8 @@ function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
         ? <p>{tr('收敛进度：{0}', trail.map(x => tr('{0} 处', x)).join(' → '))}</p>
         : n.text && <p className="two">{clip(n.text, 96)}</p>}
       {n.result && <p className="res">{clip(n.result, 60)}</p>}
-      {when && <small>{st === 'sent' ? tr('{0}发出', ago(when)) : ago(when)}{(n.log?.length ?? 0) > 2 && ` · ${tr('{0} 条记录', n.log?.length ?? 0)}`}</small>}
-      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated ? tr('等你拍板') : n.stale ? tr('待复核') : TASK[st]} />
+      {when && <small>{st === 'sent' ? tr('{0}派发', ago(when)) : ago(when)}{(n.log?.length ?? 0) > 2 && ` · ${tr('{0} 条记录', n.log?.length ?? 0)}`}</small>}
+      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated ? tr('待你拍板') : n.stale ? tr('待复核') : TASK[st]} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );

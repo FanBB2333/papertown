@@ -23,29 +23,29 @@ export type Target = { kind: 'assistant'; draft?: string } | { kind: 'idea' };
 
 // starter questions: per panel, on any panel, about what you point at, about what you selected
 const ASK: Record<string, string[]> = {
-  overview: [tr('这个项目走到哪一步了？'), tr('接下来最该做什么？'), tr('有什么要我处理的？')],
-  survey: [tr('和最接近的几篇比，我们新在哪？'), tr('哪篇最值得细读？')],
-  code: [tr('这个仓库是怎么组织的？'), tr('训练的入口在哪？'), tr('最近改了什么？')],
-  exp: [tr('最近失败的任务是怎么回事？'), tr('现在有哪些任务在跑？'), tr('哪组结果最好？')],
+  overview: [tr('当前进展至哪一步？'), tr('下一步应当做什么？'), tr('有什么待我处理的？')],
+  survey: [tr('与最相近的几篇相比，创新点何在？'), tr('哪篇最值得细读？')],
+  code: [tr('这个仓库是如何组织的？'), tr('训练的入口在哪？'), tr('近期有何修改？')],
+  exp: [tr('最近失败任务的原因是什么？'), tr('当前有哪些任务在运行？'), tr('哪组结果最好？')],
   data: [tr('这些数字说明了什么？'), tr('哪组结果最好？')],
-  paper: [tr('论文还缺什么？'), tr('帮我编译一下论文')],
-  agents: [tr('员工们在做什么？'), tr('有谁卡住了吗？')],
-  skills: [tr('这些 skill 都是做什么的？')],
-  mcp: [tr('这些 MCP 服务器都连上了吗？')],
-  rag: [tr('图书馆里有哪些和这个项目相关的论文？')],
+  paper: [tr('论文还缺什么？'), tr('请代为编译论文')],
+  agents: [tr('员工们在做什么？'), tr('有人受阻吗？')],
+  skills: [tr('这些 skill 各自有何用途？')],
+  mcp: [tr('这些 MCP 服务器均已连接吗？')],
+  rag: [tr('图书馆中有哪些与本项目相关的论文？')],
 };
-const ASK_ANY = [tr('这一页在讲什么？'), tr('有什么要我处理的？'), tr('各个项目现在怎么样？')];
+const ASK_ANY = [tr('本页内容是什么？'), tr('有什么待我处理的？'), tr('各项目当前进展如何？')];
 const ASK_AT = [tr('这是什么？'), tr('这里有问题吗？')];
-const ASK_SEL = [tr('解释一下这段'), tr('这段有什么问题？')];
+const ASK_SEL = [tr('解释这段内容'), tr('这段有什么问题？')];
 
 // a sent message split into what went along with it and your words, or a note from the town
 type Said = { text: string; where?: string; pointed?: string; selected?: string; selectedAt?: string; projects?: string[]; event?: string };
 function parse(t: string): Said {
   // Paseo drops the <start> mark from a conversation's first prompt, so its opening words mark it too
-  if (/^(<start>|你是 Papertown 中控屏的小助手)/.test(t)) return { text: '', event: tr('小助手启动了，先读了一遍它的说明。') };
+  if (/^(<start>|你是 Papertown 中控屏的小助手)/.test(t)) return { text: '', event: tr('小助手已启动，首先读取了其说明。') };
   const ev = /^<event>\n?([\s\S]*?)\n?<\/event>\s*$/.exec(t);
   if (ev) return { text: '', event: ev[1].trim() };
-  if (/^<bounds>/.test(t)) return { text: '', event: tr('你改了工作边界，它收到了新的一份。') };
+  if (/^<bounds>/.test(t)) return { text: '', event: tr('你修改了工作边界，小助手已收到更新。') };
   const pg = /^<page>\n([\s\S]*?)\n<\/page>\n*/.exec(t);
   const rest = pg ? t.slice(pg[0].length) : t;
   const pj = /^<projects>\n([\s\S]*?)\n<\/projects>\n*/.exec(rest);
@@ -231,8 +231,8 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea 
         <b>{tr('小助手')}</b>
         {a?.started && <span>{AGENT_STATUS[a.status] ?? a.status}{a.model ? ` · ${a.model}` : ''}</span>}
       </div>
-      <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('之前的对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>
-      {a?.started && <button className="ib" title={tr('新对话：可以换一个模型重新开始')} onClick={fresh}><Icon n="compose" size={16} /></button>}
+      <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('历史对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>
+      {a?.started && <button className="ib" title={tr('新对话：可切换模型重新开始')} onClick={fresh}><Icon n="compose" size={16} /></button>}
       {a?.started && a.runtime === 'paseo' && (
         <button className="ib" title={tr('在 Paseo 桌面端打开这段对话')} onClick={() => api.openInPaseo(ID).catch(e => toast((e as Error).message))}><Icon n="ext" size={16} /></button>
       )}
@@ -253,8 +253,8 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea 
         <>
           {head(a)}
           <div className="as-start">
-            <p className="as-lead">{tr('一个本地 agent，和员工一样跑在 Paseo 或 pi 里。它知道你在看哪一页、指着什么，会去读这一页数据的出处来回答。要它办的事，先在这里请你点头。')}</p>
-            <Earlier limit={3} title={tr('接着之前的对话')} onPick={resume} />
+            <p className="as-lead">{tr('本地 agent，与员工一样运行于 Paseo 或 pi。小助手可感知你当前页面及指向内容，并读取页面数据来源作答。由其执行的操作，须先在此经你确认。')}</p>
+            <Earlier limit={3} title={tr('继续此前对话')} onPick={resume} />
             <div className="hire-card">
               <h3>Paseo</h3>
               <PaseoPick busy={busy} onStart={start} role="assistant" />
@@ -342,9 +342,9 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
         }}>
           {err && (
             <div className="as-off" role="status">
-              <b>{tr('连不上 Paseo，小助手现在收不到消息')}</b>
+              <b>{tr('无法连接 Paseo，小助手当前无法收消息')}</b>
               <p>{err}</p>
-              <p className="muted">{tr('Paseo 启动后这里会自己接上。写新 idea 照常可用。')}</p>
+              <p className="muted">{tr('Paseo 启动后将自动重连。撰写新 idea 正常可用。')}</p>
             </div>
           )}
           {loading && <p className="as-wait">{tr('加载中…')}</p>}
@@ -357,7 +357,7 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
           {!loading && !err && asked < 0 && <Hello mod={place.mod} onAsk={submit} />}
           {perms.map(q => (
             <div key={q.id} className="as-card as-perm">
-              <span className="as-k">{tr('它想')}{q.name === 'Bash' ? tr('运行命令') : tr('用 {0}', q.name)}</span>
+              <span className="as-k">{tr('请求')}{q.name === 'Bash' ? tr('运行命令') : tr('使用 {0}', q.name)}</span>
               {q.title && q.title !== q.name && <p>{q.title}</p>}
               {q.arg && <pre className="code">{q.arg}</pre>}
               <div className="as-choices">
@@ -370,7 +370,7 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
           {working && !perms.length && !(tail?.k === 'it' && tail.live) && <Busy tail={tail} />}
         </div>
         {!stuck && (
-          <button className="as-down" title={tr('回到最新')} onClick={() => scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'smooth' })}>
+          <button className="as-down" title={tr('返回最新')} onClick={() => scroll.current?.scrollTo({ top: scroll.current.scrollHeight, behavior: 'smooth' })}>
             <Icon n="down" size={16} />
           </button>
         )}
@@ -388,7 +388,7 @@ function YouMsg({ r }: { r: YouRow }) {
           {where && <span title={trx(where)}><Icon n="eye" size={11} /><i>{trx(where)}</i></span>}
           {pointed && <span className="on" title={trx(pointed)}><Icon n="target" size={11} /><i>{trx(pointed)}</i></span>}
           {selected && <span className="on" title={selected}><Icon n="quote" size={11} /><i>{selected}{selectedAt && <em> · {trx(selectedAt)}</em>}</i></span>}
-          {!!projects?.length && <span title={tr('Papertown 把这些项目刚读的进展附在了消息里')}><Icon n="compass" size={11} /><i>{tr('附上了 {0} 的进展', projects.map(n => `#${n}`).join(' '))}</i></span>}
+          {!!projects?.length && <span title={tr('Papertown 已将刚读取的项目进展附在消息中')}><Icon n="compass" size={11} /><i>{tr('已附上 {0} 的进展', projects.map(n => `#${n}`).join(' '))}</i></span>}
         </div>
       )}
       <UserMsg text={r.text} />
@@ -408,7 +408,7 @@ function ReplyMsg({ r, last, again }: { r: ItRow; last: boolean; again?: () => v
       {r.live ? <i className="caret" /> : (
         <div className="as-ops">
           <button className="as-op" title={tr('复制这段回答')} onClick={copy}><Icon n="copy" size={13} />{copied && tr('已复制')}</button>
-          {again && <button className="as-op" title={tr('把上一个问题再问一次')} onClick={again}><Icon n="refresh" size={13} />{tr('再问一次')}</button>}
+          {again && <button className="as-op" title={tr('重新提问上一问题')} onClick={again}><Icon n="refresh" size={13} />{tr('重新提问')}</button>}
         </div>
       )}
     </div>
@@ -419,7 +419,7 @@ function ReplyMsg({ r, last, again }: { r: ItRow; last: boolean; again?: () => v
 function Hello({ mod, onAsk }: { mod: string; onAsk: (text: string) => void }) {
   return (
     <div className="as-hello">
-      <p>{tr('问这一页的事，或者请它帮你办。它看得到你在哪一页。想问得更准，就指给它看，或者先在页面上选中一段字。')}</p>
+      <p>{tr('可就本页内容提问或由小助手代办。小助手可识别当前页面，若需更精准作答，可点选页面位置或先选中文字。')}</p>
       <div className="as-asks">{(ASK[mod] ?? ASK_ANY).map(q => <button key={q} onClick={() => onAsk(q)}><Icon n="chat" size={14} />{q}</button>)}</div>
     </div>
   );
@@ -427,7 +427,7 @@ function Hello({ mod, onAsk }: { mod: string; onAsk: (text: string) => void }) {
 
 function Busy({ tail }: { tail?: Row }) {
   const tool = tail?.k === 'tools' ? [...tail.tools].reverse().find(t => t.st === 'run') : undefined;
-  return <div className="as-busy"><span className="thinking"><i /><i /><i /></span>{tool ? tr('在用 {0}', tool.name) : tr('在想…')}</div>;
+  return <div className="as-busy"><span className="thinking"><i /><i /><i /></span>{tool ? tr('正在使用 {0}', tool.name) : tr('思考中…')}</div>;
 }
 
 // the message box: to the assistant, with the page, what you point at and the selected text going along; or a
@@ -476,24 +476,24 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea }: {
     if (!ok) return;
     setText('');
   }
-  const placeholder = target.kind === 'idea' ? tr('写下新 idea，项目负责人将开始调研…')
-      : !started ? tr('先在上面启动小助手，写新 idea 现在就可以')
-        : off ? tr('连不上 Paseo，等它启动后再问（写新 idea 照常可用）')
-        : !working ? tr('问这一页的事，或者请它帮你办') : agent.runtime === 'pi' ? tr('它在忙，发出的消息会排在它手上的事之后') : tr('它在忙，发出的消息会插进它手上的事');
+  const placeholder = target.kind === 'idea' ? tr('输入新 idea，项目负责人将开始调研…')
+      : !started ? tr('请先在上方启动小助手，当前即可输入新 idea')
+        : off ? tr('无法连接 Paseo，待启动后再提问（输入新 idea 正常可用）')
+        : !working ? tr('就本页提问，或委托小助手代办') : agent.runtime === 'pi' ? tr('小助手忙碌中，新消息将排在当前任务之后') : tr('小助手忙碌中，新消息将插入当前任务');
   return (
     <div className="as-foot">
       {hints && <div className="as-hint">{hints.map(q => <button key={q} onClick={() => go(q)}>{q}</button>)}</div>}
       <div className="as-box" onMouseDown={e => { if (e.target === e.currentTarget) { e.preventDefault(); box.current?.focus(); } }}>
         {asking && (
           <div className="as-ctx">
-            <span className="as-pill" title={tr('每条消息都会带上你在看的页面')}><Icon n="eye" size={12} /><b>{place.line ? `#${place.line.seq} · ` : ''}{place.name || tr('中控屏')}</b></span>
+            <span className="as-pill" title={tr('每条消息均附带当前浏览页面')}><Icon n="eye" size={12} /><b>{place.line ? `#${place.line.seq} · ` : ''}{place.name || tr('中控屏')}</b></span>
             {focus && (
               <span className="as-pill on" title={focus.text}><Icon n="target" size={12} /><b>{focus.label}</b>{focus.where && <em>{focus.where}</em>}
-                <button onClick={() => side.setFocus(null)} aria-label={tr('不指了')}><Icon n="close" size={10} /></button></span>
+                <button onClick={() => side.setFocus(null)} aria-label={tr('取消指向')}><Icon n="close" size={10} /></button></span>
             )}
             {sel && (
               <span className="as-pill on" title={sel.at ? `${sel.text}\n· ${sel.at.label}` : sel.text}><Icon n="quote" size={12} /><b>{sel.text.replace(/\s+/g, ' ')}</b>{lines > 1 && <em>{tr('{0} 行文字', lines)}</em>}
-                <button onClick={() => side.setSel(null)} aria-label={tr('不带这段')}><Icon n="close" size={10} /></button></span>
+                <button onClick={() => side.setSel(null)} aria-label={tr('移除此段')}><Icon n="close" size={10} /></button></span>
             )}
           </div>
         )}
@@ -501,19 +501,19 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea }: {
           onChange={e => setText(e.target.value)}
           onKeyDown={enterSends(() => go(text))} />
         <div className="as-tools">
-            <div className="seg mini as-to" role="radiogroup" aria-label={tr('发给谁')}>
+            <div className="seg mini as-to" role="radiogroup" aria-label={tr('发送至')}>
               <button role="radio" aria-checked={asking} className={asking ? 'on' : ''} onClick={() => setTarget({ kind: 'assistant' })}>{tr('小助手')}</button>
               <button role="radio" aria-checked={!asking} className={!asking ? 'on' : ''} onClick={() => setTarget({ kind: 'idea' })}
                 title={tr('创建项目后，负责人自动启动并开展调研')}>{tr('新 idea')}</button>
             </div>
           {asking && pointable && (
-            <button className={`as-tool${side.pointing ? ' on' : ''}`} title={tr('在页面上点一下你想问的地方')}
+            <button className={`as-tool${side.pointing ? ' on' : ''}`} title={tr('点击页面上需提问的位置')}
               onClick={() => (side.pointing ? side.unpoint() : side.point(side.setFocus))}>
-              <Icon n="target" size={15} />{side.pointing ? tr('点页面上的一处…') : tr('指给它看')}
+              <Icon n="target" size={15} />{side.pointing ? tr('点击页面某处…') : tr('指向页面')}
             </button>
           )}
           {working && !typed
-            ? <button className="as-send stop" title={tr('打断它手上的事')} onClick={() => api.abort(ID).catch(e => side.toast((e as Error).message))}><Icon n="stop" size={14} /></button>
+            ? <button className="as-send stop" title={tr('中断当前任务')} onClick={() => api.abort(ID).catch(e => side.toast((e as Error).message))}><Icon n="stop" size={14} /></button>
             : <button className="as-send" disabled={!typed || sending || (asking && (!started || off))} title={tr('发送（Enter）')} onClick={() => go(text)}><Icon n="send" size={16} /></button>}
         </div>
       </div>
@@ -550,7 +550,7 @@ function Cards({ view, send, toast, onPoint }: {
           <p>{ask.data.question}</p>
           {(ask.data.choices?.length > 0 || ask.data.point) && <div className="as-choices">
             {(ask.data.choices as string[]).map(c => <button key={c} className="btn" onClick={() => send(c)}>{c}</button>)}
-            {ask.data.point && <button className="btn pri" onClick={() => onPoint(() => send(tr('是这里。')))}><Icon n="target" size={14} />{tr('在页面上点一下')}</button>}
+            {ask.data.point && <button className="btn pri" onClick={() => onPoint(() => send(tr('此处。')))}><Icon n="target" size={14} />{tr('点击页面位置')}</button>}
           </div>}
         </div>
       )}
@@ -558,10 +558,10 @@ function Cards({ view, send, toast, onPoint }: {
         const d = (done[e.id] ?? e).data;
         return (
           <div key={e.id} className={`as-card as-act st-${d.status}`} ref={seen}>
-            <span className="as-k">{d.status === 'pending' ? tr('它想替你做') : d.status === 'done' ? (d.auto ? tr('已替你做了') : tr('已经做了')) : d.status === 'denied' ? tr('你没让它做') : tr('没做成')}</span>
+            <span className="as-k">{d.status === 'pending' ? tr('请求代为执行') : d.status === 'done' ? (d.auto ? tr('已代为执行') : tr('已经做了')) : d.status === 'denied' ? tr('你未同意执行') : tr('失败')}</span>
             <p><b>{d.title}</b></p>
             {d.why && d.status === 'pending' && <p className="muted small">{d.why}</p>}
-            {d.rule && d.status === 'pending' && <p className="muted small">{tr('按你的工作边界要先问你：{0}', d.rule)}</p>}
+            {d.rule && d.status === 'pending' && <p className="muted small">{tr('按工作边界需先向你确认：{0}', d.rule)}</p>}
             {d.result && <p className="small">{d.result}</p>}
             {d.status === 'pending' && <div className="as-choices">
               <button className="btn pri" onClick={() => decide(e, true)}>{tr('允许')}</button>
@@ -613,7 +613,7 @@ function Pointer({ onPick, onCancel }: { onPick: (f: Focus) => void; onCancel: (
       {box && <div className="pt-box" style={{ left: box.r.left - 3, top: box.r.top - 3, width: box.r.width + 6, height: box.r.height + 6 }}>
         <span className={box.r.top < 40 ? 'below' : ''}>{box.label}</span>
       </div>}
-      <div className="pt-hint">{tr('点一下页面上你想问的地方')} · <kbd>Esc</kbd> {tr('取消')}</div>
+      <div className="pt-hint">{tr('点击页面中需提问的位置')} · <kbd>Esc</kbd> {tr('取消')}</div>
     </div>,
     document.querySelector('.theme-sketch') ?? document.body,
   );

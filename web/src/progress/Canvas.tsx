@@ -92,7 +92,7 @@ function fixSeed(n: CanvasNode): Draft['seed'] {
   const c = n.check!, last = c.last;
   const lines = [trx(c.text)];
   if (last?.note) lines.push('', tr('负责人的判断：{0}', last.note));
-  lines.push('', tr('按这个判断纠偏，做完说明改了什么。'));
+  lines.push('', tr('按此判断纠偏，完成后说明修改内容。'));
   const to: TaskTo = c.stage === 'exp' ? 'coder' : ['write', 'review'].includes(c.stage) ? 'writer' : 'lead';
   return { title: `${tr('纠偏：')}${trx(c.title)}`.slice(0, 58), text: lines.join('\n'), to };
 }
@@ -195,16 +195,16 @@ function Wire({ id, source, target, data, selected }: EdgeProps<FEdge>) {
       {o && !virtual(id) && !data?.hidden && (o.editing === id || text || data?.tag || selected) && (
         <EdgeLabelRenderer>
           {o.editing === id ? (
-            <input className="cv-el edit nodrag nopan" style={at} autoFocus defaultValue={text} maxLength={40} placeholder={tr('这条线的意思')}
+            <input className="cv-el edit nodrag nopan" style={at} autoFocus defaultValue={text} maxLength={40} placeholder={tr('连线含义')}
               onBlur={e => o.relabel(id, e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); else if (e.key === 'Escape') { e.stopPropagation(); o.edit(null); } }} />
           ) : (
             <div className={`cv-el nodrag nopan${selected ? ' on' : ''}${!text && data?.tag ? ` tag t-${data.tone}` : ''}`} style={at} onDoubleClick={() => o.edit(id)}>
               {(text || data?.tag) && <span>{!text && (data?.tone === 'lock' || data?.tone === 'hard') && <Icon n="lock" size={10} />}{text || data?.tag}</span>}
-              {selected && data?.can && <button className={data.order ? 'on' : ''} title={data.order ? tr('改为普通连线，只提供上下文') : tr('设为顺序线，前一个完成后才派发后一个')} aria-label={data.order ? tr('改为普通连线，只提供上下文') : tr('设为顺序线，前一个完成后才派发后一个')} aria-pressed={!!data.order} onClick={() => o.order(id, { order: !data.order })}><Icon n="right" size={12} /></button>}
+              {selected && data?.can && <button className={data.order ? 'on' : ''} title={data.order ? tr('改为普通连线，仅提供上下文') : tr('设为顺序线，前序完成后派发后续')} aria-label={data.order ? tr('改为普通连线，仅提供上下文') : tr('设为顺序线，前序完成后派发后续')} aria-pressed={!!data.order} onClick={() => o.order(id, { order: !data.order })}><Icon n="right" size={12} /></button>}
               {selected && data?.order && <button title={tr('调换先后')} aria-label={tr('调换先后')} onClick={() => o.order(id, { flip: true })}><Icon n="refresh" size={12} /></button>}
-              {selected && <button title={tr('在线上写几个字')} aria-label={tr('在线上写几个字')} onClick={() => o.edit(id)}><Icon n="compose" size={12} /></button>}
-              {selected && <button className="danger" title={tr('断开这条线')} aria-label={tr('断开这条线')} onClick={() => o.cut(id)}><Icon n="close" size={12} /></button>}
+              {selected && <button title={tr('添加连线文字')} aria-label={tr('添加连线文字')} onClick={() => o.edit(id)}><Icon n="compose" size={12} /></button>}
+              {selected && <button className="danger" title={tr('断开连线')} aria-label={tr('断开连线')} onClick={() => o.cut(id)}><Icon n="close" size={12} /></button>}
             </div>
           )}
         </EdgeLabelRenderer>
@@ -236,7 +236,7 @@ function look(e: CanvasEdge, a: CanvasNode, b: CanvasNode): { cls: string; arrow
     case 'flow': {
       const g = a.gate, lock = !!g && g.state === 'block' && !g.waived;
       const ok = a.kind === 'stage' ? a.status === 'done' : !!g && gateLook(g) === 'pass';
-      return { ...none, cls: `w-flow${lock ? ' lock' : ok ? ' ok' : g && gateLook(g) === 'warn' ? ' warn' : ''}`, arrow: true, step: true, tag: lock ? tr('锁死') : '', tone: lock ? 'lock' : '' };
+      return { ...none, cls: `w-flow${lock ? ' lock' : ok ? ' ok' : g && gateLook(g) === 'warn' ? ' warn' : ''}`, arrow: true, step: true, tag: lock ? tr('已锁定') : '', tone: lock ? 'lock' : '' };
     }
     case 'watch': { // a sentinel that is content keeps its line to itself
       const k = a.check?.on ? status(a.check) : 'none';
@@ -253,7 +253,7 @@ function look(e: CanvasEdge, a: CanvasNode, b: CanvasNode): { cls: string; arrow
     case 'member': return { ...none, cls: 'w-member' };
     case 'hard_loop': {
       const t = task ?? a, head = a.kind === 'gate';
-      const tag = head ? (t.converged ? tr('✓ {0} 轮收敛', t.round || 1) : tr('没过，打回重改 · 第 {0} 轮', t.round || 1)) : '';
+      const tag = head ? (t.converged ? tr('✓ {0} 轮收敛', t.round || 1) : tr('未通过，退回修改 · 第 {0} 轮', t.round || 1)) : '';
       return { ...none, cls: `w-hard${t.converged ? ' old' : t.status === 'sent' ? ' run' : ''}`, arrow: true, bow: true, tag, tone: t.converged ? 'old' : 'hard' };
     }
     case 'soft_loop': {
@@ -335,13 +335,13 @@ function Blocks({ v, r, frames, into, onShow, onOpen }: {
           const p = PART[f.key], pills = blockPills(f.key, f.ns), line = partLine(f.key, r, v);
           return (
             <section key={f.key} className={`cv-block b-${f.key}${into === f.key ? ' into' : ''}`} style={{ transform: `translate(${f.x}px, ${f.y}px)`, width: f.w, height: f.h }} aria-label={p.name}>
-              <header className="nopan nodrag" onClick={() => onShow(f.key)} title={tr('点击放大到「{0}」', p.name)}>
+              <header className="nopan nodrag" onClick={() => onShow(f.key)} title={tr('点击缩放至「{0}」', p.name)}>
                 <b><Icon n={p.icon} size={15} />{p.name}</b>
                 <span>
                   {pills.map(x => <em key={x.text} className={`t-${x.tone}`}>{x.text}</em>)}
                   {line && <small className={pills.length ? '' : 'only'}>{line}</small>}
                 </span>
-                <button className="ib" onClick={e => { e.stopPropagation(); onOpen(f.key); }} title={tr('在中控屏里打开「{0}」', p.name)} aria-label={tr('在中控屏里打开「{0}」', p.name)}>
+                <button className="ib" onClick={e => { e.stopPropagation(); onOpen(f.key); }} title={tr('在中控屏中打开「{0}」', p.name)} aria-label={tr('在中控屏中打开「{0}」', p.name)}>
                   <Icon n="board" size={13} />
                 </button>
               </header>
@@ -358,11 +358,11 @@ function Legend({ onClose }: { onClose: () => void }) {
   return (
     <Panel position="bottom-left" className="cv-legend">
       <header><b>{tr('图例')}</b><button className="ib" title={tr('收起')} aria-label={tr('收起')} onClick={onClose}><Icon n="close" size={12} /></button></header>
-      <p><span><i className="cv-dia" />{tr('卡口：用代码查')}</span><span><i className="cv-ring2" />{tr('巡检：负责人判断')}</span></p>
-      <p><span><i className="lg c-pass" />{tr('通过')}</span><span><i className="lg c-warn" />{tr('要留意')}</span><span><i className="lg c-bad" />{tr('没过，打回重改')}</span><span><i className="lg c-wait" />{tr('还没查，或在等前面')}</span></p>
-      <p><span><i className="lg-order" />{tr('顺序线：前一个任务完成后，才派发后一个')}</span></p>
+      <p><span><i className="cv-dia" />{tr('卡口：代码检查')}</span><span><i className="cv-ring2" />{tr('巡检：负责人判断')}</span></p>
+      <p><span><i className="lg c-pass" />{tr('通过')}</span><span><i className="lg c-warn" />{tr('需关注')}</span><span><i className="lg c-bad" />{tr('未通过，退回修改')}</span><span><i className="lg c-wait" />{tr('尚未检查或等待前序')}</span></p>
+      <p><span><i className="lg-order" />{tr('顺序线：前序任务完成后，才能派发后续任务')}</span></p>
       <p><span><i className="lg-block" />{tr('分块：与中控屏「研究流程」的各项一一对应，高度随内容伸缩')}</span></p>
-      <p className="more">{tr('节点和线用同一套颜色。其余的线平时收着，鼠标移到节点上或点开它就能看到。')}</p>
+      <p className="more">{tr('节点与连线使用同套配色。其余连线默认折叠，悬停或点击节点即可显示。')}</p>
     </Panel>
   );
 }
@@ -383,7 +383,7 @@ function Find({ v, q, setQ, onPick }: { v: CanvasView | null; q: string; setQ: (
   return (
     <div className="cv-find" onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false); }}>
       <Icon n="lens" size={14} />
-      <input id="cv-find" ref={box} value={q} placeholder={tr('找节点')} aria-label={tr('找节点')} autoComplete="off"
+      <input id="cv-find" ref={box} value={q} placeholder={tr('查找节点')} aria-label={tr('查找节点')} autoComplete="off"
         onFocus={() => setOpen(true)} onChange={e => { setQ(e.target.value); setOpen(true); }}
         onKeyDown={e => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setAt(i => Math.min(list.length - 1, i + 1)); }
@@ -397,11 +397,11 @@ function Find({ v, q, setQ, onPick }: { v: CanvasView | null; q: string; setQ: (
           {list.map((n, i) => (
             <li key={n.id}>
               <button tabIndex={-1} role="option" aria-selected={i === at} className={i === at ? 'on' : ''} onMouseDown={e => e.preventDefault()} onMouseEnter={() => setAt(i)} onClick={() => choose(n)}>
-                <Mark n={n} /><span>{label(n)}</span>{needs(n) && <i className="cv-need" title={tr('要处理')} />}<small>{kindOf(n)}</small>
+                <Mark n={n} /><span>{label(n)}</span>{needs(n) && <i className="cv-need" title={tr('待处理')} />}<small>{kindOf(n)}</small>
               </button>
             </li>
           ))}
-          {!list.length && <li className="muted small">{tr('没有这样的节点')}</li>}
+          {!list.length && <li className="muted small">{tr('无匹配节点')}</li>}
         </ul>
       )}
     </div>
@@ -589,7 +589,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
   const remember = (what: string, run: () => Promise<unknown>) => { undos.current = [...undos.current.slice(-39), { what, run }]; };
   const undo = () => {
     const u = undos.current.pop();
-    if (u) act(u.run, tr('撤销了：{0}', u.what)); else toast(tr('没有可以撤销的'));
+    if (u) act(u.run, tr('已撤销：{0}', u.what)); else toast(tr('暂无可撤销操作'));
   };
   // where nodes are: here at once, on the server after
   const before = useRef<Spots>({}), saving = useRef<{ at: Spots; timer: number } | null>(null);
@@ -667,7 +667,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     const text = ns.map(n => (n.kind === 'note' ? n.text ?? '' : [label(n), n.text].filter(Boolean).join('\n'))).join('\n\n');
     held.current = own.length ? { text, items: own.map(n => ({ kind: n.kind as 'task' | 'note', title: n.title, text: n.text, to: n.to, dx: n.x - x0, dy: n.y - y0 })) } : null;
     navigator.clipboard?.writeText(text).catch(() => {});
-    if (!quiet) toast(own.length ? tr('复制了 {0} 个节点', own.length) : tr('复制了文字（只有任务和备注能粘贴成新节点）'));
+    if (!quiet) toast(own.length ? tr('已复制 {0} 个节点', own.length) : tr('已复制文本（仅任务与备注可粘贴为新节点）'));
   };
   // where a paste lands: under the pointer (or where the menu was opened), a step further each time it has not moved
   const landing = (at?: { x: number; y: number }) => {
@@ -680,32 +680,32 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     const h = held.current;
     if (!h) return false;
     const o = landing(at);
-    make(h.items.map(i => ({ kind: i.kind, x: o.x + i.dx, y: o.y + i.dy, title: i.title, text: i.text, to: i.to })), tr('粘贴'), tr('粘贴了 {0} 个节点', h.items.length));
+    make(h.items.map(i => ({ kind: i.kind, x: o.x + i.dx, y: o.y + i.dy, title: i.title, text: i.text, to: i.to })), tr('粘贴'), tr('已粘贴 {0} 个节点', h.items.length));
     return true;
   };
   const pasteText = (text: string, at?: { x: number; y: number }) => {
     const o = landing(at);
-    make([{ kind: 'note', x: o.x, y: o.y, text: text.trim().slice(0, 2000) }], tr('粘贴'), tr('粘贴成了一张备注'));
+    make([{ kind: 'note', x: o.x, y: o.y, text: text.trim().slice(0, 2000) }], tr('粘贴'), tr('已粘贴为备注'));
   };
   const pasteAny = async (at?: { x: number; y: number }) => { // from a menu, where there is no paste event to read
     if (paste(at)) return;
     try {
       const t = await navigator.clipboard.readText();
-      if (t.trim()) pasteText(t, at); else toast(tr('剪贴板里没有可以粘贴的'));
-    } catch { toast(tr('读不到剪贴板，按 {0}V 粘贴', MOD)); }
+      if (t.trim()) pasteText(t, at); else toast(tr('剪贴板中暂无可粘贴内容'));
+    } catch { toast(tr('无法读取剪贴板，按 {0}V 粘贴', MOD)); }
   };
   const dup = (ns: CanvasNode[]) => {
     const own = ns.filter(copyable);
-    if (!own.length) { toast(tr('只有任务和备注能复制成新节点')); return; }
+    if (!own.length) { toast(tr('仅任务与备注可复制为新节点')); return; }
     const one = own.length === 1;
     make(own.map(n => ({ kind: n.kind as 'task' | 'note', x: n.x + (one ? 36 : 44), y: n.y + (one ? sizeOf(n)[1] + 28 : 44), title: n.title, text: n.text, to: n.to })),
-      tr('复制一份'), tr('复制了 {0} 个节点', own.length));
+      tr('创建副本'), tr('已复制 {0} 个节点', own.length));
   };
   const snip = (ns: CanvasNode[]) => {
     const own = ns.filter(copyable);
-    if (!own.length) { toast(tr('只有任务和备注能剪切')); return; }
+    if (!own.length) { toast(tr('仅任务与备注可剪切')); return; }
     copy(own, true);
-    remove(own, false, tr('剪切了 {0} 个节点，{1}V 粘贴', own.length, MOD));
+    remove(own, false, tr('已剪切 {0} 个节点，{1}V 粘贴', own.length, MOD));
   };
   // several nodes in a line
   const align = (ns: CanvasNode[], how: 'left' | 'top' | 'row' | 'column') => {
@@ -779,7 +779,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     const w = Math.max(...ns.map(n => sizeOf(n)[0])), h = Math.max(...ns.map(n => sizeOf(n)[1]));
     const x0 = Math.min(...ns.map(n => n.x)), y0 = Math.min(...ns.map(n => n.y));
     const at: Spots = Object.fromEntries(sorted.map((n, i) => [n.id, [x0 + (i % across) * (w + 40), y0 + Math.floor(i / across) * (h + 40)]]));
-    remember(tr('排成网格'), keep());
+    remember(tr('网格排列'), keep());
     place(at);
   };
 
@@ -821,17 +821,17 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       const id = x.added;
       if (id && !b.send) remember(tr('新建节点'), () => api.dropNode(line.id, id));
       const made = x.nodes.find(n => n.id === id);
-      toast(b.kind === 'task' && b.send ? (made?.status === 'queued' ? tr('已加上并排队，轮到时自动派发') : tr('加上了，也发给它了')) : tr('加上了'));
+      toast(b.kind === 'task' && b.send ? (made?.status === 'queued' ? tr('已添加并排队，轮到时自动派发') : tr('已添加并派发')) : tr('加上了'));
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
   // one node of your own to delete asks first; what Papertown put on the loop is only taken off, and can come back
   const remove = (ns: CanvasNode[], ask = true, done?: string) => {
     if (!ns.length) return;
     const own = ns.filter(mine), rest = ns.filter(n => !mine(n));
-    if (ask && own.length && !confirm(own.length === 1 ? tr('删掉「{0}」？', label(own[0])) : tr('删掉这 {0} 个任务、备注或自己加的检查？', own.length))) return;
+    if (ask && own.length && !confirm(own.length === 1 ? tr('删除「{0}」？', label(own[0])) : tr('删除这 {0} 个任务、备注或自定义检查？', own.length))) return;
     act(async () => { let x: CanvasView | undefined; for (const n of ns) x = await api.dropNode(line.id, n.id); return x; },
-      done ?? (rest.length ? tr('拿掉了，可以在「更多」里放回来') : tr('删掉了'))).then(() => setSel(s => (s && ns.some(n => n.id === s) ? null : s)));
-    if (rest.length) remember(tr('拿掉节点'), async () => { let x: CanvasView | undefined; for (const n of rest) x = await api.restoreNode(line.id, n.id); return x; });
+      done ?? (rest.length ? tr('已移除，可在「更多」中恢复') : tr('删掉了'))).then(() => setSel(s => (s && ns.some(n => n.id === s) ? null : s)));
+    if (rest.length) remember(tr('移除节点'), async () => { let x: CanvasView | undefined; for (const n of rest) x = await api.restoreNode(line.id, n.id); return x; });
   };
   const drop = (n: CanvasNode) => remove([n]);
   const cut = (edgeId: string) => {
@@ -846,13 +846,13 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     });
   };
   const gate = (stage: string, what: 'open' | 'close' | 'rework') =>
-    act(() => api.gateAct(line.id, stage, what), what === 'rework' ? tr('修补单发出去了') : undefined).then(() => { if (what !== 'rework') setTimeout(() => fit(), 80); });
+    act(() => api.gateAct(line.id, stage, what), what === 'rework' ? tr('修补单已派发') : undefined).then(() => { if (what !== 'rework') setTimeout(() => fit(), 80); });
   const ops: Ops = {
     busy, agents: v?.agents ?? null, r, v, editing, edit: setEditing, cut, gate,
     order: (edgeId, b) => {
       const was = v?.edges.find(e => e.id === edgeId);
-      act(() => api.orderEdge(line.id, edgeId, b), b.flip ? tr('已调换先后') : b.order ? tr('已设为顺序线：前一个完成后才派发后一个') : tr('已改为普通连线'));
-      if (was) remember(b.flip ? tr('调换先后') : tr('改连线种类'), () => api.orderEdge(line.id, edgeId, b.flip ? { flip: true } : { order: was.kind === 'order' }));
+      act(() => api.orderEdge(line.id, edgeId, b), b.flip ? tr('已调换先后') : b.order ? tr('已设为顺序线：前序完成后派发后续') : tr('已改为普通连线'));
+      if (was) remember(b.flip ? tr('调换先后') : tr('修改连线类型'), () => api.orderEdge(line.id, edgeId, b.flip ? { flip: true } : { order: was.kind === 'order' }));
     },
     relabel: (edgeId, text) => {
       setEditing(null);
@@ -864,7 +864,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       else if (n.kind === 'hard' && n.check?.stage) gate(n.check.stage, 'rework');
       else if (n.check?.kind === 'soft') begin({ kind: 'task', x: n.x, y: n.y + 280, link: n.id, seed: fixSeed(n) }); // under the stage it watches, in its block
     },
-    ask: n => { if (n.check) act(() => api.askCheck(line.id, n.check!.id), tr('已经发给负责人，它判断完会出现在这里')); },
+    ask: n => { if (n.check) act(() => api.askCheck(line.id, n.check!.id), tr('已发送至负责人，判断完成后将在此显示')); },
     send: (n, chain) => { act(() => api.sendNode(line.id, n.id, !!chain), sentWord(n.id, n.to ?? 'lead')); },
     beside: (n, k) => beside(n, k),
     dup: n => dup([n]),
@@ -878,7 +878,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       const had = new Set(v?.edges.map(e => e.id)), x = await api.connect(line.id, source, target), e = x.edges.find(y => !had.has(y.id));
       if (e) remember(tr('连线'), () => api.disconnect(line.id, e.id));
       const a = x.nodes.find(n => n.id === e?.source), b = x.nodes.find(n => n.id === e?.target);
-      if (e && a && b && ordered(a) && ordered(b)) toast(e.kind === 'order' ? tr('顺序线：「{0}」完成后才派发「{1}」。选中这条线可改为普通连线', clip(label(a), 12), clip(label(b), 12)) : tr('这条线会让先后顺序连成环，已作为普通连线保留'));
+      if (e && a && b && ordered(a) && ordered(b)) toast(e.kind === 'order' ? tr('顺序线：「{0}」完成后才能派发「{1}」。选中该连线可改为普通连线', clip(label(a), 12), clip(label(b), 12)) : tr('该连线会使先后顺序成环，已作为普通连线保留'));
       return x;
     });
   };
@@ -900,11 +900,11 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     place(at);
   };
   const tidy = () => {
-    if (!confirm(tr('按分块规整：每个分块里的资料卡、工序、卡口和巡检归位，修补单、任务和备注排到它们下面。连线保持原样。'))) return;
+    if (!confirm(tr('按分块规整：各分块内的资料卡、工序、卡口与巡检归位，修补单、任务与备注排列在其下方。连线保持不变。'))) return;
     remember(tr('按分块规整'), keep());
     act(() => api.tidyCanvas(line.id)).then(() => setTimeout(() => fit(), 60));
   };
-  const runAll = () => act(() => api.runChecks(line.id), tr('查完了'));
+  const runAll = () => act(() => api.runChecks(line.id), tr('检查完毕'));
 
   // right-click: what can be done with the thing under the pointer
   const menuAt = (e: { clientX: number; clientY: number; preventDefault: () => void }, items: Item[]) => {
@@ -913,32 +913,32 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     setCtx({ x: Math.min(e.clientX, window.innerWidth - 262), y: Math.max(12, Math.min(e.clientY, window.innerHeight - tall - 12)), items });
   };
   const setTask = (n: CanvasNode, to: 'draft' | 'done') => act(() => api.setNode(line.id, n.id, { status: to }));
-  const toggle = (n: CanvasNode) => { if (n.check) act(() => api.setCheck(line.id, n.check!.id, { on: !n.check!.on }), n.check.on ? tr('关掉了') : tr('打开了')); };
+  const toggle = (n: CanvasNode) => { if (n.check) act(() => api.setCheck(line.id, n.check!.id, { on: !n.check!.on }), n.check.on ? tr('已关闭') : tr('已开启')); };
   const several = (ns: CanvasNode[]): Item[] => [
     { icon: 'copy', label: tr('复制 {0} 个节点', ns.length), run: () => copy(ns), key: `${MOD}C` },
     { icon: 'split', label: tr('剪切'), run: () => snip(ns), key: `${MOD}X`, off: !ns.some(copyable) },
-    { icon: 'stack', label: tr('复制一份'), run: () => dup(ns), key: `${MOD}D`, off: !ns.some(copyable) },
+    { icon: 'stack', label: tr('创建副本'), run: () => dup(ns), key: `${MOD}D`, off: !ns.some(copyable) },
     null,
     { icon: 'rows', label: tr('左对齐'), run: () => align(ns, 'left') },
     { icon: 'rows', label: tr('顶部对齐'), run: () => align(ns, 'top') },
     { icon: 'cards', label: tr('横向等距'), run: () => align(ns, 'row'), off: ns.length < 3 },
     { icon: 'cards', label: tr('纵向等距'), run: () => align(ns, 'column'), off: ns.length < 3 },
-    { icon: 'board', label: tr('排成网格'), run: () => grid(ns) },
+    { icon: 'board', label: tr('网格排列'), run: () => grid(ns) },
     null,
-    { icon: 'close', label: tr('删掉这 {0} 个', ns.length), run: () => remove(ns), danger: true, key: '⌫' },
+    { icon: 'close', label: tr('删除这 {0} 个', ns.length), run: () => remove(ns), danger: true, key: '⌫' },
   ];
   const nodeItems = (n: CanvasNode): Item[] => {
     const g = n.gate, c = n.check, soft = c?.kind === 'soft', st = n.status;
     const acts: Item[] = [
-      ...(g?.state === 'block' ? [{ icon: 'refresh', label: g.ticket ? tr('打回一轮') : tr('派修补单'), run: () => gate(g.stage, 'rework') } as Item] : []),
-      ...(g?.escalated ? [{ icon: 'plus', label: tr('再给两轮'), run: () => act(() => api.gateAct(line.id, g.stage, 'more'), tr('再打回两轮')) } as Item] : []),
-      ...(g?.state === 'block' && !g.waived ? [{ icon: 'play', label: tr('先放行'), run: () => act(() => api.gateAct(line.id, g.stage, 'waive'), tr('先放行了')) } as Item] : []),
-      ...(g && g.checks.length > 1 ? [{ icon: 'split', label: g.open ? tr('收回卡口组') : tr('展开为 {0} 个独立节点', g.checks.length), run: () => gate(g.stage, g.open ? 'close' : 'open') } as Item] : []),
-      ...(g || n.kind === 'hard' ? [{ icon: 'refresh', label: tr('跑一遍代码硬检查'), run: runAll } as Item] : []),
-      ...(soft && c.on && ['fail', 'warn'].includes(status(c)) ? [{ icon: 'wand', label: tr('派人纠偏'), run: () => ops.fix(n) } as Item] : []),
+      ...(g?.state === 'block' ? [{ icon: 'refresh', label: g.ticket ? tr('退回一轮') : tr('派发修补单'), run: () => gate(g.stage, 'rework') } as Item] : []),
+      ...(g?.escalated ? [{ icon: 'plus', label: tr('追加两轮'), run: () => act(() => api.gateAct(line.id, g.stage, 'more'), tr('再退回两轮')) } as Item] : []),
+      ...(g?.state === 'block' && !g.waived ? [{ icon: 'play', label: tr('先放行'), run: () => act(() => api.gateAct(line.id, g.stage, 'waive'), tr('已暂时放行')) } as Item] : []),
+      ...(g && g.checks.length > 1 ? [{ icon: 'split', label: g.open ? tr('收起卡口组') : tr('展开为 {0} 个独立节点', g.checks.length), run: () => gate(g.stage, g.open ? 'close' : 'open') } as Item] : []),
+      ...(g || n.kind === 'hard' ? [{ icon: 'refresh', label: tr('运行代码硬检查'), run: runAll } as Item] : []),
+      ...(soft && c.on && ['fail', 'warn'].includes(status(c)) ? [{ icon: 'wand', label: tr('指派纠偏'), run: () => ops.fix(n) } as Item] : []),
       ...(soft && c.on ? [{ icon: 'send', label: tr('让负责人现在查'), run: () => ops.ask(n), off: !v?.lead } as Item] : []),
-      ...(c ? [{ icon: c.on ? 'stop' : 'play', label: c.on ? tr('关掉这项检查') : tr('打开这项检查'), run: () => toggle(n) } as Item] : []),
-      ...(n.kind === 'task' && st !== 'queued' ? [{ icon: 'send', label: st === 'draft' ? tr('发给{0}', WHO[n.to ?? 'lead']) : tr('再发一次'), run: () => ops.send(n), off: n.agent_id ? !n.agent?.started : !v?.agents[n.to ?? 'lead'].there } as Item] : []),
+      ...(c ? [{ icon: c.on ? 'stop' : 'play', label: c.on ? tr('关闭此项检查') : tr('开启此项检查'), run: () => toggle(n) } as Item] : []),
+      ...(n.kind === 'task' && st !== 'queued' ? [{ icon: 'send', label: st === 'draft' ? tr('发送至{0}', WHO[n.to ?? 'lead']) : tr('再发一次'), run: () => ops.send(n), off: n.agent_id ? !n.agent?.started : !v?.agents[n.to ?? 'lead'].there } as Item] : []),
       ...(n.kind === 'task' && v && st !== 'done' && orderOf(v, n.id).drafts.length ? [{ icon: 'right', label: tr('连同后续 {0} 个按顺序派发', orderOf(v, n.id).drafts.length), run: () => ops.send(n, true), off: n.agent_id ? !n.agent?.started : !v.agents[n.to ?? 'lead'].there } as Item] : []),
       ...(n.kind === 'task' && st === 'queued' ? [{ icon: 'stop', label: tr('取消排队'), run: () => setTask(n, 'draft') } as Item] : []),
       ...(n.kind === 'task' && n.stale ? [{ icon: 'check', label: tr('结果仍然有效'), run: () => act(() => api.setNode(line.id, n.id, { stale: false }), tr('已确认结果有效')) } as Item] : []),
@@ -947,24 +947,24 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     ];
     return [
       { icon: 'eye', label: tr('看详情'), run: () => pick(n.id) },
-      { icon: 'target', label: tr('移到画面中间'), run: () => centre(n) },
+      { icon: 'target', label: tr('移至画面中央'), run: () => centre(n) },
       ...(acts.length ? [null, ...acts] : []),
       null,
-      { icon: 'plus', label: tr('在它旁边派任务'), run: () => beside(n, 'task') },
-      { icon: 'plus', label: tr('在它旁边加备注'), run: () => beside(n, 'note') },
-      ...(n.kind === 'stage' ? [{ icon: 'plus', label: tr('加一项盯着它的软巡检'), run: () => beside(n, 'soft') } as Item, { icon: 'plus', label: tr('给它的卡口加一条硬规则'), run: () => beside(n, 'hard') } as Item] : []),
+      { icon: 'plus', label: tr('在旁派发任务'), run: () => beside(n, 'task') },
+      { icon: 'plus', label: tr('在旁添加备注'), run: () => beside(n, 'note') },
+      ...(n.kind === 'stage' ? [{ icon: 'plus', label: tr('为其添加监测软巡检'), run: () => beside(n, 'soft') } as Item, { icon: 'plus', label: tr('为其卡口添加硬规则'), run: () => beside(n, 'hard') } as Item] : []),
       null,
       { icon: 'copy', label: copyable(n) ? tr('复制') : tr('复制名称和内容'), run: () => copy([n]), key: `${MOD}C` },
-      ...(copyable(n) ? [{ icon: 'split', label: tr('剪切'), run: () => snip([n]), key: `${MOD}X` } as Item, { icon: 'stack', label: tr('复制一份'), run: () => dup([n]), key: `${MOD}D` } as Item] : []),
+      ...(copyable(n) ? [{ icon: 'split', label: tr('剪切'), run: () => snip([n]), key: `${MOD}X` } as Item, { icon: 'stack', label: tr('创建副本'), run: () => dup([n]), key: `${MOD}D` } as Item] : []),
       null,
       { icon: 'close', label: mine(n) ? tr('删掉') : tr('从回路上拿掉'), run: () => drop(n), danger: true, key: '⌫' },
     ];
   };
   const paneItems = (x: number, y: number): Item[] => [
-    { icon: 'plus', label: tr('在这里派任务'), run: () => here(x, y, 'task'), key: 'N' },
-    { icon: 'plus', label: tr('在这里加备注'), run: () => here(x, y, 'note'), key: '⇧N' },
-    { icon: 'plus', label: tr('在这里加软巡检'), run: () => here(x, y, 'soft') },
-    { icon: 'plus', label: tr('在这里加硬规则'), run: () => here(x, y, 'hard') },
+    { icon: 'plus', label: tr('在此派发任务'), run: () => here(x, y, 'task'), key: 'N' },
+    { icon: 'plus', label: tr('在此添加备注'), run: () => here(x, y, 'note'), key: '⇧N' },
+    { icon: 'plus', label: tr('在此添加软巡检'), run: () => here(x, y, 'soft') },
+    { icon: 'plus', label: tr('在此添加硬规则'), run: () => here(x, y, 'hard') },
     null,
     { icon: 'doc', label: held.current ? tr('粘贴 {0} 个节点', held.current.items.length) : tr('粘贴'), run: () => pasteAny({ x, y }), key: `${MOD}V` },
     { icon: 'board', label: tr('全选'), run: () => select('all'), key: `${MOD}A` },
@@ -973,30 +973,30 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     { icon: 'target', label: tr('适应窗口'), run: () => fit(), key: 'F' },
     { icon: 'lens', label: tr('缩放到 100%'), run: () => zoomTo('one'), key: '0' },
     { icon: 'wand', label: tr('按分块规整'), run: tidy },
-    { icon: prefs.lines ? 'check' : 'eye', label: prefs.lines ? tr('收起次要的连线') : tr('显示全部连线'), run: () => setPrefs({ lines: !prefs.lines }) },
+    { icon: prefs.lines ? 'check' : 'eye', label: prefs.lines ? tr('折叠次要连线') : tr('显示全部连线'), run: () => setPrefs({ lines: !prefs.lines }) },
     { icon: 'sliders', label: tr('画布设置…'), run: () => go('/settings/loop') },
     null,
-    { icon: v?.rules?.exclusive ? 'check' : 'lock', label: v?.rules?.exclusive ? tr('同一工作目录每次只运行一个任务：已开启') : tr('同一工作目录每次只运行一个任务'), run: () => act(() => api.setLoopRules(line.id, !v?.rules?.exclusive), v?.rules?.exclusive ? tr('同目录任务已允许同时运行') : tr('同目录任务将逐个运行')) },
+    { icon: v?.rules?.exclusive ? 'check' : 'lock', label: v?.rules?.exclusive ? tr('同一工作目录每次仅运行一个任务：已开启') : tr('同一工作目录每次仅运行一个任务'), run: () => act(() => api.setLoopRules(line.id, !v?.rules?.exclusive), v?.rules?.exclusive ? tr('同目录任务已允许同时运行') : tr('同目录任务将逐个运行')) },
     { icon: 'refresh', label: tr('立即全检'), run: runAll },
   ];
   const edgeItems = (id: string): Item[] => {
     const e = v?.edges.find(x => x.id === id), a = v?.nodes.find(n => n.id === e?.source), b = v?.nodes.find(n => n.id === e?.target);
     const can = !!e && !!a && !!b && (!e.kind || e.kind === 'order') && ordered(a) && ordered(b), is = e?.kind === 'order';
     return [
-      ...(can ? [{ icon: is ? 'rows' : 'right', label: is ? tr('改为普通连线（只提供上下文）') : tr('设为顺序线（前一个完成后才派发后一个）'), run: () => ops.order(id, { order: !is }) } as Item] : []),
+      ...(can ? [{ icon: is ? 'rows' : 'right', label: is ? tr('改为普通连线（仅提供上下文）') : tr('设为顺序线（前序完成后派发后续）'), run: () => ops.order(id, { order: !is }) } as Item] : []),
       ...(can && is ? [{ icon: 'refresh', label: tr('调换先后'), run: () => ops.order(id, { flip: true }) } as Item, null] : can ? [null] : []),
-      { icon: 'compose', label: e?.label ? tr('改线上的字') : tr('在线上写几个字'), run: () => setEditing(id) },
-      ...(a ? [{ icon: 'eye', label: tr('看「{0}」', label(a)), run: () => pick(a.id) } as Item] : []),
-      ...(b ? [{ icon: 'eye', label: tr('看「{0}」', label(b)), run: () => pick(b.id) } as Item] : []),
+      { icon: 'compose', label: e?.label ? tr('改线上的字') : tr('添加连线文字'), run: () => setEditing(id) },
+      ...(a ? [{ icon: 'eye', label: tr('查看「{0}」', label(a)), run: () => pick(a.id) } as Item] : []),
+      ...(b ? [{ icon: 'eye', label: tr('查看「{0}」', label(b)), run: () => pick(b.id) } as Item] : []),
       null,
-      { icon: 'close', label: tr('断开这条线'), run: () => cut(id), danger: true, key: '⌫' },
+      { icon: 'close', label: tr('断开连线'), run: () => cut(id), danger: true, key: '⌫' },
     ];
   };
   // the assistant in its floating window: told what is open here, and able to bring a node up (show --ref node:<id>)
   usePanelNote('canvas', 'board', {
     [tr('选中的节点')]: cur ? `${cur.id}「${label(cur)}」` : null,
     [tr('视角')]: report ? tr('前后对比') : filter === 'todo' ? tr('阻断与预警') : filter === 'hard' ? tr('硬卡口') : filter === 'soft' ? tr('软巡检') : null,
-    [tr('在找')]: q.trim() || null,
+    [tr('正在查找')]: q.trim() || null,
   });
   const want = useRef<string | null>(wanted.node ?? query().get('node')), wantBlock = useRef<FlowPart | null>(wanted.block);
   useEffect(() => { wanted.node = null; wanted.block = null; }, []);
@@ -1063,14 +1063,14 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     <MoreCtx.Provider value={more}>
     <div className="cv" ref={page} role="dialog" aria-modal="true" aria-label={tr('#{0} 的研究回路', line.seq)}>
       <header className="cv-top">
-        <a className="cv-back" href={href(back)} onClick={e => follow(e, back)} title={tr('回到项目页')}><Icon n="left" size={15} /><span>#{line.seq}</span><b>{line.title}</b></a>
+        <a className="cv-back" href={href(back)} onClick={e => follow(e, back)} title={tr('返回项目页')}><Icon n="left" size={15} /><span>#{line.seq}</span><b>{line.title}</b></a>
         <h2>{tr('研究回路')}{v && <em className="cv-r">Loop R{v.rounds}</em>}</h2>
-        <div className="seg cv-filter" role="radiogroup" aria-label={tr('回路上亮着哪些')}>
+        <div className="seg cv-filter" role="radiogroup" aria-label={tr('回路高亮项说明')}>
           {views.map(([k, t, n]) => {
             const on = k === 'report' ? report : !report && filter === k;
             return (
               <button key={k} role="radio" aria-checked={on} className={on ? 'on' : ''} onClick={() => { if (k === 'report') setReport(x => !x); else { setReport(false); setFilter(k); } }}
-                title={k === 'todo' ? tr('阻断或告警的卡口、没过或到期的巡检、没做完的任务、被锁或等你的工序、等你拍板的事') : undefined}>
+                title={k === 'todo' ? tr('阻断或告警卡口、未通过或到期巡检、未完成任务、锁定或待你处理工序、待你拍板事项') : undefined}>
                 {t}{!!n && <em>{n}</em>}
               </button>
             );
@@ -1079,11 +1079,11 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
         <Find v={v} q={q} setQ={setQ} onPick={pick} />
         {v && <LoopSummary v={v} short />}
         <div className="cv-acts">
-          <button className="btn" disabled={busy || !v} onClick={runAll} title={tr('把这个项目的硬检查现在全部跑一遍')}><Icon n="refresh" size={14} />{tr('立即全检')}</button>
+          <button className="btn" disabled={busy || !v} onClick={runAll} title={tr('立即运行该项目的全部硬检查')}><Icon n="refresh" size={14} />{tr('立即全检')}</button>
           <Menu cls="btn pri" label={<><Icon n="plus" size={14} />{tr('新建回路节点')}</>}>
             {close => (
               <>
-                {([['task', tr('一件交给 agent 的事'), 'N'], ['soft', tr('一个让负责人判断的问题'), ''], ['hard', tr('一条用代码查的规则'), ''], ['note', tr('一张便签'), '']] as const).map(([k, d, key]) => (
+                {([['task', tr('指派给 agent 的任务'), 'N'], ['soft', tr('由负责人判断的问题'), ''], ['hard', tr('通过代码检查的规则'), ''], ['note', tr('一张便签'), '']] as const).map(([k, d, key]) => (
                   <button key={k} className="cv-mi two" disabled={!v} onClick={() => { close(); add(k); }}>
                     <i className={k === 'task' ? 'cv-tdot' : k === 'note' ? 'cv-ndot' : k === 'hard' ? 'cv-dia' : 'cv-ring2'} /><span><b>{KIND[k]}</b><small>{d}</small></span>{key && <kbd>{key}</kbd>}
                   </button>
@@ -1107,18 +1107,18 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                 {v && v.spare.length > 0 && (
                   <>
                     <hr />
-                    <h6>{tr('资料卡：实时显示项目的一部分')}</h6>
+                    <h6>{tr('资料卡：实时显示项目部分信息')}</h6>
                     {v.spare.map(g => (
-                      <div key={g.id} className="cv-mi"><span>{trx(g.title)}</span><button className="lnk" disabled={busy} onClick={() => act(() => api.restoreNode(line.id, g.id), tr('放上来了'))}>{tr('放上回路')}</button></div>
+                      <div key={g.id} className="cv-mi"><span>{trx(g.title)}</span><button className="lnk" disabled={busy} onClick={() => act(() => api.restoreNode(line.id, g.id), tr('已添加'))}>{tr('添加至回路')}</button></div>
                     ))}
                   </>
                 )}
                 {v && v.gone.length > 0 && (
                   <>
                     <hr />
-                    <h6>{tr('拿掉的节点')}</h6>
+                    <h6>{tr('已移除节点')}</h6>
                     {v.gone.map(g => (
-                      <div key={g.id} className="cv-mi"><span>{trx(g.title)}</span><button className="lnk" disabled={busy} onClick={() => act(() => api.restoreNode(line.id, g.id), tr('放回来了'))}>{tr('放回回路')}</button></div>
+                      <div key={g.id} className="cv-mi"><span>{trx(g.title)}</span><button className="lnk" disabled={busy} onClick={() => act(() => api.restoreNode(line.id, g.id), tr('放回来了'))}>{tr('恢复至回路')}</button></div>
                     ))}
                   </>
                 )}
@@ -1126,14 +1126,14 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
                 <h6>{tr('怎么用')}</h6>
                 <ul className="cv-help">
                   <li>{tr('双击空白处，或右键：新建节点')}</li>
-                  <li>{tr('从节点边上的圆点拖出是连线，拖到空白处是新建并连上')}</li>
-                  <li>{tr('双击一条线在线上写字，选中后按 Delete 断开')}</li>
-                  <li>{tr('按住 Shift 拖动可以框选多个节点一起移动，再右键对齐')}</li>
-                  <li>{tr('{0}C 复制、{0}X 剪切、{0}V 粘贴、{0}D 复制一份（任务和备注），别处复制的文字粘贴成备注', MOD)}</li>
-                  <li>{tr('Delete 删掉、{0}A 全选、{0}Z 撤销，方向键挪一小步（按住 Shift 挪一大步）', MOD)}</li>
-                  <li>{tr('N 新任务、⇧N 新备注、F 适应窗口、0 回到 100%、+ − 缩放')}</li>
-                  <li>{tr('触控板双指移动或滚轮是平移，双指捏合或按住 {0} 滚动是缩放，滚轮每格缩放一小步', MOD.trim())}</li>
-                  <li>{tr('按 / 叫出小助手，让它改回路、解释卡口为什么没放行')}</li>
+                  <li>{tr('从节点边缘圆点拖拽可连线，拖至空白处可新建并连接')}</li>
+                  <li>{tr('双击连线可编辑文字，选中后按 Delete 断开')}</li>
+                  <li>{tr('按住 Shift 拖动可框选多个节点一并移动，右键可对齐')}</li>
+                  <li>{tr('{0}C 复制、{0}X 剪切、{0}V 粘贴、{0}D 创建副本（任务与备注），外部复制的文本将粘贴为备注', MOD)}</li>
+                  <li>{tr('Delete 删除、{0}A 全选、{0}Z 撤销，方向键微移（按住 Shift 大幅移动）', MOD)}</li>
+                  <li>{tr('N 新任务、⇧N 新备注、F 适应窗口、0 恢复 100%、+ − 缩放')}</li>
+                  <li>{tr('触控板双指滑动或滚轮用于平移，双指捏合或按住 {0} 滚动用于缩放，滚轮每格微幅缩放', MOD.trim())}</li>
+                  <li>{tr('按 / 打开小助手，协助修改回路或解释卡口未放行原因')}</li>
                 </ul>
               </>
             )}
@@ -1183,8 +1183,8 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
               {prefs.legend && !report && <Legend onClose={() => setPrefs({ legend: false })} />}
               {prefs.hint && (
                 <Panel position="top-center" className="cv-hint">
-                  <span>{tr('双击空白处新建 · 从节点边上的圆点拖出连线 · 右键看能做什么')}</span>
-                  <button className="ib" title={tr('知道了')} aria-label={tr('知道了')} onClick={() => setPrefs({ hint: false })}><Icon n="close" size={12} /></button>
+                  <span>{tr('双击空白处新建 · 从节点边缘圆点拖拽连线 · 右键查看更多操作')}</span>
+                  <button className="ib" title={tr('确认')} aria-label={tr('确认')} onClick={() => setPrefs({ hint: false })}><Icon n="close" size={12} /></button>
                 </Panel>
               )}
             </ReactFlow>

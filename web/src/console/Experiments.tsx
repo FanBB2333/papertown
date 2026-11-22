@@ -88,11 +88,11 @@ export function Experiments(p: Props) {
         </div>
         {zoom && <button className="xf-zoom" onClick={() => setZoom(null)}>{when(d0)} – {when(d1)}<Icon n="close" size={12} /></button>}
         {st && (
-          <button className="xf-zoom xf-pick" onClick={() => setSt(null)} style={{ ['--c' as string]: ST[st].c }} title={tr('不再只看这个状态')}>
-            <i className={ST[st].hollow ? 'hollow' : ''} />{tr('只看{0}', ST[st].label)}<Icon n="close" size={12} />
+          <button className="xf-zoom xf-pick" onClick={() => setSt(null)} style={{ ['--c' as string]: ST[st].c }} title={tr('显示全部状态')}>
+            <i className={ST[st].hollow ? 'hollow' : ''} />{tr('仅看{0}', ST[st].label)}<Icon n="close" size={12} />
           </button>
         )}
-        <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('搜任务名、编号、说明')} value={q} onChange={e => setQ(e.target.value)} /></label>
+        <label className="xf-q"><Icon n="lens" size={14} /><input placeholder={tr('搜索名称、编号、说明')} value={q} onChange={e => setQ(e.target.value)} /></label>
       </div>
 
       <div className="tiles">
@@ -105,7 +105,7 @@ export function Experiments(p: Props) {
             </button>
           );
         })}
-        <div className="tile gh" title={tr('这段时间里这个项目的任务占卡的时长，按卡数累加')} data-ref="count:gpu-hours"
+        <div className="tile gh" title={tr('此时间段内该项目任务的占卡时长，按卡数累加')} data-ref="count:gpu-hours"
           data-ref-label={`${tr('GPU 小时')} ${gh}`}><b>{gh}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时')}</span></div>
       </div>
       {board.err && <p className="warn-box small">{board.err}</p>}
@@ -116,10 +116,10 @@ export function Experiments(p: Props) {
         <div className="cs-h">
           <span className="cs-ic"><Icon n="clock" size={15} /></span><h3>{tr('时间线')}</h3>
           <Legend states={['running', 'done', 'failed', 'cancelled']} />
-          <span className="muted small">{tr('拖动框选放大 · 双击还原 · 点一个任务看详情')}</span>
+          <span className="muted small">{tr('拖动框选放大 · 双击还原 · 点击任务查看详情')}</span>
         </div>
         {gjobs.length ? <Gantt jobs={gjobs} domain={[d0, d1]} now={now} onZoom={setZoom} onPick={openIn([...gjobs].sort((a, b) => a.start - b.start).map(x => x.id))} />
-          : <p className="muted small">{jobs.length ? tr('这段时间里没有符合条件的任务。换一个时间范围试试。') : tr('这个项目还没有实验任务。代码员工提交实验后，进度将在这里显示。')}</p>}
+          : <p className="muted small">{jobs.length ? tr('此时间段内暂无符合条件的任务，请更换时间范围。') : tr('该项目暂无实验任务。代码员工提交实验后，进度将在此显示。')}</p>}
       </section>
 
       <Cluster mine={new Set(jobs.map(j => j.nvidb?.id).filter((x): x is number => x != null))} onOpen={openIn([])} />
@@ -145,7 +145,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
   const when_ = (j: Job) => ago(j.nvidb?.finished_at ?? j.ended_at ?? j.nvidb?.started_at ?? j.started_at);
   return (
     <section className="focus">
-      <div className="focus-h"><span className="cs-ic"><Icon n="eye" size={15} /></span><h3>{tr('先看这里')}</h3></div>
+      <div className="focus-h"><span className="cs-ic"><Icon n="eye" size={15} /></span><h3>{tr('优先关注')}</h3></div>
       <div className="focus-g">
         {withRes.length > 0 && (
           <div className="fc s-done">
@@ -160,7 +160,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
         )}
         {live.length > 0 && (
           <div className="fc s-running">
-            {head('running', tr('在跑和排队'), live.length)}
+            {head('running', tr('运行与排队'), live.length)}
             {live.slice(0, 3).map(j => {
               const run = stj(j) === 'running', pct = run ? pctOf(j.nvidb?.progress) : null;
               return (

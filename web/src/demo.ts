@@ -17,7 +17,7 @@ export const demoFile = (lineId: string, name: string) => `demo/files/${lineId}/
 const cache = new Map<string, Promise<unknown>>();
 function load(key: string): Promise<unknown> {
   if (!cache.has(key)) {
-    cache.set(key, fetch(`demo/${key}.json`).then(r => (r.ok ? r.json() : Promise.reject(new Error(tr('演示里没有这部分数据'))))));
+    cache.set(key, fetch(`demo/${key}.json`).then(r => (r.ok ? r.json() : Promise.reject(new Error(tr('演示中暂无此部分数据'))))));
   }
   return cache.get(key)!.then(v => structuredClone(v));
 }
@@ -86,7 +86,7 @@ function normalizeDemo(value: unknown): any {
 }
 
 export async function demoCall(method: string, url: string): Promise<unknown> {
-  if (method !== 'GET') throw new Error(tr('这是只读的演示：要让小镇真的跑起来，请到 GitHub 上克隆 Papertown，在本机启动。'));
+  if (method !== 'GET') throw new Error(tr('此为只读演示：如需实际启动运行小镇，请从 GitHub 克隆 Papertown，在本机启动。'));
   const u = new URL(url, location.href);
   const p = u.searchParams;
   if (u.pathname === '/api/library') return library(p.get('q') ?? '', p.get('topic') ?? '', Number(p.get('limit') ?? 60));

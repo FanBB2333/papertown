@@ -13,11 +13,11 @@ import { ago, dur, headline, headlines, lastLine, pctOf, tails, toggled } from '
 type Kind = 'table' | 'cards' | 'board' | 'groups' | 'grid';
 type View = 'auto' | Kind;
 const VIEWS: [Kind, string, IconName, string][] = [
-  ['table', tr('表格'), 'rows', tr('一行一个任务，可以按列排序：任务多、要找某一个的时候')],
-  ['cards', tr('卡片'), 'cards', tr('一张卡一个任务，进度、结果、出错直接摊开：同时在跑的不多的时候')],
-  ['board', tr('看板'), 'board', tr('按状态分成四栏：看一批任务走到了哪一步')],
-  ['groups', tr('分组'), 'stack', tr('同一组参数扫描、同一批提交的归在一起：看每组跑完多少、数字最高的是哪个')],
-  ['grid', tr('方格'), 'dots', tr('一个任务一个小方块，一天一行：几百个任务时看全貌')],
+  ['table', tr('表格'), 'rows', tr('每行一个任务，支持按列排序，适合任务较多或查找特定任务时')],
+  ['cards', tr('卡片'), 'cards', tr('每张卡片一个任务，直接展示进度、结果与错误，适合并行任务较少时')],
+  ['board', tr('看板'), 'board', tr('按状态分四栏：查看一批任务的当前进度')],
+  ['groups', tr('分组'), 'stack', tr('同组参数扫描或同批提交归为一类：查看每组完成进度与最高数值')],
+  ['grid', tr('方格'), 'dots', tr('每个任务一个方块，每天一行，适合在数百个任务时查看全貌')],
 ];
 const KEY = 'papertown.exp.view';
 const RANK: Record<St, number> = { running: 0, queued: 1, failed: 2, done: 3, cancelled: 4 };
@@ -44,7 +44,7 @@ export function JobViews({ jobs, open, onOpen, onData }: Props) {
       <div className="cs-h jv-h">
         <span className="cs-ic"><Icon n={v[2]} size={15} /></span><h3>{tr('任务 · {0}', jobs.length)}</h3>
         <div className="jv-sw" role="tablist" aria-label={tr('任务的显示方式')}>
-          <button className={view === 'auto' ? 'on' : ''} onClick={() => pick('auto')} title={tr('按眼下的任务自动挑：少的用卡片，在跑的多用看板，几百个用方格，其余用表格')}>
+          <button className={view === 'auto' ? 'on' : ''} onClick={() => pick('auto')} title={tr('依当前任务自动选择：较少用卡片，运行中多用看板，数百用方格，其余用表格')}>
             <Icon n="wand" size={13} />{tr('自动')}{view === 'auto' && <em>{v[1]}</em>}
           </button>
           {VIEWS.map(([k, name, ic, hint]) => (
@@ -54,7 +54,7 @@ export function JobViews({ jobs, open, onOpen, onData }: Props) {
         <button className="lnk" onClick={onData}>{tr('结果和数据')} →</button>
       </div>
       <p className="jv-hint muted small">{v[3]}</p>
-      {!jobs.length ? <p className="muted small">{tr('没有符合条件的任务。')}</p>
+      {!jobs.length ? <p className="muted small">{tr('暂无符合条件的任务。')}</p>
         : kind === 'table' ? <Table {...p} /> : kind === 'cards' ? <Cards {...p} /> : kind === 'board' ? <Board {...p} />
           : kind === 'groups' ? <Groups {...p} /> : <Grid {...p} />}
     </section>
@@ -103,7 +103,7 @@ function Table({ jobs, open, onOpen }: V) {
             <Fragment key={j.id}>
               {head && tally && (
                 <tr className="xt-day"><td colSpan={7}>
-                  <b>{Number.isFinite(day) ? dayName(day!) : tr('还没开始')}</b><em>{tr('{0} 个', tally.n)}</em>
+                  <b>{Number.isFinite(day) ? dayName(day!) : tr('尚未开始')}</b><em>{tr('{0} 个', tally.n)}</em>
                   {tally.failed > 0 && <em className="bad-t">✕ {tally.failed}</em>}{tally.done > 0 && <em>✓ {tally.done}</em>}
                 </td></tr>
               )}
@@ -190,7 +190,7 @@ function Board({ jobs, open, onOpen, now }: V) {
           </div>
         ))}
       </div>
-      {cancelled > 0 && <p className="muted small jb-foot">{tr('另有 {0} 个已取消，在表格里能看到。', cancelled)}</p>}
+      {cancelled > 0 && <p className="muted small jb-foot">{tr('另有 {0} 个已取消，可在表格中查看。', cancelled)}</p>}
     </>
   );
 }
@@ -207,7 +207,7 @@ function Groups({ jobs, open, onOpen, now }: V) {
   return (
     <div className="jg-wrap">
       <div className="jg-by seg mini">
-        <button className={by === 'name' ? 'on' : ''} onClick={() => setBy('name')}>{tr('按名字')}</button>
+        <button className={by === 'name' ? 'on' : ''} onClick={() => setBy('name')}>{tr('按名称')}</button>
         <button className={by === 'batch' ? 'on' : ''} onClick={() => setBy('batch')}>{tr('按提交批次')}</button>
       </div>
       {groups.map((g, i) => {
@@ -232,7 +232,7 @@ function Groups({ jobs, open, onOpen, now }: V) {
             {top && (
               <p className="jg-top">{tr('最高')} <span className="muted">{shortKey(top.k)}</span> <strong>{fmtNum(top.v)}</strong>
                 <button className="lnk" onClick={() => onOpen(top.j.id, order)}>{top.j.name}</button>
-                <span className="muted small">{tr('（{0} 个交回了这一项）', top.n)}</span></p>
+                <span className="muted small">{tr('（{0} 个返回了此项）', top.n)}</span></p>
             )}
             {on && (
               <div className="jg-rows">
@@ -282,7 +282,7 @@ function Grid({ jobs, open, onOpen, now }: V) {
     <div className="jgr">
       {days.map(([d, js]) => (
         <div key={d} className="jgr-row">
-          <span className="jgr-d">{Number.isFinite(d) ? dayName(d) : tr('还没开始')}<em>{js.length}</em></span>
+          <span className="jgr-d">{Number.isFinite(d) ? dayName(d) : tr('尚未开始')}<em>{js.length}</em></span>
           <div className="jgr-cells">
             {js.map((j, i) => {
               const s = stj(j), res = headlines(resOf(j), 2);
@@ -306,8 +306,8 @@ function Grid({ jobs, open, onOpen, now }: V) {
         {(['running', 'done', 'failed', 'queued', 'cancelled'] as St[]).map(s => (
           <span key={s}><i className={`jgr-c s-${s}${ST[s].hollow ? ' hollow' : ''}`} />{ST[s].label}</span>
         ))}
-        <span><i className="jgr-c s-done res" />{tr('带点的交回了结果')}</span>
-        <span>{tr('一天一行，从早到晚')}</span>
+        <span><i className="jgr-c s-done res" />{tr('带点即已返回结果')}</span>
+        <span>{tr('每日一行，由早到晚')}</span>
       </div>
       <Tip tip={tip} />
     </div>

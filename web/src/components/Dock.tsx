@@ -54,8 +54,8 @@ export function Dock({ view, open, setOpen, away, target, setTarget, focusKey, o
           </div>
         </div>
         {!open && (
-          <button className="dk-call" onClick={wake} title={tr('问这一页的事、请它帮你办，或者写一个新 idea（/）')}>
-            <Icon n="chat" size={17} /><span>{tr('问小助手，或者写一个新 idea')}</span><kbd className="dk-kbd">/</kbd>
+          <button className="dk-call" onClick={wake} title={tr('询问本页内容、交由小助手处理，或输入新 idea（/）')}>
+            <Icon n="chat" size={17} /><span>{tr('向小助手提问，或输入新 idea')}</span><kbd className="dk-kbd">/</kbd>
           </button>
         )}
       </div>

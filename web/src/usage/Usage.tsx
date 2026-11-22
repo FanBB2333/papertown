@@ -70,7 +70,7 @@ function Window({ w }: { w: UsageWindow }) {
     <div className="usage-between"><span className="usage-wname">{isFive(w) ? tr('5 小时额度') : isWeek(w) ? tr('每周额度') : tr(w.label)}{s && <span className="usage-chip">{s}</span>}</span>
       <span className="usage-q-num"><b>{pct(w.used)}</b><small>{until(w.resets_at)}</small></span></div>
     <Segments value={w.used} label={name} wide />
-    <small>{w.resets_at ? rich(tr('剩余 {0} · {1} 重置'), <b>{pct(w.left)}</b>, <b>{resetDate(w.resets_at)}</b>) : rich(tr('剩余 {0} · 还没有开始计时'), <b>{pct(w.left)}</b>)}</small>
+    <small>{w.resets_at ? rich(tr('剩余 {0} · {1} 重置'), <b>{pct(w.left)}</b>, <b>{resetDate(w.resets_at)}</b>) : rich(tr('剩余 {0} · 尚未开始计时'), <b>{pct(w.left)}</b>)}</small>
   </div>;
 }
 

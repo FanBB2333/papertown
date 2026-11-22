@@ -89,7 +89,7 @@ function Picker({ mode }: { mode: 'theme' | 'icons' }) {
                 {i === savedAt && <span className="edp-now">{tr('当前')}</span>}
               </button>
             ))}
-          {!pickable.length && <p className="edp-none">{tr('没有匹配的主题')}</p>}
+          {!pickable.length && <p className="edp-none">{tr('无匹配的主题')}</p>}
         </div>
       </div>
     </div>

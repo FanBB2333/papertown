@@ -93,7 +93,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
   }, [onKey]);
 
   async function remove(p: Page) {
-    if (!confirm(tr('删掉「{0}」？', p.title))) return;
+    if (!confirm(tr('删除「{0}」？', p.title))) return;
     try {
       await api.dropPage(line.id, p.id);
       setPages(ps => ps && ps.filter(x => x.id !== p.id));
@@ -106,9 +106,9 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
     <div className="ak pv" role="dialog" aria-modal="true" aria-label={tr('汇报与讲解')}>
       {nav && <div className="ak-scrim" onClick={() => setNav(false)} />}
       <aside className={`ak-side${nav ? ' open' : ''}`}>
-        <a className="ak-back" href={href(back)} onClick={e => follow(e, back)}><Icon n="left" size={15} />{tr('回到项目')}</a>
-        <button className={`ak-new${asking ? ' on' : ''}`} onClick={() => setAsking(a => !a)} disabled={!lead} title={lead ? '' : tr('这个项目的负责人还没有启动')}>
-          <Icon n="compose" size={16} />{tr('请负责人写一页')}
+        <a className="ak-back" href={href(back)} onClick={e => follow(e, back)}><Icon n="left" size={15} />{tr('返回项目')}</a>
+        <button className={`ak-new${asking ? ' on' : ''}`} onClick={() => setAsking(a => !a)} disabled={!lead} title={lead ? '' : tr('该项目的负责人尚未启动')}>
+          <Icon n="compose" size={16} />{tr('请负责人生成页面')}
         </button>
         {asking && lead && <Request lineId={line.id} toast={toast} onDone={() => setAsking(false)} />}
         {kinds.length > 1 && (
@@ -130,12 +130,12 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
                     <b>{p.title}</b>
                     <span><i className={`pv-k k-${p.kind}`}>{KIND[p.kind]}</i>{ago(p.at)}{p.by ? ` · ${p.by}` : ''}</span>
                   </a>
-                  <button className="ib ak-del" onClick={() => remove(p)} title={tr('删掉这一页')} aria-label={tr('删掉这一页')}><Icon n="close" size={12} /></button>
+                  <button className="ib ak-del" onClick={() => remove(p)} title={tr('删除此页')} aria-label={tr('删除此页')}><Icon n="close" size={12} /></button>
                 </li>
               );
             })}
           </ul>
-          {pages && !pages.length && <p className="ak-none">{tr('还没有页面。')}</p>}
+          {pages && !pages.length && <p className="ak-none">{tr('暂无页面。')}</p>}
         </nav>
       </aside>
 
@@ -153,11 +153,11 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
           )}
           {cur && (
             <div className="pv-acts">
-              <button className="btn pri" onClick={present} title={tr('全屏演示，←/→ 换页，Esc 退出')}><Icon n="play" size={14} /><span>{tr('演示')}</span></button>
+              <button className="btn pri" onClick={present} title={tr('全屏演示，←/→ 翻页，Esc 退出')}><Icon n="play" size={14} /><span>{tr('演示')}</span></button>
               <a className="ib" href={api.pageUrl(line.id, cur.id)} target="_blank" rel="noreferrer" title={tr('在新标签页打开')} aria-label={tr('在新标签页打开')}><Icon n="ext" size={16} /></a>
             </div>
           )}
-          <a className="ib ak-x" href={href(back)} onClick={e => follow(e, back)} title={tr('回到项目')} aria-label={tr('关闭')}><Icon n="close" size={18} /></a>
+          <a className="ib ak-x" href={href(back)} onClick={e => follow(e, back)} title={tr('返回项目')} aria-label={tr('关闭')}><Icon n="close" size={18} /></a>
         </header>
 
         {pages == null ? <p className="ak-load">{tr('加载中…')}</p> : cur ? (
@@ -170,10 +170,10 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
           <div className="ak-scroll">
             <div className="ak-hello">
               <span className="ak-hello-ic"><Icon n="doc" size={24} /></span>
-              <h1>{pid ? tr('没有这一页了') : tr('还没有汇报和讲解')}</h1>
-              <p>{tr('项目负责人汇报、讲解时，会把内容写成一页 HTML：表格、图、对比和分步的解释。写好的页面都放在这里，也可以全屏演示。')}</p>
+              <h1>{pid ? tr('该页面不存在') : tr('暂无汇报与讲解')}</h1>
+              <p>{tr('项目负责人汇报与讲解时，将生成包含表格、图表、对比及分步说明的 HTML 页面。所有页面均汇总在此处，支持全屏演示。')}</p>
               {lead ? <div className="pv-ask"><Request lineId={line.id} toast={toast} big /></div>
-                : <p className="ak-mem">{tr('这个项目的负责人还没有启动。')} <a href={href(back)} onClick={e => follow(e, back)}>{tr('在项目页打开开关')}</a></p>}
+                : <p className="ak-mem">{tr('该项目的负责人尚未启动。')} <a href={href(back)} onClick={e => follow(e, back)}>{tr('在项目页开启开关')}</a></p>}
             </div>
           </div>
         )}
@@ -194,18 +194,18 @@ function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: st
     try {
       await api.say(`lead-${lineId}`, `请写成一页给我看，用 \`pt publish 页面.html --kind explain\` 发布：\n\n${q}`);
       setText('');
-      toast(tr('已经交给负责人，它写好的页面会出现在这里。'));
+      toast(tr('已提交给负责人，生成的页面将显示在此处。'));
       onDone?.();
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
   return (
     <form className={`ak-comp${big ? '' : ' mini pv-req'}`} onSubmit={e => { e.preventDefault(); send(); }}>
-      <textarea rows={big ? 2 : 3} value={text} maxLength={1000} autoFocus={!big} placeholder={tr('想让负责人讲什么？比如「把这周的实验结果做成一页对比」')}
+      <textarea rows={big ? 2 : 3} value={text} maxLength={1000} autoFocus={!big} placeholder={tr('输入讲解主题，例如「将本周实验结果整理为单页对比」')}
         onChange={e => setText(e.target.value)}
         onKeyDown={enterSends(send)} />
       <div className="ak-comp-row">
-        <span className="small muted">{tr('负责人读完项目写成一页')}</span>
-        <button className="ak-send" type="submit" disabled={busy || !text.trim()} aria-label={tr('发给负责人')}><Icon n="send" size={15} /></button>
+        <span className="small muted">{tr('负责人读取项目后生成页面')}</span>
+        <button className="ak-send" type="submit" disabled={busy || !text.trim()} aria-label={tr('发送至负责人')}><Icon n="send" size={15} /></button>
       </div>
     </form>
   );
@@ -234,7 +234,7 @@ export function PagesBox({ r, toast }: { r: ProjectCard; toast: (t: string) => v
             );
           })}
         </ul>
-      ) : pages && <p className="psec-empty muted small">{tr('负责人汇报和讲解时写的 HTML 页面放在这里，可以全屏演示。')}</p>}
+      ) : pages && <p className="psec-empty muted small">{tr('负责人汇报与讲解生成的 HTML 页面汇总在此处，支持全屏演示。')}</p>}
     </section>
   );
 }

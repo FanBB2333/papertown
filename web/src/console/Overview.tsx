@@ -14,7 +14,7 @@ interface Props {
   line: Line | null; info: WsInfo | null; tick: number; typeOf: (id: string) => string; go: (m: ModId) => void; onAsk: () => void; onOpen: (id: string) => void;
 }
 
-const REAL = tr('工序按顺序走：方法设计在造纸厂，代码和实验在仓库与实验农场，写作在印刷厂，最后经质检所出厂。');
+const REAL = tr('工序依次推进：方法设计在造纸厂，代码与实验在仓库和实验农场，写作在印刷厂，最终经质检所出厂。');
 
 export function Overview(p: Props) {
   const l = p.line;
@@ -29,8 +29,8 @@ export function Overview(p: Props) {
   const parts: { m: ModId; icon: IconName; t: string; v: string; s?: string }[] = [
     { m: 'survey', icon: 'lens', t: tr('调研'), v: h?.verdict ?? (l.linked?.paper?.title ? tr('本地项目') : '—'), s: h ? tr('最接近 {0} 篇', h.similar?.length ?? 0) : undefined },
     { m: 'code', icon: 'code', t: tr('代码仓库'), v: p.info?.code ? p.info.code.name : tr('暂无'), s: p.info?.code ? [p.info.code.branch, p.info.code.dirty ? tr('{0} 处改动', p.info.code.dirty) : tr('无改动')].filter(Boolean).join(' · ') : undefined },
-    { m: 'exp', icon: 'flask', t: tr('实验'), v: exp ? { done: tr('完成'), run: tr('进行中'), todo: tr('还没开始') }[exp.status] : '—', s: exp?.note ? gist(exp.note, 36) : undefined },
-    { m: 'paper', icon: 'doc', t: tr('论文'), v: p.info?.paper ? p.info.paper.main ?? p.info.paper.name : tr('暂无'), s: p.info?.paper ? (p.info.paper.pdf ? tr('有 PDF') : tr('还没编译')) : undefined },
+    { m: 'exp', icon: 'flask', t: tr('实验'), v: exp ? { done: tr('完成'), run: tr('进行中'), todo: tr('尚未开始') }[exp.status] : '—', s: exp?.note ? gist(exp.note, 36) : undefined },
+    { m: 'paper', icon: 'doc', t: tr('论文'), v: p.info?.paper ? p.info.paper.main ?? p.info.paper.name : tr('暂无'), s: p.info?.paper ? (p.info.paper.pdf ? tr('有 PDF') : tr('尚未编译')) : undefined },
   ];
 
   return (
@@ -40,7 +40,7 @@ export function Overview(p: Props) {
           <span className="ov-seq">#{l.seq}</span>
           <h2>{l.title}</h2>
           <StatusTag status={l.status} />
-          <a className="ov-brief small" href={href(brief)} onClick={e => follow(e, brief)} title={tr('进展、卡片和对话')}>{tr('在进展里看')}<Icon n="right" size={12} /></a>
+          <a className="ov-brief small" href={href(brief)} onClick={e => follow(e, brief)} title={tr('进展、卡片和对话')}>{tr('进展中查看')}<Icon n="right" size={12} /></a>
         </div>
         {l.idea && <p className="ov-idea">{gist(l.idea, 140)}</p>}
       </section>
@@ -48,7 +48,7 @@ export function Overview(p: Props) {
       {ask && (
         <a className="ov-ask" href={href(brief)} onClick={e => follow(e, brief)}>
           <Icon n="bell" size={20} />
-          <div><b>{ask}</b><p className="small">{tr('在「进展」里决定，和负责人商量也在那里')}</p></div>
+          <div><b>{ask}</b><p className="small">{tr('在「进展」中决定，也可在此与负责人沟通')}</p></div>
           <Icon n="right" size={16} />
         </a>
       )}

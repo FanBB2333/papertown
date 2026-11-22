@@ -87,7 +87,7 @@ function phase(v: CanvasView) {
   if (healing) return tr('{0}自愈中', gates.find(g => g.stage === healing.stage)?.name ?? '');
   const held = gates.find(g => gateLook(g) === 'block');
   if (held) return tr('{0}卡口阻断', held.name);
-  if (human) return tr('{0} 件等你拍板', human);
+  if (human) return tr('{0} 件待你拍板', human);
   if (gates.length && gates.every(g => ['pass', 'off', 'none'].includes(gateLook(g)))) return tr('卡口全部放行');
   return tr('巡检中');
 }
@@ -214,7 +214,7 @@ function Track({ v, r }: { v: CanvasView; r: ProjectCard }) {
         return (
           <section key={part.id} className={`lp-blk b-${part.id}`}>
             <header>
-              <button className="lp-blk-h" onClick={() => openAt(v.seq, undefined, part.id)} title={tr('在完整回路里看「{0}」', part.name)}><Icon n={part.icon} size={13} />{part.name}</button>
+              <button className="lp-blk-h" onClick={() => openAt(v.seq, undefined, part.id)} title={tr('在完整回路中查看「{0}」', part.name)}><Icon n={part.icon} size={13} />{part.name}</button>
               {blockPills(part.id, ns).filter(p => p.tone !== 'pass' && p.tone !== 'none').map(p => <em key={p.text} className={`lp-say t-${p.tone}`}>{p.text}</em>)}
             </header>
             <div className="lp-row lp-soft">
@@ -243,8 +243,8 @@ function Track({ v, r }: { v: CanvasView; r: ProjectCard }) {
                 {back.map(t => (
                   <button key={t.id} className={`lp-tk l-${t.loop}${t.escalated ? ' esc' : ''}`} data-box={t.id} onClick={() => openAt(v.seq, t.id)} title={t.title}>
                     <Icon n={t.loop === 'hard' ? 'refresh' : 'spark'} size={12} />
-                    {t.loop === 'hard' ? tr('硬卡口打回重修 · 第 {0} 轮（{1}）', t.round || 1, t.id) : tr('软纠偏：{0}（{1}）', t.title ?? '', t.id)}
-                    {t.escalated && <em>{tr('等你拍板')}</em>}
+                    {t.loop === 'hard' ? tr('硬卡口退回修改 · 第 {0} 轮（{1}）', t.round || 1, t.id) : tr('软纠偏：{0}（{1}）', t.title ?? '', t.id)}
+                    {t.escalated && <em>{tr('待你拍板')}</em>}
                   </button>
                 ))}
               </div>
@@ -284,7 +284,7 @@ function HardReport({ v }: { v: CanvasView }) {
           <li className="rest"><code>[{[...new Set(rest.map(c => c.prio))].sort().join('/')}]</code><span>{rest.slice(0, 3).map(c => trx(c.title)).join('、')}{rest.length > 3 ? tr(' 等 {0} 项', rest.length) : ''}</span>
             <b>{tr('全部达标')}</b><em className="lp-pill ok">{tr('已放行 ✓')}</em></li>
         )}
-        {!hard.length && <li className="muted small">{tr('还没有可查的结果：论文和实验有了以后自动查')}</li>}
+        {!hard.length && <li className="muted small">{tr('暂无可查结果：论文与实验产出后将自动检查')}</li>}
       </ul>
     </section>
   );
@@ -298,8 +298,8 @@ function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast
     <section className="lp-rep-s">
       <header><h4><i className="cv-ring2" />{tr('软检测航向汇报')}<span>{tr('负责人语义巡检结论')}</span></h4>
         <button className="lnk" disabled={busy || !v.lead} title={v.lead ? '' : tr('先配一位项目负责人')}
-          onClick={() => { setBusy(true); api.askAll(lineId).then(x => toast(tr('已经请负责人复审 {0} 项', x.n))).catch(e => toast((e as Error).message)).finally(() => setBusy(false)); }}>
-          {tr('让负责人现在复审')}<Icon n="refresh" size={12} />
+          onClick={() => { setBusy(true); api.askAll(lineId).then(x => toast(tr('已请负责人复审 {0} 项', x.n))).catch(e => toast((e as Error).message)).finally(() => setBusy(false)); }}>
+          {tr('立即请负责人复审')}<Icon n="refresh" size={12} />
         </button>
       </header>
       <ul>
@@ -308,11 +308,11 @@ function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast
           return (
             <li key={c.id}>
               <em className={`lp-pill v-${k}`}>{VERDICT[k]}{k === 'pass' ? ' ✓' : k === 'warn' || k === 'fail' ? ' !' : ''}</em>
-              <div><b>{trx(c.title)}</b><p>{c.last?.note || (c.asked ? tr('{0}问过负责人，还没回', ago(c.asked)) : trx(c.text))}</p></div>
+              <div><b>{trx(c.title)}</b><p>{c.last?.note || (c.asked ? tr('{0}询问负责人，尚未回复', ago(c.asked)) : trx(c.text))}</p></div>
             </li>
           );
         })}
-        {!soft.length && <li className="muted small">{tr('没有开着的软巡检')}</li>}
+        {!soft.length && <li className="muted small">{tr('暂无开启的软巡检')}</li>}
       </ul>
     </section>
   );

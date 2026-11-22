@@ -32,13 +32,13 @@ const count = <T,>(xs: T[], f: (x: T) => boolean) => xs.filter(f).length;
 // what a department is doing, in a few words: what waits for you first, then what is moving
 function brief(d: Department): string {
   const working = count(d.agents, a => a.status === 'working' || a.status === 'starting');
-  if (working) return tr('{0} 个员工在干活', working);
+  if (working) return tr('{0} 名员工工作中', working);
   const run = count(d.jobs, j => j.status === 'running'), queued = d.jobs.length - run;
-  if (run) return queued ? tr('{0} 个实验在跑 · {1} 个排队', run, queued) : tr('{0} 个实验在跑', run);
-  if (queued) return tr('{0} 个实验在排队', queued);
+  if (run) return queued ? tr('{0} 个实验运行中 · {1} 个排队', run, queued) : tr('{0} 个实验运行中', run);
+  if (queued) return tr('{0} 个实验排队中', queued);
   const going = count(d.lines, l => l.status === 'running');
-  if (going) return tr('{0} 个项目在做', going);
-  if (d.gpus) return d.gpus.running ? tr('{0} 个任务在跑', d.gpus.running) : tr('{0} 张卡空闲', d.gpus.idle);
+  if (going) return tr('{0} 个项目进行中', going);
+  if (d.gpus) return d.gpus.running ? tr('{0} 个任务运行中', d.gpus.running) : tr('{0} 张卡空闲', d.gpus.idle);
   if (d.lines.length === 1) return `#${d.lines[0].seq} ${STATUS[d.lines[0].status] ?? d.lines[0].status}`;
   if (d.lines.length) return tr('{0} 个项目', d.lines.length);
   return d.state === 'off' ? tr('未接入') : d.job;
@@ -56,7 +56,7 @@ function DeptCard({ d, onRoom, onAgent }: {
         <i className={`dp-st s-${d.state}`} />
         <h4>{d.name}</h4>
         <span className="dp-district">{d.district}</span>
-        <button className="dp-op" onClick={() => onRoom(d.id)}>{tr('进去看看')}<Icon n="right" size={14} /></button>
+        <button className="dp-op" onClick={() => onRoom(d.id)}>{tr('进入查看')}<Icon n="right" size={14} /></button>
       </header>
       <p className="dp-job">{d.jobs.length ? brief(d) : d.job}</p>
       {(d.lines.length > 0 || d.agents.length > 0 || d.jobs.length > 0) && (
@@ -75,7 +75,7 @@ function DeptCard({ d, onRoom, onAgent }: {
                 <b>{agentName(a)}</b>{a.last?.text && <em>{a.last.kind === 'user' ? tr('你：') : ''}{a.last.text}</em>}
               </button>
               <span className="dp-rs">{agentSub(a)}</span>
-              <span className="dp-ra"><button className="btn" onClick={() => onAgent(a)}>{tr('跟它说')}</button></span>
+              <span className="dp-ra"><button className="btn" onClick={() => onAgent(a)}>{tr('发起对话')}</button></span>
             </div>
           ))}
           {d.jobs.slice(0, 5).map(j => (
@@ -117,7 +117,7 @@ export function Trace() {
           <div className="tr" key={t.id} title={t.ts}>
             <span className={`k k-${t.kind.toLowerCase()}`}>{t.kind}</span><code>{t.label}</code><em>{t.detail}</em>
           </div>
-        )) : <p className="muted">{tr('还没有调用。')}</p>}
+        )) : <p className="muted">{tr('暂无调用。')}</p>}
       </div>
     </div>
   );

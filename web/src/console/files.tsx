@@ -47,7 +47,7 @@ export function useFiles(lineId: string, root: WsRoot, tick: number, toast: (t: 
   const save = useCallback(async (only?: string) => {
     const todo = ref.current.filter(o => isDirty(o) && (!only || o.path === only));
     if (!todo.length) return true;
-    if (DEMO) { toast(tr('这是只读的演示，改动不会保存。')); return false; }
+    if (DEMO) { toast(tr('此为只读演示，修改不会保存。')); return false; }
     setSaving(true);
     try {
       for (const o of todo) {
@@ -67,7 +67,7 @@ export function useFiles(lineId: string, root: WsRoot, tick: number, toast: (t: 
 
   const close = useCallback((path: string) => {
     const o = ref.current.find(x => x.path === path);
-    if (o && isDirty(o) && !confirm(tr('{0} 还没保存，关掉会丢掉这些修改。', base(path)))) return;
+    if (o && isDirty(o) && !confirm(tr('{0} 尚未保存，关闭将丢失这些修改。', base(path)))) return;
     const i = ref.current.findIndex(x => x.path === path);
     const rest = ref.current.filter(x => x.path !== path);
     setOpen(rest);
@@ -150,14 +150,14 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', root }: {
         <button key={f.path} className={`tr-row tr-file${f.path === cur ? ' on' : ''}${f.status ? ` st-${f.status}` : ''}`} style={{ ['--d' as string]: depth }}
           onClick={() => onOpen(f.path)} title={`${f.path} · ${bytes(f.size)}`} data-ref={`file:${root}:${f.path}`} data-ref-label={f.path}>
           <FileIcon path={f.path} theme={icons} /><span className="tr-name">{base(f.path)}</span>
-          {dirty.has(f.path) && <i className="tr-dirty" title={tr('还没保存')} />}
+          {dirty.has(f.path) && <i className="tr-dirty" title={tr('尚未保存')} />}
           {m && <em className="tr-mark" title={m[1]}>{m[0]}</em>}
         </button>,
       );
     }
     return out;
   }
-  return <div className={`tree ic-${icons}`}>{rows(top, 0)}{!shown.length && <p className="muted small tr-none">{filter ? tr('没有匹配的文件。') : tr('这里还没有文件。')}</p>}</div>;
+  return <div className={`tree ic-${icons}`}>{rows(top, 0)}{!shown.length && <p className="muted small tr-none">{filter ? tr('无匹配文件。') : tr('此处暂无文件。')}</p>}</div>;
 }
 
 export function Tabs({ f, lead, extra }: { f: Files; lead?: React.ReactNode; extra?: React.ReactNode }) {
@@ -195,12 +195,12 @@ export function FileView({ f, onRun, onCursor, goto, empty }: {
   const note = !o ? empty
     : o.loading ? <p className="muted">{tr('读取中…')}</p>
       : o.err ? <p className="warn-box small">{o.err}</p>
-        : o.binary ? <div className="fv-note"><Icon n="file" size={30} /><b>{base(o.path)}</b><p className="muted small">{tr('二进制文件（{0}），这里不能打开。', bytes(o.size))}</p></div>
-          : o.tooBig ? <div className="fv-note"><Icon n="file" size={30} /><b>{base(o.path)}</b><p className="muted small">{tr('文件太大（{0}），请在本地打开。', bytes(o.size))}</p></div>
+        : o.binary ? <div className="fv-note"><Icon n="file" size={30} /><b>{base(o.path)}</b><p className="muted small">{tr('二进制文件（{0}），此处无法打开。', bytes(o.size))}</p></div>
+          : o.tooBig ? <div className="fv-note"><Icon n="file" size={30} /><b>{base(o.path)}</b><p className="muted small">{tr('文件过大（{0}），请在本地打开。', bytes(o.size))}</p></div>
             : null;
   return (
     <div className="fv">
-      <Suspense fallback={<p className="muted fv-wait">{tr('正在载入编辑器…')}</p>}>
+      <Suspense fallback={<p className="muted fv-wait">{tr('载入编辑器中…')}</p>}>
         <Editor doc={doc} readOnly={DEMO} onChange={f.edit} onSave={f.save} onRun={onRun} onCursor={onCursor} goto={goto} />
       </Suspense>
       {note && <div className="fv-over">{note}</div>}

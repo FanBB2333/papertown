@@ -20,7 +20,7 @@ import { Meter, noCardText, OUT_STATE, repoLine, runText, UpdateButton, useCardA
 export interface ConsoleTarget { mod?: string; file?: string; job?: string }
 type Open = (lineId: string, t?: ConsoleTarget) => void;
 
-const LISTS = [['need_you', tr('要你决定')], ['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')]] as const;
+const LISTS = [['need_you', tr('待你决定')], ['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')]] as const;
 
 export function Project({ r, defs, toast, onChange, onConsole }: {
   r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onConsole: Open;
@@ -33,7 +33,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
   const [liveLine, reloadLead] = useResidentLine(line.id);
   useEffect(() => { document.querySelector('.p-prog')?.scrollTo({ top: 0 }); }, [line.id]);
   const more = (mod: string) => (
-    <button className="lnk pj-more small" onClick={() => onConsole(line.id, { mod })} title={tr('在中控屏里看细节')}>{tr('详细')}<Icon n="right" size={12} /></button>
+    <button className="lnk pj-more small" onClick={() => onConsole(line.id, { mod })} title={tr('在中控屏查看详情')}>{tr('详细')}<Icon n="right" size={12} /></button>
   );
 
   return (
@@ -49,7 +49,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
         </div>
         <div className="pj-acts">
           <a className="btn pri" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={14} />{tr('对话')}</a>
-          <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏里看这个项目的细节')}><Icon n="board" size={14} />{tr('中控屏')}</button>
+          <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏查看该项目详情')}><Icon n="board" size={14} />{tr('中控屏')}</button>
         </div>
       </header>
       <ResidentControl lineId={line.id} resident={liveLine?.lead ?? line.lead} sample={liveLine?.sample ?? line.sample} model={liveLine?.team.find(a => a.role === 'lead')?.model ?? r.lead?.model} talk={ask} toast={toast} onChanged={reloadLead} />
@@ -82,14 +82,14 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
                     </section>
                   ))}
                 </div>
-                <p className="small muted">{tr('{0}由 {1} 写', ago(card.at), card.by)}</p>
+                <p className="small muted">{tr('{0}由 {1} 撰写', ago(card.at), card.by)}</p>
               </>
             ) : (
               <p className="psec-empty muted">{noCardText(r)}</p>
             )}
             <div className="pj-upd">
               {r.lead?.started && !r.pending && (
-                <input value={note} maxLength={300} placeholder={tr('给负责人附一句（可选），比如「重点看实验」')} onChange={e => setNote(e.target.value)}
+                <input value={note} maxLength={300} placeholder={tr('向负责人附言（可选），例如「重点关注实验」')} onChange={e => setNote(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) acts.update(note).then(ok => ok && setNote('')); }} />
               )}
               <UpdateButton r={r} acts={acts} defs={defs} note={note} />
@@ -99,12 +99,12 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
           <section className="psec" id="exp">
             <header className="psec-h">
               <h3><Icon n="flask" size={16} />{tr('实验')}</h3>
-              <span className="muted small">{[tr('{0} 个在跑', r.running.length), r.queued.length ? tr('{0} 个排队', r.queued.length) : '', card?.plans.length ? tr('{0} 个规划中', card.plans.length) : ''].filter(Boolean).join(' · ')}</span>
+              <span className="muted small">{[tr('{0} 个运行中', r.running.length), r.queued.length ? tr('{0} 个排队', r.queued.length) : '', card?.plans.length ? tr('{0} 个规划中', card.plans.length) : ''].filter(Boolean).join(' · ')}</span>
               {more('exp')}
             </header>
             <div className="pj-exp">
               <div>
-                <h4 className="pj-sub">{tr('在跑')}</h4>
+                <h4 className="pj-sub">{tr('运行中')}</h4>
                 {r.running.length ? (
                   <ul className="pj-runs">
                     {r.running.map(j => (
@@ -113,13 +113,13 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
                           <span className="pj-run-h"><i className="pp-live" /><b>{j.name}</b><span className="muted small">{ago(j.since)}</span></span>
                           <span className="pj-run-b">
                             {j.progress != null && j.progress > 0 && <span className="pc-bar"><i style={{ width: `${j.progress}%` }} /></span>}
-                            <span className="small muted">{runText(j) || tr('在跑')}</span>
+                            <span className="small muted">{runText(j) || tr('运行中')}</span>
                           </span>
                         </button>
                       </li>
                     ))}
                   </ul>
-                ) : <p className="muted small">{tr('没有在跑的实验')}</p>}
+                ) : <p className="muted small">{tr('暂无运行中的实验')}</p>}
                 {r.queued.length > 0 && (
                   <p className="small muted pj-queued">{tr('排队：')}{r.queued.map(j => j.name).join(tr('、'))}</p>
                 )}
@@ -130,7 +130,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
                   <ul className="pj-plans">
                     {card.plans.map((p, i) => <li key={i}><b>{p.name}</b>{(p.goal || p.when) && <span className="small muted">{[p.goal, p.when].filter(Boolean).join(' · ')}</span>}</li>)}
                   </ul>
-                ) : <p className="muted small">{card ? tr('负责人没写规划中的实验') : tr('由负责人在卡片上填写')}</p>}
+                ) : <p className="muted small">{card ? tr('负责人未填写规划中的实验') : tr('由负责人在卡片上填写')}</p>}
               </div>
             </div>
           </section>
@@ -150,7 +150,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
                   </li>
                 ))}
               </ul>
-            ) : <p className="psec-empty muted small">{card ? tr('负责人没写预期产出') : tr('由负责人在卡片上填写：论文、主表、图、模型…')}</p>}
+            ) : <p className="psec-empty muted small">{card ? tr('负责人未填写预期产出') : tr('由负责人在卡片上填写：论文、主表、图、模型…')}</p>}
           </section>
 
           <section className="psec" id="repos">
@@ -173,7 +173,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
                         {x.commit && <span className="pj-commit small"><code>{x.commit.hash}</code><span>{x.commit.subject}<span className="muted"> · {ago(x.commit.when)}</span></span></span>}
                         {!x.missing && <button className="btn" onClick={() => onConsole(line.id, { mod: w })}>{w === 'code' ? tr('打开代码') : tr('打开论文')}</button>}
                       </>
-                    ) : <p className="muted small">{w === 'code' ? tr('还没有代码仓库') : tr('还没有论文仓库')}</p>}
+                    ) : <p className="muted small">{w === 'code' ? tr('暂无代码仓库') : tr('暂无论文仓库')}</p>}
                   </article>
                 );
               })}

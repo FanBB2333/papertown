@@ -10,15 +10,15 @@ import { tr } from '../i18n';
 import { follow, go, href } from '../route';
 import { askPath } from './Ask';
 
-const HEALTH: Record<Health, string> = { ok: tr('顺利'), risk: tr('有风险'), blocked: tr('卡住了') };
-export const OUT_STATE: Record<OutputState, string> = { todo: tr('还没开始'), doing: tr('在做'), done: tr('完成') };
+const HEALTH: Record<Health, string> = { ok: tr('正常'), risk: tr('有风险'), blocked: tr('受阻') };
+export const OUT_STATE: Record<OutputState, string> = { todo: tr('尚未开始'), doing: tr('进行中'), done: tr('完成') };
 // each pane: its name in the picker, its short label on a card, its icon
 export const PANES: Record<Pane, [string, string, IconName]> = {
   summary: [tr('进展摘要'), tr('进展'), 'cards'],
-  attention: [tr('要你决定和卡点'), tr('要你'), 'bell'],
+  attention: [tr('待你决定与卡点'), tr('待处理'), 'bell'],
   milestone: [tr('下一个里程碑'), tr('里程碑'), 'target'],
   metrics: [tr('关键数字'), tr('数字'), 'table'],
-  running: [tr('在跑的实验'), tr('在跑'), 'play'],
+  running: [tr('运行中的实验'), tr('运行中'), 'play'],
   planned: [tr('规划中的实验'), tr('规划'), 'flask'],
   outputs: [tr('预期产出'), tr('产出'), 'doc'],
   code: [tr('代码仓库'), tr('代码'), 'code'],
@@ -30,7 +30,7 @@ export const PANE_KEYS = Object.keys(PANES) as Pane[];
 export const youNeeded = (c: ProjectCard) => c.asks > 0 || c.line.lead.state === 'blocked';
 
 const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
-const STAGE_ST: Record<'todo' | 'run' | 'done', string> = { done: tr('完成'), run: tr('进行中'), todo: tr('还没开始') };
+const STAGE_ST: Record<'todo' | 'run' | 'done', string> = { done: tr('完成'), run: tr('进行中'), todo: tr('尚未开始') };
 
 // what a card's buttons do, the same on the card and on the project's page
 export function useCardActs(r: ProjectCard, toast: (t: string) => void, onChange: (r: ProjectCard) => void) {
@@ -46,7 +46,7 @@ export function useCardActs(r: ProjectCard, toast: (t: string) => void, onChange
   }
   return {
     busy,
-    update: (note = '') => run(() => api.updateCard(line.id, note.trim()), tr('已经请 #{0} 的负责人更新卡片。', line.seq)),
+    update: (note = '') => run(() => api.updateCard(line.id, note.trim()), tr('已请 #{0} 的负责人更新卡片。', line.seq)),
     cancel: () => run(() => api.cancelCard(line.id)),
     hire: () => run(async () => {
       await api.setLead(line.id, { on: true });
@@ -65,10 +65,10 @@ export function Stages({ r }: { r: ProjectCard }) {
         {line.stages.map(s => <li key={s.key} className={`s-${s.status}`} title={`${s.name} · ${STAGE_ST[s.status]}`} />)}
       </ol>
       <span className="small muted pc-stage">
-        {line.stage ? `${line.stage.name} · ${line.stage.status === 'todo' ? tr('还没开始') : `${line.stage.pct}%`}` : tr('全部完成')}
+        {line.stage ? `${line.stage.name} · ${line.stage.status === 'todo' ? tr('尚未开始') : `${line.stage.pct}%`}` : tr('全部完成')}
         {!!r.jobs.failed && <> · <b className="bad-t">{tr('{0} 个失败', r.jobs.failed)}</b></>}
-        {r.asks > 0 && <> · <b className="pg-wait">{tr('{0} 个问题等你', r.asks)}</b></>}
-        {!!r.checks?.hard.fail && <> · <b className="bad-t" title={tr('研究回路上必须满足的硬检查')}>{tr('{0} 项硬检查没过', r.checks.hard.fail)}</b></>}
+        {r.asks > 0 && <> · <b className="pg-wait">{tr('{0} 个问题待回复', r.asks)}</b></>}
+        {!!r.checks?.hard.fail && <> · <b className="bad-t" title={tr('研究回路上必须满足的硬检查')}>{tr('{0} 项硬检查未通过', r.checks.hard.fail)}</b></>}
       </span>
     </div>
   );
@@ -83,7 +83,7 @@ export function Meter({ r }: { r: ProjectCard }) {
       {card.progress != null && <>
         <span className="pc-bar" role="meter" aria-valuenow={card.progress} aria-valuemin={0} aria-valuemax={100} aria-label={tr('完成度')}><i style={{ width: `${card.progress}%` }} /></span>
         <b className="pc-pct">{card.progress}%</b>
-        {delta !== 0 && <em className={`pc-delta${delta < 0 ? ' down' : ''}`} title={tr('比上一张卡片')}>{delta > 0 ? '+' : ''}{delta}</em>}
+        {delta !== 0 && <em className={`pc-delta${delta < 0 ? ' down' : ''}`} title={tr('较上一张卡片')}>{delta > 0 ? '+' : ''}{delta}</em>}
       </>}
     </div>
   );
@@ -99,17 +99,17 @@ export function UpdateButton({ r, acts, defs, note }: { r: ProjectCard; acts: Ca
   if (r.pending) {
     return (
       <span className="pc-pend">
-        <span className="pc-pending" title={[tr('{0}请负责人更新的，等它写好', ago(r.pending.at)), r.pending.note && tr('附言：{0}', r.pending.note)].filter(Boolean).join('\n')}>
+        <span className="pc-pending" title={[tr('{0}请负责人更新，等待撰写完成', ago(r.pending.at)), r.pending.note && tr('附言：{0}', r.pending.note)].filter(Boolean).join('\n')}>
           <i />{tr('更新中')}
         </span>
-        <button className="ib" disabled={acts.busy} onClick={e => { e.stopPropagation(); acts.cancel(); }} title={tr('取消这次更新')} aria-label={tr('取消')}><Icon n="close" size={14} /></button>
+        <button className="ib" disabled={acts.busy} onClick={e => { e.stopPropagation(); acts.cancel(); }} title={tr('取消本次更新')} aria-label={tr('取消')}><Icon n="close" size={14} /></button>
       </span>
     );
   }
   if (r.line.lead.state === 'ended') return null;
   if (r.lead?.started && r.line.lead.state === 'running') {
     return (
-      <button className="btn pri" disabled={acts.busy} onClick={e => { e.stopPropagation(); acts.update(note); }} title={tr('请负责人读一遍项目，重写这张卡片')}>
+      <button className="btn pri" disabled={acts.busy} onClick={e => { e.stopPropagation(); acts.update(note); }} title={tr('请负责人读取项目并重写此卡片')}>
         <Icon n="refresh" size={14} />{tr('更新')}
       </button>
     );
@@ -138,7 +138,7 @@ export function runText(j: CardRun) {
 }
 
 export function repoLine(x: CardRepo, which: 'code' | 'paper') {
-  if (x.missing) return tr('找不到这个目录');
+  if (x.missing) return tr('未找到该目录');
   const bits = which === 'code'
     ? [x.branch, x.dirty ? tr('{0} 处改动', x.dirty) : x.git ? tr('干净') : null, x.files ? tr('{0} 个文件', x.files) : null]
     : [x.main, x.words ? tr('{0} 词', k(x.words)) : null, x.pdf ? 'PDF' : null, x.dirty ? tr('{0} 处改动', x.dirty) : null];
@@ -147,7 +147,7 @@ export function repoLine(x: CardRepo, which: 'code' | 'paper') {
 
 // what a project without a card says in its place
 export const noCardText = (r: ProjectCard) =>
-  r.lead?.started ? tr('还没有卡片。按「更新」，负责人读完项目后会写第一张。') : tr('负责人还没有启动。打开它的开关后，按「更新」由它把进展写成卡片。');
+  r.lead?.started ? tr('暂无卡片。点击「更新」，负责人读取项目后将撰写第一张。') : tr('负责人尚未启动。开启开关后点击「更新」，由负责人将进展撰写为卡片。');
 
 // a card or row opens its project's page on a click, Enter or Space; its title links there
 export function opens(line: ProjectCard['line']) {
@@ -155,7 +155,7 @@ export function opens(line: ProjectCard['line']) {
   const open = () => go(to);
   return {
     box: {
-      onClick: open, tabIndex: 0, 'aria-label': tr('#{0} {1}，看详情', line.seq, line.title),
+      onClick: open, tabIndex: 0, 'aria-label': tr('#{0} {1}，查看详情', line.seq, line.title),
       onKeyDown: (e: React.KeyboardEvent) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) { e.preventDefault(); open(); } },
     },
     title: <h3 title={line.title}><a href={href(to)} onClick={e => { e.stopPropagation(); follow(e, to); }} tabIndex={-1}>{line.title}</a></h3>,
@@ -163,20 +163,20 @@ export function opens(line: ProjectCard['line']) {
 }
 
 export function AskButton({ seq }: { seq: number }) {
-  return <button className="btn pc-ask" onClick={() => go(askPath(seq))} title={tr('和这个项目对话：提问、交代负责人、回它的问题')}><Icon n="chat" size={14} /><span>{tr('对话')}</span></button>;
+  return <button className="btn pc-ask" onClick={() => go(askPath(seq))} title={tr('与该项目对话：提问、向负责人派发任务、回复提问')}><Icon n="chat" size={14} /><span>{tr('对话')}</span></button>;
 }
 
 // one pane on a card; `bare` in a row, where the column names it and an empty cell is a dash
 export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?: boolean }) {
   const c: Card | null = r.card;
   const none = (t: string) => <span className="pp-none" title={bare ? t : undefined}>{bare ? '—' : t}</span>;
-  const noCard = () => none(r.lead?.started ? tr('负责人还没写') : tr('负责人启动后由它填写'));
+  const noCard = () => none(r.lead?.started ? tr('负责人尚未填写') : tr('负责人启动后填写'));
   switch (pane) {
     case 'summary':
       return (
         <section className="pp pp-summary">
           {c ? <><Meter r={r} /><p className="pc-sum">{c.summary}</p></>
-            : bare ? <p className="pc-empty muted small">{r.lead?.started ? tr('还没有卡片') : tr('负责人还没有启动')}</p>
+            : bare ? <p className="pc-empty muted small">{r.lead?.started ? tr('暂无卡片') : tr('负责人尚未启动')}</p>
             : <p className="pc-empty muted small">{noCardText(r)}</p>}
         </section>
       );
@@ -185,7 +185,7 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
       return (
         <Row pane="attention" extra={first && first[1].length > 1 ? `+${first[1].length - 1}` : undefined}>
           {first ? <span className={`pp-one l-${first[0]}`}><b>{first[0] === 'need_you' ? tr('决定') : tr('卡点')}</b>{first[1][0]}</span>
-            : c ? none(tr('没有要你决定的')) : noCard()}
+            : c ? none(tr('暂无待决定事项')) : noCard()}
         </Row>
       );
     }
@@ -196,7 +196,7 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
         <section className="pp pp-metrics">
           {c?.metrics.length ? (
             <dl className="pc-metrics">{c.metrics.slice(0, 3).map(m => <div key={m.name}><dt>{m.name}</dt><dd>{m.value}</dd></div>)}</dl>
-          ) : <Row pane="metrics">{c ? none(tr('没有关键数字')) : noCard()}</Row>}
+          ) : <Row pane="metrics">{c ? none(tr('暂无关键数字')) : noCard()}</Row>}
         </section>
       );
     case 'running':
@@ -209,7 +209,7 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
                 <li className="muted small">{[r.running.length > 2 ? tr('还有 {0} 个', r.running.length - 2) : '', r.queued.length ? tr('{0} 个排队', r.queued.length) : ''].filter(Boolean).join(' · ')}</li>
               )}
             </ul>
-          ) : none(r.queued.length ? tr('没有在跑的 · {0} 个排队', r.queued.length) : tr('没有在跑的实验'))}
+          ) : none(r.queued.length ? tr('暂无运行中 · {0} 个排队', r.queued.length) : tr('暂无运行中的实验'))}
         </Row>
       );
     case 'planned':
@@ -217,7 +217,7 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
         <Row pane="planned" extra={c?.plans.length ? <b className="pp-n">{c.plans.length}</b> : undefined}>
           {c?.plans.length ? (
             <ul className="pp-list">{c.plans.slice(0, 2).map((p, i) => <li key={i}><b>{p.name}</b>{p.when && <span className="muted">{p.when}</span>}</li>)}</ul>
-          ) : c ? none(tr('没有规划中的实验')) : noCard()}
+          ) : c ? none(tr('暂无规划中的实验')) : noCard()}
         </Row>
       );
     case 'outputs':
@@ -227,7 +227,7 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
             <ul className="pp-list">
               {c.outputs.slice(0, 2).map((o, i) => <li key={i}><i className={`pp-st st-${o.state}`} title={OUT_STATE[o.state]} /><b>{o.name}</b>{o.due && <span className="muted">{o.due}</span>}</li>)}
             </ul>
-          ) : c ? none(tr('没写预期产出')) : noCard()}
+          ) : c ? none(tr('未填写预期产出')) : noCard()}
         </Row>
       );
     case 'code':
@@ -241,7 +241,7 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
               <span className="pp-one"><b>{x.name}</b>{info && <span className="muted"> · {info}</span>}</span>
               {x.commit && <span className="pp-one muted small">{x.commit.subject} · {ago(x.commit.when)}</span>}
             </span>
-          ) : none(pane === 'code' ? tr('还没有代码仓库') : tr('还没有论文仓库'))}
+          ) : none(pane === 'code' ? tr('暂无代码仓库') : tr('暂无论文仓库'))}
         </Row>
       );
     }
@@ -250,7 +250,7 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
       return (
         <Row pane="memory">
           {m.sessions || m.notes ? <span className="pp-one">{tr('{0} 段对话 · {1} 条记忆', m.sessions, m.notes)}<span className="muted"> · {tr('{0}导入', ago(m.at))}</span></span>
-            : none(tr('还没有导入'))}
+            : none(tr('尚未导入'))}
         </Row>
       );
     }

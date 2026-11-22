@@ -53,16 +53,16 @@ export const set = <K extends keyof S>(k: K) => (v: S[K]) => setSettings({ [k]: 
 interface Option { key: keyof S; label: string; desc: string; options?: [string, string][]; only?: S['pgView'] }
 
 export const PROGRESS_OPTIONS: Option[] = [
-  { key: 'pgSort', label: tr('排序'), desc: tr('项目的先后。等你的在前：要你决定的、卡住的、有风险的依次排在前面'),
-    options: [['need', tr('等你的在前')], ['recent', tr('最近更新')], ['progress', tr('进度')], ['number', tr('编号')]] },
-  { key: 'pgGroup', label: tr('分组'), desc: tr('把项目分成几段：按状况是等你、卡住了、有风险、在做、已完成，按工序是现在走到哪一步'),
+  { key: 'pgSort', label: tr('排序'), desc: tr('项目排序。待处理优先：待你决定、受阻、有风险的依次排在前面'),
+    options: [['need', tr('待处理优先')], ['recent', tr('最近更新')], ['progress', tr('进度')], ['number', tr('编号')]] },
+  { key: 'pgGroup', label: tr('分组'), desc: tr('将项目分组：按状况为待处理、受阻、有风险、进行中、已完成，按工序为当前阶段'),
     options: [['none', tr('不分组')], ['state', tr('按状况')], ['stage', tr('按工序')]] },
-  { key: 'pgDensity', label: tr('密度'), desc: tr('紧凑：卡片更矮，一行只留一行字'), options: [['roomy', tr('舒适')], ['tight', tr('紧凑')]] },
-  { key: 'pgCard', label: tr('卡片宽度'), desc: tr('卡片最窄多宽，决定一排放几张'), options: [['narrow', tr('窄')], ['mid', tr('中')], ['wide', tr('宽')]], only: 'blocks' },
-  { key: 'pgText', label: tr('文字大小'), desc: tr('这一页和项目页里所有的字'), options: [['small', tr('小')], ['mid', tr('中')], ['large', tr('大')]] },
-  { key: 'pgWidth', label: tr('页面宽度'), desc: tr('大屏幕上内容最宽铺到哪里'), options: [['narrow', tr('窄')], ['mid', tr('标准')], ['full', tr('铺满')]] },
-  { key: 'pgStages', label: tr('工序条'), desc: tr('每个项目标题下面那条分段的进度') },
-  { key: 'pgDone', label: tr('已完成的项目'), desc: tr('关掉后列表里不放已完成的，点「已完成」时还看得到') },
+  { key: 'pgDensity', label: tr('密度'), desc: tr('紧凑：减小卡片高度，每行仅显示一行'), options: [['roomy', tr('舒适')], ['tight', tr('紧凑')]] },
+  { key: 'pgCard', label: tr('卡片宽度'), desc: tr('卡片最小宽度，决定每行排列数'), options: [['narrow', tr('窄')], ['mid', tr('中')], ['wide', tr('宽')]], only: 'blocks' },
+  { key: 'pgText', label: tr('文字大小'), desc: tr('本页及项目页的全部文字'), options: [['small', tr('小')], ['mid', tr('中')], ['large', tr('大')]] },
+  { key: 'pgWidth', label: tr('页面宽度'), desc: tr('大屏幕下内容的最大宽度'), options: [['narrow', tr('窄')], ['mid', tr('标准')], ['full', tr('铺满')]] },
+  { key: 'pgStages', label: tr('工序条'), desc: tr('各项目标题下方的分段进度条') },
+  { key: 'pgDone', label: tr('已完成的项目'), desc: tr('关闭后列表隐藏已完成项目，点击「已完成」仍可查看') },
 ];
 
 export function OptionControl({ o, s, small }: { o: Option; s: S; small?: boolean }) {

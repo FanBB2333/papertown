@@ -50,7 +50,7 @@ export function DisplayMenu({ s, layout, onPanes }: { s: S; layout: CardLayout; 
   }
   return (
     <Popover.Root>
-      <Popover.Trigger render={<button className="btn" title={tr('这一页怎么显示')} />}><Icon n="rows" size={14} />{tr('显示')}</Popover.Trigger>
+      <Popover.Trigger render={<button className="btn" title={tr('显示设置')} />}><Icon n="rows" size={14} />{tr('显示')}</Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={8} collisionPadding={12}>
           <Popover.Popup className="dm">
@@ -63,7 +63,7 @@ export function DisplayMenu({ s, layout, onPanes }: { s: S; layout: CardLayout; 
               </section>
               <section>
                 <h4>{rows ? tr('每行的列') : tr('卡片上显示')}</h4>
-                <p>{rows ? tr('顺序就是从左到右。列太多放不下时，一个项目折成两层。') : tr('所有卡片显示同样的部分，所以一样高。顺序就是从上到下。')}</p>
+                <p>{rows ? tr('按从左到右顺序排列。列数过多时，单个项目将折为两层。') : tr('所有卡片显示相同内容以保持等高，按从上到下顺序排列。')}</p>
                 {rows ? <PaneList on={cols} onChange={pgCols => setSettings({ pgCols })} /> : <PaneList on={layout.panes} onChange={onPanes} />}
               </section>
             </div>

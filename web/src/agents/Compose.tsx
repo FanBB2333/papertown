@@ -8,9 +8,9 @@ import { isWorking, type Watched } from './watch';
 import './agents.css';
 
 const MODES: [SayMode, string, string, string][] = [
-  ['steer', tr('插话'), tr('补充当前任务的指令'), tr('当前步骤完成后，消息将进入正在运行的这一轮。')],
-  ['queue', tr('排队'), tr('安排下一轮任务'), tr('当前一轮结束后发送这条消息。')],
-  ['interrupt', tr('打断并发送'), tr('停止当前任务并发送新指令'), tr('停止当前这一轮，立即发送这条消息。')],
+  ['steer', tr('插话'), tr('补充当前任务的指令'), tr('当前步骤完成后，消息将加入当前轮次。')],
+  ['queue', tr('排队'), tr('安排下一轮任务'), tr('当前轮次结束后发送此消息。')],
+  ['interrupt', tr('中断并发送'), tr('停止当前任务并发送新指令'), tr('停止当前轮次，立即发送此消息。')],
 ];
 
 export interface ComposeAdapter {
@@ -86,7 +86,7 @@ export function Compose({ agent, queued = [], permission = false, toast, onSent,
     {!!queued.length && <ul className="ac-queue" aria-label={tr('排队中的消息')}>
       {queued.map(event => <li key={event.id}>
         <div><span className="small muted">{tr('排队')}</span><p>{String(event.data.text ?? '')}</p>{event.data.error && <p className="ac-error">{String(event.data.error)}</p>}</div>
-        <button className="btn" disabled={busy || off} onClick={() => queue(event, 'now')}>{tr('现在发')}</button>
+        <button className="btn" disabled={busy || off} onClick={() => queue(event, 'now')}>{tr('立即发送')}</button>
         <button className="btn" disabled={busy} onClick={() => queue(event, 'drop')}>{tr('撤回')}</button>
       </li>)}
     </ul>}

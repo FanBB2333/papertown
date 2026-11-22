@@ -70,7 +70,7 @@ export function Cluster({ mine, onOpen }: Props) {
   }, [hover, byId]);
 
   const head = <span className="cs-ic"><Icon n="gpu" size={15} /></span>;
-  if (!g || !g.ok) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className="muted small">{g ? g.note : tr('正在读 nvidb…')}</p></section>;
+  if (!g || !g.ok) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className="muted small">{g ? g.note : tr('读取 nvidb 中…')}</p></section>;
 
   const up = g.nodes.filter(n => n.state === 'up');
   const probed = Math.max(...up.map(n => t(n.probed_at ?? n.last_seen)).filter(Number.isFinite), 0);
@@ -83,20 +83,20 @@ export function Cluster({ mine, onOpen }: Props) {
     <section className="cs queue cl">
       <div className="cs-h">
         {head}<h3>{tr('GPU 与队列')}</h3>
-        <span className={`live${stale ? ' stale' : ''}`} title={tr('nvidb 的 keeper 定时去各台机器读卡，Papertown 每 {0} 秒从 nvidb 取一次最新的读数', g.poll_s ?? 10)}>
-          <i />{stale ? (probed ? tr('nvidb 已经 {0} 没有新读数', dur(age / 1000)) : tr('还没有读数')) : tr('实时 · {0}读的卡', secsAgo(age))}
+        <span className={`live${stale ? ' stale' : ''}`} title={tr('nvidb 的 keeper 定时读取各机器显卡，Papertown 每 {0} 秒从 nvidb 获取最新读数', g.poll_s ?? 10)}>
+          <i />{stale ? (probed ? tr('nvidb 已 {0} 无新读数', dur(age / 1000)) : tr('暂无读数')) : tr('实时 · {0}读取', secsAgo(age))}
         </span>
-        <button className="ib" onClick={refreshGpus} title={tr('现在就从 nvidb 取一次')}><Icon n="refresh" size={14} /></button>
+        <button className="ib" onClick={refreshGpus} title={tr('立即从 nvidb 读取')}><Icon n="refresh" size={14} /></button>
         <div className="seg mini cl-sw">
           <button className={view === 'cards' ? 'on' : ''} onClick={() => pick('cards')}>{tr('按卡')}</button>
           <button className={view === 'people' ? 'on' : ''} onClick={() => pick('people')}>{tr('按使用者')}</button>
         </div>
       </div>
       <p className="cl-sum muted small">
-        {tr('{0} 张卡 · {1} 张还放得下 · {2} 个在跑 · {3} 个排队', g.summary?.gpus ?? 0, g.summary?.room ?? 0, running, pending)}
-        {g.alerts ? <span className="warn-t"> · {tr('{0} 条告警没确认', g.alerts)}</span> : null}
-        <label className={`qb-mine${mine.size ? '' : ' off'}`} title={mine.size ? '' : tr('这个项目眼下没有任务在队列里')}>
-          <input type="checkbox" checked={onlyMine} disabled={!mine.size} onChange={e => setOnlyMine(e.target.checked)} />{tr('只看这个项目')}
+        {tr('{0} 张卡 · {1} 张有余量 · {2} 个运行中 · {3} 个排队', g.summary?.gpus ?? 0, g.summary?.room ?? 0, running, pending)}
+        {g.alerts ? <span className="warn-t"> · {tr('{0} 条告警未确认', g.alerts)}</span> : null}
+        <label className={`qb-mine${mine.size ? '' : ' off'}`} title={mine.size ? '' : tr('该项目当前暂无队列任务')}>
+          <input type="checkbox" checked={onlyMine} disabled={!mine.size} onChange={e => setOnlyMine(e.target.checked)} />{tr('仅看本项目')}
         </label>
       </p>
       {view === 'cards' ? <ByCard ctx={ctx} onlyMine={onlyMine} /> : <ByPerson ctx={ctx} onlyMine={onlyMine} />}
@@ -121,7 +121,7 @@ function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
   return (
     <>
       <div className="qb-key muted small">
-        <span><i className="cl-k from-q" />{tr('队列里的任务（底色是进度）')}</span><span><i className="cl-k outside" />{tr('队列以外的程序')}</span>
+        <span><i className="cl-k from-q" />{tr('队列任务（底色表示进度）')}</span><span><i className="cl-k outside" />{tr('队列以外的程序')}</span>
         <span><i className="qk mine" />{tr('这个项目的')}</span>
         <span><i className="cl-k line" style={{ background: SPARK.util }} />{tr('利用率')}</span><span><i className="cl-k area" style={{ background: SPARK.mem }} />{tr('显存占用')}</span>
         <span>{tr('曲线：近 {0} 分钟', Math.round(span / 60))}</span>
@@ -141,10 +141,10 @@ function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
               <Icon n="chevron" size={13} className="tr-chev" /><i className="qb-dot" /><b>{n.name}</b>
               {n.state === 'up' ? <>
                 <span className="qb-pill">{tr('{0} 张卡', n.gpus.length)}</span>
-                <span className={`qb-pill${users.size ? ' busy' : ''}`}>{tr('{0} 个人在用', users.size)}</span>
-                {all.some(r => r.occ.some(o => o.job && mine.has(o.job.id))) && <span className="qb-pill mine">{tr('有这个项目的')}</span>}
+                <span className={`qb-pill${users.size ? ' busy' : ''}`}>{tr('{0} 人使用中', users.size)}</span>
+                {all.some(r => r.occ.some(o => o.job && mine.has(o.job.id))) && <span className="qb-pill mine">{tr('含本项目')}</span>}
               </> : <span className="qb-pill">{n.state}</span>}
-              {Number.isFinite(p) && <span className="cl-age muted small">{tr('{0}读的', secsAgo(now - p))}</span>}
+              {Number.isFinite(p) && <span className="cl-age muted small">{tr('{0}读取', secsAgo(now - p))}</span>}
             </button>
             {!closed && rows.map(({ x, occ, queued }, i) => (
               <div key={x.index} className={`cl-row${occ.length || queued.length ? '' : ' idle'}${occ.some(o => o.job && mine.has(o.job.id)) ? ' has-mine' : ''}`} style={{ ['--i' as string]: i }}
@@ -164,7 +164,7 @@ function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
                 </div>
                 <div className="cl-who">
                   {occ.map(o => <OccRow key={o.key} o={o} ctx={ctx} />)}
-                  {!occ.length && <p className="muted small cl-free">{x.attribution === 'blind' && x.mem_used_mb > 1024 ? tr('这张卡报不出进程（WSL），显存有人在用') : tr('空着')}</p>}
+                  {!occ.length && <p className="muted small cl-free">{x.attribution === 'blind' && x.mem_used_mb > 1024 ? tr('该卡无法获取进程（WSL），显存已占用') : tr('空着')}</p>}
                   {queued.length > 0 && (
                     <div className="cl-next"><span className="muted small">{tr('接下来')}</span>{queued.map((id, k) => <NextChip key={id} id={id} k={k + 1} ctx={ctx} />)}</div>
                   )}
@@ -198,7 +198,7 @@ function OccRow({ o, ctx, where }: { o: Occ; ctx: Ctx; where?: boolean }) {
   const rows = [
     { v: o.user, k: tr('谁') },
     ...(j?.submitter ? [{ v: j.submitter, k: tr('提交者') }] : []),
-    { v: lasted(o, now), k: j ? tr('已跑（从开始算）') : tr('从 Papertown 第一次看到算') },
+    { v: lasted(o, now), k: j ? tr('已运行（自开始）') : tr('自 Papertown 首次监测起算') },
     { v: o.mem ? gb(o.mem) : '—', k: tr('显存') },
     ...(j?.progress ? [{ v: j.progress, k: tr('状态行') }] : []),
     ...(j?.vram_mb ? [{ v: gb(j.vram_mb), k: tr('显存预留') }] : []),
@@ -211,12 +211,12 @@ function OccRow({ o, ctx, where }: { o: Occ; ctx: Ctx; where?: boolean }) {
       data-ref={j ? `job:nvidb-${j.id}` : `proc:${o.node}:${o.gpu}:${o.key}`} data-ref-label={j ? `${tr('任务')} #${j.id} ${j.name}` : `${o.user} · ${o.what}`}
       onPointerEnter={() => j && setHover(j.id)}
       onPointerMove={e => tip.show(e, { title: j ? `#${j.id} ${j.name}` : `${o.what}`, rows, foot: j?.notes ? j.notes.slice(0, 160) : j ? undefined
-        : `${tr('不是从队列启动的，Papertown 只能看到它占着卡')}${o.atLeast ? tr('。nvidb 不记它的开始时间，≥ 表示 Papertown 开始看时它已经在了') : ''}` })}
+        : `${tr('非队列启动，Papertown 仅能监测到其占用显卡')}${o.atLeast ? tr('。nvidb 未记录其开始时间，≥ 表示 Papertown 监测前即已存在') : ''}` })}
       onPointerLeave={() => { setHover(null); tip.hide(); }}>
       {pct != null && <i className="cl-fill" style={{ width: `${Math.min(100, pct)}%` }} />}
       <span className="cl-s">{o.kind === 'job' ? ST.running.sign : '⊙'}</span>
       <span className="cl-what">{j && <b className="mono">#{j.id}</b>}<span>{o.what}</span>{o.kind === 'ext' && <em>{tr('队列外')}</em>}
-        {j && !o.procs.length && <em className="cl-none" title={tr('nvidb 说它在跑，但这张卡上没有它的进程：可能只用 CPU，或者已经退出了')}>{tr('卡上没有进程')}</em>}
+        {j && !o.procs.length && <em className="cl-none" title={tr('nvidb 显示其运行中，但该卡无对应进程：可能仅使用 CPU 或已退出')}>{tr('卡上无进程')}</em>}
         {where && <em>{o.node} · GPU {o.gpu}</em>}</span>
       <span className="cl-user"><i className="ub">{(o.user[0] ?? '?').toUpperCase()}</i>{o.user}</span>
       <span className="cl-m">{o.mem ? gb(o.mem) : '—'}</span>
@@ -257,10 +257,10 @@ function ByPerson({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
       jobs: os.filter(o => o.kind === 'job').length, ext: os.filter(o => o.kind === 'ext').length,
       longest: os.reduce<Occ | null>((a, o) => (o.since != null && Number.isFinite(o.since) && (!a || o.since < (a.since ?? Infinity)) ? o : a), null) }))
     .sort((a, b) => b.mem - a.mem);
-  if (!people.length) return <p className="muted small">{onlyMine ? tr('这个项目眼下没有任务在卡上。') : tr('眼下没有人在用这些卡。')}</p>;
+  if (!people.length) return <p className="muted small">{onlyMine ? tr('该项目当前暂无任务占用显卡。') : tr('当前无人使用这些显卡。')}</p>;
   return (
     <div className="pp">
-      <div className="pp-row pp-th muted small"><span>{tr('谁')}</span><span>{tr('在用的卡')}</span><span>{tr('显存')}</span><span>{tr('在跑什么')}</span><span>{tr('最久的已经')}</span></div>
+      <div className="pp-row pp-th muted small"><span>{tr('谁')}</span><span>{tr('在用显卡')}</span><span>{tr('显存')}</span><span>{tr('运行任务')}</span><span>{tr('最长已运行')}</span></div>
       {people.map((p, i) => (
         <div key={p.user} className={`pp-p${open === p.user ? ' open' : ''}`} style={{ ['--i' as string]: Math.min(i, 10) }}>
           <button className="pp-row" onClick={() => setOpen(o => (o === p.user ? null : p.user))}>
@@ -273,7 +273,7 @@ function ByPerson({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
           {open === p.user && <div className="pp-list">{p.os.map(o => <OccRow key={`${o.node}${o.gpu}${o.key}`} o={o} ctx={ctx} where />)}</div>}
         </div>
       ))}
-      <p className="muted small pp-foot">{tr('显存条按全部在线卡的总显存算。队列外程序的时长从 Papertown 第一次看到它算起，带 ≥ 的表示 Papertown 开始看时它已经在了。')}</p>
+      <p className="muted small pp-foot">{tr('显存条按全部在线显卡总显存计算。队列外程序时长自 Papertown 首次监测起算，带 ≥ 表示 Papertown 监测前即已存在。')}</p>
     </div>
   );
 }
@@ -284,9 +284,9 @@ function Waiting({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
   const waiting = g.jobs.filter(j => j.state === 'pending' && !inLane.has(j.id) && (!onlyMine || mine.has(j.id)));
   if (!waiting.length) return null;
   const groups: [string, string, NvJob[]][] = [
-    ['dep', tr('等依赖跑完'), waiting.filter(j => !j.held && (j.depends_on?.length ?? 0) > 0)],
-    ['card', tr('等空卡'), waiting.filter(j => !j.held && !(j.depends_on?.length))],
-    ['held', tr('挂起：依赖没跑成，等人决定'), waiting.filter(j => j.held)],
+    ['dep', tr('待依赖完成'), waiting.filter(j => !j.held && (j.depends_on?.length ?? 0) > 0)],
+    ['card', tr('待空卡'), waiting.filter(j => !j.held && !(j.depends_on?.length))],
+    ['held', tr('挂起：依赖失败，待人工决定'), waiting.filter(j => j.held)],
   ];
   return (
     <div className="qb-wait">

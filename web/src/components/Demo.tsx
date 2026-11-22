@@ -27,17 +27,17 @@ export function DemoWelcome() {
     <div className="demo-veil" role="dialog" aria-modal="true" onClick={e => { if (e.target === e.currentTarget) close(); }}>
       <div className="demo-card pnl">
         <h2>{tr('欢迎来到 Papertown')}</h2>
-        <p>{tr('一个开源的科研小镇：idea 经过查重、立项、方法设计、实验、写作和审稿，最后成为一篇论文。每个项目由一位常驻的项目负责人推进，它启动员工并派活，你在关键处监督、纠错和拍板。')}</p>
+        <p>{tr('一个开源的科研小镇：idea 经查重、立项、方法设计、实验、写作与审稿，最终成为一篇论文。每个项目由一位常驻项目负责人推进，启动员工并派发任务，你在关键节点监督、纠错与拍板。')}</p>
         <p className="muted">{tr('这是只读的静态演示，五个预制样例项目展示不同阶段，包含占位内容。项目负责人默认关闭。')}</p>
         <ul>
-          <li>{tr('「进展」里每个项目一张卡片，点开项目页，再进入「研究回路」')}</li>
-          <li>{tr('研究回路按研究流程排成四行分块，按住 ⌘ 或 Ctrl 滚动缩放，点节点在右侧看详情')}</li>
-          <li>{tr('「小镇 › 中控屏」里是每个项目的调研、代码、实验、数据、论文和员工，也可以切到平面地图或 3D 漫游')}</li>
-          <li>{tr('在设置里切换 English / 简体 / 繁體')}</li>
+          <li>{tr('「进展」中每个项目一张卡片，点击打开项目页，再进入「研究回路」')}</li>
+          <li>{tr('研究回路按研究流程分四行分块，按住 ⌘ 或 Ctrl 滚动缩放，点击节点查看右侧详情')}</li>
+          <li>{tr('「小镇 › 中控屏」集中展示各项目的调研、代码、实验、数据、论文与员工，也可切换至平面地图或 3D 漫游')}</li>
+          <li>{tr('在设置中切换 English / 简体 / 繁體')}</li>
         </ul>
         <div className="btns">
-          <a className="btn pri" href={REPO} target="_blank" rel="noreferrer"><GitHubMark />{tr('去 GitHub 看源码')}</a>
-          <button className="btn" onClick={close}>{tr('先逛逛')}</button>
+          <a className="btn pri" href={REPO} target="_blank" rel="noreferrer"><GitHubMark />{tr('前往 GitHub 查看源码')}</a>
+          <button className="btn" onClick={close}>{tr('浏览演示')}</button>
         </div>
       </div>
     </div>

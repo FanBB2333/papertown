@@ -45,7 +45,7 @@ export function Tip({ tip }: { tip: TipData | null }) {
 export type St = 'running' | 'queued' | 'done' | 'failed' | 'cancelled';
 // colour, sign and word per state (colours validated as CVD-safe)
 export const ST: Record<St, { c: string; sign: string; label: string; hollow?: boolean }> = {
-  running: { c: '#d0743a', sign: '▶', label: tr('在跑') },
+  running: { c: '#d0743a', sign: '▶', label: tr('运行中') },
   done: { c: '#3a76b0', sign: '✓', label: tr('完成') },
   failed: { c: '#a8325e', sign: '✕', label: tr('失败') },
   queued: { c: '#a3927b', sign: '◷', label: tr('排队'), hollow: true },
@@ -179,7 +179,7 @@ export function Gantt({ jobs, domain, onZoom, onPick, now }: {
             return (
               <g key={j.id} className={`g-bar s-${j.st}`} transform={`translate(${a} ${b.y + GAP + k * (TRACK + GAP)})`}
                 data-ref={`job:${j.id}`} data-ref-label={`${tr('任务')} ${j.name}`}
-                onPointerMove={ev => show(ev, { title: j.name, rows: j.tip, foot: tr('点开看详情') })} onPointerLeave={hide}
+                onPointerMove={ev => show(ev, { title: j.name, rows: j.tip, foot: tr('点击查看详情') })} onPointerLeave={hide}
                 onClick={() => onPick(j.id)} tabIndex={0} onKeyDown={ev => { if (ev.key === 'Enter') onPick(j.id); }}>
                 <rect className="g-pad" x={-3} y={-2} width={w + 6} height={TRACK + 4} />
                 <rect width={w} height={TRACK} rx={4} style={s.hollow ? { fill: 'var(--panel)', stroke: s.c } : { fill: s.c }} />
@@ -280,7 +280,7 @@ export function Spark({ pts, total, now, label, span = 3600 }: {
   };
   return (
     <div className={`spark${ps.length < 2 ? ' empty' : ''}`} ref={box} onPointerMove={pick} onPointerLeave={() => { setAt(null); hide(); }}>
-      {ps.length < 2 ? <span>{tr('刚开始记录，过一会儿就有曲线')}</span> : w > 0 && (
+      {ps.length < 2 ? <span>{tr('刚开始记录，稍后将显示曲线')}</span> : w > 0 && (
         <svg width={w} height={h} role="img" aria-label={tr('{0} 近一小时的利用率和显存', label)}>
           <line className="sp-base" x1={0} x2={w} y1={h - 0.5} y2={h - 0.5} />
           {segs.map((s, i) => <path key={`a${i}`} className="sp-area" d={area(s)} />)}

@@ -67,7 +67,7 @@ function Belt({ stations }: { stations: { key: string; name: string; st: string;
 }
 
 function Output({ stage, body, lineId }: { stage: string; body: any; lineId: string }) {
-  if (!body) return <p className="muted">{tr('还没有产出。')}</p>;
+  if (!body) return <p className="muted">{tr('暂无产出。')}</p>;
   if (stage === 'idea') return <p>{body.text}</p>;
   if (stage === 'hatch') return (
     <>
@@ -147,7 +147,7 @@ export function MillDetail({ line, typeOf, onOpen, onAsk, real, tick }: {
             <dt>{tr('状态')}</dt><dd>{line.note ?? cur.note ?? ({ done: tr('已出厂') } as Record<string, string>)[line.status] ?? line.status}</dd>
           </dl>
           <div className="btns" style={{ marginTop: 12 }}>
-            <button className="btn" onClick={onAsk}>{tr('问问这里的员工')}</button>
+            <button className="btn" onClick={onAsk}>{tr('向此处员工提问')}</button>
           </div>
         </div>
         <div className="pnl">
@@ -158,7 +158,7 @@ export function MillDetail({ line, typeOf, onOpen, onAsk, real, tick }: {
         </div>
         <div className="pnl">
           <h4>{next ? tr('下一站 · {0}', next.name) : tr('已出厂')}</h4>
-          <p className="real">{next ? real : tr('论文和源码都在下面，可以直接下载。')}</p>
+          <p className="real">{next ? real : tr('论文与源码见下方，可直接下载。')}</p>
           {line.files.length > 0 && <FileLinks lineId={line.id} files={line.files} />}
           {next && <div className="btns" style={{ marginTop: 10 }}><button className="btn" onClick={() => onOpen(next.building)}>{tr('去')}{next.name}{tr('所在的建筑')}</button></div>}
         </div>
@@ -211,13 +211,13 @@ export function Sheet(p: Props) {
           <p>{line ? line.idea : s.rep}</p>
           <div className="sh-chips">
             <span className="chip">{s.tech}</span>
-            {!s.live && <span className="chip warn">{s.later ? tr('以后再做') : tr('未接入')}</span>}
+            {!s.live && <span className="chip warn">{s.later ? tr('后续推出') : tr('未接入')}</span>}
             {line && <span className="chip pri">{line.current?.name ?? (line.status === 'done' ? tr('已出厂') : line.status)} · {line.pct}%</span>}
             {cur && <span className="chip pri">{cur.name}</span>}
           </div>
         </div>
         <div className="sh-btns">
-          <button className="btn" onClick={() => p.onAsk(s.id, s.name)}>{tr('问问这里的员工')}</button>
+          <button className="btn" onClick={() => p.onAsk(s.id, s.name)}>{tr('向此处员工提问')}</button>
           <button className="sh-x" title={tr('关闭 Esc')} onClick={p.onClose}>×</button>
         </div>
       </header>
@@ -231,21 +231,21 @@ export function Sheet(p: Props) {
           }))} />
           <section className="detail">
             <div className="pnl">
-              <h4>{cur ? tr('当前工位 · {0}', cur.name) : s.live ? tr('现在空闲') : tr('还没接入')}</h4>
+              <h4>{cur ? tr('当前工位 · {0}', cur.name) : s.live ? tr('当前空闲') : tr('尚未接入')}</h4>
               <dl className="kv">
-                <dt>{tr('员工')}</dt><dd>{team.length ? team.map(r => <span key={r} className="w"><Ava role={r} />{ROLE_NAMES[r]}</span>) : <span className="muted">{tr('自动运行，没有 agent 员工')}</span>}</dd>
+                <dt>{tr('员工')}</dt><dd>{team.length ? team.map(r => <span key={r} className="w"><Ava role={r} />{ROLE_NAMES[r]}</span>) : <span className="muted">{tr('自动运行，无 agent 员工')}</span>}</dd>
                 <dt>Skills</dt><dd>{chips(s.skills)}</dd>
                 <dt>{tr('工具')}</dt><dd>{chips(s.tools)}</dd>
                 <dt>{tr('现在')}</dt><dd>{s.job}</dd>
               </dl>
-              {s.active_line && <div className="btns" style={{ marginTop: 12 }}><button className="btn pri" onClick={() => p.onOpen(p.placements.find(x => x.line_id === s.active_line)?.id ?? 'hatchery')}>{tr('看这篇论文的流水线')}</button></div>}
+              {s.active_line && <div className="btns" style={{ marginTop: 12 }}><button className="btn pri" onClick={() => p.onOpen(p.placements.find(x => x.line_id === s.active_line)?.id ?? 'hatchery')}>{tr('查看该论文流水线')}</button></div>}
             </div>
             <div className="pnl">
               <h4>{tr('进货 / 出货')}</h4>
               <div className="io-list">{goods(s.from, tr('来自'))}{goods(s.to, tr('送往'))}</div>
             </div>
             <div className="pnl">
-              <h4>{tr('怎么实现的')}</h4><p className="real">{s.real}</p>
+              <h4>{tr('实现方式')}</h4><p className="real">{s.real}</p>
             </div>
           </section>
           {s.type === 'library' && <LibraryShelf tick={p.tick} />}

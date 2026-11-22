@@ -3,7 +3,7 @@ import { dur } from '../console/util';
 import { tr } from '../i18n';
 
 export const BUCKETS: [Bucket, string][] = [
-  ['needs', tr('等你')], ['failed', tr('出错')], ['review', tr('待查看')],
+  ['needs', tr('待处理')], ['failed', tr('出错')], ['review', tr('待查看')],
   ['working', tr('工作中')], ['idle', tr('待命')], ['off', tr('未启动')],
 ];
 export type Watched = { status?: string; watch?: Agent['watch']; down?: string | null };

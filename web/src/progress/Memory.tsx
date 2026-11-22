@@ -24,7 +24,7 @@ export function MemorySection({ lineId, toast, open }: { lineId: string; toast: 
   }, [lineId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function remove(m: MemoryItem) {
-    if (!confirm(tr('从这个项目里移除「{0}」？只删 Papertown 导入的这一份，原来的对话不动。', m.title))) return;
+    if (!confirm(tr('从此项目中移除「{0}」？仅删除 Papertown 导入的副本，原对话保持不变。', m.title))) return;
     try { await api.memoryRemove(lineId, m.id); load(); } catch (e) { toast((e as Error).message); }
   }
   const sessions = (items ?? []).filter(m => m.kind === 'session'), notes = (items ?? []).filter(m => m.kind === 'note');
@@ -32,11 +32,11 @@ export function MemorySection({ lineId, toast, open }: { lineId: string; toast: 
     <section className="psec" id="memory">
       <header className="psec-h">
         <h3><Icon n="chat" size={16} />{tr('记忆')}</h3>
-        <span className="muted small">{tr('以前的 agent 对话和笔记，提问时会一起检索')}</span>
+        <span className="muted small">{tr('历史 agent 对话与笔记，提问时将一并检索')}</span>
         <button className="btn" onClick={() => setImporting(true)}><Icon n="plus" size={14} />{tr('从本机导入…')}</button>
       </header>
       {!items ? <p className="muted small">{tr('加载中…')}</p> : !items.length ? (
-        <p className="psec-empty muted">{tr('还没有导入。Papertown 会在这台电脑上找这个项目的代码和论文仓库里的 Claude Code、Codex 对话，Claude Code 的记忆，以及仓库里的 CLAUDE.md 和 AGENTS.md。')}</p>
+        <p className="psec-empty muted">{tr('尚未导入。Papertown 将在本机查找该项目代码与论文仓库中的 Claude Code、Codex 对话、Claude Code 记忆及 CLAUDE.md、AGENTS.md。')}</p>
       ) : (
         <div className="mem-cols">
           {([[tr('对话'), sessions], [tr('笔记'), notes]] as [string, MemoryItem[]][]).filter(([, xs]) => xs.length).map(([name, xs]) => (
@@ -98,7 +98,7 @@ function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toas
     setBusy(true);
     try {
       const r = await api.memoryImport(lineId, [...pick]);
-      toast(r.failed.length ? tr('导入了 {0} 项，{1} 项没成功：{2}', r.imported.length, r.failed.length, r.failed[0].why) : tr('导入了 {0} 项。提问时会一起检索。', r.imported.length));
+      toast(r.failed.length ? tr('已导入 {0} 项，{1} 项失败：{2}', r.imported.length, r.failed.length, r.failed[0].why) : tr('已导入 {0} 项。提问时将一并检索。', r.imported.length));
       onDone();
       onClose();
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
@@ -111,10 +111,10 @@ function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toas
         <button className="ib pd-x" onClick={onClose} title={tr('关闭（Esc）')} aria-label={tr('关闭')}><Icon n="close" size={16} /></button>
       </header>
       <div className="pd-body">
-        <p className="small muted">{tr('只导入说过的话：你问的和 agent 答的。工具调用、思考过程和自动塞进去的上下文都不要，密钥和 token 会被遮掉。原来的文件不会被改动。')}</p>
+        <p className="small muted">{tr('仅导入对话内容（你的提问与 agent 的回复），跳过工具调用、思考过程与自动注入的上下文，密钥和 token 将脱敏，原文件保持不变。')}</p>
         {err && <p className="warn-box small">{err}</p>}
-        {!scan && !err && <p className="muted">{tr('正在找…')}</p>}
-        {scan && !scan.roots.length && <p className="muted">{tr('这个项目还没有代码或论文仓库。')}</p>}
+        {!scan && !err && <p className="muted">{tr('查找中…')}</p>}
+        {scan && !scan.roots.length && <p className="muted">{tr('该项目暂无代码或论文仓库。')}</p>}
         {groups.map(g => (
           <section key={g.repo} className="mem-g">
             <header>
@@ -124,7 +124,7 @@ function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toas
                   onChange={e => toggle(g.items.map(x => x.key), e.target.checked)} />{tr('全选')}</label>
               )}
             </header>
-            {!g.items.length ? <p className="muted small">{tr('没找到这个仓库里的 agent 对话或记忆。')}</p> : (
+            {!g.items.length ? <p className="muted small">{tr('未找到该仓库中的 agent 对话或记忆。')}</p> : (
               <ul className="mem-pick">
                 {g.items.map(x => <Found key={x.key} x={x} on={pick.has(x.key)} toggle={on => toggle([x.key], on)} />)}
               </ul>
@@ -132,12 +132,12 @@ function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toas
           </section>
         ))}
         {scan && (!scan.sources.claude || !scan.sources.codex) && (
-          <p className="small muted">{[!scan.sources.claude && tr('这台电脑上没有 Claude Code 的对话目录'), !scan.sources.codex && tr('没有 Codex 的对话目录')].filter(Boolean).join(tr('，'))}</p>
+          <p className="small muted">{[!scan.sources.claude && tr('本机未找到 Claude Code 对话目录'), !scan.sources.codex && tr('无 Codex 对话目录')].filter(Boolean).join(tr('，'))}</p>
         )}
       </div>
       <footer className="pd-foot">
         <div className="pd-row">
-          <span className="small muted">{tr('选了 {0} 项', pick.size)}</span>
+          <span className="small muted">{tr('已选 {0} 项', pick.size)}</span>
           <div className="btns">
             <button className="btn" onClick={onClose}>{tr('取消')}</button>
             <button className="btn pri" disabled={busy || !pick.size} onClick={run}>{busy ? tr('导入中…') : tr('导入')}</button>

@@ -37,20 +37,20 @@ export function LeadAside({ lineId, seq, toast }: { lineId: string; seq?: number
         <h4>{tr('巡检')}</h4>
         <label className="ld-sw">
           <input type="checkbox" checked={v.settings.supervise} onChange={e => set({ supervise: e.target.checked })} />
-          <span>{tr('项目有动静时（实验结束或失败、员工结束一轮、工序变了、你回答了问题）发消息给它')}</span>
+          <span>{tr('项目有新动态时（实验结束或失败、员工结束一轮、工序变更、你回复）向负责人发送消息')}</span>
         </label>
-        <label className="field">{tr('项目没动静时，最多隔多久也看一眼')}
+        <label className="field">{tr('项目无新动态时，最多隔多久检查一次')}
           <Select value={v.settings.every} disabled={!v.settings.supervise} onChange={m => set({ every: m })}
             options={EVERY.map(m => ({ value: m, label: m < 60 ? tr('{0} 分钟', m) : tr('{0} 小时', m / 60) }))} />
         </label>
-        <p className="muted small">{tr('接连三次没有新动静就不再来，直到项目又有变化。')}</p>
+        <p className="muted small">{tr('连续三次无新动态即停止跟进，直至项目再有变化。')}</p>
       </div>
       {talk && (
         <div className="pnl-s">
           <h4>{tr('汇报和提问')}</h4>
-          <p className="muted small">{tr('它的汇报、它问你的事，和你在「进展」里对它说的话，都在这个项目的对话里。')}</p>
+          <p className="muted small">{tr('负责人的汇报、向你的提问，以及你在「进展」中发送的消息，均在此项目对话中。')}</p>
           <a className={`btn${v.asks.length ? ' pri' : ''}`} href={href(talk)} onClick={e => follow(e, talk)}>
-            {v.asks.length ? tr('{0} 件等你回答', v.asks.length) : tr('打开对话')}
+            {v.asks.length ? tr('{0} 项待你回复', v.asks.length) : tr('打开对话')}
           </a>
         </div>
       )}
