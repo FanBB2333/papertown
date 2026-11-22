@@ -24,12 +24,42 @@ export function UsageMark({ state }: { state?: UsageState }) {
   return state === 'near' || state === 'over' ? <span className={`usage-mark usage-${state}`}>{STATES[state]}</span> : null;
 }
 
+// A quota window the way a terminal status line shows it: 5h or 7d, ten segments, the percent coloured by how
+// much is used, and the time left until it resets.
+const isFive = (w: UsageWindow) => w.id === 'five_hour' || /(^|[-_])5h$/.test(w.id) || w.label === '5 小时额度' || w.label === 'Session';
+const isWeek = (w: UsageWindow) => w.id.includes('weekly') || w.label === '每周额度' || w.label.startsWith('Weekly');
+const span = (w: UsageWindow) => isFive(w) ? '5h' : isWeek(w) ? '7d' : '';
+// what a window counts beyond its span: a model group (Antigravity) or one model (Claude's "Weekly · Fable")
+const GROUPS: Record<string, string> = { 'Gemini Models': 'Gemini', 'Claude and GPT models': 'Claude/GPT' };
+const scope = (w: UsageWindow) => w.group ? GROUPS[w.group] ?? tr(w.group) : w.label.includes('·') ? w.label.split('·').pop()!.trim() : '';
+const windowName = (w: UsageWindow) => {
+  const base = isFive(w) ? tr('5 小时额度') : isWeek(w) ? tr('每周额度') : tr(w.label), s = scope(w);
+  return s ? tr('{0} · {1}', base, s) : base;
+};
+const level = (n: number) => n >= 80 ? 'high' : n >= 50 ? 'mid' : 'low';
+function until(at: string | null): string {
+  if (!at) return tr('未开始');
+  const m = Math.round((new Date(at).getTime() - Date.now()) / 60000);
+  if (m <= 0) return tr('已重置');
+  const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60);
+  return d ? `${d}d${h}h` : h ? `${h}h${m % 60}m` : `${m}m`;
+}
+const order = (w: UsageWindow) => (scope(w) ? 10 : 0) + (isFive(w) ? 0 : isWeek(w) ? 1 : 2);
+
+function Segments({ value, label, wide }: { value: number; label: string; wide?: boolean }) {
+  const on = value <= 0 ? 0 : Math.min(10, Math.max(1, Math.round(value / 10)));
+  return <span className={`usage-seg${wide ? ' wide' : ''}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100}
+    aria-valuenow={Math.min(100, value)} aria-valuetext={pct(value)}>
+    {Array.from({ length: 10 }, (_, i) => <i key={i} className={i < on ? 'on' : undefined} style={{ ['--i' as string]: i }} />)}
+  </span>;
+}
+
 function Window({ w }: { w: UsageWindow }) {
-  const label = w.id === 'weekly' ? tr('每周额度') : w.id === 'five_hour' ? tr('5 小时额度') : tr(w.label);
-  return <div className="usage-window">
-    <div className="usage-between"><span>{w.group ? tr('{0} · {1}', tr(w.group), label) : label}</span><b>{pct(w.used)}</b></div>
-    <Bar value={w.used} label={label} />
-    <small>{tr('剩余 {0} · 重置 {1}', pct(w.left), date(w.resets_at))}</small>
+  const name = windowName(w);
+  return <div className={`usage-window usage-q-${level(w.used)}`}>
+    <div className="usage-between"><span>{name}</span><span className="usage-q-num"><b>{pct(w.used)}</b><small>{until(w.resets_at)}</small></span></div>
+    <Segments value={w.used} label={name} wide />
+    <small>{w.resets_at ? tr('剩余 {0} · {1} 重置', pct(w.left), resetDate(w.resets_at)) : tr('剩余 {0} · 还没有开始计时', pct(w.left))}</small>
   </div>;
 }
 
@@ -49,8 +79,17 @@ export function UsageStrip({ active }: { active: boolean }) {
     setBusy(true);
     try { setView(await api.refreshUsage()); setError(''); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
-  // one line per weekly window: the strip sits under the employee list and opens upward for the rest
-  const weekly = (view?.providers ?? []).flatMap(p => p.windows.filter(w => w.id === 'weekly' || w.label === '每周额度').map(w => ({ p, w })));
+  // one line per window, like a status line: a subscription's name on its first line only, a window not started yet left
+  // to the details; the strip sits under the employee list and opens upward for the rest
+  // a group with two windows writes its subscription on the first line and the group on the second, so neither is cut short
+  const rows = (view?.providers ?? []).flatMap(p => {
+    const ws = p.windows.filter(w => w.used > 0 || w.resets_at).sort((a, b) => order(a) - order(b));
+    return ws.map(w => {
+      const s = scope(w), same = ws.filter(x => scope(x) === s), at = same.indexOf(w), full = s ? tr('{0} · {1}', p.label, s) : p.label;
+      const name = at === 0 ? (s && same.length > 1 ? p.label : full) : at === 1 && s ? s : '';
+      return { p, w, full, name, sub: at === 1 && !!s };
+    });
+  });
   return <section className={`usage-strip${open ? ' open' : ''}`} aria-label={tr('订阅用量')}>
     <div id="usage-details" className="usage-details" hidden={!open}>
       {view?.providers.map(p => <div className="usage-provider" key={p.id}>
@@ -78,10 +117,13 @@ export function UsageStrip({ active }: { active: boolean }) {
     {error && <p role="alert" className="usage-error">{tr(error)}</p>}
     {!view && !error && <p className="usage-wait">{tr('加载中…')}</p>}
     {!open && <ul className="usage-mini">
-      {weekly.map(({ p, w }) => <li key={w.key} title={`${w.group ? tr('{0} · {1}', p.label, tr(w.group)) : p.label} · ${tr('重置：{0}', resetDate(w.resets_at))}`}>
-        <span>{w.group ? tr('{0} · {1}', p.label, tr(w.group)) : p.label}</span>
-        <Bar value={w.used} label={tr('{0} · {1}', p.label, tr('每周额度'))} />
+      {rows.map(({ p, w, full, name, sub }) => <li key={w.key} className={`usage-q usage-q-${level(w.used)}`}
+        title={`${p.label} · ${windowName(w)} · ${pct(w.used)} · ${tr('重置：{0}', resetDate(w.resets_at))}`}>
+        <span className={`usage-q-name${sub ? ' sub' : ''}`}>{name}</span>
+        <span className="usage-q-span">{span(w) || tr(w.label)}</span>
+        <Segments value={w.used} label={tr('{0} · {1}', full, windowName(w))} />
         <b>{pct(w.used)}</b>
+        <small>{until(w.resets_at)}</small>
       </li>)}
       {view?.providers.filter(p => !p.windows.length || p.error).map(p => <li key={p.id} className="usage-mini-note"><span>{p.label}</span><small>{p.error ? tr(p.error) : tr('尚无用量读数')}</small></li>)}
     </ul>}
