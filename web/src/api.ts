@@ -129,17 +129,26 @@ export interface PiState {
 export interface Agent {
   id: string; line_id: string | null; role: AgentRole; status: AgentStatus; tmux: string | null; cwd: string | null;
   model: string | null; cost: number; attach: string | null; name: string; last: AgentEvent | null; updated_at: string;
-  runtime: 'pi' | 'paseo'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
+  runtime: 'pi' | 'paseo' | 'herdr' | 'tmux'; started: boolean; ext_id: string | null; web: string | null; state: PiState | null;
   down?: string | null; // why it cannot be reached now (its status is then offline)
   node_id?: string | null; workspace_id?: string | null; session_id?: string | null;
-  watch?: Watch; task?: AgentTask | null;
+  watch?: Watch; task?: AgentTask | null; term?: AgentTerm | null;
 }
 
+export interface AgentTerm {
+  backend: 'herdr' | 'tmux'; provider: string; status: 'starting' | 'idle' | 'working' | 'blocked' | 'done' | 'exited';
+  seq: number; seen_seq: number; since: string; tool?: string | null; model?: string | null; thinking?: string | null; note?: string | null;
+}
+export type DefaultRuntime = 'paseo' | 'herdr' | 'tmux';
+export interface Backends {
+  paseo: { ok: boolean; note: string }; herdr: { ok: boolean; note: string }; tmux: { ok: boolean; note: string };
+  clis: Record<string, string | null>;
+}
 export interface PaseoModel { id: string; name: string; thinking: string[]; default_thinking: string | null }
 export interface PaseoProvider { id: string; label: string; modes: string; models: PaseoModel[]; error?: string | null } // error: why its models could not be read
 export interface PaseoInfo {
   status: { ok: boolean; note: string; server_id?: string; web?: string | null; version?: string };
-  providers: PaseoProvider[];
+  providers: PaseoProvider[]; runtime?: DefaultRuntime;
   defaults?: PaseoDefaults;
   news?: ModelNews[];
 }
@@ -272,7 +281,7 @@ export interface PaseoConversation {
 }
 export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
 export interface PaseoPermission { id: string; name: string; title: string | null; arg: string; kind?: string }
-export interface StartOpts { runtime?: 'pi' | 'paseo'; provider?: string; model?: string; thinking?: string }
+export interface StartOpts { runtime?: 'pi' | 'paseo' | 'herdr' | 'tmux'; provider?: string; model?: string; thinking?: string }
 
 export interface AssistantView { agent: Agent; asks: AgentEvent[]; acts: AgentEvent[]; actions: Record<string, { what: string; args: string }> }
 export interface Focus { ref?: string; label: string; where?: string; text?: string }
@@ -485,6 +494,12 @@ export const api = {
     call<unknown>('POST', `/api/agents/${encodeURIComponent(id)}/queue/${eventId}`, { what }),
   agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`, undefined, said),
   openAgent: (lineId: string, role: AgentRole) => call<Agent>('POST', '/api/agents', { line_id: lineId, role }),
+  backends: () => call<Backends>('GET', '/api/backends'),
+  defaultRuntime: () => call<{ runtime: DefaultRuntime }>('GET', '/api/agents/runtime'),
+  setDefaultRuntime: (runtime: DefaultRuntime) => call<{ runtime: DefaultRuntime }>('POST', '/api/agents/runtime', { runtime }),
+  agentScreen: (id: string) => call<{ text: string; term: AgentTerm }>('GET', `/api/agents/${id}/screen`, undefined, asIs),
+  agentKeys: (id: string, keys: string[]) => call('POST', `/api/agents/${id}/keys`, { keys }),
+  closeTerminal: (id: string) => call<Agent>('POST', `/api/agents/${id}/close`),
   startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
   openInPaseo: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/open`),
   paseo: (fresh?: boolean) => call<PaseoInfo>('GET', `/api/paseo${fresh ? '?fresh=1' : ''}`),

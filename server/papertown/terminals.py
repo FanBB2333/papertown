@@ -176,7 +176,10 @@ class Terminals:
         roots = project_roots(self.town, lines, agents)
         groups: dict[str, list[dict]] = {line["id"]: [] for line in lines}
         others = []
+        owned = {(a.get("term") or {}).get("handle", {}).get("pane") for a in agents if a.get("runtime") == "herdr" and (a.get("term") or {}).get("handle")}
         for terminal in self.all():
+            if terminal["pane_id"] in owned:
+                continue
             lid = owner(terminal["cwd"], roots)
             (groups[lid] if lid else others).append(terminal)
         return groups, others

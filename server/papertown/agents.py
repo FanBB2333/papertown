@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 from .db import now, read_json, write_json
 from .paseo import Feed, Paseo, PaseoError
+from .hosted import Hosted, RUNTIMES
 
 if TYPE_CHECKING:
     from .town import Town
@@ -199,8 +200,8 @@ def model_label(provider: str | None, model: str | None) -> str:
     return "/".join(x for x in (provider, model) if x)
 
 
-def _attach(session: str) -> str:
-    return f"tmux -L {SOCKET} attach -t {session}"
+def _attach(session: str, socket: str = SOCKET) -> str:
+    return shlex.join(["tmux", "-L", socket, "attach", "-t", session])
 
 
 def _serialized(fn):
@@ -248,6 +249,7 @@ class Agents:
         self._turns: dict[str, str] = {}
         self._watch_lock = threading.RLock()
         self._feed: Feed | None = None
+        self.hosted = Hosted(self)
 
     def available(self) -> dict:
         missing = [n for n, p in (("pi", self.pi), ("tmux", self.tmux)) if not p]
@@ -292,11 +294,15 @@ class Agents:
         out["status"], out["down"] = self.shown(a), self.down(a) or None
         out["runtime"] = rt = a.get("runtime") or "pi"
         out["started"] = bool(a.get("runtime"))
-        out["attach"] = _attach(a["tmux"]) if rt == "pi" and a.get("tmux") else None
+        out["attach"] = _attach(a["tmux"], self.s.tmux_socket) if rt == "pi" and a.get("tmux") else None
         out["web"] = self.paseo.url(a["ext_id"]) if rt == "paseo" and a.get("ext_id") and not out["down"] else None
         out["state"] = self._state.get(a["id"]) if rt == "pi" else None
         out["name"] = ROLES[a["role"]]["name"]
         out["last"] = self.db.one("select * from agent_events where agent_id = ? and kind in ('assistant', 'note', 'user') order by id desc limit 1", a["id"])
+        if rt in RUNTIMES:
+            out["term"], out["attach"] = self.hosted.public(a), self.hosted.attach(a)
+        else:
+            out["term"] = None
         out["watch"] = self.watch_of(a)
         out["task"] = None
         if a.get("node_id") and a.get("line_id"):
@@ -318,6 +324,8 @@ class Agents:
 
     def watch_of(self, a: dict) -> dict:
         """Combine lifecycle, attention and local questions into the shared watch contract."""
+        if a.get("runtime") in RUNTIMES:
+            return self.hosted.watch_of(a)
         ext = a.get("ext_id")
         with self._watch_lock:
             snap = self._snapshots.get(ext, {})
@@ -375,6 +383,9 @@ class Agents:
     def seen(self, agent_id: str) -> dict:
         if not self.get(agent_id):
             raise AgentError("没有这个员工")
+        a = self.get(agent_id)
+        if a.get("runtime") in RUNTIMES:
+            self.hosted.seen(a)
         self.db.update("agents", {"id": agent_id}, seen_at=datetime.now(timezone.utc).isoformat())
         self._publish(agent_id)
         return self.public(self.get(agent_id))
@@ -572,6 +583,8 @@ class Agents:
         picked, the others start another at once on the same model, so a lead keeps supervising. pi starts a new session."""
         a = self._chat(agent_id)
         self._switchable(a)
+        if a.get("runtime") in RUNTIMES:
+            raise AgentError("终端员工请关闭终端后接着会话启动")
         if a.get("runtime") == "paseo":
             conv = next((c for c in self._own(agent_id) if c["id"] == a.get("ext_id")), None)
             self._interrupt(a)
@@ -598,6 +611,8 @@ class Agents:
         if not conv.get("cwd"):
             raise AgentError("这段 Paseo 对话没有工作目录，无法切换")
         if a.get("ext_id") != ext_id:
+            if a.get("runtime") in RUNTIMES:
+                self.hosted.close(agent_id)
             self._interrupt(a)
             self.attach(agent_id, conv)
         return self.public(self.get(agent_id))
@@ -606,18 +621,21 @@ class Agents:
         rows = self.db.q("select * from agent_events where agent_id = ? and id > ? order by id desc limit ?", agent_id, after, limit)
         return rows[::-1]
 
-    def _tmux(self, *args: str) -> subprocess.CompletedProcess:
+    def _tmux(self, *args: str, input: str | None = None) -> subprocess.CompletedProcess:
         # own tmux server: ~/.tmux.conf plus the extended keys pi asks for
         conf = self.s.data_dir / "tmux.conf"
         if not conf.exists():
-            conf.write_text("source-file -q ~/.tmux.conf\nset -g extended-keys on\nset -g extended-keys-format csi-u\n", encoding="utf-8")
-        return subprocess.run([self.tmux, "-L", SOCKET, "-f", str(conf), *args], capture_output=True, text=True, timeout=10)
+            conf.write_text(("source-file -q ~/.tmux.conf\n" if self.s.tmux_socket == SOCKET else "") + "set -g extended-keys on\nset -g extended-keys-format csi-u\n", encoding="utf-8")
+        return subprocess.run([self.tmux, "-L", self.s.tmux_socket, "-f", str(conf), *args], input=input, capture_output=True, text=True, timeout=10)
 
     def alive(self, a: dict) -> bool:
+        if a.get("runtime") in RUNTIMES:
+            return self.hosted.backends[a["runtime"]].alive(a["term"]["handle"])
         return bool(self.tmux and a.get("tmux")) and self._tmux("has-session", "-t", a["tmux"]).returncode == 0
 
     def _guide(self, a: dict, runtime: str) -> str:
         """Write the role's guide to the agent's home (never into a linked repository) and return it."""
+        runtime = "paseo" if runtime in RUNTIMES else runtime
         cwd = Path(a["cwd"])
         cwd.mkdir(parents=True, exist_ok=True)
         text = self._guide_text(a, runtime)
@@ -631,6 +649,7 @@ class Agents:
 
     def _guide_text(self, a: dict, runtime: str) -> str:
         """The role's guide, ending with the agent's work boundaries."""
+        runtime = "paseo" if runtime in RUNTIMES else runtime
         bounds = self.town.bounds.section(a["role"], a["line_id"], ".papertown/pt" if runtime == "paseo" else None)
         if a["role"] == "assistant":
             return self.town.assistant.guide(runtime) + bounds
@@ -682,7 +701,7 @@ class Agents:
         Paseo creates the session, so canvases elsewhere are not kept waiting on Paseo's CLI. A pi start keeps the
         canvas lock throughout: its bridge reads gates as it comes up."""
         a = self.get(agent_id)
-        if a and a["role"] in CHAT_ROLES and (runtime or a.get("runtime")) == "paseo" and not a.get("ext_id"):
+        if a and a["role"] in CHAT_ROLES and (runtime or a.get("runtime")) == "paseo" and not a.get("ext_id") and a.get("runtime") not in RUNTIMES:
             intro = self._paseo_intro(a)
             with self._delivery_lock:
                 return self._start_paseo(self.get(agent_id), provider, model, thinking, intro)
@@ -694,7 +713,18 @@ class Agents:
         a = self.get(agent_id)
         if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")
-        if (runtime or a.get("runtime")) == "paseo":
+        runtime = runtime or a.get("runtime") or (self.town.paseo_models.runtime() if a["role"] == "lead" else "pi")
+        if runtime not in ("pi", "paseo", *RUNTIMES):
+            raise AgentError("没有这种运行方式")
+        if runtime in RUNTIMES:
+            if a.get("runtime") == "paseo" and a.get("ext_id"):
+                raise AgentError("请先结束当前 Paseo 会话后再切换运行方式")
+            if a.get("runtime") == "pi" and self.alive(a):
+                raise AgentError("请先关闭 pi 会话后再切换运行方式")
+            return self.hosted.start(a, runtime, provider, model, thinking)
+        if a.get("runtime") in RUNTIMES:
+            self.hosted.close(agent_id)
+        if runtime == "paseo":
             return self._start_paseo(a, provider, model, thinking)
         if a.get("node_id"):
             raise AgentError("节点 Agent 只在 Paseo 里运行")
@@ -726,7 +756,7 @@ class Agents:
         if r.returncode != 0:
             raise AgentError(f"tmux 启动失败：{r.stderr.strip()}")
         self._set(agent_id, status="starting", runtime="pi")
-        self.record(agent_id, "note", {"text": "在后台终端里启动 pi。", "attach": _attach(a["tmux"])})
+        self.record(agent_id, "note", {"text": "在后台终端里启动 pi。", "attach": _attach(a["tmux"], self.s.tmux_socket)})
         threading.Thread(target=self._watch_start, args=(agent_id,), daemon=True).start()
         return self.public(self.get(agent_id))
 
@@ -837,6 +867,8 @@ class Agents:
             raise AgentError(f"这段对话已经导入给了{self.town.leads._who(self.get(other['id']))}")
         if owner and owner != a["id"]:
             raise AgentError("这段对话已经属于另一个 Papertown Agent，不能重复导入")
+        if a.get("runtime") in RUNTIMES:
+            self.hosted.close(agent_id)
         try:
             self.paseo.label(ext_id, self.labels(a))
         except PaseoError as e:
@@ -905,6 +937,7 @@ class Agents:
         self._watch_thread.start()
 
     def shutdown(self) -> None:
+        self.hosted.shutdown()
         self._halt.set()
         if self._feed:
             self._feed.close()
@@ -1027,6 +1060,8 @@ class Agents:
         a = self.get(agent_id)
         if not a:
             return
+        if a.get("runtime") in RUNTIMES:
+            self.hosted.close(agent_id)
         if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "working" and not self.down(a):
             try:
                 self.paseo.interrupt(a["ext_id"])
@@ -1036,12 +1071,14 @@ class Agents:
             self.amend(row["id"], row["data"] | {"held": False, "error": why})
         self.db.update("agents", {"id": agent_id}, token=secrets.token_urlsafe(18))
         self._set(agent_id, runtime=None, ext_id=None, workspace_id=None, status="stopped", model=None)
-        self.record(agent_id, "note", {"text": f"{why}。Paseo 中的对话已保留，该 Agent 已无法访问 Papertown。"})
+        self.record(agent_id, "note", {"text": f"{why}。终端已关闭，该 Agent 已无法访问 Papertown。" if a.get("runtime") in RUNTIMES else f"{why}。Paseo 中的对话已保留，该 Agent 已无法访问 Papertown。"})
 
     @_serialized
     def release(self, agent_id: str) -> None:
         """Deliver the oldest queued message; failures remain visible and retryable."""
         a = self.get(agent_id)
+        if a and a.get("runtime") in RUNTIMES:
+            return self.hosted.release(agent_id)
         row = self.db.one("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1"
                           " order by id limit 1", agent_id)
         if not a or not row or not a.get("ext_id") or a["status"] != "idle":
@@ -1069,6 +1106,8 @@ class Agents:
     def queue_now(self, agent_id: str, event_id: int) -> dict:
         """Deliver a held event once, preserving its identity and session ownership."""
         a, row = self._held(agent_id, event_id)
+        if a.get("runtime") in RUNTIMES:
+            return self.hosted.queue_now(agent_id, event_id)
         if a.get("runtime") == "pi":
             self._queue(agent_id, {"kind": "queue_now", "mid": row["data"]["mid"]})
             event = self.amend(event_id, row["data"] | {"held": False, "steered": True})
@@ -1088,6 +1127,8 @@ class Agents:
     @_serialized
     def queue_drop(self, agent_id: str, event_id: int) -> dict:
         a, row = self._held(agent_id, event_id)
+        if a.get("runtime") in RUNTIMES:
+            return self.hosted.queue_drop(agent_id, event_id)
         if a.get("runtime") == "pi":
             self._queue(agent_id, {"kind": "queue_drop", "mid": row["data"]["mid"]})
         event = self.amend(event_id, row["data"] | {"held": False, "dropped": True})
@@ -1098,6 +1139,8 @@ class Agents:
         a = self.get(agent_id)
         if not a:
             raise AgentError("没有这个员工")
+        if a.get("runtime") in RUNTIMES:
+            return self.hosted.stop(agent_id)
         if a.get("runtime") == "paseo":
             self.abort(agent_id)
             return self.public(self.get(agent_id))
@@ -1108,6 +1151,7 @@ class Agents:
         return self.public(self.get(agent_id))
 
     def reconcile(self) -> None:
+        self.hosted.reconcile()
         for a in self.db.q("select * from agents where role in ('coder', 'writer', 'assistant') and status != 'stopped' and coalesce(runtime, 'pi') = 'pi'"):
             if not self.alive(a):
                 self.db.update("agents", {"id": a["id"]}, status="stopped", updated_at=now())
@@ -1117,6 +1161,11 @@ class Agents:
         """A message to the agent. While it works, `mode` "steer" puts it into the current turn and "queue"
         holds it until the turn ends. The default is steer. A message to a Paseo session holds
         only the delivery lock; one that may have to start pi also holds the canvas lock, taken first."""
+        if (self.get(agent_id) or {}).get("runtime") in RUNTIMES:
+            event = self.hosted.say(agent_id, text, mode, origin)
+            if origin == "web":
+                self.seen(agent_id)
+            return event
         if (self.get(agent_id) or {}).get("runtime") == "paseo":
             with self._delivery_lock:
                 if (self.get(agent_id) or {}).get("runtime") == "paseo":  # still, now that the order is ours
@@ -1145,6 +1194,8 @@ class Agents:
             raise AgentError("消息是空的")
         if mode not in (None, "queue", "steer", "interrupt"):
             raise AgentError("发送模式只能是 steer、queue 或 interrupt")
+        if a.get("runtime") in RUNTIMES:
+            return self.hosted.say(agent_id, text, mode, origin)
         if a.get("runtime") == "paseo":
             if not a.get("ext_id"):
                 raise AgentError("先在 Paseo 里启动它")
@@ -1194,7 +1245,7 @@ class Agents:
             self._tmux("send-keys", "-t", a["tmux"], "-l", text)
             self._tmux("send-keys", "-t", a["tmux"], "Enter")
             ev = self.record(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "delivered": True})
-            attach = _attach(a["tmux"])
+            attach = _attach(a["tmux"], self.s.tmux_socket)
             self.record(a["id"], "note", {"text": f"{text} 要用 pi 的终端界面，已经在终端里执行了，接上终端操作：{attach}", "attach": attach})
             return ev
         mid = self._queue(a["id"], {"kind": "cmd", "name": name, "args": args.strip()})
@@ -1202,6 +1253,9 @@ class Agents:
 
     def abort(self, agent_id: str) -> None:
         a = self.get(agent_id)
+        if a and a.get("runtime") in RUNTIMES:
+            self.hosted.stop(agent_id)
+            return
         if a and a.get("runtime") == "paseo" and a.get("ext_id"):
             try:
                 self.paseo.interrupt(a["ext_id"])
@@ -1239,9 +1293,9 @@ class Agents:
                     "要员工动手的用 `pt tell` 派下去。然后结束这一轮，等巡检消息。\n\n"
                     + self.town.leads.status(a["line_id"]) + "\n\n## 项目简报\n\n" + self.town.brief(a["line_id"], "lead"))
         if self.town.linked.of(a["line_id"]):
-            return self._linked_intro(a, "paseo" if a.get("runtime") == "paseo" else "pi")
+            return self._linked_intro(a, "paseo" if a.get("runtime") in ("paseo", *RUNTIMES) else "pi")
         text = self.town.brief(a["line_id"], a["role"])
-        if a.get("runtime") != "paseo":
+        if a.get("runtime") not in ("paseo", *RUNTIMES):
             return "这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + text
         pt = self._tools(a)
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
@@ -1263,6 +1317,8 @@ class Agents:
     @_serialized
     def ingest(self, agent_id: str, events: list[dict]) -> None:
         """Events from a pi agent's bridge."""
+        if (self.get(agent_id) or {}).get("runtime") in RUNTIMES:
+            raise AgentError("终端员工请使用 hook 回报接口")
         for e in events:
             t = e.get("t")
             if t == "hello":

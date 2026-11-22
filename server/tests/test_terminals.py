@@ -43,6 +43,9 @@ class FakeHerdr(socketserver.ThreadingUnixStreamServer):
         self.lock = threading.RLock()
         self.stopped = threading.Event()
         self.fail_prompt = False
+        self.workspaces, self.tabs = {}, {}
+        self.hosted_ready = True
+        self.busy_starts = 0  # agent.start answers agent_pane_busy this many times, like a shell still loading
         self.thread = threading.Thread(target=self.serve_forever, kwargs={'poll_interval': 0.01}, daemon=True)
         self.thread.start()
 
@@ -97,6 +100,38 @@ class Handler(socketserver.StreamRequestHandler):
                     result = None
                 elif method == 'agent.list':
                     result = {'type': 'agent_list', 'agents': list(host.agents.values())}
+                elif method == 'workspace.create':
+                    wid = 'ws' + str(len(host.workspaces) + 1)
+                    host.workspaces[wid] = p
+                    tid = 'tab' + str(len(host.tabs) + 1)
+                    host.tabs[tid] = p | {'workspace_id': wid}
+                    result = {'workspace': {'workspace_id': wid}, 'tab': {'tab_id': tid}, 'root_pane': {'pane_id': wid + ':' + tid}}
+                elif method == 'tab.rename':
+                    host.tabs[p['tab_id']]['label'] = p['label']
+                    result = {'type': 'tab_info'}
+                elif method == 'tab.create':
+                    tid = 'tab' + str(len(host.tabs) + 1)
+                    host.tabs[tid] = p
+                    result = {'tab': {'tab_id': tid}, 'root_pane': {'pane_id': p['workspace_id'] + ':' + tid}}
+                elif method == 'agent.start' and host.busy_starts:
+                    host.busy_starts -= 1
+                    error = 'agent_pane_busy'
+                elif method == 'agent.start':
+                    tid = p['pane_id'].split(':')[-1]
+                    tab = host.tabs[tid]
+                    ident = 'hosted-' + tid
+                    a = agent(ident, pane_id=p['pane_id'], workspace_id=tab['workspace_id'], tab_id=tid,
+                              agent=p['kind'], name=p['name'], cwd=tab['cwd'], interactive_ready=host.hosted_ready,
+                              agent_status='idle' if host.hosted_ready else 'blocked', completion_seq=0)
+                    host.agents[ident] = a
+                    result = {'agent': a, 'argv': [p['kind'], *p['args']]}
+                elif method == 'tab.close':
+                    gone = host.tabs.pop(p['tab_id'], None)
+                    # Like herdr: closing a workspace's last tab closes the workspace.
+                    if gone and not any(t['workspace_id'] == gone['workspace_id'] for t in host.tabs.values()):
+                        host.workspaces.pop(gone['workspace_id'], None)
+                    host.agents = {k: v for k, v in host.agents.items() if v['tab_id'] != p['tab_id']}
+                    result = {'type': 'ok'}
                 elif a is None:
                     error = 'agent_not_found'
                 elif method == 'agent.get':

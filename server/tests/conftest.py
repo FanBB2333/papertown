@@ -15,6 +15,8 @@ def make_settings(tmp: Path, **kw) -> Settings:
         shutil.copytree(SERVER_DIR / "skills", skills)
     base = dict(provider="mock", data_dir=tmp / "var", skills_dir=skills, arxiv_port=False, sim_gpu_seconds=0.05,
                 compile_tex=False, samples=False, pi_bin=str(tmp / "no-pi"), nvidb_bin=str(tmp / "no-nvidb"), skim_bin=str(tmp / "no-skim"),
+                tmux_bin=str(tmp / "no-tmux"),
+                claude_bin=str(tmp / "no-claude-bin"), codex_bin=str(tmp / "no-codex-bin"),
                 paseo_bin=str(tmp / "no-paseo"), paseo_url="http://127.0.0.1:9",
                 claude_home=str(tmp / "no-claude"), codex_home=str(tmp / "no-codex"),
                 antigravity_home=str(tmp / "no-antigravity"), agy_bin=str(tmp / "no-agy"), usage_poll=0,

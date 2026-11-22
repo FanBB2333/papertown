@@ -5,6 +5,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, listen, type Agent, type AgentEvent, type AssistantConv, type AssistantView, type Focus, type PaseoItem, type PaseoPermission, type ShowTarget, type StartOpts } from '../api';
+import { HostedRoom } from '../agents/Terminal';
+import { TerminalPick } from '../agents/TerminalPick';
 import { fold, paseoTool, PaseoPick, piTool, PiSwitch, Text, Tool, Trail, UserMsg, usePaseoTalk, usePiTalk, type Item, type Linker, type ToolSt } from '../components/AgentRoom';
 import { AGENT_STATUS } from '../components/MillRoom';
 import { Select } from '../components/Select';
@@ -259,16 +261,17 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea,
               <h3>Paseo</h3>
               <PaseoPick busy={busy} onStart={start} role="assistant" />
             </div>
+            <div className="hire-card"><h3>{tr('终端')}</h3><TerminalPick busy={busy} onStart={start} role="assistant" /></div>
             <div className="hire-card">
               <h3>{tr('pi · 后台终端')}</h3>
               <button className="btn" disabled={busy} onClick={() => start({ runtime: 'pi' })}>{busy ? tr('启动中…') : tr('启动 pi')}</button>
             </div>
           </div>
         </>
-      ) : a.runtime === 'paseo'
+      ) : a.term ? <HostedRoom agent={a} toast={toast} /> : a.runtime === 'paseo'
         ? <PaseoSide key={a.ext_id ?? 'paseo'} agent={a} side={side} />
         : <PiSide key="pi" agent={a} side={side} />}
-      {side && a && <Composer agent={a} side={side} target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} onAdjust={onAdjust} />}
+      {side && a && !a.term && <Composer agent={a} side={side} target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} onAdjust={onAdjust} />}
       {history && <History onPick={resume} onClose={() => setHistory(false)} />}
       {pointing && <Pointer onPick={pointing} onCancel={() => setPointing(null)} />}
     </div>

@@ -717,6 +717,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def terminal_seen(id: str):
         return terminals(town.terminals.seen, id)
 
+    @app.get("/api/backends")
+    def backends():
+        return town.agents.hosted.available()
+
+    @app.get("/api/agents/runtime")
+    def agent_runtime():
+        return {"runtime": town.paseo_models.runtime()}
+
+    @app.post("/api/agents/runtime")
+    def set_agent_runtime(body: StartIn):
+        return mapped(ModelError)(town.paseo_models.set_runtime, body.runtime)
+
+    @app.get("/api/agents/{agent_id}/screen")
+    def agent_screen(agent_id: str):
+        return agents(town.agents.hosted.screen, agent_id)
+
+    @app.post("/api/agents/{agent_id}/keys")
+    def agent_keys(agent_id: str, body: TerminalKeysIn):
+        agents(town.agents.hosted.keys, agent_id, body.keys)
+        return {"ok": True}
+
+    @app.post("/api/agents/{agent_id}/close")
+    def agent_close(agent_id: str):
+        return agents(town.agents.hosted.close, agent_id)
+
+    @app.post("/api/agents/{agent_id}/hook")
+    def agent_hook(agent_id: str, body: dict, x_papertown_token: str | None = Header(default=None)):
+        bridged(agent_id, x_papertown_token)
+        data = body.get("data")
+        if not isinstance(data, dict):
+            raise HTTPException(422, "hook 数据必须是对象")
+        agents(town.agents.hosted.hook, agent_id, body.get("provider"), data)
+        return {"ok": True}
+
     # agents
     @app.get("/api/agents")
     def agent_roster(role: str):
@@ -826,7 +860,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             providers = []
         if providers:
             m.learn(providers)
-        return {"status": st, "providers": providers, "defaults": m.defaults(), "news": m.news()}
+        return {"status": st, "providers": providers, "defaults": m.defaults(), "news": m.news(), "runtime": m.runtime()}
 
     @app.post("/api/paseo/defaults")
     def paseo_default(body: DefaultIn):
@@ -1124,7 +1158,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/bridge/{agent_id}/events")
     def bridge_events(agent_id: str, body: BridgeIn, x_papertown_token: str | None = Header(default=None)):
         bridged(agent_id, x_papertown_token)
-        town.agents.ingest(agent_id, body.events)
+        agents(town.agents.ingest, agent_id, body.events)
         return {"ok": True}
 
     @app.get("/api/bridge/{agent_id}/inbox")
@@ -1146,7 +1180,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/bridge/{agent_id}/rules")
     def bridge_rules(agent_id: str, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
-        return {"text": town.bounds.text(a["role"], a["line_id"], str(town.agents.pt(a)) if a["runtime"] == "paseo" else None)}
+        return {"text": town.bounds.text(a["role"], a["line_id"], str(town.agents.pt(a)) if a["runtime"] in ("paseo", "herdr", "tmux") else None)}
 
     def helper(agent_id: str, token: str | None) -> dict:
         a = bridged(agent_id, token)

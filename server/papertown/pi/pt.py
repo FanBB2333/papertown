@@ -79,6 +79,43 @@ def link():
     return d["url"], d["agent"], d["token"]
 
 
+# Only scalar lifecycle metadata leaves the CLI process. Never include conversation content.
+HOOK_FIELDS = {"hook_event_name", "event", "type", "session_id", "thread-id", "conversation_id",
+               "notification_type", "tool_name", "agent_state", "tool_confirmation_pending",
+               "agent_id", "source", "transcript_path"}
+
+
+def hook(provider, args):
+    try:
+        raw = json.loads(args[-1] if provider == "codex" and args else sys.stdin.read())
+        data = {k: v for k, v in raw.items() if k in HOOK_FIELDS and isinstance(v, (str, bool, int, float))}
+        url, agent, token = link()
+        body = {"provider": provider, "data": data}
+        if provider == "agy":
+            state = json.dumps({k: data.get(k) for k in ("conversation_id", "agent_state", "tool_confirmation_pending", "tool_name")}, sort_keys=True)
+            cache = os.path.join(HERE, "hook-agy.json")
+            try:
+                with open(cache, encoding="utf-8") as f:
+                    if f.read() == state:
+                        return
+            except OSError:
+                pass
+        req = urllib.request.Request(url.rstrip("/") + "/api/agents/" + quote(agent, safe="") + "/hook",
+            data=json.dumps(body).encode(), headers={"content-type": "application/json", "x-papertown-token": token}, method="POST")
+        with OPEN(req, timeout=2):
+            pass
+        if provider == "agy":
+            tmp = cache + "." + uuid.uuid4().hex
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(state)
+            os.replace(tmp, cache)
+    except (Exception, SystemExit):
+        pass
+    finally:
+        if provider == "agy":
+            print("Papertown")
+
+
 def call(path, body=None):
     """A bridge call (a path like /brief) or one of the public endpoints (/api/...)."""
     url, agent, token = link()
@@ -175,6 +212,10 @@ def read(path):
 
 
 def main(a):
+    if a[:1] == ["hook"]:
+        if len(a) > 1 and a[1] in ("claude", "codex", "agy"):
+            hook(a[1], a[2:])
+        return
     if not a or a[0] in ("-h", "--help"):
         print(__doc__)
     elif a[0] in ("brief", "status", "reports"):

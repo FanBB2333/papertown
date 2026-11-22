@@ -1510,7 +1510,7 @@ class Canvas:
             if ext_id:
                 a = self.town.agents.import_session(a["id"], ext_id)
             else:
-                a = self.town.agents.start(a["id"], "paseo", provider, model, thinking)
+                a = self.town.agents.start(a["id"], self.town.paseo_models.runtime(), provider, model, thinking)
         finally:
             with self._lock:
                 self._binding.discard(key)
@@ -1524,7 +1524,7 @@ class Canvas:
                     raise CanvasError(f"安排 Agent 期间任务已被修改或删除，新会话{e}") from e
                 raise CanvasError("安排 Agent 期间任务已被修改或删除，新建的会话已停用")
             n["agent_id"] = a["id"]
-            _log(n, "bound", f"Paseo · {a['model']} · {a['ext_id']}")
+            _log(n, "bound", f"{'Paseo' if a['runtime'] == 'paseo' else a['runtime']} · {a['model']} · {a.get('ext_id') or a.get('session_id') or a['id']}")
             self._save(line_id, d)
         self._changed(line_id)
         return self.view(line_id)
@@ -1539,7 +1539,7 @@ class Canvas:
         return a
 
     def _reply_instructions(self, a: dict, n: dict, token: str) -> str:
-        pt = shlex.quote(str(self.town.agents.pt(a))) if a["runtime"] == "paseo" else ".papertown/pt"
+        pt = shlex.quote(str(self.town.agents.pt(a))) if a["runtime"] in ("paseo", "herdr", "tmux") else ".papertown/pt"
         dispatch = f' --dispatch {token}'
         return (f'做完运行 `{pt} task {n["id"]} done "结果"{dispatch}`，卡住运行 `{pt} task {n["id"]} blocked "原因"{dispatch}`。'
                 '回报 blocked 后如已自行解决，可使用同一 --dispatch 回报 done。'

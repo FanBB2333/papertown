@@ -1,6 +1,8 @@
 // A project's agent at the depot, the press or the mill: hiring it in Paseo or in pi (a background
 // tmux terminal), then its conversation. The assistant and the lead's chat reuse the hooks and pieces here.
 
+import { HostedRoom, HostedContext } from '../agents/Terminal';
+import { TerminalPick } from '../agents/TerminalPick';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { api, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
@@ -83,7 +85,7 @@ export function AgentRoom(p: Props) {
 function Seat(p: Props & { row: Roster['roster'][number]; ok: boolean; onDone: () => void }) {
   const { row: cur } = p, line = p.lines.find(l => l.id === cur.line.id);
   return cur.agent?.started
-    ? cur.agent.runtime === 'paseo'
+    ? cur.agent.term ? <><HostedRoom key={cur.agent.id} agent={cur.agent} toast={p.toast} /><aside className="aw-context"><HostedContext agent={cur.agent} toast={p.toast} /></aside></> : cur.agent.runtime === 'paseo'
       ? <PaseoChat key={cur.agent.ext_id ?? cur.agent.id} {...p} agent={cur.agent} line={line} />
       : <AgentChat key={cur.agent.id} {...p} agent={cur.agent} line={line} />
     : <Hire key={cur.line.id} line={cur.line} role={p.role} agent={cur.agent} ok={p.ok} toast={p.toast} onDone={p.onDone}
@@ -137,7 +139,7 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
       <div className="hire-wrap">
         <h2>#{line.seq} {tr('还没有')}{r.name}</h2>
         {lead ? (
-          <p className="muted">{tr('负责人盯着这个项目：项目有动静时看一眼，催员工干活、给他们派活，有要紧的事向你汇报、问你。它只跑在 Paseo 里，工作目录是 Papertown 自己的，不碰项目的仓库。')}</p>
+          <p className="muted">{tr('负责人跟进项目进度、分派任务并汇报。工作目录是 Papertown 自己的目录。')}</p>
         ) : repo ? (
           <p className="warn-box">{tr('这是从本地接入的项目：员工会直接在')} <code>{repo}</code> {tr('里改文件，改动是真的。启动时会让它先看 git status、提交和推送前问你。它的说明和 pt 工具放在 Papertown 自己的目录里，不写进仓库。')}</p>
         ) : <p className="muted">{tr('选一种运行方式。工作目录都是这个项目在')}{r.place}{tr('的目录，启动时会先把项目简报发给它。')}</p>}
@@ -147,6 +149,7 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
             <p className="muted small">{tr('Claude Code、Codex、OpenCode、Pi 等都可以。对话用的是 Paseo 自己的界面，命令、模型切换和权限审批都照旧。')}</p>
             <PaseoPick busy={busy} onStart={go} onReady={setPaseo} role={lead ? 'lead' : undefined} />
           </div>
+          <div className="hire-card"><h3>{tr('终端')}</h3><TerminalPick busy={busy} onStart={go} role={role} /></div>
           {!lead && <div className="hire-card">
             <h3>{tr('pi · 后台终端')}</h3>
             <p className="muted small">{tr('本机的 pi 跑在 tmux 里，终端和这里的对话实时同步。这里能切换模型和思考强度，输入 / 可以用 pi 的命令。它用 pi 自己的模型设置和登录。')}</p>
@@ -388,6 +391,7 @@ type ChatProps = { agent: Agent; line?: Line; role: AgentRole; toast: (t: string
 
 // The standalone page supplies its own context column.
 export function Conversation({ agent, toast }: { agent: Agent; toast: (t: string) => void }) {
+  if (agent.term) return <HostedRoom key={agent.id} agent={agent} toast={toast} />;
   return agent.runtime === 'paseo'
     ? <PaseoChat key={agent.ext_id ?? agent.id} agent={agent} role={agent.role} toast={toast} />
     : <AgentChat key={agent.id} agent={agent} role={agent.role} toast={toast} />;

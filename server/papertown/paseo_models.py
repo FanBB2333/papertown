@@ -43,6 +43,18 @@ class PaseoModels:
     def _publish(self) -> None:
         self.town.bus.publish("paseo_models", defaults=self.defaults(), news=self.news())
 
+    def runtime(self) -> str:
+        value = self._read().get("runtime", self.s.agent_runtime)
+        return value if value in ("paseo", "herdr", "tmux") else "paseo"
+
+    def set_runtime(self, runtime: str) -> dict:
+        if runtime not in ("paseo", "herdr", "tmux"):
+            raise ModelError("默认运行方式只能是 Paseo、herdr 或 tmux")
+        with self._lock:
+            self._write(self._read() | {"runtime": runtime})
+        self._publish()
+        return {"runtime": runtime}
+
     def default(self, role: str) -> dict:
         """The provider, model and thinking an agent of this role starts with when none is picked."""
         d = (self._read().get("defaults") or {}).get(role)

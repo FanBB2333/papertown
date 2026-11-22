@@ -233,7 +233,7 @@ class Bounds:
             a = self.town.agents.get(aid)
             if a.get("runtime") == "pi" and not self.town.agents.alive(a):
                 continue  # a stopped pi reads them in AGENTS.md when it starts; saying something would start it
-            pt = str(self.town.agents.pt(a)) if a.get("runtime") == "paseo" else None
+            pt = str(self.town.agents.pt(a)) if a.get("runtime") in ("paseo", "herdr", "tmux") else None
             msg = "<bounds>\n用户改了你的工作边界，从现在起按这一份做（AGENTS.md 里也更新了）：\n\n" + self.text(a["role"], a["line_id"], pt) + "\n</bounds>"
             try:
                 self.town.agents.say(aid, msg, "queue", origin="papertown")

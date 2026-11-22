@@ -70,6 +70,18 @@ class Settings:
     pi_bin: str = field(default_factory=lambda: _env("PAPERTOWN_PI_BIN"))
     pi_model: str = field(default_factory=lambda: _env("PAPERTOWN_PI_MODEL"))
     tmux_bin: str = field(default_factory=lambda: _env("PAPERTOWN_TMUX_BIN"))
+    tmux_socket: str = field(default_factory=lambda: _env("PAPERTOWN_TMUX_SOCKET", "papertown"))
+    claude_bin: str = field(default_factory=lambda: _env("PAPERTOWN_CLAUDE_BIN"))
+    codex_bin: str = field(default_factory=lambda: _env("PAPERTOWN_CODEX_BIN"))
+    agent_runtime: str = field(default_factory=lambda: _env("PAPERTOWN_AGENT_RUNTIME", "paseo"))
+    # Seconds of a still screen after which a working terminal agent counts as waiting on a dialog.
+    terminal_still: float = field(default_factory=lambda: float(_env("PAPERTOWN_TERMINAL_STILL", "15")))
+    # How long herdr gets to start a CLI in a new tab, and the window for finding a new Codex session's log.
+    terminal_startup: float = field(default_factory=lambda: float(_env("PAPERTOWN_TERMINAL_STARTUP", "20")))
+    # Seconds of a still screen after which a start counts as held by a dialog (trust, sign-in, hooks review).
+    terminal_ready: float = field(default_factory=lambda: float(_env("PAPERTOWN_TERMINAL_READY", "5")))
+    # After Papertown sends Esc, a screen that stays still this long means the agent has stopped.
+    terminal_settle: float = field(default_factory=lambda: float(_env("PAPERTOWN_TERMINAL_SETTLE", "2")))
     # or in Paseo (paseo.sh): its CLI, the web app it serves, and an explicit daemon endpoint
     paseo_bin: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_BIN"))
     paseo_url: str = field(default_factory=lambda: _env("PAPERTOWN_PASEO_URL", "http://127.0.0.1:6767"))

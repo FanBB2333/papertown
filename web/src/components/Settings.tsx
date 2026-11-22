@@ -5,7 +5,7 @@ import { Autocomplete, Badge, Banner, Button, Dialog, Input, LayerCard, Select, 
 import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CpuIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, listen, type AuthState, type Hud, type HerdrInfo, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
+import { api, listen, type DefaultRuntime, type AuthState, type Hud, type HerdrInfo, type Llm, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { Logo } from '../art';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
@@ -372,6 +372,14 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
 }
 
 function Agents() {
+  const [runtime, setRuntime] = useState<DefaultRuntime>('paseo'), [runtimeError, setRuntimeError] = useState('');
+  const [savingRuntime, setSavingRuntime] = useState(false);
+  useEffect(() => { api.defaultRuntime().then(d => setRuntime(d.runtime)).catch(e => setRuntimeError((e as Error).message)); }, []);
+  async function saveRuntime(value: DefaultRuntime) {
+    setSavingRuntime(true);
+    try { const d = await api.setDefaultRuntime(value); setRuntime(d.runtime); setRuntimeError(''); }
+    catch (e) { setRuntimeError((e as Error).message); } finally { setSavingRuntime(false); }
+  }
   const s = useSettings();
   const [paseo, setPaseo] = useState<PaseoInfo | null | 'err'>(null);
   const [herdr, setHerdr] = useState<HerdrInfo | null>(null);
@@ -394,6 +402,12 @@ function Agents() {
   const info = paseo && paseo !== 'err' ? paseo : null, st = info?.status;
   return (
     <>
+      <Card title={tr('默认运行方式')}>
+        <Row label={tr('默认运行方式')} desc={tr('新建节点 Agent 和项目负责人使用此运行方式。')}>
+          <Select aria-label={tr('默认运行方式')} disabled={savingRuntime} value={runtime} items={{ paseo: 'Paseo', herdr: 'herdr', tmux: 'tmux' }} onValueChange={v => saveRuntime(v as DefaultRuntime)} />
+        </Row>
+        {runtimeError && <Warn bad>{runtimeError}</Warn>}
+      </Card>
       <Card title={tr('对话')}>
         <Row label={tr('默认发送方式')} desc={tr('员工工作时使用此方式发送消息，⌘/Ctrl+Enter 始终排队。')}>
           <Pick label={tr('默认发送方式')} value={s.agentSend} options={[['steer', tr('插话')], ['queue', tr('排队')], ['interrupt', tr('打断并发送')]]} onChange={set('agentSend')} />

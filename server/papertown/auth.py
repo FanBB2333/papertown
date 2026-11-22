@@ -190,6 +190,8 @@ class Gate:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope["path"].startswith("/api/") and not scope["path"].startswith(self.OPEN) \
+                and not (scope["method"] == "POST" and scope["path"].startswith("/api/agents/")
+                         and scope["path"].endswith("/hook") and len(scope["path"].split("/")) == 5) \
                 and not self.auth.allowed(scope):
             body = json.dumps({"detail": "先登录"}, ensure_ascii=False).encode()
             await send({"type": "http.response.start", "status": 401,

@@ -39,7 +39,7 @@ class Relay:
 
     def _dirs(self) -> list[tuple[str, Path]]:
         """Each agent that may write requests, with the folder it writes them in."""
-        rows = self.town.db.q("select id, role, line_id, node_id from agents where id = 'assistant' or runtime = 'paseo'")
+        rows = self.town.db.q("select id, role, line_id, node_id from agents where id = 'assistant' or runtime in ('paseo', 'herdr', 'tmux')")
         return [(a["id"], self.town.agents.pt(a).parent / "q") for a in rows]
 
     def _watch(self) -> None:

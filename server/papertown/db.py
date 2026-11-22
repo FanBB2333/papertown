@@ -122,7 +122,9 @@ ADDED += [("agents", "node_id", "text"), ("agents", "workspace_id", "text"), ("l
 ADDED += [("agents", "seen_at", "text")]
 ADDED += [("lines", "usage_budget", "real"), ("agents", "session_id", "text")]
 
-JSON_COLS = {"team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result", "linked"}
+ADDED += [("agents", "term", "text")]
+
+JSON_COLS = {"term", "team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result", "linked"}
 
 
 JSONValue = TypeVar("JSONValue", dict, list)

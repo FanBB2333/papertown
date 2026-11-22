@@ -5,6 +5,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, type Agent, type AssistantConv, type Report, type StartOpts } from '../api';
 import { fold, PaseoLog, PaseoPick, usePaseoTalk } from '../components/AgentRoom';
+import { HostedRoom } from '../agents/Terminal';
+import { TerminalPick } from '../agents/TerminalPick';
 import { Compose } from '../agents/Compose';
 import { AGENT_STATUS } from '../components/MillRoom';
 import { tr, trx } from '../i18n';
@@ -19,6 +21,8 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
   lineId: string; seq: number; layout: Layout; onClose?: () => void; toast: (t: string) => void;
 }) {
   const [v, again] = useLead(lineId);
+  const [runtime, setRuntime] = useState<'paseo' | 'herdr' | 'tmux'>('paseo');
+  useEffect(() => { api.defaultRuntime().then(d => setRuntime(d.runtime)).catch(e => toast((e as Error).message)); }, []);
   const [history, setHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   const a = v?.agent ?? null;
@@ -30,7 +34,7 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
     setBusy(true);
     try {
       const x = a ?? await api.openAgent(lineId, 'lead');
-      await api.startAgent(x.id, { ...o, runtime: 'paseo' });
+      await api.startAgent(x.id, { ...o, runtime: o.runtime ?? runtime });
       again();
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
   }
@@ -43,9 +47,9 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
         <b>{tr('项目负责人')}{layout === 'side' ? ` · #${seq}` : ''}</b>
         {x?.started && <span>{AGENT_STATUS[x.status] ?? x.status}{x.model ? ` · ${x.model}` : ''}</span>}
       </div>
-      {x && <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('之前的对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>}
-      {x?.started && <button className="ib" title={tr('新对话：负责人用同一个模型重新开始')} onClick={() => run(() => api.newConv(x.id))}><Icon n="compose" size={16} /></button>}
-      {x?.started && <button className="ib" title={tr('在 Paseo 桌面端打开这段对话')} onClick={() => api.openInPaseo(x.id).catch(e => toast((e as Error).message))}><Icon n="ext" size={16} /></button>}
+      {x?.runtime === 'paseo' && <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('之前的对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>}
+      {x?.started && x.runtime === 'paseo' && <button className="ib" title={tr('新对话：负责人用同一个模型重新开始')} onClick={() => run(() => api.newConv(x.id))}><Icon n="compose" size={16} /></button>}
+      {x?.started && x.runtime === 'paseo' && <button className="ib" title={tr('在 Paseo 桌面端打开这段对话')} onClick={() => api.openInPaseo(x.id).catch(e => toast((e as Error).message))}><Icon n="ext" size={16} /></button>}
       {onClose && <button className="ib" title={tr('收起（⌘J）')} onClick={onClose}><Icon n="sideR" size={16} /></button>}
     </header>
   );
@@ -57,15 +61,15 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
           <>
             {head(a)}
             <div className="as-start">
-              <p className="as-lead">{tr('负责人盯着这个项目：有动静时看一眼，催员工干活、给他们派活，有要紧的事向你汇报、问你。它只跑在 Paseo 里。')}</p>
+              <p className="as-lead">{tr('负责人跟进项目进度、分派任务并汇报。工作目录是 Papertown 自己的目录。')}</p>
               {a && <Earlier agent={a.id} at={a.ext_id} limit={3} title={tr('接着之前的对话')} onPick={resume} />}
               <div className="hire-card">
-                <h3>Paseo</h3>
-                <PaseoPick busy={busy} onStart={start} role="lead" />
+                <h3>{runtime === 'paseo' ? 'Paseo' : tr('终端')}</h3>
+                {runtime === 'paseo' ? <PaseoPick busy={busy} onStart={start} role="lead" /> : <TerminalPick busy={busy} onStart={start} role="lead" />}
               </div>
             </div>
           </>
-        ) : <Talk key={a.ext_id ?? a.id} agent={a} asks={v.asks} head={head} toast={toast} onAnswered={again} />}
+        ) : a.term ? <HostedRoom agent={a} toast={toast} /> : <Talk key={a.ext_id ?? a.id} agent={a} asks={v.asks} head={head} toast={toast} onAnswered={again} />}
       {history && a && <History agent={a.id} onPick={resume} onClose={() => setHistory(false)} />}
     </div>
   );

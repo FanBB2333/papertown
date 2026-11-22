@@ -10,7 +10,7 @@ import { useSettings } from '../settings';
 import { follow, go, href, query, usePath } from '../route';
 import { refreshOverview, useOverview } from './overview';
 import { agentName, BUCKETS, bucketOf, kindName, WatchStatus } from './watch';
-import { TerminalContext, TerminalRoom } from './Terminal';
+import { HostedContext, TerminalContext, TerminalRoom } from './Terminal';
 import './agents.css';
 import { UsageStrip } from '../usage/Usage';
 
@@ -132,7 +132,7 @@ function AgentRow({ agent: a, selected, filter, project, toast }: { agent: Agent
   return <article className={`aw-row${selected ? ' on' : ''}`}>
     <a href={href(to)} onClick={e => follow(e, to)} aria-current={selected ? 'page' : undefined}>
       <div className="aw-row-top"><b>{agentName(a)}</b><span>{ago(a.watch?.since)}</span></div>
-      <div className="aw-row-meta"><WatchStatus agent={a} /><span>{a.model ?? tr('模型未指定')}</span>{!!a.watch?.queued && <span>{tr('排队 {0}', a.watch.queued)}</span>}</div>
+      <div className="aw-row-meta"><WatchStatus agent={a} />{a.term && <span className="aw-terminal-tag">{a.runtime}</span>}<span>{a.model ?? tr('模型未指定')}</span>{!!a.watch?.queued && <span>{tr('排队 {0}', a.watch.queued)}</span>}</div>
       {project && <small>#{project.seq} {project.title}</small>}
       {/* a waiting question is the row's line: the activity line would repeat it */}
       {a.watch?.asks.length ? a.watch.asks.map(q => <p className="aw-question" key={q.id}>{q.data.question}</p>)
@@ -197,8 +197,9 @@ function Context({ agent, group, line, toast }: { agent: Agent; group: Group; li
       {stage && <><dt>{tr('工序')}</dt><dd><a href={href(projectPath)} onClick={e => follow(e, projectPath)}>{stage}</a></dd></>}
       {agent.task && <><dt>{tr('节点任务')}</dt><dd><a href={href(nodePath)} onClick={e => follow(e, nodePath)}>{agent.task.title}</a></dd></>}
       <dt>{tr('工作目录')}</dt><dd className="path">{agent.cwd || tr('未指定')}</dd>
-      <dt>{tr('模型')}</dt><dd>{agent.model || tr('模型未指定')}</dd>
+      {!agent.term && <><dt>{tr('模型')}</dt><dd>{agent.model || tr('模型未指定')}</dd></>}
     </dl>
+    {agent.term && <HostedContext agent={agent} toast={toast} />}
     {agent.runtime === 'paseo' && <button className="btn" onClick={() => api.openInPaseo(agent.id).catch(e => toast((e as Error).message))}>{tr('在 Paseo 中打开')}</button>}
     <h3>{tr('最近的汇报与提问')}</h3>
     {error && <p role="alert" className="ac-error">{error}</p>}
