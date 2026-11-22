@@ -113,15 +113,26 @@ Claude Code 的会话 id 在启动时就写进 `agent_sessions`。Codex 和 Anti
 ### 3.8 页面
 
 - **招员工**：在 Paseo、pi 之外加一张「终端」卡片：选后端（herdr、tmux，不可用的置灰并写明原因）、CLI（只列本机装了的 Claude Code、Codex、Antigravity）、模型和思考强度（用 Paseo 的模型目录，Paseo 不可用时只能用 CLI 的默认模型），按钮「在 herdr 中启动」「在 tmux 中启动」。
-- **员工页**：终端员工的行带后端标签（herdr、tmux）。选中后中栏与 herdr 终端会话相同：终端画面、「等你」时的按键行、共用的输入框（插话、排队、打断并发送、停止，排队的消息可现在发或撤回）。右栏显示后端、CLI、模型、会话 id、接入方式（tmux 为 `tmux -L papertown attach -t <会话>:<窗口>`，herdr 为工作区和标签页）和「关闭终端」。
+- **员工页**：终端员工的行带后端标签（herdr、tmux）。选中后中栏与 herdr 终端会话相同，分「对话」「终端」两个标签（见 3.9），下方是共用的输入框（插话、排队、打断并发送、停止，排队的消息可现在发或撤回）。右栏显示后端、CLI、模型、会话 id、接入方式（tmux 为 `tmux -L papertown attach -t <会话>:<窗口>`，herdr 为工作区和标签页）和「关闭终端」，可收起，窗口窄于 1180px 时改为抽屉。
+- **新建员工**：员工页左上角的按钮打开弹窗，依次选择项目、岗位（代码员工、写作员工、项目负责人）、运行方式（Paseo、herdr、tmux、pi，不可用的置灰并写明原因）和模型，直接启动。该岗位的员工已在运行时改为「打开对话」。
 - 由 herdr 后端启动的员工不再出现在「终端」或「其他终端」里。
 - **设置 › 员工 Agent**：新增「默认运行方式」（Paseo、herdr、tmux），节点任务派发和项目负责人启动时使用。模型仍按各岗位的默认设置。
+
+### 3.9 对话记录与提示弹窗
+
+终端员工和 herdr 终端会话与 Paseo 员工使用同一个对话组件，各后端只提供读取、发送、按键和回答四个动作。
+
+- **对话**：对话内容在请求时从 CLI 自己的会话日志读取，只按会话 id 定位文件（Claude Code 在 `projects/*/<id>.jsonl`，Codex 在 `sessions/年/月/日/rollout-*-<id>.jsonl`，Antigravity 在 `brain/<id>/.system_generated/logs/`），只读文件末尾 4 MB，Papertown 自己不保存任何对话内容。读出的条目与 Paseo 相同：用户消息、回复、工具调用（名称、160 字以内的参数、状态）和「这一轮已被打断」。思考内容、工具输出、子 agent 的对话和斜杠命令的记录不显示。日志目录内的符号链接一律不跟随。`PAPERTOWN_TRANSCRIPTS=0` 关闭读取，此时只显示终端画面。会话尚未建立或找不到日志时，「对话」标签写明原因，页面停在「终端」标签。
+- **提示弹窗**：员工因终端里的对话框停住时（信任目录、hooks 审核、权限确认），服务端从可见画面里解析出标题、正文和选项（带编号的列表，或带光标的列表），页面弹出同一个弹窗列出选项，点击即回答。回答前服务端重新读取画面并核对摘要，画面已变化则返回 409，页面刷新后再让用户选择。带编号的选项发送对应数字键，其余按光标位置发送方向键和回车。解析不出选项时弹窗显示画面末尾几行和按键行。Paseo 员工的权限请求使用同一个弹窗（允许、拒绝）。弹窗只在用户点击时发送按键，Papertown 不自行回答。
 
 ## 4. 接口
 
 - `GET /api/backends`：`{paseo: {ok, note}, herdr: {ok, note}, tmux: {ok, note}, clis: {claude, codex, antigravity}}`，`clis` 为找到的路径或 null。
 - `POST /api/agents/{id}/start` 的 `runtime` 增加 `herdr`、`tmux`，其余参数不变。
-- `GET /api/agents/{id}/screen`：`{text, term}`。
+- `GET /api/agents/{id}/screen`：`{text, term, prompt}`，`prompt` 为 `{digest, title, body, options: [{index, label, current, key}], hint}` 或 null。
+- `GET /api/agents/{id}/timeline`：终端员工也可用，返回 `{agent, items, queued, paseo: {}, transcript: {ok, note}}`。
+- `POST /api/agents/{id}/prompt`：`{digest, option}`，回答画面上的对话框。画面已变化返回 409。
+- `GET /api/terminals/{id}/timeline`、`POST /api/terminals/{id}/prompt`：herdr 终端会话的对话和回答，`GET /api/terminals/{id}` 增加 `prompt`。
 - `POST /api/agents/{id}/keys`：`{keys: [...]}`，按键范围与 herdr 终端会话相同。
 - `POST /api/agents/{id}/close`：关闭终端。
 - `POST /api/agents/{id}/hook`：`pt hook` 专用，令牌鉴权。
@@ -148,7 +159,7 @@ Claude Code 的会话 id 在启动时就写进 `agent_sessions`。Codex 和 Anti
 
 ## 6. 这一版不做
 
-- 不替用户回答信任、登录、hooks 审核等对话框，也不写这些 CLI 的全局配置。
+- 不自行回答信任、登录、hooks 审核等对话框（由用户在提示弹窗里选择），也不写这些 CLI 的全局配置。
 - 不使用 Codex 的新 hooks 和 `--dangerously-bypass-hook-trust`。
 - 不支持把已有的 tmux 窗口或 herdr 终端会话转为员工（herdr 终端会话仍在员工页的「终端」组里直接操作）。
 - pi 仍按原来的方式运行。

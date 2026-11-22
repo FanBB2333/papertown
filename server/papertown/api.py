@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import samples, stages, status as status_mod
 from .agents import AgentError, ROLES
 from .herdr import HerdrError
+from .prompts import PromptError
 from .ask import AskError
 from .assistant import ID as ASSISTANT, ActError
 from .auth import COOKIE, DAYS, Auth, AuthError, Gate
@@ -298,6 +299,11 @@ class QueueIn(BaseModel):
     what: Literal["now", "drop"]
 
 
+class PromptIn(BaseModel):
+    digest: str
+    option: int = Field(strict=True)
+
+
 class TerminalKeysIn(BaseModel):
     keys: list[str] = Field(min_length=1, max_length=32)
 
@@ -406,6 +412,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     authed, guard, ws, farm = mapped(AuthError), mapped(LineError), mapped(WsError), mapped(FarmError)
     agents, assistant = mapped(AgentError), mapped(AgentError, ActError)
     terminals = mapped(HerdrError)
+    agent_prompts, terminal_prompts = mapped(AgentError, PromptError), mapped(HerdrError, PromptError)
     leads = mapped(LeadError, AgentError, CardError)
     checks = mapped(CheckError, AgentError, LeadError)
     canvas = mapped(CanvasError, CheckError, AgentError, LeadError)
@@ -692,6 +699,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/jobs/{job_id}/cancel")
     def job_cancel(job_id: str):
         return farm(town.farm.cancel, job_id)
+
+    @app.post("/api/agents/{agent_id}/prompt")
+    def agent_prompt(agent_id: str, body: PromptIn):
+        return agent_prompts(town.agents.hosted.prompt, agent_id, body.digest, body.option)
+
+    @app.post("/api/terminals/{id}/prompt")
+    def terminal_prompt(id: str, body: PromptIn):
+        return terminal_prompts(town.terminals.prompt, id, body.digest, body.option)
+
+    @app.get("/api/terminals/{id}/timeline")
+    def terminal_timeline(id: str, limit: int = 200):
+        return terminals(town.terminals.timeline, id, min(max(limit, 1), 1000))
 
     @app.get("/api/herdr")
     def herdr_info():

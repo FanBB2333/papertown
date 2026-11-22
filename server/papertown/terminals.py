@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .db import now
+from . import prompts, transcripts
 from .herdr import Feed, Herdr, HerdrError
 from .project_dirs import owner, project_roots
 
@@ -192,7 +193,38 @@ class Terminals:
             with self._lock:
                 terminal = self._public(fresh)
             queued = self.db.q("select * from terminal_queue where terminal_id = ? and state in ('queued', 'sending', 'failed') order by id", a["terminal_id"])
-            return {"terminal": terminal, "text": text, "queued": queued}
+            prompt = prompts.parse(self._visible(fresh)) if terminal['watch']['bucket'] == 'needs' else None
+            return {"terminal": terminal, "text": text, "queued": queued, "prompt": prompt}
+
+    def _visible(self, a):
+        data = self.client.call('agent.read', {'target': a['pane_id'], 'source': 'visible'}).get('read')
+        if not isinstance(data, dict) or not isinstance(data.get('text'), str):
+            raise HerdrError('herdr 返回了无效数据')
+        return data['text']
+
+    def timeline(self, id: str, limit=200) -> dict:
+        with self._delivery:
+            fresh = self._current(id)
+            with self._lock:
+                terminal = self._public(fresh)
+        session = terminal.get('agent_session') or {}
+        provider = {'agy': 'antigravity', 'claude-code': 'claude'}.get(terminal['kind'], terminal['kind'])
+        sid = session.get('value') if session.get('kind') == 'id' else None
+        if not sid:
+            row = self.db.one('select * from terminal_sessions where terminal_id in (?, ?) order by rowid desc limit 1',
+                              terminal['id'], terminal['terminal_id'])
+            if row:
+                provider, sid = row['provider'], row['session_id']
+        return {'terminal': terminal, **transcripts.read(self.town.s, provider, sid, limit, missing_session=transcripts.NO_TERMINAL)}
+
+    def prompt(self, id, digest, option):
+        with self._delivery:
+            a = self._current(id)
+            keys = prompts.answer(prompts.parse(self._visible(a)), digest, option)
+            self.client.keys(a['pane_id'], keys)
+            self._publish(a['terminal_id'])
+            self._wake.set()
+        return {'ok': True}
 
     def seen(self, id: str) -> dict:
         with self._lock:

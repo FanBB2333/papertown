@@ -888,7 +888,14 @@ class Agents:
         return a
 
     def timeline(self, agent_id: str, limit: int = 200) -> dict:
-        """A Paseo agent's conversation, trimmed for the room; also refreshes its status."""
+        """The current conversation, read on demand; also refreshes its status."""
+        a = self.get(agent_id)
+        if a and a.get("runtime") in RUNTIMES:
+            from .transcripts import read
+            a = self.hosted.refresh(agent_id)
+            result = read(self.s, a['term']['provider'], a.get('session_id'), limit, a['term'].get('started'))
+            queued = self.db.q("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1 order by id", agent_id)
+            return {"agent": self.public(a), "paseo": {}, "queued": queued, **result}
         a = self._paseo_agent(agent_id)
         version = self._versions.get(agent_id, 0)
         try:
@@ -908,7 +915,7 @@ class Agents:
                     self._says[a["ext_id"]] = {"kind": "say", "text": last["text"][:200]}
                 self._apply_snapshot(current, snap)
             queued = self.db.q("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1 order by id", agent_id)
-            return {"agent": self.public(self.get(agent_id)), "paseo": snap, "items": t["items"], "queued": queued}
+            return {"agent": self.public(self.get(agent_id)), "paseo": snap, "items": t["items"], "queued": queued, "transcript": {"ok": True, "note": None}}
 
     def permit(self, agent_id: str, request_id: str, allow: bool) -> None:
         """Answer a Paseo agent's permission request."""

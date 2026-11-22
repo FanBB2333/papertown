@@ -16,6 +16,7 @@ from .backends import BackendError, HerdrBackend, TmuxBackend, binary
 from .db import now, write_json
 from .herdr import Herdr, HerdrError
 from .terminals import KEYS
+from . import prompts
 
 RUNTIMES = ('herdr', 'tmux')
 
@@ -38,6 +39,7 @@ class Hosted:
         self.interrupt_timeout = 10
         self._interrupting: set[str] = set()
         self._session_scan: dict[str, float] = {}
+        self._prompts: dict[str, dict] = {}
 
     def error(self, text):
         from .agents import AgentError
@@ -340,6 +342,11 @@ class Hosted:
                 term.pop('note', None)
             except BackendError as e:
                 term['note'] = str(e)
+            prompt = prompts.parse(text) if term['status'] in ('blocked', 'starting') else None
+            if prompt:
+                self._prompts[id] = prompt
+            else:
+                self._prompts.pop(id, None)
             self.save(a, term)
         if release:
             self.release(id)
@@ -353,7 +360,20 @@ class Hosted:
             if a['term']['status'] != 'exited':
                 raise self.error(e) from e
             text = ''
-        return {'text': text, 'term': self.public(a)}
+        return {'text': text, 'term': self.public(a), 'prompt': self._prompts.get(id) if a['term']['status'] in ('blocked', 'starting') else None}
+
+    def prompt(self, id, digest, option):
+        with self.lock:
+            a = self.require(id)
+            backend, handle = self.backends[a['runtime']], a['term'].get('handle')
+            live = bool(handle) and a['term']['status'] != 'exited'
+        # like refresh, read the terminal outside the lock: herdr can take seconds, and hooks report in meanwhile
+        try:
+            keys = prompts.answer(prompts.parse(backend.glance(handle)) if live else None, digest, option)
+            backend.keys(handle, keys)
+        except (HerdrError, BackendError) as e:
+            raise self.error(e) from e
+        return {'ok': True}
 
     def keys(self, id, keys):
         if not keys or any(k not in KEYS for k in keys):
@@ -508,6 +528,8 @@ class Hosted:
         elif t.get('status') in ('starting', 'working'):
             bucket = 'working'
         doing = {'kind': 'tool', 'text': t['tool']} if t.get('tool') else None
+        if t.get('status') == 'blocked' and (prompt := self._prompts.get(a['id'])):
+            doing = {'kind': 'prompt', 'text': prompt['title'][:120]}
         if why == 'ask':
             doing = {'kind': 'ask', 'text': asks[0]['data']['question'][:200]}
         return {'bucket': bucket, 'why': why, 'since': t.get('since'), 'turn': t.get('since') if bucket == 'working' else None,

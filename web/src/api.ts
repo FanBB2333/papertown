@@ -111,7 +111,11 @@ export interface Terminal {
   agent_session?: { kind: string; value: string } | null;
 }
 export interface TerminalQueue { id: number; terminal_id: string; text: string; created_at: string; state: 'queued' | 'sending' | 'sent' | 'failed' | 'dropped' }
-export interface TerminalDetail { terminal: Terminal; text: string; queued: TerminalQueue[] }
+// a dialog on a terminal's screen (trusting a folder, a permission, a review) and the choices it offers
+export interface TermPrompt { digest: string; title: string; body: string[]; options: { index: number; label: string; current: boolean; key: string | null }[]; hint: string }
+// whether the session log behind a terminal conversation could be read, and why not
+export interface Transcript { ok: boolean; note: string | null }
+export interface TerminalDetail { terminal: Terminal; text: string; queued: TerminalQueue[]; prompt?: TermPrompt | null }
 export interface HerdrInfo { ok: boolean; note: string; live: boolean; socket: string; count: number; installed: boolean; enabled: boolean }
 
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act'; data: any }
@@ -486,6 +490,8 @@ export const api = {
   terminal: (id: string) => call<TerminalDetail>('GET', `/api/terminals/${encodeURIComponent(id)}`, undefined, asIs),
   terminalSay: (id: string, text: string, mode?: SayMode) => call<unknown>('POST', `/api/terminals/${encodeURIComponent(id)}/say`, { text, mode }, asIs),
   terminalKeys: (id: string, keys: string[]) => call<unknown>('POST', `/api/terminals/${encodeURIComponent(id)}/keys`, { keys }, asIs),
+  terminalTimeline: (id: string) => call<{ terminal: Terminal; items: PaseoItem[]; transcript: Transcript }>('GET', `/api/terminals/${encodeURIComponent(id)}/timeline`, undefined, asIs),
+  terminalPrompt: (id: string, digest: string, option: number) => call<{ ok: boolean }>('POST', `/api/terminals/${encodeURIComponent(id)}/prompt`, { digest, option }, asIs),
   terminalSeen: (id: string) => call<Terminal>('POST', `/api/terminals/${encodeURIComponent(id)}/seen`, undefined, asIs),
   terminalQueue: (id: string, queueId: number, what: 'now' | 'drop') =>
     call<TerminalQueue>('POST', `/api/terminals/${encodeURIComponent(id)}/queue/${queueId}`, { what }, asIs),
@@ -497,7 +503,8 @@ export const api = {
   backends: () => call<Backends>('GET', '/api/backends'),
   defaultRuntime: () => call<{ runtime: DefaultRuntime }>('GET', '/api/agents/runtime'),
   setDefaultRuntime: (runtime: DefaultRuntime) => call<{ runtime: DefaultRuntime }>('POST', '/api/agents/runtime', { runtime }),
-  agentScreen: (id: string) => call<{ text: string; term: AgentTerm }>('GET', `/api/agents/${id}/screen`, undefined, asIs),
+  agentScreen: (id: string) => call<{ text: string; term: AgentTerm; prompt?: TermPrompt | null }>('GET', `/api/agents/${id}/screen`, undefined, asIs),
+  answerPrompt: (id: string, digest: string, option: number) => call<{ ok: boolean }>('POST', `/api/agents/${id}/prompt`, { digest, option }),
   agentKeys: (id: string, keys: string[]) => call('POST', `/api/agents/${id}/keys`, { keys }),
   closeTerminal: (id: string) => call<Agent>('POST', `/api/agents/${id}/close`),
   startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
@@ -509,7 +516,7 @@ export const api = {
   dismissModels: (keys?: string[]) => call<{ news: ModelNews[] }>('POST', '/api/paseo/news/dismiss', { keys: keys ?? null }),
   conversations: () => call<{ conversations: PaseoConversation[] }>('GET', '/api/paseo/conversations'),
   importAgent: (lineId: string, role: AgentRole, extId: string) => call<Agent>('POST', '/api/agents/import', { line_id: lineId, role, ext_id: extId }),
-  timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; queued: AgentEvent[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null } }>('GET', `/api/agents/${id}/timeline`, undefined, said),
+  timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; queued: AgentEvent[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null }; transcript?: Transcript }>('GET', `/api/agents/${id}/timeline`, undefined, said),
   permit: (id: string, requestId: string, allow: boolean) => call<{ ok: boolean }>('POST', `/api/agents/${id}/permit`, { request_id: requestId, allow }),
   llm: () => call<Llm>('GET', '/api/llm'),
   samples: () => call<{ added: string[]; note: string }>('POST', '/api/samples'),

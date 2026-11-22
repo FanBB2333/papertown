@@ -13,7 +13,7 @@ const MODES: [SayMode, string, string, string][] = [
 ];
 
 export interface ComposeAdapter {
-  send: (text: string, mode?: SayMode) => Promise<void>;
+  send: (text: string, mode?: SayMode) => Promise<AgentEvent | void>; // the recorded message, when the backend keeps one
   queue: (id: number, what: 'now' | 'drop') => Promise<void>;
   stop: () => Promise<void>;
   steerHint: string;

@@ -85,7 +85,7 @@ export function AgentRoom(p: Props) {
 function Seat(p: Props & { row: Roster['roster'][number]; ok: boolean; onDone: () => void }) {
   const { row: cur } = p, line = p.lines.find(l => l.id === cur.line.id);
   return cur.agent?.started
-    ? cur.agent.term ? <><HostedRoom key={cur.agent.id} agent={cur.agent} toast={p.toast} /><aside className="aw-context"><HostedContext agent={cur.agent} toast={p.toast} /></aside></> : cur.agent.runtime === 'paseo'
+    ? cur.agent.term ? <><HostedRoom key={cur.agent.id} agent={cur.agent} toast={p.toast} /><aside className="room-aside"><div className="pnl-s"><h4>{tr('终端')}</h4><HostedContext agent={cur.agent} toast={p.toast} /></div></aside></> : cur.agent.runtime === 'paseo'
       ? <PaseoChat key={cur.agent.ext_id ?? cur.agent.id} {...p} agent={cur.agent} line={line} />
       : <AgentChat key={cur.agent.id} {...p} agent={cur.agent} line={line} />
     : <Hire key={cur.line.id} line={cur.line} role={p.role} agent={cur.agent} ok={p.ok} toast={p.toast} onDone={p.onDone}
@@ -387,17 +387,18 @@ export function PaseoLog({ rows, sent, asks, working, onPermit, children }: {
   );
 }
 
-type ChatProps = { agent: Agent; line?: Line; role: AgentRole; toast: (t: string) => void; onOpen?: RoomActions['onOpen'] };
+// tools: what the page around the conversation adds to its header
+type ChatProps = { agent: Agent; line?: Line; role: AgentRole; toast: (t: string) => void; onOpen?: RoomActions['onOpen']; tools?: React.ReactNode };
 
 // The standalone page supplies its own context column.
-export function Conversation({ agent, toast }: { agent: Agent; toast: (t: string) => void }) {
-  if (agent.term) return <HostedRoom key={agent.id} agent={agent} toast={toast} />;
+export function Conversation({ agent, toast, tools }: { agent: Agent; toast: (t: string) => void; tools?: React.ReactNode }) {
+  if (agent.term) return <HostedRoom key={agent.id} agent={agent} toast={toast} tools={tools} />;
   return agent.runtime === 'paseo'
-    ? <PaseoChat key={agent.ext_id ?? agent.id} agent={agent} role={agent.role} toast={toast} />
-    : <AgentChat key={agent.id} agent={agent} role={agent.role} toast={toast} />;
+    ? <PaseoChat key={agent.ext_id ?? agent.id} agent={agent} role={agent.role} toast={toast} tools={tools} />
+    : <AgentChat key={agent.id} agent={agent} role={agent.role} toast={toast} tools={tools} />;
 }
 
-function PaseoChat({ agent: initial, line, role, toast, onOpen }: ChatProps) {
+function PaseoChat({ agent: initial, line, role, toast, onOpen, tools }: ChatProps) {
   const { agent, items, asks, queued, err, sent, wrote, answered, reload, readRef } = usePaseoTalk(initial);
   const [full, setFull] = useState(false);
   const [hist, setHist] = useState(false);
@@ -426,6 +427,7 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen }: ChatProps) {
             <button className="btn" title={tr('新对话：用同一个模型重新开始')} onClick={() => run(() => api.newConv(agent.id))}>{tr('新对话')}</button>
             <button className="btn" disabled={!agent.web} title={agent.web ? tr('Paseo 自己的界面：命令、模型切换、权限审批') : tr('Paseo 的网页端没开')} onClick={() => setFull(f => !f)}>{full ? tr('精简视图') : tr('完整界面')}</button>
             <button className="btn" onClick={() => run(() => api.openInPaseo(agent.id))}>{tr('桌面端')}</button>
+            {tools}
             {hist && <History agent={agent.id} onPick={c => { setHist(false); run(() => api.resumeConv(agent.id, c.id)); }} onClose={() => setHist(false)} />}
           </div>
         </header>
@@ -575,7 +577,7 @@ export function PiLog({ rows, live, working }: { rows: (Item | Item[])[]; live: 
   );
 }
 
-function AgentChat({ agent: initial, line, role, toast, onOpen }: ChatProps) {
+function AgentChat({ agent: initial, line, role, toast, onOpen, tools }: ChatProps) {
   const { agent, items, live, queued, err, reload, readRef } = usePiTalk(initial);
   const [text, setText] = useState('');
   const scroll = useRef<HTMLDivElement | null>(null);
@@ -610,6 +612,7 @@ function AgentChat({ agent: initial, line, role, toast, onOpen }: ChatProps) {
             <button className="btn" onClick={() => run(() => api.brief(agent.id))}>{tr('发送项目简报')}</button>
             {on ? <button className="btn" onClick={() => run(() => api.stopAgent(agent.id))}>{tr('关闭会话')}</button>
               : <button className="btn pri" onClick={() => run(() => api.startAgent(agent.id))}>{tr('启动')}</button>}
+            {tools}
           </div>
         </header>
         <div className="transcript" ref={el => { scroll.current = el; readRef.current = el; }} onScroll={e => {

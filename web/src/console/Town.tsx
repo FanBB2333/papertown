@@ -48,7 +48,7 @@ function brief(d: Department): string {
 }
 
 const agentName = (a: Pick<DeptAgent, 'name' | 'seq'>) => (a.seq ? `${a.name} · #${a.seq}` : a.name);
-const agentSub = (a: DeptAgent) => `${AGENT_STATUS[a.status] ?? a.status} · ${a.runtime === 'paseo' ? 'Paseo' : 'pi'}`;
+const agentSub = (a: DeptAgent) => `${AGENT_STATUS[a.status] ?? a.status} · ${a.runtime === 'paseo' ? 'Paseo' : a.runtime || 'pi'}`;
 
 function DeptCard({ d, onRoom, onAgent, onHatch, onResume, onAdjust }: {
   d: Department; onRoom: (id: string, lineId?: string | null) => void; onAgent: (a: DeptAgent) => void;

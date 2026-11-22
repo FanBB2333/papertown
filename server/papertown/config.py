@@ -118,6 +118,7 @@ class Settings:
     antigravity_home: str = field(default_factory=lambda: _env("PAPERTOWN_ANTIGRAVITY_HOME", "~/.gemini/antigravity-cli"))
     agy_bin: str = field(default_factory=lambda: _env("PAPERTOWN_AGY_BIN"))
     usage_poll: float = field(default_factory=lambda: float(_env("PAPERTOWN_USAGE_POLL", "300") or 300))
+    transcripts: bool = field(default_factory=lambda: _env("PAPERTOWN_TRANSCRIPTS", "1") != "0")
     usage_logs: bool = field(default_factory=lambda: _env("PAPERTOWN_USAGE_LOGS", "1") != "0")
     # local job runner: how many commands run at once
     local_jobs: int = field(default_factory=lambda: int(_env("PAPERTOWN_LOCAL_JOBS", "2")))

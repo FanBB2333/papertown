@@ -24,14 +24,12 @@ export function UsageMark({ state }: { state?: UsageState }) {
   return state === 'near' || state === 'over' ? <span className={`usage-mark usage-${state}`}>{STATES[state]}</span> : null;
 }
 
-function Window({ w, compact }: { w: UsageWindow; compact?: boolean }) {
+function Window({ w }: { w: UsageWindow }) {
   const label = w.id === 'weekly' ? tr('每周额度') : w.id === 'five_hour' ? tr('5 小时额度') : tr(w.label);
-  return <div className={`usage-window${compact ? ' usage-window-compact' : ''}`}>
+  return <div className="usage-window">
     <div className="usage-between"><span>{w.group ? tr('{0} · {1}', tr(w.group), label) : label}</span><b>{pct(w.used)}</b></div>
-    <div className={compact ? 'usage-meter' : undefined}>
-      <Bar value={w.used} label={label} />
-      <small>{compact ? tr('重置：{0}', resetDate(w.resets_at)) : tr('剩余 {0} · 重置 {1}', pct(w.left), date(w.resets_at))}</small>
-    </div>
+    <Bar value={w.used} label={label} />
+    <small>{tr('剩余 {0} · 重置 {1}', pct(w.left), date(w.resets_at))}</small>
   </div>;
 }
 
@@ -51,25 +49,17 @@ export function UsageStrip({ active }: { active: boolean }) {
     setBusy(true);
     try { setView(await api.refreshUsage()); setError(''); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
-  return <section className="usage-strip" aria-label={tr('订阅用量')}>
-    <header className="usage-between">
-      <button className="usage-toggle" aria-expanded={open} aria-controls="usage-details" onClick={() => setOpen(!open)}>{tr('订阅用量')} <span aria-hidden>{open ? '−' : '+'}</span></button>
-      <button className="btn" disabled={busy} onClick={refresh} title={tr('每个订阅每分钟至多强制刷新一次')}>{busy ? tr('读取中…') : tr('刷新')}</button>
-    </header>
-    {error && <p role="alert" className="usage-error">{tr(error)}</p>}
-    {!view && !error && <p>{tr('加载中…')}</p>}
-    {view?.providers.map(p => <div className="usage-provider" key={p.id}>
-      <div className="usage-between"><b>{p.label}</b><span>{p.plan || tr('套餐未提供')}</span></div>
-      {p.windows.filter(w => w.id === 'weekly' || w.label === '每周额度').map(w => <Window compact w={w} key={w.key} />)}
-      {!p.windows.length && <small>{tr('尚无用量读数')}</small>}
-      {p.status === 'stale' && <small className="usage-error">{tr('显示最近成功读数')}</small>}
-      {p.error && <p className="usage-error">{tr(p.error)}</p>}
-    </div>)}
-    <div id="usage-details" hidden={!open}>
+  // one line per weekly window: the strip sits under the employee list and opens upward for the rest
+  const weekly = (view?.providers ?? []).flatMap(p => p.windows.filter(w => w.id === 'weekly' || w.label === '每周额度').map(w => ({ p, w })));
+  return <section className={`usage-strip${open ? ' open' : ''}`} aria-label={tr('订阅用量')}>
+    <div id="usage-details" className="usage-details" hidden={!open}>
       {view?.providers.map(p => <div className="usage-provider" key={p.id}>
-        <b>{p.label} · {tr('全部窗口')}</b>
+        <div className="usage-between"><b>{p.label}</b><span>{p.plan || tr('套餐未提供')}</span></div>
         <small>{tr('读取于 {0}', p.fetched_at ? date(p.fetched_at) : tr('尚未读取'))}</small>
         {p.windows.map(w => <Window w={w} key={w.key} />)}
+        {!p.windows.length && <small>{tr('尚无用量读数')}</small>}
+        {p.status === 'stale' && <small className="usage-error">{tr('显示最近成功读数')}</small>}
+        {p.error && <p className="usage-error">{tr(p.error)}</p>}
         {p.balances.map(b => <p key={b.id}>{tr(b.label)} · {tr('额外余额：{0} {1}', b.remaining ?? '—', b.unit)}</p>)}
         {view.logs && <p>{tr('本周本机折合 {0}，其中项目 {1}', money(p.week.cost), money(p.week.projects))}</p>}
         {view.logs && !!p.week.unpriced.length && <small>{tr('以下模型缺价格，未计入金额：{0}', p.week.unpriced.join('、'))}</small>}
@@ -77,8 +67,24 @@ export function UsageStrip({ active }: { active: boolean }) {
       </div>)}
       <p>{view?.logs ? tr('按 API 价格折算。本周从周一零点起算。') : tr('本机会话日志读取已关闭，项目用量统计已暂停。')}</p>
       {view?.log_error && <p className="usage-error">{tr(view.log_error)}</p>}
-      {view?.next_at && <small>{tr('下次轮询：{0}', date(view.next_at))}</small>}
+      <div className="usage-between usage-foot">
+        {view?.next_at ? <small>{tr('下次轮询：{0}', date(view.next_at))}</small> : <span />}
+        <button className="btn" disabled={busy} onClick={refresh} title={tr('每个订阅每分钟至多强制刷新一次')}>{busy ? tr('读取中…') : tr('刷新')}</button>
+      </div>
     </div>
+    <button className="usage-toggle" aria-expanded={open} aria-controls="usage-details" onClick={() => setOpen(!open)}>
+      <span>{tr('订阅用量')}</span><i className="usage-chevron" aria-hidden="true" />
+    </button>
+    {error && <p role="alert" className="usage-error">{tr(error)}</p>}
+    {!view && !error && <p className="usage-wait">{tr('加载中…')}</p>}
+    {!open && <ul className="usage-mini">
+      {weekly.map(({ p, w }) => <li key={w.key} title={`${w.group ? tr('{0} · {1}', p.label, tr(w.group)) : p.label} · ${tr('重置：{0}', resetDate(w.resets_at))}`}>
+        <span>{w.group ? tr('{0} · {1}', p.label, tr(w.group)) : p.label}</span>
+        <Bar value={w.used} label={tr('{0} · {1}', p.label, tr('每周额度'))} />
+        <b>{pct(w.used)}</b>
+      </li>)}
+      {view?.providers.filter(p => !p.windows.length || p.error).map(p => <li key={p.id} className="usage-mini-note"><span>{p.label}</span><small>{p.error ? tr(p.error) : tr('尚无用量读数')}</small></li>)}
+    </ul>}
   </section>;
 }
 

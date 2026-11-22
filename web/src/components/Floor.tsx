@@ -114,7 +114,7 @@ function depotLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
       id: line.id, seq: line.seq, title: line.title, status: l?.status ?? line.status,
       tag: agent?.started ? AGENT_STATUS[agent.status] ?? agent.status : tr('还没配代码员工'),
       note: [l?.linked?.code ? `${l.linked.code.path} · ${l.linked.code.branch ?? ''}${l.linked.code.dirty ? tr(' · {0} 处没提交', l.linked.code.dirty) : ''}` : '',
-        agent?.started ? `${agent.runtime === 'paseo' ? 'Paseo' : 'pi'}${agent.model ? ` · ${agent.model}` : ''}` : l?.linked ? '' : tr('在「明细」里给它配一位代码员工')].filter(Boolean).join(' · '),
+        agent?.started ? `${agent.runtime === 'paseo' ? 'Paseo' : agent.runtime || 'pi'}${(agent.term?.model || agent.model) ? ` · ${agent.term?.model || agent.model}` : ''}` : l?.linked ? '' : tr('在「明细」里给它配一位代码员工')].filter(Boolean).join(' · '),
       stations, at, token: <Item k="crate" />, moving: st === 'working' || live.length > 0,
     };
   });
@@ -217,7 +217,7 @@ function pressLanes(rows: RosterRow[], lines: Line[]): Lane[] {
     });
     return {
       id: line.id, seq: line.seq, title: line.title, status: l?.status ?? line.status, tag: l ? STATUS[l.status] ?? l.status : line.status,
-      note: [paper ? tr('{0} · 约 {1} 词', paper.path, paper.words ?? 0) : '', agent?.started ? tr('写作员工：{0}', agent.runtime === 'paseo' ? 'Paseo' : 'pi') : '',
+      note: [paper ? tr('{0} · 约 {1} 词', paper.path, paper.words ?? 0) : '', agent?.started ? tr('写作员工：{0}', agent.runtime === 'paseo' ? 'Paseo' : agent.runtime || 'pi') : '',
         l?.revisions ? tr('改过 {0} 版', l.revisions) : printed ? tr('稿子已经排出来了') : tr('还没开印')].filter(Boolean).join(' · '),
       stations, at, token: <span className="sheets">{Array.from({ length: Math.min(4, 1 + (l?.revisions ?? 0) + (printed ? 1 : 0)) }, (_, i) => <i key={i} />)}</span>,
       moving: l?.status === 'running',
