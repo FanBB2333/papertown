@@ -3,6 +3,12 @@
 .usage-between > :first-child { min-width: 0; overflow-wrap: anywhere; }
 .usage-between > :last-child { flex-shrink: 0; }
 .usage-provider { padding: 10px 0; border-bottom: 1px solid var(--line); }
+/* The plan in the theme's accent, kept apart from the green, amber and red that mark how much is used. */
+.usage-between > .usage-plan { flex: 0 1 auto; min-width: 0; }
+.usage-plan { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 1.6; color: color-mix(in srgb, var(--brand) 72%, var(--ink)); background: color-mix(in srgb, var(--brand) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 30%, transparent); }
+.usage-plan-none { font-size: 12px; color: var(--muted); }
 .usage-provider:last-child { border-bottom: 0; }
 .usage-provider p { margin: 6px 0; }
 .usage-window { margin-top: 8px; }
@@ -16,13 +22,46 @@
 .usage-project { padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .usage-project h2 { margin: 0; font-size: 16px; }
 .usage-project .usage-between { flex-wrap: wrap; }
-.usage-tokens { font-size: 13px; line-height: 1.7; color: var(--muted); }
+.usage-tokens { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 12px; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+.usage-tokens b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .usage-fields { display: grid; gap: 12px; margin: 16px 0; }
 .usage-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 16px; }
 .usage-dialog { max-height: 90dvh; overflow-y: auto; }
 .usage-model { padding: 8px 0 0 14px; border-left: 2px solid var(--line); margin-top: 8px; }
 .usage-path { overflow-wrap: anywhere; }
-.usage-project h3 { font-size: 14px; margin: 18px 0 6px; }
+.usage-project h3 { margin: 24px 0 4px; font-size: 14px; font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px;
+  text-decoration-color: color-mix(in srgb, var(--brand) 55%, transparent); text-underline-offset: 6px; }
+
+/* Reading order: a name in bold, figures in tiles or bold, identifiers as code chips, the rest small and muted. */
+.usage-head { align-items: center; }
+.usage-name { font-size: 15px; font-weight: 700; color: var(--ink); }
+.usage-cost { padding: 1px 9px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.usage-cost.sm { padding: 0; font-size: 13px; font-weight: 600; background: transparent; }
+.usage-chip { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: 11.5px; font-weight: 600; line-height: 1.75;
+  color: var(--muted); background: color-mix(in srgb, var(--ink) 6%, transparent); box-shadow: inset 0 0 0 1px var(--line); vertical-align: 1px; white-space: nowrap; }
+.usage-chip.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent); }
+.usage-tokens .usage-chip, .usage-meta .usage-chip, .usage-balance .usage-chip { margin-left: 0; }
+.usage-code { min-width: 0; padding: 1px 7px; border-radius: 6px; font: 600 12.5px/1.6 var(--mono, ui-monospace, Menlo, monospace); color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent); overflow-wrap: anywhere; }
+.usage-code.dim { font-weight: 500; font-size: 11.5px; color: var(--muted); }
+.usage-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+code.usage-path { display: block; margin-top: 5px; padding: 0; background: none; font: 11.5px/1.5 var(--mono, ui-monospace, Menlo, monospace); color: var(--muted); }
+.usage-wname { font-weight: 600; color: var(--ink); }
+.usage-window small b, .usage-provider > small b { font-weight: 600; color: var(--ink); }
+.usage-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin: 12px 0 8px; }
+.usage-stat { display: grid; gap: 1px; min-width: 0; padding: 9px 12px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 4%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line); }
+.usage-stat > small { font-size: 11.5px; color: var(--muted); }
+.usage-stat > b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 18px; font-weight: 700; line-height: 1.35;
+  font-variant-numeric: tabular-nums; color: var(--usage-color, var(--ink)); }
+.usage-stat > span { font-size: 11.5px; color: var(--muted); }
+.usage-stat.empty > b { font-size: 14px; font-weight: 500; color: var(--muted); }
+.usage-balance { color: var(--muted); }
+.usage-balance .usage-chip { margin-right: 6px; }
+.usage-balance b { color: var(--ink); font-weight: 700; }
+p.usage-warn { margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; font-size: 12px; line-height: 1.55; color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 10%, transparent); overflow-wrap: anywhere; }
 
 /* The strip under the employee list: one line per weekly window, and the full reading opens upward. */
 .usage-strip { flex: none; display: flex; flex-direction: column; min-height: 0; max-height: 62%; border-top: 1px solid var(--line); background: var(--panel); font-size: 12.5px; }
@@ -45,8 +84,8 @@
 .usage-mini { gap: 5px; }
 .usage-mini li { display: grid; align-items: center; gap: 10px; }
 .usage-mini li.usage-q { grid-template-columns: minmax(0, 1fr) 20px 58px 38px 42px; gap: 6px; font-variant-numeric: tabular-nums; }
-.usage-q-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
-.usage-q-name.sub { color: var(--muted); padding-left: 10px; }
+.usage-q-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); }
+.usage-q-name.sub { font-weight: 500; color: var(--muted); padding-left: 10px; }
 .usage-q-span, .usage-q > small, .usage-q-num > small { font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: 11.5px; color: var(--muted); }
 .usage-q > b, .usage-q-num > b { text-align: right; font-weight: 600; color: var(--q); }
 .usage-q > small { text-align: right; white-space: nowrap; }

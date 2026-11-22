@@ -1,6 +1,6 @@
 // Global subscription windows and project session billing statistics.
 import { Banner, Button, Dialog, Input } from '@cloudflare/kumo';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { api, listen, type LineUsage, type UsageBudget, type UsageProviderId, type UsageState, type UsageView, type UsageWindow, type UsageTokens } from '../api';
 import { tr } from '../i18n';
 import './usage.css';
@@ -13,6 +13,16 @@ const providerName = (id: UsageProviderId) => PROVIDERS.find(p => p[0] === id)?.
 // Providers report whole percents, Antigravity reports fractions: show at most one decimal.
 const pct = (n: number) => `${Number.isInteger(n) ? n : n.toFixed(1)}%`;
 const resetDate = (s: string | null) => s ? new Date(s).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : tr('尚未开始');
+
+// A translated sentence with its {0}, {1}… filled by nodes, so the numbers in it can stand out.
+function rich(s: string, ...parts: React.ReactNode[]) {
+  return s.split(/\{(\d+)\}/).map((x, i) => i % 2 ? <Fragment key={i}>{parts[+x]}</Fragment> : x);
+}
+// A figure in a rounded tile: a small label above, the value large, an optional line below.
+function Stat({ label, value, note, tone, empty }: { label: string; value: React.ReactNode; note?: React.ReactNode; tone?: UsageState; empty?: boolean }) {
+  return <div className={`usage-stat${tone ? ` usage-${tone}` : ''}${empty ? ' empty' : ''}`}><small>{label}</small><b>{value}</b>{note && <span>{note}</span>}</div>;
+}
+const shortDate = (s: string | null) => s ? new Date(s).toLocaleDateString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric' }) : tr('尚未开始');
 
 function Bar({ value, state = 'ok', label }: { value: number; state?: UsageState; label: string }) {
   return <div className={`usage-bar usage-${state}`} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, value)} aria-valuetext={pct(value)}>
@@ -55,11 +65,12 @@ function Segments({ value, label, wide }: { value: number; label: string; wide?:
 }
 
 function Window({ w }: { w: UsageWindow }) {
-  const name = windowName(w);
+  const name = windowName(w), s = scope(w);
   return <div className={`usage-window usage-q-${level(w.used)}`}>
-    <div className="usage-between"><span>{name}</span><span className="usage-q-num"><b>{pct(w.used)}</b><small>{until(w.resets_at)}</small></span></div>
+    <div className="usage-between"><span className="usage-wname">{isFive(w) ? tr('5 小时额度') : isWeek(w) ? tr('每周额度') : tr(w.label)}{s && <span className="usage-chip">{s}</span>}</span>
+      <span className="usage-q-num"><b>{pct(w.used)}</b><small>{until(w.resets_at)}</small></span></div>
     <Segments value={w.used} label={name} wide />
-    <small>{w.resets_at ? tr('剩余 {0} · {1} 重置', pct(w.left), resetDate(w.resets_at)) : tr('剩余 {0} · 还没有开始计时', pct(w.left))}</small>
+    <small>{w.resets_at ? rich(tr('剩余 {0} · {1} 重置'), <b>{pct(w.left)}</b>, <b>{resetDate(w.resets_at)}</b>) : rich(tr('剩余 {0} · 还没有开始计时'), <b>{pct(w.left)}</b>)}</small>
   </div>;
 }
 
@@ -93,16 +104,19 @@ export function UsageStrip({ active }: { active: boolean }) {
   return <section className={`usage-strip${open ? ' open' : ''}`} aria-label={tr('订阅用量')}>
     <div id="usage-details" className="usage-details" hidden={!open}>
       {view?.providers.map(p => <div className="usage-provider" key={p.id}>
-        <div className="usage-between"><b>{p.label}</b><span>{p.plan || tr('套餐未提供')}</span></div>
+        <div className="usage-between usage-head"><b className="usage-name">{p.label}</b>{p.plan ? <span className="usage-plan" title={tr('套餐：{0}', p.plan)}>{p.plan}</span> : <span className="usage-plan-none">{tr('套餐未提供')}</span>}</div>
         <small>{tr('读取于 {0}', p.fetched_at ? date(p.fetched_at) : tr('尚未读取'))}</small>
-        {p.windows.map(w => <Window w={w} key={w.key} />)}
+        {[...p.windows].sort((a, b) => order(a) - order(b)).map(w => <Window w={w} key={w.key} />)}
         {!p.windows.length && <small>{tr('尚无用量读数')}</small>}
-        {p.status === 'stale' && <small className="usage-error">{tr('显示最近成功读数')}</small>}
-        {p.error && <p className="usage-error">{tr(p.error)}</p>}
-        {p.balances.map(b => <p key={b.id}>{tr(b.label)} · {tr('额外余额：{0} {1}', b.remaining ?? '—', b.unit)}</p>)}
-        {view.logs && <p>{tr('本周本机折合 {0}，其中项目 {1}', money(p.week.cost), money(p.week.projects))}</p>}
+        {p.status === 'stale' && <p className="usage-warn">{tr('显示最近成功读数')}</p>}
+        {p.error && <p className="usage-warn">{tr(p.error)}</p>}
+        {p.balances.map(b => <p className="usage-balance" key={b.id}><span className="usage-chip">{tr(b.label)}</span>{rich(tr('额外余额：{0} {1}'), <b>{b.remaining ?? '—'}</b>, b.unit)}</p>)}
+        {view.logs && <div className="usage-stats">
+          <Stat label={tr('本周本机折合')} value={money(p.week.cost)} />
+          <Stat label={tr('其中项目')} value={money(p.week.projects)} />
+        </div>}
         {view.logs && !!p.week.unpriced.length && <small>{tr('以下模型缺价格，未计入金额：{0}', p.week.unpriced.join('、'))}</small>}
-        {p.notes.map(n => <small key={n}>{tr('另有一个登录读取失败：{0}', tr(n))}</small>)}
+        {p.notes.map(n => <p className="usage-warn" key={n}>{tr('另有一个登录读取失败：{0}', tr(n))}</p>)}
       </div>)}
       <p>{view?.logs ? tr('按 API 价格折算。本周从周一零点起算。') : tr('本机会话日志读取已关闭，项目用量统计已暂停。')}</p>
       {view?.log_error && <p className="usage-error">{tr(view.log_error)}</p>}
@@ -118,7 +132,7 @@ export function UsageStrip({ active }: { active: boolean }) {
     {!view && !error && <p className="usage-wait">{tr('加载中…')}</p>}
     {!open && <ul className="usage-mini">
       {rows.map(({ p, w, full, name, sub }) => <li key={w.key} className={`usage-q usage-q-${level(w.used)}`}
-        title={`${p.label} · ${windowName(w)} · ${pct(w.used)} · ${tr('重置：{0}', resetDate(w.resets_at))}`}>
+        title={`${p.plan ? tr('{0}（{1}）', p.label, p.plan) : p.label} · ${windowName(w)} · ${pct(w.used)} · ${tr('重置：{0}', resetDate(w.resets_at))}`}>
         <span className={`usage-q-name${sub ? ' sub' : ''}`}>{name}</span>
         <span className="usage-q-span">{span(w) || tr(w.label)}</span>
         <Segments value={w.used} label={tr('{0} · {1}', full, windowName(w))} />
@@ -170,17 +184,21 @@ export function ProjectUsage({ lineId }: { lineId: string }) {
     {error && <p role="alert" className="usage-error">{tr(error)}</p>}
     {!value && !error && <p>{tr('加载中…')}</p>}
     {value && <>
-      <p>{tr('Agent 用量：{0} / 预算 {1}（{2}）', money(value.spent), value.budget === null ? tr('未设预算') : money(value.budget), STATES[value.state])}</p>
+      <div className="usage-stats">
+        <Stat label={tr('Agent 累计用量')} value={money(value.spent)} note={tr('自 {0} 起', shortDate(value.since))} />
+        <Stat label={tr('本周 Agent 用量')} value={money(value.week)} note={tr('从周一零点起算')} />
+        <Stat label={tr('预算')} value={value.budget === null ? tr('未设预算') : money(value.budget)} empty={value.budget === null} tone={value.budget === null ? undefined : value.state}
+          note={value.budget === null ? undefined : tr('已用 {0} · {1}', pct(Math.round(value.spent / value.budget * 1000) / 10), STATES[value.state])} />
+      </div>
       {value.budget !== null && <Bar value={value.spent / value.budget * 100} state={value.state} label={tr('Agent 预算使用比例')} />}
-      <p>{tr('本周 Agent 用量：{0}', money(value.week))}</p>
-      <small>{tr('自 {0} 起累计，按 API 价格折算。本周从周一零点起算。', date(value.since))}</small>
+      <small>{tr('金额按 API 价格折算。')}</small>
       {!value.logs && <p>{tr('本机会话日志读取已关闭，项目用量统计已暂停。')}</p>}
       <h3>{tr('订阅与模型')}</h3>
       {value.providers.map(p => <div className="usage-provider" key={p.id}>
-        <div className="usage-between"><b>{providerName(p.id)}</b><span>{money(p.cost)}</span></div>
+        <div className="usage-between usage-head"><b className="usage-name">{providerName(p.id)}</b><span className="usage-cost">{money(p.cost)}</span></div>
         <Tokens tokens={p.tokens} />
         {value.models.filter(m => m.provider === p.id).map(m => <div className="usage-model" key={m.model}>
-          <div className="usage-between"><span>{m.model}</span><span>{m.priced ? money(m.cost) : tr('缺价格')}</span></div>
+          <div className="usage-between usage-head"><code className="usage-code">{m.model}</code>{m.priced ? <span className="usage-cost sm">{money(m.cost)}</span> : <span className="usage-chip warn">{tr('缺价格')}</span>}</div>
           <Tokens tokens={m.tokens} />
         </div>)}
       </div>)}
@@ -188,18 +206,21 @@ export function ProjectUsage({ lineId }: { lineId: string }) {
       {value.models.some(m => !m.priced) && <small>{tr('缺价格的模型仅计入 token，金额暂未计入合计。')}</small>}
       <h3>{tr('会话明细')}</h3>
       {value.sessions.map(s => <div className="usage-provider" key={`${s.provider}/${s.session}`}>
-        <div className="usage-between"><b>{s.owner.kind === 'dir' ? tr('目录会话') : tr(s.owner.name)}</b><span>{money(s.cost)}</span></div>
-        <small>{providerName(s.provider)} · {s.session}</small>
-        <small className="usage-path">{s.cwd}</small>
+        <div className="usage-between usage-head"><b className="usage-name">{s.owner.kind === 'dir' ? tr('目录会话') : tr(s.owner.name)}</b><span className="usage-cost">{money(s.cost)}</span></div>
+        <div className="usage-meta"><span className="usage-chip">{providerName(s.provider)}</span><code className="usage-code dim" title={s.session}>{s.session}</code></div>
+        <code className="usage-path">{s.cwd}</code>
         <Tokens tokens={s.tokens} />
-        <small>{tr('最近用量：{0}', date(s.last_at))}</small>
+        <small>{rich(tr('最近用量：{0}'), <b>{date(s.last_at)}</b>)}</small>
       </div>)}
     </>}
     {editing && value && <BudgetDialog title={tr('修改预算')} initial={value.budget} confirm={tr('保存')} onClose={() => setEditing(false)} onSave={async budget => setValue(await api.setUsageBudget(lineId, budget))} />}
   </section>;
 }
 
+// Token counts as label and figure pairs, the figure short (454.3M) with the exact count on hover.
+const TOKEN_KINDS: [keyof UsageTokens, string][] = [['input', '输入'], ['cache_write', '缓存写入'], ['cache_read', '缓存读取'], ['output', '输出']];
 function Tokens({ tokens }: { tokens: UsageTokens }) {
-  return <p className="usage-tokens">{tr('token：输入 {0} · 缓存写入 {1} · 缓存读取 {2} · 输出 {3}',
-    ...[tokens.input, tokens.cache_write, tokens.cache_read, tokens.output].map(n => n.toLocaleString()))}</p>;
+  return <p className="usage-tokens"><span className="usage-chip">token</span>
+    {TOKEN_KINDS.map(([k, label]) => <span key={k} title={tokens[k].toLocaleString()}>{tr(label)} <b>{tokens[k].toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 })}</b></span>)}
+  </p>;
 }

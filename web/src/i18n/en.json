@@ -3659,5 +3659,14 @@
  "预制的样例项目，内容是占位的": "A prebuilt sample project with placeholder content",
  "已重置": "reset",
  "剩余 {0} · {1} 重置": "{0} left · resets {1}",
- "剩余 {0} · 还没有开始计时": "{0} left · not started yet"
+ "剩余 {0} · 还没有开始计时": "{0} left · not started yet",
+ "套餐：{0}": "Plan: {0}",
+ "本周本机折合": "This week on this machine",
+ "其中项目": "Of which projects",
+ "Agent 累计用量": "Agent usage to date",
+ "自 {0} 起": "since {0}",
+ "本周 Agent 用量": "Agent usage this week",
+ "从周一零点起算": "from Monday 00:00",
+ "已用 {0} · {1}": "{0} used · {1}",
+ "金额按 API 价格折算。": "Amounts are at API prices."
 }
