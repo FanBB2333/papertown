@@ -26,7 +26,8 @@ def hud(town: "Town") -> dict:
     day = (datetime.now(timezone.utc) - datetime.fromisoformat(first)).days + 1 if first else 1
     leads = [town.leads.resident(r["id"]) for r in lines if r["status"] in LIVE]
     return {"day": day, "lines": {"running": len(leads), "total": len(lines)},
-            "leads": {"on": sum(r["on"] for r in leads), "running": sum(r["state"] == "running" for r in leads)},
+            "leads": {"on": sum(r["on"] for r in leads), "running": sum(r["state"] == "running" for r in leads),
+                      "blocked": sum(r["state"] == "blocked" for r in leads)},
             "library": town.library.count(), "ports": town.mcp.status}
 
 

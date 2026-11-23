@@ -4,7 +4,7 @@
 
 import { typing } from './components/walk';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, listen, subscribe, type Line, type ShowTarget, type WorldState } from './api';
+import { api, listen, subscribe, type Hud, type Line, type ShowTarget, type WorldState } from './api';
 import { Logo } from './art';
 import { DemoWelcome, RepoLink } from './components/Demo';
 import { Dock } from './components/Dock';
@@ -65,6 +65,16 @@ function Gear() {
 }
 
 // covered: the landing is shown over the app, which keeps its state meanwhile
+// The colour of the HUD's lead count: green when every lead that is on is running, orange while some are still
+// starting, red when one should run and cannot, grey when no project in progress has its lead on.
+function leadTone(h: Hud): { tone: 'ok' | 'warn' | 'bad' | 'off'; tip: string } {
+  const { on, running, blocked = 0 } = h.leads;
+  if (!on) return { tone: 'off', tip: h.lines.running ? tr('进行中的项目都没有开启常驻负责人') : tr('目前没有进行中的项目') };
+  if (blocked) return { tone: 'bad', tip: tr('{0} 位负责人无法运行，需要处理', blocked) };
+  if (running < on) return { tone: 'warn', tip: tr('{0} 位负责人正在启动', on - running) };
+  return { tone: 'ok', tip: tr('开启常驻的 {0} 位负责人都在运行', on) };
+}
+
 export function App({ route: at, covered }: { route: Route; covered: boolean }) {
   const [hp] = useState(() => new URLSearchParams(location.hash.slice(1)));
   const settingsOpen = at.view === 'settings';
@@ -344,6 +354,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   }
 
   const hud = world?.hud;
+  const leads = hud && leadTone(hud);
   const walking = !sheet && view === 'world' && !chatOpen && !settingsOpen;
   const running = world?.running ?? [];
 
@@ -386,9 +397,10 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
             </button>
           ))}
         </div>
-        {hud && <div className="hud-quiet">
-          <span><b>{hud.lines.running}</b> {tr('个项目进行中')}</span>
-          <span>{tr('{0}/{1} 位负责人在岗', hud.leads.running, hud.leads.on)}</span>
+        {hud && leads && <div className="hud-quiet">
+          <span className={hud.lines.running ? 'hq-live' : undefined}><b>{hud.lines.running}</b> {tr('个项目进行中')}</span>
+          <span className={`hq-leads hq-${leads.tone}`} title={leads.tip}>
+            <i className="hq-dot" aria-hidden="true" /><b>{hud.leads.running}/{hud.leads.on}</b> {tr('位负责人在岗')}</span>
         </div>}
         <div className="hud-r">
           {!!overview?.counts.needs && <a className="chip warn aw-count" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('待处理 {0}', overview.counts.needs)}</a>}

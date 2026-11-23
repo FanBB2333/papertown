@@ -11,7 +11,7 @@ export interface Placement {
 
 export interface Hud {
   day: number; lines: { running: number; total: number }; library: number;
-  leads: { on: number; running: number };
+  leads: { on: number; running: number; blocked?: number }; // blocked: should run and cannot (absent in older demo snapshots)
 }
 export type LineStatus = 'running' | 'done' | 'linked' | 'dropped';
 export interface RunningLine { id: string; seq: number; title: string; status: LineStatus; stage: string; building: string; pct: number; mill_id: string | null }

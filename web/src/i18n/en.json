@@ -2606,7 +2606,6 @@
  "终端画面已变化，请重新查看。": "The terminal screen has changed. Please look again.",
  "所选选项超出有效范围。": "The chosen option is out of range.",
  "项目 #{0} 已创建，负责人正在启动。": "Project #{0} created. Its lead is starting.",
- "{0}/{1} 位负责人在岗": "{0}/{1} leads on duty",
  "这是只读的静态演示，五个预制样例项目展示不同阶段，包含占位内容。项目负责人默认关闭。": "This read-only static demo contains five prebuilt sample projects at different stages, with placeholder content. Their leads are off by default.",
  "负责人已暂停": "Lead paused",
  "提交 idea 后，项目负责人自动启动并推进项目。": "After you submit an idea, its lead starts automatically and moves the project forward.",
@@ -3691,5 +3690,11 @@
  "在后台终端中启动": "Start in a background terminal",
  "Papertown 后台终端，在此页面查看与操作": "Papertown background terminal, viewed and used on this page",
  "此处内容未能显示": "This part could not be shown",
- "渲染出错，页面其余部分照常可用。错误信息：": "It failed while rendering. The rest of the page still works. The error:"
+ "渲染出错，页面其余部分照常可用。错误信息：": "It failed while rendering. The rest of the page still works. The error:",
+ "位负责人在岗": "leads on duty",
+ "进行中的项目都没有开启常驻负责人": "No project in progress has its lead switched on",
+ "目前没有进行中的项目": "No project is in progress",
+ "{0} 位负责人无法运行，需要处理": "{0} {0|lead cannot|leads cannot} run and {0|needs|need} attention",
+ "{0} 位负责人正在启动": "{0} {0|lead is|leads are} starting",
+ "开启常驻的 {0} 位负责人都在运行": "All {0} {0|lead|leads} switched on {0|is|are} running"
 }

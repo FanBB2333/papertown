@@ -14,7 +14,7 @@ def test_api_flow(tmp_path):
         core = sorted((p["type"], p["id"]) for p in w["placements"] if p["core"])
         assert core == [("depot", "depot"), ("farm", "farm"), ("mill", "mill"), ("press", "press")]
         assert c.get("/api/buildings/mill").json()["job"].startswith("空闲")
-        assert w["hud"]["leads"] == {"on": 0, "running": 0}
+        assert w["hud"]["leads"] == {"on": 0, "running": 0, "blocked": 0}
 
         r = c.post("/api/ideas", json={"text": "用检索增强做论文的新颖性评估"})
         assert r.status_code == 200
@@ -96,4 +96,4 @@ def test_hud_counts_only_live_residents(tmp_path, monkeypatch):
         town.db.update("lines", {"id": third}, status="done")
         hud = c.get("/api/status").json()["hud"]
         assert set(hud) == {"day", "lines", "leads", "library", "ports"}
-        assert hud["lines"] == {"running": 2, "total": 3} and hud["leads"] == {"on": 1, "running": 1}
+        assert hud["lines"] == {"running": 2, "total": 3} and hud["leads"] == {"on": 1, "running": 1, "blocked": 0}
