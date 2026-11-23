@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { api, fileUrl, type Line, type Placement, type Sheet as SheetData, type Stage } from '../api';
-import { Ava, Item, ROLE_NAMES, Sprite, itemName } from '../art';
+import { Item, Sprite, itemName } from '../art';
 import { GpuBoard } from './Gpus';
 import { LinkedRepos } from './Linked';
 import { LibraryShelf, LinePapers } from './Papers';
@@ -44,7 +44,7 @@ export const FileLinks = ({ lineId, files }: { lineId: string; files: string[] }
   <div className="btns">{files.map(f => <a key={f} className={`btn${f === 'main.pdf' ? ' pri' : ''}`} href={fileUrl(lineId, f)} target="_blank" rel="noreferrer">{f}</a>)}</div>
 );
 
-function Belt({ stations }: { stations: { key: string; name: string; st: string; pct?: number; icon: React.ReactNode; out: string; team: React.ReactNode; open?: string }[] }) {
+function Belt({ stations }: { stations: { key: string; name: string; st: string; pct?: number; icon: React.ReactNode; out: string; team?: React.ReactNode; open?: string }[] }) {
   const n = stations.length;
   const style: React.CSSProperties = { gridTemplateColumns: `repeat(${n}, minmax(0, ${n <= 5 ? '200px' : '1fr'}))` };
   if (n <= 5) Object.assign(style, { width: 'fit-content', margin: '0 auto' });
@@ -57,7 +57,7 @@ function Belt({ stations }: { stations: { key: string; name: string; st: string;
             <div className="stn-ic">{s.icon}</div>
             <b>{i + 1}. {s.name}</b>
             {chip(s.st, s.pct)}
-            <div className="stn-team">{s.team}</div>
+            {s.team != null && <div className="stn-team">{s.team}</div>}
             <div className="stn-out" title={itemName(s.out)}><Item k={s.out} /></div>
           </div>
         ))}
@@ -194,7 +194,6 @@ export function Sheet(p: Props) {
   if (!s || s.id !== p.id && s.type !== p.id) return <div className="p-sheet pnl lc"><div className="sh-head"><p className="muted">{tr('加载中…')}</p></div></div>;
 
   const cur = s.stations?.find(x => x.st === 'run');
-  const team = [...new Set((s.stations ?? []).flatMap(x => x.team))];
   const goods = (list: [string, string][], dir: string) => list.length ? list.map(([id, it]) => (
     <div key={dir + id + it} className="io" data-open={id}>
       <Item k={it} /><div><b>{dir} {nameOf(id)}</b><small>{itemName(it)}</small></div><span className="go">→</span>
@@ -227,13 +226,11 @@ export function Sheet(p: Props) {
         <>
           <Belt stations={(s.stations ?? []).map((x, i) => ({
             key: String(i), name: x.name, st: x.st, out: x.out, icon: <Item k={x.out} />,
-            team: x.team.length ? x.team.map((r, k) => <Ava key={k} role={r} />) : <em>—</em>,
           }))} />
           <section className="detail">
             <div className="pnl">
               <h4>{cur ? tr('当前工位 · {0}', cur.name) : s.live ? tr('当前空闲') : tr('尚未接入')}</h4>
               <dl className="kv">
-                <dt>{tr('员工')}</dt><dd>{team.length ? team.map(r => <span key={r} className="w"><Ava role={r} />{ROLE_NAMES[r]}</span>) : <span className="muted">{tr('自动运行，无 agent 员工')}</span>}</dd>
                 <dt>Skills</dt><dd>{chips(s.skills)}</dd>
                 <dt>{tr('工具')}</dt><dd>{chips(s.tools)}</dd>
                 <dt>{tr('现在')}</dt><dd>{s.job}</dd>

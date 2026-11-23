@@ -70,7 +70,7 @@ export interface Message {
 
 export interface TraceRow { id: number; ts: string; kind: string; label: string; detail: string; ms: number; line_id: string | null }
 
-export interface Station { name: string; out: string; team: string[]; st: 'todo' | 'run' | 'done' }
+export interface Station { name: string; out: string; st: 'todo' | 'run' | 'done' }
 
 export interface Sheet {
   id: string; type: string; name: string; label: string | null; accent: string | null; district: string; rep: string;
@@ -400,14 +400,13 @@ export interface McpServer {
 }
 export interface McpView { servers: McpServer[]; town_file: string; config_file: string | null; self: any }
 
-export interface RagOpts { top_k: number; candidates: number; vectors: boolean }
+export interface RagOpts { top_k: number; candidates: number }
 export interface RagView {
-  stats: { papers: number; sources: Record<string, number>; vectors: number; terms: number };
+  stats: { papers: number; sources: Record<string, number>; terms: number };
   opts: RagOpts; limits: Record<'top_k' | 'candidates', [number, number]>; index: string;
-  embed: { configured: boolean; model: string | null; host: string | null };
 }
 export interface RagHit extends PaperCard { matched: string[] }
-export interface RagResult { query: string; expanded: string; terms: string[]; method: 'coverage' | 'embedding'; hits: RagHit[] }
+export interface RagResult { query: string; expanded: string; terms: string[]; method: 'coverage'; hits: RagHit[] }
 
 const pageLook = () => {
   const h = document.documentElement;

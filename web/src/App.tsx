@@ -9,6 +9,7 @@ import { Logo } from './art';
 import { DemoWelcome, RepoLink } from './components/Demo';
 import { Dock } from './components/Dock';
 import { Interior } from './components/Interior';
+import { Guard } from './components/Guard';
 import { SettingsPage } from './components/Settings';
 import type { Target } from './console/Assistant';
 import { Console } from './console/Console';
@@ -362,12 +363,12 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
             onFail={msg => { push(msg); leaveFull(); setWant3d(false); setDim('2d'); }} />
         </Suspense>
       )}
-      <Progress active={view === 'cards' && !covered} seq={route.view === 'cards' ? route.seq : undefined} sub={route.view === 'cards' ? route.sub : undefined} page={route.view === 'cards' ? route.page : undefined} toast={push} onOpen={openProject} />
-      {view === 'agents' && <Agents id={route.agent} active={!covered && !settingsOpen} lines={lines} toast={push} />}
+      <Guard key={`cards:${route.view === 'cards' ? `${route.seq ?? ''}/${route.sub ?? ''}/${route.page ?? ''}` : ''}`}><Progress active={view === 'cards' && !covered} seq={route.view === 'cards' ? route.seq : undefined} sub={route.view === 'cards' ? route.sub : undefined} page={route.view === 'cards' ? route.page : undefined} toast={push} onOpen={openProject} /></Guard>
+      {view === 'agents' && <Guard key={`agents:${route.agent ?? ''}`}><Agents id={route.agent} active={!covered && !settingsOpen} lines={lines} toast={push} /></Guard>}
       {consoleUp && (
-        <Console active={view === 'console' && !covered} at={route.view === 'console' ? route : undefined} onPlace={onPlace}
+        <Guard key={`console:${route.view === 'console' ? `${route.seq ?? ''}/${route.mod ?? ''}` : ''}`}><Console active={view === 'console' && !covered} at={route.view === 'console' ? route : undefined} onPlace={onPlace}
           lines={lines} ready={linesIn} placements={world?.placements ?? []} tick={tick} toast={push}
-          onRoom={room} onIdea={newIdea} onAsk={askAt} />
+          onRoom={room} onIdea={newIdea} onAsk={askAt} /></Guard>
       )}
 
       <header className="hud">
@@ -423,7 +424,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           motion={leaving ? 'leave' : swap ? 'swap' : 'enter'} onClose={leaveRoom}
           onOpen={room} onIdea={newIdea} onAsk={askAt} toast={push} />
       )}
-      {settingsOpen && <SettingsPage section={at.mod} hud={hud ?? null} onClose={closeSettings} />}
+      {settingsOpen && <Guard key={`settings:${at.mod ?? ''}`} onClose={closeSettings}><SettingsPage section={at.mod} hud={hud ?? null} onClose={closeSettings} /></Guard>}
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>
       {DEMO && <DemoWelcome />}
     </div>

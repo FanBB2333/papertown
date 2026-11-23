@@ -1,6 +1,7 @@
 // A building from the inside, full screen: the four core buildings' rooms (shop floor and details),
 // the three configuration rooms, and a production sheet for every other building.
 
+import { Guard } from './Guard';
 import { useState } from 'react';
 import { BUILDINGS } from '@design/sprites.js';
 import type { Line, Placement } from '../api';
@@ -58,8 +59,10 @@ export function Interior(p: Props) {
   if (!info) {
     return (
       <div className={`interior in-sheet m-${p.motion}`} role="dialog" aria-modal="true">
-        <Sheet id={p.id} tick={p.tick} placements={p.placements} focus={p.focus} onClose={p.onClose} onOpen={p.onOpen}
-          onAsk={p.onAsk} />
+        <Guard onClose={p.onClose}>
+          <Sheet id={p.id} tick={p.tick} placements={p.placements} focus={p.focus} onClose={p.onClose} onOpen={p.onOpen}
+            onAsk={p.onAsk} />
+        </Guard>
       </div>
     );
   }
@@ -90,7 +93,7 @@ export function Interior(p: Props) {
           <button className="btn" onClick={() => p.onAsk(pl?.id ?? type, info.title)}>{tr('向此处员工提问')}</button>
         </div>
       </header>
-      <div className="in-body">{body}</div>
+      <div className="in-body"><Guard key={`${view}:${q.focus ?? ''}`}>{body}</Guard></div>
     </div>
   );
 }

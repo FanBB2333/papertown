@@ -47,7 +47,6 @@ export function RagRoom(p: Props) {
         <div><b>{v.stats.papers}</b><span>{tr('篇馆藏')}</span></div>
         {Object.entries(v.stats.sources).map(([k, n]) => <div key={k}><b>{n}</b><span>{SOURCES[k] ?? k}</span></div>)}
         <div><b>{v.stats.terms}</b><span>{tr('个索引词')}</span></div>
-        <div><b>{v.stats.vectors}</b><span>{tr('条向量')}</span></div>
       </div>
 
       <div className="rag-grid">
@@ -61,7 +60,7 @@ export function RagRoom(p: Props) {
           {res && (
             <>
               <p className="muted small">
-                {res.method === 'embedding' ? tr('向量排序') : tr('关键词覆盖率排序')} {tr('· 检索词：')}{res.terms.map(t => <code key={t}>{t}</code>)}
+                {tr('关键词覆盖率排序')} {tr('· 检索词：')}{res.terms.map(t => <code key={t}>{t}</code>)}
                 {res.expanded !== res.query && <> {tr('· 扩展为「')}{res.expanded}{tr('」')}</>}
               </p>
               <ol className="rag-hits">
@@ -83,8 +82,7 @@ export function RagRoom(p: Props) {
         <details className="pnl-s rag-opts" open={dirty || undefined}>
           <summary>
             <h4>{tr('检索机制')}</h4>
-            <span className="muted small">{tr('返回 {0} 篇 · 召回 {1} 篇候选并评分 · {2}', v.opts.top_k, v.opts.candidates,
-              v.opts.vectors && v.embed.configured ? tr('向量排序') : tr('关键词覆盖率排序'))}</span>
+            <span className="muted small">{tr('返回 {0} 篇 · 召回 {1} 篇候选并评分 · {2}', v.opts.top_k, v.opts.candidates, tr('关键词覆盖率排序'))}</span>
           </summary>
           <p className="muted small">{v.index}{tr('。孵化场查重、造纸厂找 baseline、印刷厂找引用均采用此流程。')}</p>
           <label className="field">{tr('默认返回篇数')} <b>{opts.top_k}</b>
@@ -92,12 +90,6 @@ export function RagRoom(p: Props) {
           </label>
           <label className="field">{tr('评分前全文召回候选篇数')} <b>{opts.candidates}</b>
             <input type="range" min={v.limits.candidates[0]} max={v.limits.candidates[1]} step={5} value={opts.candidates} onChange={e => setOpts({ ...opts, candidates: +e.target.value })} />
-          </label>
-          <label className={`check${v.embed.configured ? '' : ' off'}`}>
-            <input type="checkbox" checked={opts.vectors && v.embed.configured} disabled={!v.embed.configured} onChange={e => setOpts({ ...opts, vectors: e.target.checked })} />
-            <span>{tr('按向量排序候选')}
-              <small className="muted">{v.embed.configured ? `${v.embed.model ?? ''}${v.embed.host ? ` @ ${v.embed.host}` : ''}` : tr('未配置 embeddings 接口（PAPERTOWN_EMBED_*），当前按关键词覆盖率排序')}</small>
-            </span>
           </label>
           <div className="btns">
             <button className="btn pri" disabled={!dirty} onClick={save}>{tr('保存')}</button>
