@@ -1,0 +1,1 @@
+{"servers":[],"town_file":"~/papertown/mcp.json","config_file":null,"self":{"mcpServers":{"papertown":{"command":"uv","args":["--directory","~/papertown/server","run","papertown","mcp"]}}}}

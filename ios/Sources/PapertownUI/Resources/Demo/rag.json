@@ -1,0 +1,1 @@
+{"stats":{"papers":346,"sources":{"seed":346},"terms":6510},"opts":{"top_k":8,"candidates":40},"limits":{"top_k":[1,30],"candidates":[5,200]},"index":"SQLite FTS5 · BM25 召回 + 关键词覆盖率打分"}

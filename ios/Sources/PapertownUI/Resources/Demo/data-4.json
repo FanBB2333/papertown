@@ -1,0 +1,1 @@
+{"meta":{"datasets":["sample-lab/vla-bench","sample-lab/vla-bench"],"metrics":["Task success rate (%)","Average completed subtasks (%)","Error recovery rate after perturbations (%)"],"baselines":["Hierarchical Vla","Vela","Cortex 2.0"],"seeds":null,"gpu_hours":null,"backend":null},"results":null,"runs":[],"files":[]}

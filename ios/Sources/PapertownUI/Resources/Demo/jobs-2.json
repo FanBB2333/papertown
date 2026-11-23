@@ -1,0 +1,1 @@
+{"jobs":[],"backends":[{"id":"local","name":"本地执行器","ready":true,"note":"在项目的代码目录里直接运行命令","active":0},{"id":"nvidb","name":"nvidb","ready":false,"note":"没有接入（PAPERTOWN_NVIDB=0）","active":0}]}
