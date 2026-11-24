@@ -70,6 +70,12 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
   const again = useRef(0);
   const s = useSettings();
 
+  // an agent's change that moves 待你决定: the lead's, or any agent's that starts or stops waiting on you
+  const deciding = useRef(new Set<string>());
+  deciding.current = new Set((rows ?? []).filter(r => r.decisions?.length).map(r => r.line.id));
+  const asking = (a?: { role?: string; line_id?: string | null; watch?: { bucket?: string } }) =>
+    !!a && (a.role === 'lead' || a.watch?.bucket === 'needs' || (!!a.line_id && deciding.current.has(a.line_id)));
+
   useEffect(() => {
     if (!active) return;
     let alive = true;
@@ -79,7 +85,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
     const off = listen(e => {
       if (e.type === 'card' && e.card) setRows(rs => rs && rs.map(r => (r.line.id === e.card.line.id ? { ...e.card, line: { ...e.card.line, lead: r.line.lead, sample: r.line.sample } } : r)));
       else if (e.type === 'card_layout' && e.layout) setLayout(e.layout);
-      else if (['line', 'job', 'report', 'memory', 'usage'].includes(e.type) || (e.type === 'agent' && e.agent?.role === 'lead')) {
+      else if (['line', 'job', 'report', 'memory', 'usage'].includes(e.type) || (e.type === 'agent' && asking(e.agent))) {
         clearTimeout(again.current);
         again.current = window.setTimeout(load, 1500);
       }
@@ -205,7 +211,7 @@ function ProjectBox({ r, i, panes, defs, toast, onChange }: {
   const { line, card } = r;
   const o = opens(line);
   return (
-    <article className={`pc${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} {...o.box}>
+    <article className={`pc${card ? ` h-${card.health}` : ''}${r.decisions?.length ? ' need' : ''}`} style={{ ['--i' as string]: i }} {...o.box}>
       <header className="pc-head">
         <span className="pc-name"><span className="pc-seq">#{line.seq}</span>{o.title}</span>
         <StatusTag status={line.status} sample={line.sample} />

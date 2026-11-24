@@ -179,9 +179,17 @@ export interface ProjectCard {
   line: { id: string; seq: number; title: string; status: LineStatus; linked: boolean; updated_at: string; sample: boolean; lead: Resident; usage_state?: UsageState;
     stages: { key: string; name: string; status: 'todo' | 'run' | 'done' }[]; stage: { name: string; status: string; pct: number } | null };
   lead: Agent | null; card: Card | null; prev: number | null; pending: { at: string; note: string } | null;
-  jobs: Record<string, number>; asks: number;
+  jobs: Record<string, number>; asks: number; decisions?: Decision[];
   running: CardRun[]; queued: CardRun[]; repos: { code: CardRepo | null; paper: CardRepo | null }; memory: MemoryCounts;
   checks?: { hard: CheckCounts; soft: CheckCounts };
+}
+
+// 待你决定 on a card (decisions.py): a question, a native permission request, a terminal dialog, or a line of the card
+export interface DecisionOption { label: string; value: boolean | number | string; main?: boolean }
+export interface Decision {
+  kind: 'ask' | 'permission' | 'prompt' | 'need'; id: string; agent: string | null; who: string; title: string; detail: string;
+  options: DecisionOption[]; free: boolean; ready: boolean; since: string | null;
+  later?: boolean; // a line of the card while no lead runs: it hears the choice with the next card request
 }
 
 // checks (checks.py): hard checks are code and must pass; soft checks are the lead's judgement
@@ -541,6 +549,8 @@ export const api = {
   clearPassword: () => call<AuthState>('DELETE', '/api/auth/password'),
   accessKeys: () => call<{ keys: AccessKey[] }>('GET', '/api/auth/keys'),
   createKey: (name: string) => call<AccessKey & { key: string }>('POST', '/api/auth/keys', { name }),
+  decideCard: (lineId: string, d: { kind: Decision['kind']; id: string; agent: string | null; value: DecisionOption['value'] | null; text?: string }) =>
+    call<ProjectCard>('POST', `/api/lines/${encodeURIComponent(lineId)}/decide`, d),
   revokeKey: (id: string) => call<{ keys: AccessKey[] }>('DELETE', `/api/auth/keys/${encodeURIComponent(id)}`),
   updateCard: (lineId: string, note = '') => call<ProjectCard>('POST', `/api/lines/${lineId}/card`, { note }, carded).then(residentCard),
   cancelCard: (lineId: string) => call<ProjectCard>('POST', `/api/lines/${lineId}/card/cancel`, {}, carded).then(residentCard),

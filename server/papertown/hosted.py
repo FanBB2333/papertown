@@ -536,8 +536,9 @@ class Hosted:
             doing = {'kind': 'prompt', 'text': prompt['title'][:120]}
         if why == 'ask':
             doing = {'kind': 'ask', 'text': asks[0]['data']['question'][:200]}
+        prompt = self._prompts.get(a['id']) if t.get('status') in ('blocked', 'starting') else None
         return {'bucket': bucket, 'why': why, 'since': t.get('since'), 'turn': t.get('since') if bucket == 'working' else None,
-                'doing': doing, 'queued': queued, 'unread': unread, 'permissions': [], 'asks': asks}
+                'doing': doing, 'queued': queued, 'unread': unread, 'permissions': [], 'asks': asks, 'prompt': prompt}
 
     def reconcile(self):
         for a in self.db.q("select * from agents where " + IN_RUNTIMES):

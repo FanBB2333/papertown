@@ -69,7 +69,7 @@ function ProjectRow({ r, i, cols, seqGhost, defs, toast, onChange }: { r: Projec
   const { line, card } = r;
   const o = opens(line);
   return (
-    <div className={`pr${card ? ` h-${card.health}` : ''}`} style={{ ['--i' as string]: i }} role="row" {...o.box}>
+    <div className={`pr${card ? ` h-${card.health}` : ''}${r.decisions?.length ? ' need' : ''}`} style={{ ['--i' as string]: i }} role="row" {...o.box}>
       <div className="pr-name" role="cell">
         <Fit ghosts={[<span className="pc-seq">{seqGhost}</span>]}><span className="pc-seq">#{line.seq}</span></Fit>
         <div className="pr-t">

@@ -3669,7 +3669,7 @@
  "退回一轮": "Send back a round",
  "暂无论文": "No paper yet",
  "尚未编译出 PDF": "No PDF compiled yet",
- "待你决定": "For you to decide",
+ "待你决定": "To decide",
  "尚未发送": "Not sent",
  "待你拍板": "Waiting on you",
  "未通过": "Failing",
@@ -3708,5 +3708,18 @@
  "还没有访问密钥。": "No access keys yet.",
  "撤销密钥": "Revoke",
  "其他设备的访问密码与 App 访问密钥": "Password for other devices, keys for the apps",
- "尚未设置：其他设备的浏览器无法登录": "Not set: browsers on other devices cannot sign in"
+ "尚未设置：其他设备的浏览器无法登录": "Not set: browsers on other devices cannot sign in",
+ "权限请求": "Permission request",
+ "终端对话框": "Terminal dialog",
+ "卡片上要你决定": "On the card",
+ "同意": "Agree",
+ "不同意": "Disagree",
+ "已决定，等它们接着做": "Decided, waiting for them to carry on",
+ "待你决定：{0} 件": "To decide: {0}",
+ "#{0} 待你决定": "#{0} to decide",
+ "点选项即完成决定": "Click a choice to decide",
+ "其他回答…": "Other answer…",
+ "去对话里回答": "Answer in the chat",
+ "写给它的回答": "Your answer",
+ "负责人没在运行，这个决定会在下次请它更新卡片时一并交给它": "The lead isn't running, so it gets this decision the next time you ask it to update the card"
 }

@@ -9,6 +9,7 @@ import { ago } from '../console/util';
 import { tr } from '../i18n';
 import { follow, go, href } from '../route';
 import { askPath } from './Ask';
+import { DecideLine } from './Decide';
 
 const HEALTH: Record<Health, string> = { ok: tr('正常'), risk: tr('有风险'), blocked: tr('受阻') };
 export const OUT_STATE: Record<OutputState, string> = { todo: tr('尚未开始'), doing: tr('进行中'), done: tr('完成') };
@@ -27,7 +28,7 @@ export const PANES: Record<Pane, [string, string, IconName]> = {
 };
 export const PANE_KEYS = Object.keys(PANES) as Pane[];
 
-export const youNeeded = (c: ProjectCard) => c.asks > 0 || c.line.lead.state === 'blocked';
+export const youNeeded = (c: ProjectCard) => (c.decisions?.length ?? 0) > 0 || c.asks > 0 || c.line.lead.state === 'blocked';
 
 const k = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n));
 const STAGE_ST: Record<'todo' | 'run' | 'done', string> = { done: tr('完成'), run: tr('进行中'), todo: tr('尚未开始') };
@@ -196,10 +197,15 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
         </section>
       );
     case 'attention': {
-      const first = c?.need_you.length ? ['need_you', c.need_you] as const : c?.blockers.length ? ['blockers', c.blockers] as const : null;
+      // what waits on you comes first, with its choices a hover away; else the first blocker
+      if (r.decisions?.length) return <Row pane="attention"><DecideLine r={r} /></Row>;
+      // a server from before decisions: the card's own line, as text
+      if (!r.decisions && c?.need_you.length) {
+        return <Row pane="attention"><span className="pp-one l-need_you"><b>{tr('决定')}</b>{c.need_you[0]}</span></Row>;
+      }
       return (
-        <Row pane="attention" extra={first && first[1].length > 1 ? `+${first[1].length - 1}` : undefined}>
-          {first ? <span className={`pp-one l-${first[0]}`}><b>{first[0] === 'need_you' ? tr('决定') : tr('卡点')}</b>{first[1][0]}</span>
+        <Row pane="attention" extra={c && c.blockers.length > 1 ? `+${c.blockers.length - 1}` : undefined}>
+          {c?.blockers.length ? <span className="pp-one l-blockers"><b>{tr('卡点')}</b>{c.blockers[0]}</span>
             : c ? none(tr('暂无待决定事项')) : noCard()}
         </Row>
       );

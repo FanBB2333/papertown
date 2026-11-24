@@ -12,6 +12,7 @@ import { tr } from '../i18n';
 import { ProjectUsage } from '../usage/Usage';
 import { follow, href, PATHS } from '../route';
 import { askPath, ChatBox } from './Ask';
+import { DecideList } from './Decide';
 import { LoopCard } from './LoopCard';
 import { PagesBox } from './Pages';
 import { MemorySection, MemoryViewer } from './Memory';
@@ -20,7 +21,8 @@ import { Meter, noCardText, OUT_STATE, repoLine, runText, UpdateButton, useCardA
 export interface ConsoleTarget { mod?: string; file?: string; job?: string }
 type Open = (lineId: string, t?: ConsoleTarget) => void;
 
-const LISTS = [['need_you', tr('待你决定')], ['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')]] as const;
+// what the card says it needs from you is under 待你决定 above, with its choices
+const LISTS = [['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')]] as const;
 
 export function Project({ r, defs, toast, onChange, onConsole }: {
   r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onConsole: Open;
@@ -53,6 +55,12 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
         </div>
       </header>
       <ResidentControl lineId={line.id} resident={liveLine?.lead ?? line.lead} sample={liveLine?.sample ?? line.sample} model={liveLine?.team.find(a => a.role === 'lead')?.model ?? r.lead?.model} talk={ask} toast={toast} onChanged={reloadLead} />
+      {(r.decisions?.length ?? 0) > 0 && (
+        <section className="psec pj-decide" id="decide">
+          <header className="psec-h"><h3><Icon n="bell" size={16} />{tr('待你决定')}<span className="pj-n">{r.decisions!.length}</span></h3></header>
+          <DecideList r={r} />
+        </section>
+      )}
       <LoopCard r={r} toast={toast} />
 
       <div className="pj-grid">
@@ -75,7 +83,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
                   </dl>
                 )}
                 <div className="pj-lists">
-                  {LISTS.filter(([k]) => card[k].length).map(([k, name]) => (
+                  {(r.decisions ? LISTS : [['need_you', tr('待你决定')] as const, ...LISTS]).filter(([k]) => card[k].length).map(([k, name]) => (
                     <section key={k} className={`pc-list l-${k}`}>
                       <h4>{name}</h4>
                       <ul>{card[k].map((t, j) => <li key={j}>{t}</li>)}</ul>

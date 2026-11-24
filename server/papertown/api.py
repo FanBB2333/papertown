@@ -24,6 +24,7 @@ from .auth import COOKIE, DAYS, Auth, AuthError, Gate
 from .bounds import BoundsError
 from .canvas import CanvasError
 from .cards import CardError
+from .decisions import DecisionError
 from .checks import CheckError
 from .paseo_models import ModelError
 from .usage import UsageError
@@ -115,6 +116,14 @@ class AnswerByIn(BaseModel):
 
 class LoginIn(BaseModel):
     password: str = Field(max_length=200)
+
+
+class DecideCardIn(BaseModel):
+    kind: Literal["ask", "permission", "prompt", "need"]
+    id: str = Field(min_length=1, max_length=400)
+    agent: str | None = Field(default=None, max_length=100)
+    value: bool | int | str | None = None
+    text: str | None = Field(default=None, max_length=2000)
 
 
 class KeyIn(BaseModel):
@@ -941,6 +950,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/lines/{line_id}/card")
     def card_update(line_id: str, body: CardAsk):
         return leads(town.cards.request, line_id, body.note)
+
+    # 待你决定 on a card: answers a question, a permission request or a terminal dialog of the project's agents,
+    # or tells the lead what you decided about a line of its card (decisions.py)
+    @app.post("/api/lines/{line_id}/decide")
+    def card_decide(line_id: str, body: DecideCardIn):
+        return mapped(CardError, DecisionError)(town.cards.decide, line_id, body.kind, body.id, body.agent, body.value, body.text)
 
     @app.post("/api/lines/{line_id}/card/cancel")
     def card_cancel(line_id: str):

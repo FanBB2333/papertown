@@ -9,7 +9,7 @@ import { api, type CanvasNode, type CanvasView, type CardRepo, type Health, type
 import { AGENT_STATUS } from '../components/MillRoom';
 import { Icon, type IconName } from '../console/icons';
 import { ago, base, gist } from '../console/util';
-import { tr } from '../i18n';
+import { tr, trx } from '../i18n';
 import { noCardText, OUT_STATE, repoLine, runText } from './parts';
 
 const HEALTH: Record<Health, string> = { ok: tr('正常'), risk: tr('有风险'), blocked: tr('受阻') };
@@ -99,7 +99,8 @@ function Repo({ x, which, full }: { x: CardRepo | null; which: 'code' | 'paper';
 export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectCard; v: CanvasView; full?: boolean; onPick?: (id: string) => void }) {
   const k = infoKind(n), c = r.card, m = useContext(MoreCtx);
   if (k === 'card') { // what the project is, then how it stands; on the canvas the one list that matters most
-    const first = c && (c.need_you.length ? 'need' : c.blockers.length ? 'bad' : 'next');
+    const need = (r.decisions ?? []).map(d => trx(d.title));
+    const first = c && (need.length ? 'need' : c.blockers.length ? 'bad' : 'next');
     return (
       <>
         <p className={`ci-what${full ? '' : ' ci-clamp2'}`}>{r.line.title}</p>
@@ -109,7 +110,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
             {c.progress != null && (
               <div className="ci-prog"><div className="cg-bar"><i style={{ width: `${c.progress}%` }} /></div><small>{c.progress}%{c.milestone && ` · ${c.milestone}`}</small></div>
             )}
-            {(full || first === 'need') && <List title={tr('待你决定')} items={c.need_you} cls="warn" most={full ? 0 : 2} />}
+            {(full || first === 'need') && <List title={tr('待你决定')} items={need} cls="warn" most={full ? 0 : 2} />}
             {(full || first === 'bad') && <List title={tr('卡点和风险')} items={c.blockers} cls="bad" most={full ? 0 : 2} />}
             {(full || first === 'next') && <List title={tr('接下来')} items={c.next} most={full ? 0 : 2} />}
             {full && <List title={tr('最近完成')} items={c.done} />}

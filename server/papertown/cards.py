@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from .agents import AgentError
 from .db import now, read_json, write_json
+from .decisions import Decisions
 from .linked import _git
 from .workspace import list_files, repo_info
 
@@ -146,6 +147,7 @@ class Cards:
         self.s = town.s
         self._lock = threading.Lock()
         self._repos: dict[str, tuple[float, dict]] = {}
+        self.decisions = Decisions(town)
 
     def _path(self, line_id: str):
         return self.s.projects_dir / line_id / "card.json"
@@ -184,8 +186,16 @@ class Cards:
             "repos": self.repos(lid),
             "memory": self.town.history.counts(lid),
             "asks": len(self.town.leads.asks(lid)),
+            "decisions": self.decisions.gather(lid, card, d.get("decided") or []),
             "checks": self.town.checks.summary(lid),
         }
+
+    def decide(self, line_id: str, kind: str, id_: str, agent: str | None, value: object, text: str | None) -> dict:
+        """One of the card's decisions answered from the 进展 page; the card as it is now."""
+        if not self.db.one("select 1 from lines where id = ?", line_id):
+            raise CardError("没有这个项目")
+        self.decisions.decide(line_id, kind, id_, agent, value, text)
+        return self._publish(line_id)
 
     @staticmethod
     def _run(j: dict) -> dict:
@@ -280,11 +290,14 @@ class Cards:
             raise CardError("这个项目还没有负责人：先给它配一个")
         with self._lock:
             d = self._read(line_id)
-            msg = self.message(line_id, d.get("card"), note)
+            unsent = [x for x in d.get("decided") or [] if not x.get("sent")]
+            msg = self.message(line_id, d.get("card"), note, unsent)
             try:
                 self.town.agents.say(a["id"], msg, "queue", origin="papertown")
             except AgentError as e:
                 raise CardError(str(e)) from e
+            if unsent:
+                d["decided"] = [x | {"sent": True} for x in d.get("decided") or []]
             d["pending"] = {"at": now(), "note": " ".join(note.split())[:300]}
             self._write(line_id, d)
         return self._publish(line_id)
@@ -309,7 +322,7 @@ class Cards:
             self._write(line_id, d)
         return self._publish(line_id)
 
-    def message(self, line_id: str, card: dict | None, note: str = "") -> str:
+    def message(self, line_id: str, card: dict | None, note: str = "", decided: list[dict] | None = None) -> str:
         seq = self.db.val("select seq from lines where id = ?", line_id)
         out = ["<card>", f"用户请你更新项目 #{seq} 在「进展」页上的卡片。",
                "先弄清项目现在的样子（pt status，需要时 pt worker coder|writer、pt jobs），再按下面的字段写成一个 JSON，"
@@ -320,6 +333,9 @@ class Cards:
             out += [f"现在的卡片（{card.get('at', '')[:16].replace('T', ' ')} 写的），没变的可以照抄：", json.dumps(_content(card), ensure_ascii=False), ""]
         else:
             out += ["这个项目还没有卡片，这是第一次写。", ""]
+        if decided:  # made on the 进展 page while no lead was running to hear them
+            out += ["卡片上要用户决定的事，用户已经决定了，写卡片时从 need_you 去掉，之后的工作照这些决定安排：",
+                    *[f"- 「{x['item']}」：{x['choice']}" for x in decided], ""]
         if note.strip():
             out += [f"用户附言：{note.strip()}", ""]
         return "\n".join([*out, "</card>"])
@@ -344,7 +360,9 @@ class Cards:
             if not d.get("pending"):
                 raise CardError("现在没有人让你更新卡片：只在收到 <card> 消息时更新")
             card |= {"at": now(), "by": a.get("model") or "项目负责人"}
-            d |= {"prev": d.get("card"), "card": card, "pending": None}
+            d |= {"prev": d.get("card"), "card": card, "pending": None,
+                  # what you decided from the old card, while the new one still lists it unchanged
+                  "decided": [x for x in d.get("decided") or [] if x.get("item") in card.get("need_you", [])]}
             self._write(lid, d)
         self._publish(lid)
         return card
