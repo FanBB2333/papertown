@@ -1,9 +1,11 @@
+import Foundation
 import PapertownCore
 import SwiftUI
 
 /// One conversation: an agent of the town, the assistant, or a terminal the town watches. Messages, tool calls,
-/// questions and proposed actions in order; what waits for you (a permission, a dialog on the terminal's screen) above the
-/// composer; and for a terminal CLI its live screen with the keys it takes.
+/// questions and proposed actions in order, then what you sent from here until the conversation shows it, and what the
+/// agent is doing now; what waits for you (a permission, a dialog on the terminal's screen) above the composer. A terminal
+/// CLI also has its terminal tab: the same conversation as the CLI draws it, with the keys it takes.
 struct AgentChatView: View {
     let target: ChatTarget
     let role: String
@@ -22,14 +24,19 @@ struct AgentChatView: View {
     @EnvironmentObject private var store: TownStore
     @State private var draft = ""
     @State private var deliveryMode: DeliveryMode = .steer
-    @State private var isSending = false
-    @State private var sendError: String?
-    @State private var pendingUncertainText: String?
-    @State private var showUncertainAlert = false
-    @State private var showScreen = false
+    @State private var notice: String?
+    @State private var showTerminal = false
     @State private var busy = false
     @State private var showConversations = false
     @State private var showStart = false
+    @State private var modelChoice: ModelChoice?
+    @FocusState private var typing: Bool
+
+    private struct ModelChoice: Identifiable {
+        let model: String
+        let thinking: String
+        var id: String { model + "@" + thinking }
+    }
 
     private var state: ConversationState { store.conversation(target) }
 
@@ -42,7 +49,7 @@ struct AgentChatView: View {
         let lang = store.language
         VStack(spacing: 0) {
             if state.hasScreen {
-                Picker("", selection: $showScreen) {
+                Picker("", selection: $showTerminal) {
                     Text(lang.string("chat.view.chat")).tag(false)
                     Text(lang.string("chat.view.screen")).tag(true)
                 }
@@ -50,8 +57,8 @@ struct AgentChatView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
             }
-            if showScreen && state.hasScreen {
-                screenPane(lang)
+            if showTerminal && state.hasScreen {
+                TerminalPane(target: target)
             } else {
                 messages(lang)
             }
@@ -61,44 +68,56 @@ struct AgentChatView: View {
         .navigationTitle(title)
         .papertownInlineTitle()
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                VStack(spacing: 1) {
-                    Text(title).font(.headline).lineLimit(1)
-                    Text(subtitleLine(lang)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
+            ToolbarItem(placement: .principal) { titleMenu(lang) }
             if case .agent(let id) = target {
                 ToolbarItem(placement: .automatic) { moreMenu(id, lang) }
             }
             if state.isWorking || target.isAssistant {
-            ToolbarItem(placement: .primaryAction) {
-                HStack(spacing: 12) {
-                    if state.isWorking, case .agent(let id) = target {
-                        Button {
-                            Task {
-                                if state.agent?.term != nil {
-                                    await store.act(on: target) { try await $0.stopAgent(id) }
-                                } else {
-                                    await store.abortAgent(id)
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 12) {
+                        if state.isWorking, case .agent(let id) = target {
+                            Button {
+                                Task {
+                                    if state.agent?.term != nil {
+                                        await store.act(on: target) { try await $0.stopAgent(id) }
+                                    } else {
+                                        await store.abortAgent(id)
+                                    }
                                 }
+                            } label: {
+                                Image(systemName: "stop.circle").foregroundStyle(.red)
                             }
-                        } label: {
-                            Image(systemName: "stop.circle").foregroundStyle(.red)
+                            .accessibilityLabel(lang.string("chat.stop"))
                         }
-                        .accessibilityLabel(lang.string("chat.stop"))
-                    }
-                    if target.isAssistant {
-                        Button {
-                            Task { await store.act(on: target) { try await $0.assistantNew() } }
-                        } label: { Image(systemName: "square.and.pencil") }
-                        .accessibilityLabel(lang.string("chat.new_conversation"))
+                        if target.isAssistant {
+                            Button {
+                                Task { await store.act(on: target) { try await $0.assistantNew() } }
+                            } label: { Image(systemName: "square.and.pencil") }
+                            .accessibilityLabel(lang.string("chat.new_conversation"))
+                        }
                     }
                 }
             }
+            #if os(iOS)
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button { typing = false } label: { Image(systemName: "keyboard.chevron.compact.down") }
+                    .accessibilityLabel(lang.string("chat.hide_keyboard"))
             }
+            #endif
         }
-        .onAppear { store.setActiveChat(target) }
-        .onDisappear { store.setActiveChat(nil) }
+        .onAppear {
+            #if DEBUG
+            if UserDefaults.standard.string(forKey: "PTChatTab") == "terminal" { showTerminal = true }
+            #endif
+            store.chatShowsTerminal = showTerminal
+            store.setActiveChat(target)
+        }
+        .onDisappear { store.leaveChat(target) }
+        .onChange(of: showTerminal) { on in
+            store.chatShowsTerminal = on
+            if on { Task { await store.refreshChat(target) } }
+        }
         .sheet(isPresented: $showConversations) {
             if case .agent(let id) = target {
                 ConversationsSheet(agentID: id) { Task { await store.refreshChat(target) } }
@@ -118,38 +137,122 @@ struct AgentChatView: View {
                 .tint(store.appearance.tintColor)
         }
         .refreshable { await store.refreshChat(target) }
-        .alert(lang.string("chat.uncertain.title"), isPresented: $showUncertainAlert) {
-            Button(lang.string("chat.uncertain.refresh")) {
-                Task { await store.refreshChat(target) }
-            }
-            Button(lang.string("chat.uncertain.resend")) {
-                if let text = pendingUncertainText { Task { await send(text) } }
-            }
-            Button(lang.string("action.cancel"), role: .cancel) {}
-        } message: {
-            Text(lang.string("chat.uncertain.message"))
+        .alert(item: $modelChoice) { choice in
+            Alert(title: Text(lang.format("model.confirm.title", modelName(choice, lang))),
+                  message: Text(lang.string("model.confirm.message")),
+                  primaryButton: .default(Text(lang.string("model.confirm.switch"))) { Task { await switchModel(choice) } },
+                  secondaryButton: .cancel(Text(lang.string("action.cancel"))))
         }
     }
 
     private func subtitleLine(_ lang: AppLanguage) -> String {
         var parts = [subtitle]
         if let model = state.agent?.displayModel { parts.append(model) }
+        if let thinking = models?.current?.thinking, !thinking.isEmpty { parts.append(thinking) }
         if let term = state.agent?.term { parts.append(term.backend) }
         return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
+    // MARK: Model
+
+    private var agentID: String? {
+        if case .agent(let id) = target { return id }
+        return nil
+    }
+
+    private var models: AgentModels? { agentID.flatMap { store.agentModels[$0] } }
+
+    /// A terminal CLI that has started can be resumed on another model of the same CLI.
+    private var canSwitchModel: Bool {
+        models?.how == "resume" && state.agent?.started == true && !store.isDemo
+    }
+
+    @ViewBuilder
+    private func titleMenu(_ lang: AppLanguage) -> some View {
+        let label = VStack(spacing: 1) {
+            Text(title).font(.headline).foregroundStyle(.primary).lineLimit(1)
+            HStack(spacing: 3) {
+                Text(subtitleLine(lang)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                if canSwitchModel {
+                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
+                }
+            }
+        }
+        if canSwitchModel, let m = models {
+            Menu { modelMenu(m, lang) } label: { label }
+                .accessibilityLabel(lang.string("model.menu"))
+        } else {
+            label
+        }
+    }
+
+    @ViewBuilder
+    private func modelMenu(_ m: AgentModels, _ lang: AppLanguage) -> some View {
+        let cur = m.current
+        let working = state.isWorking || state.termStatus == "starting"
+        Section(lang.string(working ? "model.busy" : "model.header")) {
+            ForEach(m.models) { model in
+                let name = model.name ?? model.id
+                let levels = model.thinking ?? []
+                let on = cur?.model == model.id
+                if levels.count > 1 {
+                    Menu {
+                        ForEach(levels, id: \.self) { t in
+                            Button { modelChoice = ModelChoice(model: model.id, thinking: t) } label: {
+                                if on && cur?.thinking == t { Label(t, systemImage: "checkmark") } else { Text(t) }
+                            }
+                        }
+                    } label: {
+                        if on { Label(name, systemImage: "checkmark") } else { Text(name) }
+                    }
+                } else {
+                    Button { modelChoice = ModelChoice(model: model.id, thinking: "") } label: {
+                        if on { Label(name, systemImage: "checkmark") } else { Text(name) }
+                    }
+                }
+            }
+            Button { modelChoice = ModelChoice(model: "", thinking: "") } label: {
+                if cur?.model.isEmpty == true { Label(lang.string("model.cli_default"), systemImage: "checkmark") } else { Text(lang.string("model.cli_default")) }
+            }
+        }
+        .disabled(working)
+        if m.models.isEmpty {
+            Text(lang.string("model.no_list"))
+        }
+    }
+
+    private func modelName(_ c: ModelChoice, _ lang: AppLanguage) -> String {
+        let name = c.model.isEmpty ? lang.string("model.cli_default") : (models?.models.first { $0.id == c.model }?.name ?? c.model)
+        return c.thinking.isEmpty ? name : "\(name) · \(c.thinking)"
+    }
+
+    private func switchModel(_ c: ModelChoice) async {
+        guard let agentID else { return }
+        notice = nil
+        if let why = await store.switchModel(agentID: agentID, model: c.model, thinking: c.thinking) {
+            notice = why
+        }
+    }
+
     // MARK: Messages
+
+    /// What changes the end of the conversation, to keep it in view.
+    private var tailKey: String {
+        "\(state.entries.count)·\(state.pending.count)·\(state.entries.last?.text.count ?? 0)·\(state.isWorking)·\(state.screenTail.joined().count)"
+    }
 
     @ViewBuilder
     private func messages(_ lang: AppLanguage) -> some View {
-        if state.isLoading && state.entries.isEmpty {
+        let working = state.isWorking || state.termStatus == "starting"
+        if state.isLoading && state.entries.isEmpty && state.pending.isEmpty {
             Spacer()
             ProgressView()
             Spacer()
-        } else if state.entries.isEmpty {
+        } else if state.entries.isEmpty && state.pending.isEmpty && !working {
             Spacer()
             EmptyStateView(title: lang.string("chat.empty.title"), systemImage: "bubble.left.and.bubble.right",
                            description: state.error ?? state.transcriptNote.map(lang.server) ?? lang.string("chat.empty.desc"))
+                .onTapGesture { typing = false }
             Spacer()
         } else {
             ScrollViewReader { proxy in
@@ -162,18 +265,21 @@ struct AgentChatView: View {
                         ForEach(state.entries) { entry in
                             row(entry, lang).id(entry.id)
                         }
+                        ForEach(state.pending) { p in
+                            pendingRow(p, lang).id(p.id)
+                        }
+                        if working { activityRow(lang) }
+                        Color.clear.frame(height: 1).id("end")
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                 }
-                .onChange(of: state.entries.count) { _ in
-                    if let last = state.entries.last?.id {
-                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last, anchor: .bottom) }
-                    }
+                .scrollDismissesKeyboard(.interactively)
+                .simultaneousGesture(TapGesture().onEnded { typing = false })
+                .onChange(of: tailKey) { _ in
+                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("end", anchor: .bottom) }
                 }
-                .onAppear {
-                    if let last = state.entries.last?.id { proxy.scrollTo(last, anchor: .bottom) }
-                }
+                .onAppear { proxy.scrollTo("end", anchor: .bottom) }
             }
         }
     }
@@ -184,11 +290,7 @@ struct AgentChatView: View {
         case .user:
             HStack {
                 Spacer(minLength: 48)
-                Text(e.text)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .foregroundStyle(.white)
-                    .background(store.appearance.tintColor, in: RoundedRectangle(cornerRadius: 16))
+                userBubble(e.text)
             }
         case .assistant:
             HStack(alignment: .top, spacing: 8) {
@@ -208,7 +310,11 @@ struct AgentChatView: View {
                     Text(e.tool ?? e.text).font(.caption.weight(.medium))
                     if let arg = e.arg { Text(arg).font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1) }
                     Spacer()
-                    if let st = e.status { Image(systemName: Tone.symbol(st)).foregroundStyle(Tone.color(st)).imageScale(.small) }
+                    if e.status == "running" {
+                        ProgressView().controlSize(.mini)
+                    } else if let st = e.status {
+                        Image(systemName: Tone.symbol(st)).foregroundStyle(Tone.color(st)).imageScale(.small)
+                    }
                 }
             }
             .padding(.leading, 32)
@@ -228,6 +334,108 @@ struct AgentChatView: View {
         }
     }
 
+    private func userBubble(_ text: String, dim: Bool = false) -> some View {
+        Text(text)
+            .textSelection(.enabled)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .foregroundStyle(.white)
+            .background(store.appearance.tintColor.opacity(dim ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    /// A message sent from here: shown at once, with how far it got and what can be done when it did not get through.
+    private func pendingRow(_ p: PendingMessage, _ lang: AppLanguage) -> some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack {
+                Spacer(minLength: 48)
+                userBubble(p.text, dim: p.phase != .sent)
+            }
+            HStack(spacing: 6) {
+                switch p.phase {
+                case .sending:
+                    ProgressView().controlSize(.mini)
+                    Text(lang.string("chat.pending.sending"))
+                case .sent:
+                    Image(systemName: "checkmark")
+                    Text(lang.string(state.hasScreen ? "chat.pending.typed" : "chat.pending.sent"))
+                case .uncertain:
+                    Image(systemName: "questionmark.circle").foregroundStyle(.orange)
+                    Text(lang.string("chat.pending.uncertain"))
+                    Button(lang.string("chat.uncertain.refresh")) { Task { await store.refreshChat(target) } }
+                    Button(lang.string("chat.uncertain.resend")) { Task { await store.resendPending(p.id, in: target) } }
+                    Button(lang.string("action.delete"), role: .destructive) { store.dropPending(p.id, in: target) }
+                case .failed(let why):
+                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
+                    Text(why).foregroundStyle(.red).lineLimit(3)
+                    Button(lang.string("chat.uncertain.resend")) { Task { await store.resendPending(p.id, in: target) } }
+                    Button(lang.string("chat.pending.edit")) {
+                        draft = p.text
+                        store.dropPending(p.id, in: target)
+                        typing = true
+                    }
+                    Button(lang.string("action.delete"), role: .destructive) { store.dropPending(p.id, in: target) }
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .buttonStyle(.borderless)
+            .multilineTextAlignment(.trailing)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+    }
+
+    // MARK: Activity
+
+    /// While it works: what it is doing as its watch or its last tool says, for how long, and the CLI's own working line.
+    private func activityRow(_ lang: AppLanguage) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            RoleBadgeView(role: role, size: 24)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    TypingDots()
+                    Text(activityTitle(lang)).font(.footnote.weight(.medium)).lineLimit(2)
+                    if let since = turnStart {
+                        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                            Text(Self.elapsed(since, ctx.date)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                let tail = state.screenTail
+                if !tail.isEmpty {
+                    Text(tail.joined(separator: "\n"))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(4)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+            Spacer(minLength: 24)
+        }
+    }
+
+    private func activityTitle(_ lang: AppLanguage) -> String {
+        if state.termStatus == "starting" { return lang.string("chat.activity.starting") }
+        if let doing = state.agent?.watch?.doing?.text, !doing.isEmpty { return lang.format("chat.activity.doing", lang.server(doing)) }
+        if let tool = state.entries.last(where: { $0.kind == .tool }), tool.status == "running" {
+            return lang.format("chat.activity.doing", [tool.tool ?? tool.text, tool.arg ?? ""].filter { !$0.isEmpty }.joined(separator: " "))
+        }
+        return lang.string("chat.activity.thinking")
+    }
+
+    private var turnStart: Date? {
+        guard let s = state.agent?.watch?.turn ?? state.agent?.term?.since else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = f.date(from: s) { return d }
+        f.formatOptions = [.withInternetDateTime]
+        return f.date(from: s)
+    }
+
+    static func elapsed(_ since: Date, _ now: Date) -> String {
+        let s = max(0, Int(now.timeIntervalSince(since)))
+        return s < 60 ? "\(s)s" : s < 3600 ? String(format: "%dm %02ds", s / 60, s % 60) : String(format: "%dh %02dm", s / 3600, s % 3600 / 60)
+    }
+
     private func markdown(_ s: String) -> AttributedString {
         (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
     }
@@ -239,7 +447,7 @@ struct AgentChatView: View {
             Text(lang.server(e.text)).font(.subheadline)
             if e.open && !e.choices.isEmpty {
                 FlowButtons(labels: e.choices.map(lang.server)) { i in
-                    Task { await send(e.choices[i]) }
+                    Task { await store.sendMessage(e.choices[i], to: target, mode: nil) }
                 }
             }
         }
@@ -277,53 +485,22 @@ struct AgentChatView: View {
         .background(Color.purple.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    // MARK: Screen
-
-    private static let keyRow: [(label: String, key: String)] = [("Enter", "enter"), ("Esc", "esc"), ("↑", "up"), ("↓", "down"),
-                                                                ("Tab", "tab"), ("⌃C", "ctrl+c")]
-
-    private func screenPane(_ lang: AppLanguage) -> some View {
-        VStack(spacing: 8) {
-            ScrollView([.vertical, .horizontal]) {
-                Text(state.screen ?? "")
-                    .font(.system(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .background(Color.black.opacity(store.appearance == .dark ? 0.35 : 0.04))
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(Self.keyRow, id: \.key) { k in
-                        Button(k.label) { Task { await pressKeys([k.key]) } }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                    }
-                }
-                .padding(.horizontal, 14)
-            }
-        }
-    }
-
-    private func pressKeys(_ keys: [String]) async {
-        await store.act(on: target) { client in
-            switch target {
-            case .agent(let id): try await client.keys(agentID: id, keys)
-            case .terminal(let id): try await client.terminalKeys(id: id, keys)
-            }
-        }
-    }
-
     // MARK: Composer
 
     @ViewBuilder
     private func composer(_ lang: AppLanguage) -> some View {
         VStack(spacing: 8) {
             if let prompt = state.prompt { promptCard(prompt, lang) }
+            if state.heldByScreen && !showTerminal { heldCard(lang) }
             ForEach(state.permissions) { perm in permissionCard(perm, lang) }
             if !state.queued.isEmpty { queuedBar(lang) }
-            if let sendError {
-                Text(sendError).font(.caption).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading)
+            if let notice {
+                HStack(alignment: .top) {
+                    Text(notice).font(.caption).foregroundStyle(.red)
+                    Spacer()
+                    Button { self.notice = nil } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.borderless).font(.caption)
+                }
             }
             if state.isOffline, case .agent(let id) = target, state.agent != nil {
                 offlineBar(agentID: id, lang)
@@ -343,16 +520,13 @@ struct AgentChatView: View {
                     TextField(placeholder(lang), text: $draft, axis: .vertical)
                         .lineLimit(1...6)
                         .textFieldStyle(.plain)
+                        .focused($typing)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 18))
-                    Button {
-                        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !text.isEmpty else { return }
-                        Task { await send(text) }
-                    } label: {
-                        if isSending { ProgressView() } else { Image(systemName: "arrow.up.circle.fill").font(.system(size: 30)) }
+                    Button(action: send) {
+                        Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
                     }
-                    .disabled(isSending || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!canSend)
                     .accessibilityLabel(lang.string("action.send"))
                 }
                 if state.isWorking {
@@ -365,6 +539,27 @@ struct AgentChatView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.bar)
+    }
+
+    /// A screen on the terminal Papertown cannot answer for you: typed text would go into it, so sending waits.
+    private func heldCard(_ lang: AppLanguage) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(lang.string("chat.held.title"), systemImage: "exclamationmark.bubble.fill")
+                .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+            Text(lang.string("chat.held.desc")).font(.footnote).foregroundStyle(.secondary)
+            let peek = (state.screen ?? "").split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.suffix(5)
+            if !peek.isEmpty { MonoBlock(text: peek.joined(separator: "\n"), maxHeight: 90) }
+            Button(lang.string("chat.held.open")) { showTerminal = true }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var canSend: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !(state.heldByScreen && !(state.isWorking && deliveryMode == .queue))
     }
 
     /// What else there is to do with this member: its conversations, the brief, its terminal, how it starts.
@@ -408,6 +603,7 @@ struct AgentChatView: View {
     }
 
     private func placeholder(_ lang: AppLanguage) -> String {
+        if state.heldByScreen { return lang.string("chat.placeholder.held") }
         if state.isWorking { return TextFormatters.deliveryModePlaceholder(deliveryMode, language: lang) }
         return lang.format("chat.placeholder.idle", title)
     }
@@ -518,20 +714,32 @@ struct AgentChatView: View {
         }
     }
 
-    private func send(_ text: String) async {
-        isSending = true
-        sendError = nil
+    /// The draft leaves the box at once and shows as yours while it is on its way; the box stays free for the next one.
+    private func send() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
         let mode: DeliveryMode? = state.isWorking ? deliveryMode : nil
-        switch await store.sendMessage(text, to: target, mode: mode) {
-        case .sent:
-            if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text { draft = "" }
-        case .uncertainNetworkDrop:
-            pendingUncertainText = text
-            showUncertainAlert = true
-        case .failed(let message):
-            sendError = message
+        draft = ""
+        notice = nil
+        Task { await store.sendMessage(text, to: target, mode: mode) }
+    }
+}
+
+/// Three dots that pulse while an agent works.
+private struct TypingDots: View {
+    @State private var on = false
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3) { i in
+                Circle()
+                    .frame(width: 5, height: 5)
+                    .opacity(on ? 1 : 0.25)
+                    .animation(.easeInOut(duration: 0.6).repeatForever().delay(Double(i) * 0.2), value: on)
+            }
         }
-        isSending = false
+        .foregroundStyle(.secondary)
+        .onAppear { on = true }
     }
 }
 

@@ -38,6 +38,34 @@ public struct QueuedMessage: Identifiable, Equatable, Sendable {
     public let text: String
 }
 
+/// A message you sent from this device, shown at once and kept until the conversation itself shows it.
+public struct PendingMessage: Identifiable, Equatable, Sendable {
+    public enum Phase: Equatable, Sendable {
+        case sending
+        /// The server took it; the conversation has not shown it yet (a terminal CLI logs it when its turn starts).
+        case sent
+        /// The connection dropped before the answer: it may or may not have arrived.
+        case uncertain
+        case failed(String)
+    }
+    public let id: String
+    public let text: String
+    public let mode: DeliveryMode?
+    public var phase: Phase
+    /// How many of your messages with this text the conversation held when it was sent.
+    let had: Int
+    let at: Date
+
+    init(text: String, mode: DeliveryMode?, had: Int) {
+        id = UUID().uuidString
+        self.text = text
+        self.mode = mode
+        phase = .sending
+        self.had = had
+        at = Date()
+    }
+}
+
 public struct ConversationState: Sendable {
     public var agent: StaffAgent?
     public var terminal: TerminalInfo?
@@ -47,6 +75,7 @@ public struct ConversationState: Sendable {
     public var screen: String?
     public var prompt: TermPrompt?
     public var transcriptNote: String?
+    public var pending: [PendingMessage] = []
     public var isLoading = false
     public var error: String?
     /// pi agents: the last event read, so a refresh only asks for what came after it.
@@ -54,6 +83,37 @@ public struct ConversationState: Sendable {
     var events: [AgentEvent] = []
 
     public var hasScreen: Bool { agent?.term != nil || terminal != nil }
+
+    /// The terminal's status: working, starting, blocked, idle, done or exited.
+    public var termStatus: String? { agent?.term?.status ?? (terminal?.watch?.bucket == "needs" ? "blocked" : nil) }
+
+    /// A screen holds the terminal that Papertown cannot answer for you (a hook review, a menu): typing would go into it.
+    public var heldByScreen: Bool { termStatus == "blocked" && prompt == nil && (agent?.watch?.permissions ?? []).isEmpty }
+
+    /// The last lines of the terminal above its input box: the CLI's own account of what it is doing.
+    public var screenTail: [String] {
+        guard let screen else { return [] }
+        let lines = screen.split(separator: "\n", omittingEmptySubsequences: false).map { String($0) }
+        // Claude Code and Codex end their working line with "esc to interrupt"; the lines above it are the latest output
+        if let i = lines.lastIndex(where: { $0.contains("esc to interrupt") || $0.contains("Esc to interrupt") }) {
+            let shown = lines[max(0, i - 3)...i].map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            return Array(shown.suffix(3))
+        }
+        return []
+    }
+
+    /// Your messages with this text the conversation shows.
+    func seen(_ text: String) -> Int {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return entries.filter { $0.kind == .user && $0.text.contains(t) }.count
+    }
+
+    /// Sent messages the conversation now shows, or that it has not shown for ten minutes, are let go.
+    mutating func settlePending() {
+        let now = Date()
+        let kept = pending.filter { p in !(p.phase == .sent && (seen(p.text) > p.had || now.timeIntervalSince(p.at) > 600)) }
+        pending = kept
+    }
 
     public var isWorking: Bool {
         if let t = agent?.term { return t.status == "working" || t.status == "starting" }

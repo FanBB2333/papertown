@@ -4,6 +4,9 @@ import SwiftUI
 public struct PapertownRootView: View {
     @StateObject private var store: TownStore
     @Environment(\.scenePhase) private var scenePhase
+    #if DEBUG
+    @State private var debugChat = false
+    #endif
 
     public init(store: TownStore? = nil) {
         _store = StateObject(wrappedValue: store ?? TownStore())
@@ -26,6 +29,20 @@ public struct PapertownRootView: View {
             .onChange(of: scenePhase) { newPhase in
                 store.handleScenePhase(newPhase)
             }
+            #if DEBUG
+            // -PTChat <agent id> [-PTChatTab terminal]: opens that conversation once connected, for screenshots
+            .sheet(isPresented: $debugChat) {
+                if let id = UserDefaults.standard.string(forKey: "PTChat") {
+                    NavigationStack { AgentChatView(agentID: id, role: id.components(separatedBy: "-").first ?? "coder", subtitle: "") }
+                        .environmentObject(store)
+                        .environment(\.locale, store.language.locale)
+                        .tint(store.appearance.tintColor)
+                }
+            }
+            .onChange(of: store.connectionStatus) { status in
+                if status == .connected, UserDefaults.standard.string(forKey: "PTChat") != nil { debugChat = true }
+            }
+            #endif
             .sheet(isPresented: $store.showConnectSheet, onDismiss: {
                 store.editingProfile = nil
             }) {

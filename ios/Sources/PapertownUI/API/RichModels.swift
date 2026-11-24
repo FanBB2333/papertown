@@ -751,6 +751,19 @@ public struct AgentTimeline: Decodable, Sendable {
     public let transcript: TranscriptState?
 }
 
+/// GET /api/agents/{id}/models: the model the conversation is on and the ones it can switch to. `how` is "resume" for a
+/// terminal CLI (closed and resumed on its session) and "none" where switching is not offered.
+public struct AgentModels: Decodable, Sendable, Equatable {
+    public struct Current: Decodable, Sendable, Equatable {
+        public let provider: String
+        public let model: String
+        public let thinking: String
+    }
+    public let how: String
+    public let current: Current?
+    public let models: [PaseoModel]
+}
+
 public struct AgentScreen: Decodable, Sendable {
     public let text: String
     public let term: AgentTermInfo?

@@ -89,6 +89,15 @@ public extension PapertownClient {
         let _: Ack = try await send(.post, ["agents", agentID, "prompt"], body: Body(digest: digest, option: option))
     }
 
+    /// What the conversation open now can switch to: a terminal CLI resumes its session on another model of the same CLI.
+    func agentModels(agentID: String) async throws -> AgentModels { try await get(["agents", agentID, "models"]) }
+
+    /// An empty model or thinking leaves the choice to the CLI.
+    func switchModel(agentID: String, model: String, thinking: String) async throws {
+        struct Body: Encodable { let model: String; let thinking: String }
+        let _: Ack = try await send(.post, ["agents", agentID, "model"], body: Body(model: model, thinking: thinking))
+    }
+
     func startAgent(_ agentID: String) async throws { let _: Ack = try await send(.post, ["agents", agentID, "start"], body: Empty()) }
     func stopAgent(_ agentID: String) async throws { let _: Ack = try await send(.post, ["agents", agentID, "stop"], body: Empty()) }
 

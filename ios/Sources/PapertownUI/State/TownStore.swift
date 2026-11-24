@@ -89,6 +89,16 @@ public final class TownStore: ObservableObject {
     private var sseTask: Task<Void, Never>?
     private var refreshDebounceTask: Task<Void, Never>?
     private var activeChat: ChatTarget?
+    /// The open conversation is read again while it is open: every two seconds while it works, waits on you, has a
+    /// message on its way or shows its terminal, every eight otherwise. Bus events read it sooner.
+    private var chatPoll: Task<Void, Never>?
+    /// Conversations being read now, and those asked for again meanwhile: one read at a time per conversation.
+    private var chatReading: Set<String> = []
+    private var chatAgain: Set<String> = []
+    /// The open conversation shows its terminal tab, so its screen is read every time.
+    public var chatShowsTerminal = false
+    /// What each agent's conversation can switch its model to, read when its page opens.
+    @Published public var agentModels: [String: AgentModels] = [:]
 
     public init(profileStore: ProfileStore = ProfileStore()) {
         self.profileStore = profileStore
@@ -656,11 +666,33 @@ public final class TownStore: ObservableObject {
 
     public func setActiveChat(_ target: ChatTarget?) {
         activeChat = target
-        guard let target else { return }
-        Task {
-            await refreshChat(target)
-            await markSeen(target)
+        chatPoll?.cancel()
+        chatPoll = nil
+        guard let target else {
+            chatShowsTerminal = false
+            return
         }
+        chatPoll = Task { [weak self] in
+            await self?.refreshChat(target)
+            await self?.markSeen(target)
+            if case .agent(let id) = target { await self?.loadModels(agentID: id) }
+            while !Task.isCancelled {
+                let fast = self?.chatIsLive(target) ?? false
+                try? await Task.sleep(nanoseconds: fast ? 2_000_000_000 : 8_000_000_000)
+                guard !Task.isCancelled, let self, self.activeChat == target else { return }
+                await self.refreshChat(target)
+            }
+        }
+    }
+
+    /// A page closing: the next page may have opened its conversation already.
+    public func leaveChat(_ target: ChatTarget) {
+        if activeChat == target { setActiveChat(nil) }
+    }
+
+    private func chatIsLive(_ target: ChatTarget) -> Bool {
+        let s = conversation(target)
+        return chatShowsTerminal || s.isWorking || !s.pending.isEmpty || ["blocked", "starting"].contains(s.termStatus ?? "")
     }
 
     private func markSeen(_ target: ChatTarget) async {
@@ -678,6 +710,20 @@ public final class TownStore: ObservableObject {
     /// Reads a conversation again: pi agents incrementally from their events, Paseo and terminal agents from their
     /// timeline (and screen), watched terminals from theirs.
     public func refreshChat(_ target: ChatTarget) async {
+        let key = target.key
+        if chatReading.contains(key) {
+            chatAgain.insert(key)
+            return
+        }
+        chatReading.insert(key)
+        repeat {
+            chatAgain.remove(key)
+            await readChat(target)
+        } while chatAgain.contains(key)
+        chatReading.remove(key)
+    }
+
+    private func readChat(_ target: ChatTarget) async {
         guard let client else { return }
         var state = conversations[target.key] ?? ConversationState()
         if state.entries.isEmpty && state.agent == nil && state.terminal == nil {
@@ -712,10 +758,15 @@ public final class TownStore: ObservableObject {
                         state.queued = (tl.queued ?? []).map { QueuedMessage(id: $0.id, text: $0.data.field("text")?.stringValue ?? "") }
                         state.permissions = tl.agent.watch?.permissions ?? tl.paseo?.permissions ?? []
                         state.transcriptNote = tl.transcript?.ok == false ? tl.transcript?.note : nil
-                        if tl.agent.term != nil {
-                            let screen = try? await client.screen(agentID: id)
-                            state.screen = screen?.text
-                            state.prompt = screen?.prompt
+                        if let term = tl.agent.term {
+                            // the screen (with its scrollback) is read while it shows, works or waits on a dialog
+                            if (activeChat == target && chatShowsTerminal) || ["working", "starting", "blocked"].contains(term.status) {
+                                let screen = try? await client.screen(agentID: id)
+                                state.screen = screen?.text ?? state.screen
+                                state.prompt = screen?.prompt
+                            } else {
+                                state.prompt = nil
+                            }
                         } else {
                             state.screen = nil
                             state.prompt = nil
@@ -757,36 +808,100 @@ public final class TownStore: ObservableObject {
             state.error = message(for: error)
             if isUnauthorized(error) { handleError(error) }
         }
+        // messages sent while this was read are kept, and those the conversation now shows are let go
+        state.pending = conversations[target.key]?.pending ?? []
+        state.settlePending()
         conversations[target.key] = state
     }
 
-    public enum SendOutcome {
-        case sent
-        case uncertainNetworkDrop
-        case failed(String)
+    /// Sends a message: it shows at once as yours, and stays until the conversation itself shows it.
+    public func sendMessage(_ text: String, to target: ChatTarget, mode: DeliveryMode?) async {
+        var state = conversation(target)
+        let pending = PendingMessage(text: text, mode: mode, had: state.seen(text))
+        state.pending.append(pending)
+        conversations[target.key] = state
+        await deliver(pending, to: target)
     }
 
-    public func sendMessage(_ text: String, to target: ChatTarget, mode: DeliveryMode?) async -> SendOutcome {
-        guard let client else { return .failed(message(for: ClientError.invalidAddress)) }
+    private func deliver(_ p: PendingMessage, to target: ChatTarget) async {
+        guard let client else {
+            setPending(p.id, in: target, .failed(message(for: ClientError.invalidAddress)))
+            return
+        }
         do {
             switch target {
-            case .agent(let id) where target.isAssistant && mode == nil:
-                try await client.assistantSay(text)
-                _ = id
+            case .agent where target.isAssistant && p.mode == nil:
+                try await client.assistantSay(p.text)
             case .agent(let id):
-                try await client.say(text, to: id, mode: mode)
+                try await client.say(p.text, to: id, mode: p.mode)
             case .terminal(let id):
-                try await client.terminalSay(text, to: id, mode: mode)
+                try await client.terminalSay(p.text, to: id, mode: p.mode)
             }
-            await refreshChat(target)
+            setPending(p.id, in: target, .sent)
             await markSeen(target)
-            return .sent
+            await refreshChat(target)
         } catch let urlError as URLError where [.networkConnectionLost, .timedOut].contains(urlError.code) {
-            return .uncertainNetworkDrop
+            setPending(p.id, in: target, .uncertain)
         } catch {
             if isUnauthorized(error) { handleError(error) }
-            return .failed(message(for: error))
+            setPending(p.id, in: target, .failed(message(for: error)))
         }
+    }
+
+    private func setPending(_ id: String, in target: ChatTarget, _ phase: PendingMessage.Phase) {
+        guard var state = conversations[target.key], let i = state.pending.firstIndex(where: { $0.id == id }) else { return }
+        state.pending[i].phase = phase
+        conversations[target.key] = state
+    }
+
+    /// A message that failed or may not have arrived, sent again.
+    public func resendPending(_ id: String, in target: ChatTarget) async {
+        guard var state = conversations[target.key], let i = state.pending.firstIndex(where: { $0.id == id }) else { return }
+        let old = state.pending.remove(at: i)
+        conversations[target.key] = state
+        await sendMessage(old.text, to: target, mode: old.mode)
+    }
+
+    public func dropPending(_ id: String, in target: ChatTarget) {
+        conversations[target.key]?.pending.removeAll { $0.id == id }
+    }
+
+    /// Keys typed into a conversation's terminal; the message why not, when they could not be.
+    public func pressKeys(_ keys: [String], on target: ChatTarget) async -> String? {
+        guard let client else { return message(for: ClientError.invalidAddress) }
+        do {
+            switch target {
+            case .agent(let id): try await client.keys(agentID: id, keys)
+            case .terminal(let id): try await client.terminalKeys(id: id, keys)
+            }
+        } catch {
+            if isUnauthorized(error) { handleError(error) }
+            return message(for: error)
+        }
+        try? await Task.sleep(nanoseconds: 250_000_000)  // let the screen redraw
+        await refreshChat(target)
+        return nil
+    }
+
+    // MARK: - Models
+
+    public func loadModels(agentID: String) async {
+        guard let client, !isDemo else { return }
+        if let m = try? await client.agentModels(agentID: agentID) { agentModels[agentID] = m }
+    }
+
+    /// Resumes a terminal agent's conversation on another model; the message why not, when it cannot.
+    public func switchModel(agentID: String, model: String, thinking: String) async -> String? {
+        guard let client else { return message(for: ClientError.invalidAddress) }
+        do {
+            try await client.switchModel(agentID: agentID, model: model, thinking: thinking)
+        } catch {
+            if isUnauthorized(error) { handleError(error) }
+            return message(for: error)
+        }
+        await refreshChat(.agent(agentID))
+        await loadModels(agentID: agentID)
+        return nil
     }
 
     /// Runs an action on a conversation (stop, queue, keys, prompt answers) and reads it again.
