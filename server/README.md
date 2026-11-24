@@ -1,6 +1,6 @@
 # Papertown server
 
-运行方式和环境变量见仓库根目录的 README。这里说明代码怎么分层。
+运行方式和配置文件 `papertown.toml` 见仓库根目录的 README。这里说明代码怎么分层。
 
 ```
 papertown/
@@ -32,12 +32,13 @@ scripts/         维护脚本（刷新种子论文）
 tests/           pytest，离线运行
 ```
 
-数据默认写在 `server/var/`（SQLite 数据库和印刷厂产物），可以用 `PAPERTOWN_DATA_DIR` 改位置。删掉这个目录就是重新开局；重启时正在跑的流水线会被标记为暂停，可以在界面上继续。
+数据默认写在 `server/var/`（SQLite 数据库和印刷厂产物），位置由 `papertown.toml` 的 `[server] data_dir` 决定。删掉这个目录就是重新开局。重启时正在跑的流水线会被标记为暂停，可以在界面上继续。
 
 常用命令：
 
 ```bash
-uv run papertown serve [--port 8000]
+uv run papertown serve [--host H] [--port P]   # 不写时用 papertown.toml 的 [server]，默认 127.0.0.1:31640
+uv run papertown config show                   # 每项设置现在的值（config path：读的哪个文件）
 uv run papertown ingest "vision language action" "scene graph planning" [--max 50] [--refs]
 uv run papertown skills
 uv run papertown demo "<idea>"

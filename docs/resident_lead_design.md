@@ -44,10 +44,10 @@ Papertown 原来有两套 agent。一套是员工（项目负责人、代码员�
 `leads.py` 里每个项目多一项设置 `on`，存在 `data/projects/<项目>/lead.json`。没有选过时的默认值：在做的项目为开，样例项目和已结束的项目为关。
 
 - `Leads.ensure(line_id)`：项目在做、开关为开、负责人没有会话时，用默认运行方式（设置页里选的 Paseo、herdr 或 tmux）和负责人的默认模型启动它，第一条消息是项目简报。启动失败时记下原因，60 秒后再试。
-- 触发时机有三处：小镇启动后巡检线程的第一轮和之后的每个 `PAPERTOWN_LEAD_TICK`，新建项目时（`Pipeline.create` 调 `Leads.wake`），开关打开时。开关已经开着而负责人受阻时，再打开一次（界面上的「重试」）会清掉 60 秒的等待并立即再试。
+- 触发时机有三处：小镇启动后巡检线程的第一轮和之后的每个 `lead_tick`（`papertown.toml` 的 `[agents]`），新建项目时（`Pipeline.create` 调 `Leads.wake`），开关打开时。开关已经开着而负责人受阻时，再打开一次（界面上的「重试」）会清掉 60 秒的等待并立即再试。
 - 开关关掉：终端里的负责人关闭终端，Paseo 里的负责人打断当前这一轮，会话保留。关着的时候不再发巡检消息。再打开时接着原来的会话。
 - `Leads.resident(line_id)` 给界面用：`{on, state, note, agent, runtime, status}`。`state` 取 `running`、`starting`、`blocked`（应该在跑而没跑起来，`note` 写原因，例如 Paseo 没在运行、本机没有找到 CLI）、`off`、`ended`（项目已结束）。
-- `PAPERTOWN_LEAD_RESIDENT=0` 关掉整个小镇的自动启动，测试和排查时用。巡检、新建项目和开关三处都遵守它，此时仍可在对话里手动启动。
+- `[agents] lead_resident = false` 关掉整个小镇的自动启动，测试和排查时用。巡检、新建项目和开关三处都遵守它，此时仍可在对话里手动启动。
 
 Papertown 不启动也不停止 Paseo 和 herdr 的守护进程。它们没在运行时，负责人的状态是 `blocked`，界面上写出原因。
 
@@ -57,7 +57,7 @@ Papertown 不启动也不停止 Paseo 和 herdr 的守护进程。它们没在�
 
 | 命令 | 接口（`/api/bridge/{agent}` 之下） | 作用 |
 | --- | --- | --- |
-| `pt hire coder\|writer [--runtime R] [--cli C] [--model M] [--thinking T]` | `POST /hire` | 启动代码员工或写作员工。不写参数时用默认运行方式和员工的默认模型（`PAPERTOWN_WORKER_MODEL`，没设时跟负责人的默认模型） |
+| `pt hire coder\|writer [--runtime R] [--cli C] [--model M] [--thinking T]` | `POST /hire` | 启动代码员工或写作员工。不写参数时用默认运行方式和员工的默认模型（`[agents] worker_model`，没设时跟负责人的默认模型） |
 | `pt stage` | `GET /stage` | 八道工序的状态、归谁做、产出交没交、哪道硬卡口在阻断，以及各工序产出的格式 |
 | `pt stage run\|done\|todo <工序> ["说明"] [--pct N]` | `POST /stage` | 开工或写进度、收尾、放回去重做 |
 | `pt output <工序> '<JSON>'\|@文件` | `POST /output` | 交一道工序的产出（`hatch`、`method`、`exp`、`write`、`review`）。员工也能交自己那道工序的 |
@@ -116,7 +116,7 @@ Resident { on, state, note, agent, runtime, status }       # Line.lead
 
 样例不再靠执行器跑出来。`samples.seed()` 直接写入预制的状态（`papertown/data/samples.json`）：五个项目停在不同的工序，各有工序产出、论文源码和一段占位的负责人对话。样例标着 `sample`，界面上带「样例」标签，负责人的开关默认关着，打开后就是一个普通项目，由真的负责人接着做。
 
-样例随时可以放入，不再限于离线模式。空的小镇第一次启动时仍会自动放入（`PAPERTOWN_SAMPLES=0` 关闭）。
+样例随时可以放入，不再限于离线模式。空的小镇第一次启动时仍会自动放入（`[server] samples = false` 关闭）。
 
 ## 10. 验证
 

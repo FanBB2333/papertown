@@ -101,10 +101,10 @@ web/      前端：React + Vite，复用 design/src 的地图渲染
 ```bash
 cd server
 uv sync
-uv run papertown serve            # http://127.0.0.1:8000
+uv run papertown serve            # http://127.0.0.1:31640
 ```
 
-前端开发（另开一个终端，/api 会代理到 8000）：
+前端开发（另开一个终端，/api 会代理到 `papertown.toml` 里设的端口，默认 31640）：
 
 ```bash
 cd web
@@ -116,11 +116,11 @@ pnpm dev                          # http://127.0.0.1:5173
 
 ### 访问与登录
 
-`papertown serve` 默认只在 `127.0.0.1` 上监听。从本机直接打开（请求来自回环地址、没有经过代理）时，首页直接提供「进入」。要用手机或别的电脑打开，先让它能从网络上访问（比如 `tailscale serve 8000`），再在本机的首页或「设置 › 访问与登录」里设一个访问密码（至少 6 位）。别的设备打开首页时输入这个密码登录，登录保持 30 天。第一次设密码和取消密码都只能在本机做。从别的设备改密码要输入原来的密码。连续输错 5 次要等一分钟。设置页里可以让所有设备重新登录。
+`papertown serve` 默认只在 `127.0.0.1:31640` 上监听。从本机直接打开（请求来自回环地址、没有经过代理）时，首页直接提供「进入」。要用手机或别的电脑打开，先让它能从网络上访问，有两种做法：在信任的网络里把 `papertown.toml` 的 `[server] host` 改为 `"0.0.0.0"`（也可以在「设置 › 网络与安全」里把监听地址改为所有网络），然后重启服务。或者保持 `127.0.0.1`，在前面加一层 `tailscale serve 31640` 之类的 HTTPS 转发。别的设备默认可以从局域网和 Tailscale 来，范围由 `[network] sources` 决定，同样能在「网络与安全」里改。再在本机的首页或「设置 › 访问与登录」里设一个访问密码（至少 6 位）。别的设备打开首页时输入这个密码登录，登录保持的天数由 `[network] days` 决定（默认 30 天）。第一次设密码和取消密码都只能在本机做。从别的设备改密码要输入原来的密码。连续输错 5 次要等一分钟。设置页里可以让所有设备重新登录。
 
 密码只存 scrypt 哈希，登录用一个 HttpOnly 的 cookie（`pt_session`，经 https 打开时加 `Secure`），都在数据目录的 `auth.json` 里，不进 git。没登录时 `/api/*` 一律回 401（`/api/auth/`、`/api/health` 和员工用的 `/api/bridge/` 除外），前端会回到首页登录，登录后回到原来的地址。接口：`GET /api/auth/state`、`POST /api/auth/login`、`POST /api/auth/logout`、`POST /api/auth/logout-all`、`POST /api/auth/password`（设置或修改）、`DELETE /api/auth/password`。
 
-iPhone 和 Mac App、脚本用**访问密钥**连接：每个设备一个，在服务器上运行 `uv run papertown key create --name iPhone`（`server/` 里），或在「设置 › 访问与登录」里新建。密钥只在新建时显示一次，`auth.json` 里只存它的哈希。App 里填服务器地址和密钥，之后每个请求（包括实时通道 `/api/events`）都带 `Authorization: Bearer <密钥>`。`papertown key list` 列出密钥和最近使用时间，`papertown key revoke <id>` 撤销其中一个，只影响用它的那台设备。新建和撤销只能在本机或用密码登录的浏览器里做，密钥本身没有这个权限。取消访问密码时密钥保留。`GET /api/health` 不需要登录，回复里的 `"app": "papertown"` 让 App 先确认地址上是 Papertown。接口：`GET /api/auth/keys`、`POST /api/auth/keys`、`DELETE /api/auth/keys/<id>`。
+iPhone 和 Mac App、脚本用**访问密钥**连接：每个设备一个，在服务器上运行 `uv run papertown key create --name iPhone`（`server/` 里），或在「设置 › 访问与登录」里新建。密钥只在新建时显示一次，`auth.json` 里只存它的哈希。App 里添加服务器，填地址（如 `http://<Tailscale 或局域网 IP>:31640`，或 `tailscale serve` 给的地址）和密钥，之后每个请求（包括实时通道 `/api/events`）都带 `Authorization: Bearer <密钥>`。`papertown key list` 列出密钥和最近使用时间，`papertown key revoke <id>` 撤销其中一个，只影响用它的那台设备。新建和撤销只能在本机或用密码登录的浏览器里做，密钥本身没有这个权限。取消访问密码时密钥保留。`GET /api/health` 不需要登录，回复里的 `"app": "papertown"` 让 App 先确认地址上是 Papertown。接口：`GET /api/auth/keys`、`POST /api/auth/keys`、`DELETE /api/auth/keys/<id>`。
 
 ### 终端界面（TUI）
 
@@ -128,8 +128,8 @@ iPhone 和 Mac App、脚本用**访问密钥**连接：每个设备一个，在�
 
 ```bash
 cd server
-uv run papertown                  # 连 http://127.0.0.1:8000，没有服务就自己起一个，退出时停掉
-uv run papertown tui --server http://127.0.0.1:8001 --no-start   # 只连已有的服务（也可以设 PAPERTOWN_URL）
+uv run papertown                  # 连 papertown.toml 里的服务（默认 http://127.0.0.1:31640），没有服务就自己起一个，退出时停掉
+uv run papertown tui --server http://127.0.0.1:<端口> --no-start   # 只连已有的服务
 ```
 
 左边 1–7 是七处地方：
@@ -150,7 +150,7 @@ uv run papertown tui --server http://127.0.0.1:8001 --no-start   # 只连已有�
 
 `T` 打开外观：界面的深色 / 纸色、编辑器配色（纸墨、经典浅色 / 深色、One Dark、Monokai、Solarized 浅色 / 深色、Nord，和网页同一套）、文件图标（色点、字标、徽章、无）。↑↓ 当场试，Enter 用，Esc 换回原样。选择和专注模式记在数据目录的 `tui.json` 里。
 
-小镇自己的数据（项目、员工、消息、农场的任务）走服务的 API。命令行工具能直接看到的数据由 TUI 自己去读，和服务读的方式一样，所以要和服务用同样的 `PAPERTOWN_NVIDB_BIN`、`PAPERTOWN_SKIM_BIN` 等设置：
+小镇自己的数据（项目、员工、消息、农场的任务）走服务的 API。命令行工具能直接看到的数据由 TUI 自己去读，和服务读的方式一样。TUI 和服务读同一个 `papertown.toml`，nvidb、skim 的路径等设置自然一致（用环境变量覆盖时两边要设成一样）：
 
 - nvidb 的显卡、lane、任务和日志：`nvidb queue status`、`nvidb job ls / show / logs`，都带 `--no-tick`，只读，不提交、不取消、不确认告警。
 - 技能：小镇自己的（`papertown skills` 列出的那些）和 skim 里的（`skim skill list`）。
@@ -175,7 +175,7 @@ macos/build.sh             # 生成 macos/build/Papertown.app
 macos/build.sh --install   # 再拷到 ~/Applications
 ```
 
-- **服务**：8000 端口上已经有 Papertown 在跑（比如终端里开的），App 直接用它。没有就在 `server/` 里用登录 shell 的环境（uv、pnpm、TeX 的 PATH 和 `~/.zshrc` 里的设置）运行 `uv run papertown serve --port $PAPERTOWN_PORT`，退出 App 时停掉它启动的那个。命令、端口、代码位置在「App 设置…」（⌥⌘,）里改，比如加上 `PAPERTOWN_LEAD_RESIDENT=0` 关闭自动启动负责人。日志在 `~/Library/Logs/Papertown/`。
+- **服务**：「App 设置…」里的端口上已经有 Papertown 在跑（比如终端里开的），App 直接用它。没有就在 `server/` 里用登录 shell 的环境（uv、pnpm、TeX 的 PATH 和 `~/.zshrc` 里的设置）运行 `uv run papertown serve --port $PAPERTOWN_PORT`，退出 App 时停掉它启动的那个。命令、端口、代码位置在「App 设置…」（⌥⌘,）里改，比如加上 `PAPERTOWN_LEAD_RESIDENT=0` 关闭自动启动负责人。日志在 `~/Library/Logs/Papertown/`。
 - **网页改动同步**：页面不打包进 App，就是服务托管的 `web/dist`。启动时网页代码比 `web/dist` 新就先构建。运行中 `web/` 或 `design/src` 有改动，停下 3 秒后自动构建（先构建到 `web/dist.next` 再整体换上）。不管是 App 还是终端里的 `pnpm build` 更新了 `web/dist`，页面都会自动重新载入（输入框里有没发出去的字时只提示，按 ⌘R 再载入）。只有改了 `macos/` 才需要重新跑 `build.sh`。
 - **跟随页面的风格**：页面把当前的风格告诉 App（`webkit.messageHandlers.look`），标题栏下的色条和窗口的浅色、深色跟着变。在 App 里没选过风格时用 macOS 风格。
 - **和浏览器一致**：外站链接用默认浏览器打开。项目文件照常下载到「下载」。PDF 开新窗口。`confirm()` 等对话框、选文件、3D 漫游的全屏和鼠标锁定都可用。菜单：⌘, 打开页面的设置，⌘1/2/3 切换进展 / 中控屏 / 小镇地图，⌘R 重新载入，⌘0/=/- 缩放，⇧⌘R 重新构建网页。Dock 图标上的数字是在等你决定的项目数。页面自己的设置（语言、起始视图……）存在 App 里，和浏览器各存一份。
@@ -186,36 +186,38 @@ macos/build.sh --install   # 再拷到 ~/Applications
 
 herdr、tmux 和 headless 三种方式里，CLI 都以真实的终端界面运行，网页上的操作一律换成终端里的键盘输入送达：发消息是一次粘贴加回车，停止是 Esc，回答对话框是数字键或方向键。Papertown 不用反向代理，也不经 SDK 或结构化接口驱动 agent，对话内容从 CLI 写在本机的会话日志读取。herdr 和 tmux 可随时接入终端亲自操作。headless 由 Papertown 的后台进程 `ptyd` 托管伪终端，不依赖 tmux，网页就是它的窗口，Papertown 重启时员工照常运行。设计见 `docs/agent_backends_design.md`。守护进程未运行或 CLI 路径不可用时，负责人显示「启动受阻」并说明原因，之后重试。模型认证由 CLI 自己管理，Papertown 只保存运行方式和模型选择。
 
-项目主页的负责人开关控制这个项目是否常驻。新建 idea 和接入的在做项目默认开启，样例和已结束项目默认关闭。关闭时，终端里的负责人关闭终端，Paseo 里的负责人打断当前一轮并保留会话，之后停止巡检消息。再次开启会接着原会话工作。全局设置 `PAPERTOWN_LEAD_RESIDENT=0` 可用于测试和排查，关闭自动启动后仍可在对话里手动启动。
+项目主页的负责人开关控制这个项目是否常驻。新建 idea 和接入的在做项目默认开启，样例和已结束项目默认关闭。关闭时，终端里的负责人关闭终端，Paseo 里的负责人打断当前一轮并保留会话，之后停止巡检消息。再次开启会接着原会话工作。`papertown.toml` 里的 `[agents] lead_resident = false` 关闭整个小镇的自动启动，用于测试和排查，此时仍可在对话里手动启动。
 
-| 变量 | 说明 |
+### 配置文件 papertown.toml
+
+所有设置集中在一个文件里：仓库根目录的 `papertown.toml`，不进 git。环境变量 `PAPERTOWN_CONFIG` 可以指向别处的文件。新建时复制 `papertown.example.toml`，它按表列出每一项设置、默认值和说明，去掉要改的那一行开头的 `#` 再改值，其余保持默认：
+
+```bash
+cp papertown.example.toml papertown.toml
+cd server && uv run papertown config show   # 每项设置现在的值
+```
+
+`papertown config path` 打印正在读的文件，`papertown config example` 重新打印示例。取值的优先级从高到低：命令行参数（`papertown serve --host`、`--port`）、环境变量 `PAPERTOWN_<名字>`（如 `PAPERTOWN_PORT`，适合临时覆盖）、`papertown.toml`、内置默认值。文件里的相对路径相对于文件所在的目录。
+
+| 表 | 内容 |
 | --- | --- |
-| `PAPERTOWN_AGENT_RUNTIME` | 默认运行方式：`paseo`、`herdr`、`tmux` 或 `headless` |
-| `PAPERTOWN_LEAD_RESIDENT` | 自动启动常驻负责人，默认开启，`0` 关闭 |
-| `PAPERTOWN_WORKER_MODEL` | 代码员工和写作员工的默认模型，留空时沿用负责人的默认模型 |
-| `PAPERTOWN_PRICES` | 用量统计折算 token 时使用的模型价格覆盖表 |
-| `PAPERTOWN_MCP_CONFIG` | 额外的 MCP server，Claude Desktop 格式的 JSON |
-| `PAPERTOWN_ARXIV=0` | 关掉 arXiv 码头（无网络时） |
-| `S2_API_KEY` | 可选，`papertown ingest --refs` 拉 Semantic Scholar 引用边时使用 |
-| `PAPERTOWN_PI_BIN`、`PAPERTOWN_TMUX_BIN` | pi 和 tmux 的路径。不设时自动查找（会跳过终端包装的 shim，也会找 nvm 下的 pi） |
-| `PAPERTOWN_PI_MODEL` | 给 pi 员工指定模型。不设时用 pi 自己的默认模型 |
-| `PAPERTOWN_LOCAL_JOBS` | 实验农场本地执行器同时跑几个任务，默认 2 |
-| `PAPERTOWN_SAMPLES=0` | 关闭空镇首次启动时自动放入样例项目 |
-| `PAPERTOWN_NVIDB=0`、`PAPERTOWN_NVIDB_BIN`、`PAPERTOWN_NVIDB_POLL` | 关掉 nvidb 显卡读取。nvidb 的路径（默认在 PATH 上找）。后台读 nvidb 的间隔秒数（默认 10） |
-| `PAPERTOWN_PROJECTS` | 本地项目清单的位置，默认数据目录下的 `projects.json` |
-| `PAPERTOWN_SKIM_BIN` | skim 的路径（默认在 PATH 上找），技能学堂用它按项目、按对话配置 skill |
-| `PAPERTOWN_ASSISTANT_MODEL`、`PAPERTOWN_LEAD_MODEL` | 小助手和项目负责人默认使用的模型，写成 `供应商/模型@思考强度`，默认 `codex/gpt-6.1-terra@xhigh` 和 `codex/gpt-6.1-terra@high`。只在设置页里没选过时才用，见「默认模型和新模型」 |
-| `PAPERTOWN_PASEO_WATCH` | 多久重读一次 Paseo 的模型列表找新模型（秒，默认 1800，`0` 关掉。打开模型选择时也会读） |
-| `PAPERTOWN_LEAD_TICK`、`PAPERTOWN_LEAD_GAP` | 多久看一次各项目有没有动静（秒，默认 20）。同一个负责人两次巡检至少隔多久（秒，默认 180） |
-| `PAPERTOWN_CHECK_TICK` | 多久比对一次各项目硬检查要读的东西（论文、实验、PDF），变了就重跑（秒，默认 120） |
+| `[server]` | `papertown serve` 的监听地址 `host`（默认 `127.0.0.1`）和端口 `port`（默认 31640），本机员工访问服务用的地址 `url`（默认由端口推出），数据目录 `data_dir`（默认 `server/var`），skills 目录 `skills_dir`，本地项目清单 `projects`（默认数据目录下的 `projects.json`），空镇首次启动时放入样例 `samples`，实验农场本地执行器同时跑几个任务 `local_jobs`（默认 2） |
+| `[agents]` | 默认运行方式 `agent_runtime`（`paseo`、`herdr`、`tmux` 或 `headless`）。小助手、项目负责人、代码和写作员工的默认模型 `assistant_model`、`lead_model`、`worker_model`，写成 `供应商/模型@思考强度`，`worker_model` 留空时沿用负责人的，三者只在设置页里没选过时才用，见「默认模型和新模型」。常驻负责人 `lead_resident`（默认开启）。多久看一次各项目有没有动静 `lead_tick`（秒，默认 20），同一个负责人两次巡检至少隔多久 `lead_gap`（秒，默认 180），多久比对一次各项目硬检查要读的东西 `check_tick`（论文、实验、PDF，变了就重跑，秒，默认 120）。各 CLI 的路径 `claude_bin`、`codex_bin`、`agy_bin`、`pi_bin`，不设时自动查找（会跳过终端包装的 shim，也会找 nvm 下的 pi）。pi 员工的模型 `pi_model`，不设时用 pi 自己的默认模型 |
+| `[paseo]` | Paseo 的 CLI、网页地址和守护进程端点。多久重读一次 Paseo 的模型列表找新模型 `paseo_watch`（秒，默认 1800，`0` 关掉，打开模型选择时也会读） |
+| `[terminal]` | tmux 和 herdr 的路径与 socket，终端员工判断等待对话框、启动受阻和已停下所用的秒数 |
+| `[history]` | Claude Code、Codex、Antigravity 存会话的目录，是否读员工的对话记录和用量日志，多久读一次用量 |
+| `[services]` | arXiv 码头 `arxiv_port`（无网络时关掉），LaTeX 编译 `compile_tex`，额外的 MCP server `mcp_config`（Claude Desktop 格式的 JSON 文件），nvidb 显卡读取 `nvidb`、它的路径 `nvidb_bin`（默认在 PATH 上找）和后台读取间隔 `nvidb_poll`（秒，默认 10），skim 的路径 `skim_bin`（技能学堂用它按项目、按对话配置 skill） |
+| `[network]` | 别的设备可以从哪里来 `sources`（`lan`、`tailscale`、`any`，或一个地址、网段），是否允许密码登录 `password` 和访问密钥 `keys`，密码登录保持几天 `days`（1、7、30 或 90） |
 
-完整列表见 [`.env.example`](../.env.example) 和 `server/papertown/config.py`。
+网页「设置 › 网络与安全」修改 `[server]` 的 `host`、`port` 和整个 `[network]` 表，并写回 `papertown.toml`，文件里的其他内容保持原样。`host` 和 `port` 在服务重启后生效，其余立即生效。设置页「员工 Agent」里选的运行方式和模型存在数据目录，优先于文件里的默认值。
+
+两项设置只从环境变量读：`S2_API_KEY`（可选，`papertown ingest --refs` 拉 Semantic Scholar 引用边时使用）和 `PAPERTOWN_PRICES`（用量统计折算 token 时使用的模型价格覆盖表）。
 
 ### 展示模式的样例
 
 空的小镇第一次启动时会自动放入五个预制样例，分别展示查重、实验、写作、质检和出厂等状态。样例由 `papertown/data/samples.json` 直接写入，包含工序产出、论文源码和占位的负责人对话。每个样例标记为 `sample`，负责人开关默认关闭。未结束的样例打开开关后，由真实负责人继续推进项目。
 
-设置页的「展示模式」可以随时放入样例，已有的样例保持原样。`PAPERTOWN_SAMPLES=0` 关闭首次自动放入。样例的实验数据用于展示，实际研究以员工提交的真实结果为准。
+设置页的「展示模式」可以随时放入样例，已有的样例保持原样。`[server] samples = false` 关闭首次自动放入。样例的实验数据用于展示，实际研究以员工提交的真实结果为准。
 
 ### 静态演示
 
@@ -242,11 +244,11 @@ herdr、tmux 和 headless 三种方式里，CLI 都以真实的终端界面运�
 
 点机器卡片上的「详情」（或在 3D 的算力电厂里对着它的机柜按 F）打开这台机器的详情：它的每条队列（lane：一张或几张卡，和它按顺序要跑的任务）在跑、暂停还是被卡住。每张卡上正在跑什么、它的队列里按顺序排着哪些任务、还有哪些没分到卡的排队任务放得进这张卡。以及指定了这台机器、但因为依赖没成功被卡住的任务。每个任务展开能看到说明、命令和它在等什么。
 
-读取用的是 `nvidb queue status --json --no-tick`（队列和卡池也在这份输出里），只读 nvidb 的数据库、不去连节点：Papertown 主进程在后台每 10 秒读一次（`PAPERTOWN_NVIDB_POLL` 可改），页面拿到的总是最新的一份。每张卡最近一小时的利用率和显存、每个进程第一次被看到的时间由 Papertown 自己从这些读数里记下（nvidb 只存当前值），重启后从头记。本地项目的历史任务另外用 `nvidb job ls --json --no-tick -n 1000` 读，一分钟左右读一次。中控屏里点开一个任务时用 `nvidb job show --json --no-tick` 读它的详情和事件，任务的环境变量不会传到页面上。Papertown 不提交、不取消、不确认告警，提交任务照旧用 `nvidb job submit`。机器的地址和用户名不会出现在网页上。
+读取用的是 `nvidb queue status --json --no-tick`（队列和卡池也在这份输出里），只读 nvidb 的数据库、不去连节点：Papertown 主进程在后台每 10 秒读一次（`[services] nvidb_poll` 可改），页面拿到的总是最新的一份。每张卡最近一小时的利用率和显存、每个进程第一次被看到的时间由 Papertown 自己从这些读数里记下（nvidb 只存当前值），重启后从头记。本地项目的历史任务另外用 `nvidb job ls --json --no-tick -n 1000` 读，一分钟左右读一次。中控屏里点开一个任务时用 `nvidb job show --json --no-tick` 读它的详情和事件，任务的环境变量不会传到页面上。Papertown 不提交、不取消、不确认告警，提交任务照旧用 `nvidb job submit`。机器的地址和用户名不会出现在网页上。
 
 ## 接入本地项目
 
-自己已有的项目可以接进小镇展示：代码在一个 git 仓库里，论文在另一个 LaTeX 仓库里（比如 Overleaf 的 git 克隆）。在数据目录（默认 `server/var/`，不进 git）写一个 `projects.json`：
+自己已有的项目可以接进小镇展示：代码在一个 git 仓库里，论文在另一个 LaTeX 仓库里（比如 Overleaf 的 git 克隆）。在数据目录（默认 `server/var/`，不进 git）写一个 `projects.json`，或用 `[server] projects` 指向别处的文件：
 
 ```json
 {"projects": [{"key": "my-proj", "code": "~/repos/my-code", "paper": "~/repos/overleaf/my-paper", "match": ["my-code", "my-proj"]}]}
@@ -280,7 +282,7 @@ herdr、tmux 和 headless 三种方式里，CLI 都以真实的终端界面运�
 
 ### 接线局（MCP）
 
-小镇接的每个 MCP server 是一条线：内置的 arXiv 码头、`PAPERTOWN_MCP_CONFIG` 里的，以及在这里添加的（存在数据目录的 `mcp.json`，Claude Desktop 的格式）。每条线显示接通状态和它给员工的工具，可以随时停用、重连。在这里添加的还能修改和删除。环境变量写成 `${变量名}`，启动时从环境里取，密钥不落进文件。房间右侧有把 Papertown 自己作为 MCP server 接到别的 agent 上的配置。
+小镇接的每个 MCP server 是一条线：内置的 arXiv 码头、`[services] mcp_config` 指向的文件里的，以及在这里添加的（存在数据目录的 `mcp.json`，Claude Desktop 的格式）。每条线显示接通状态和它给员工的工具，可以随时停用、重连。在这里添加的还能修改和删除。环境变量写成 `${变量名}`，启动时从环境里取，密钥不落进文件。房间右侧有把 Papertown 自己作为 MCP server 接到别的 agent 上的配置。
 
 ### 图书馆（RAG）
 
@@ -317,7 +319,7 @@ Paseo 的 agent 通过一条常驻的 SDK 订阅取得状态和对话的变化�
 
 ### Paseo（推荐）
 
-[Paseo](https://paseo.sh) 在本机跑一个守护进程（默认 `127.0.0.1:6767`），托管 Claude Code、Codex、OpenCode、Pi、Copilot 等 agent。Papertown 通过 `paseo` CLI（它是这个端点的客户端）为每个项目创建 agent，供应商、模型和思考强度在启动时从 Paseo 列出的清单里选。对话记录通过 Paseo 的官方 SDK（`@getpaseo/client`）读取。手机上的 Paseo 也能看到同一个 agent。
+[Paseo](https://paseo.sh) 在本机跑一个守护进程（默认 `127.0.0.1:6767`，地址在 `papertown.toml` 的 `[paseo]` 里改），托管 Claude Code、Codex、OpenCode、Pi、Copilot 等 agent。Papertown 通过 `paseo` CLI（它是这个端点的客户端）为每个项目创建 agent，供应商、模型和思考强度在启动时从 Paseo 列出的清单里选。对话记录通过 Paseo 的官方 SDK（`@getpaseo/client`）读取。手机上的 Paseo 也能看到同一个 agent。
 
 ```bash
 paseo daemon start                                      # 守护进程
@@ -336,7 +338,7 @@ cd server/papertown/paseo_link && pnpm install          # SDK，装一次
 
 节点间通信通过 `pt tell task:<节点编号> "信息"` 进入对方 Paseo 会话。Papertown 负责同项目寻址、权限和任务状态，Paseo 负责实际 Agent 执行。普通连线提供关联上下文。顺序线决定派发的先后：前序完成后，已排队的后续任务自动派发（见上文「任务的先后顺序」）。完成时必须执行派发消息给出的 `pt task … done|blocked … --dispatch <本轮编号>`，普通聊天回复或 Agent 变为空闲都不会标记完成。已回报 blocked 的任务可在同一轮内改报 done。排队消息固定投递到原会话，发送失败会保留错误。返工会生成新编号并拒绝旧回报。
 
-本机真实连通性测试：`cd server && .venv/bin/python scripts/verify_paseo.py --provider codex`。它会调用真实模型，以 `lead_resident=False`（等同于 `PAPERTOWN_LEAD_RESIDENT=0`）关闭常驻启动，在临时项目显式创建两个 Agent，验证消息转交和任务回报，保存报告后归档它创建的 Paseo Project。可用 `--model` 指定模型。权限请求仍由 Paseo 原生机制处理。
+本机真实连通性测试：`cd server && .venv/bin/python scripts/verify_paseo.py --provider codex`。它会调用真实模型，以 `lead_resident=False`（等同于 `[agents] lead_resident = false`）关闭常驻启动，在临时项目显式创建两个 Agent，验证消息转交和任务回报，保存报告后归档它创建的 Paseo Project。可用 `--model` 指定模型。权限请求仍由 Paseo 原生机制处理。
 
 这些 agent 用 `.papertown/pt` 读项目简报、把实验提交到实验农场（`pt brief`、`pt submit <名字> -- <命令>`、`pt jobs`），也用它和项目负责人打交道：`pt tell lead "…"` 告诉负责人做完了什么或卡在哪，`pt ask "问题" [--choice 选项]…` 问你（你的回答作为 `<answer>` 消息发回来），`pt rules` 看自己的工作边界，`pt checks [run]` 看项目的硬检查（写作员工改论文后用它确认都通过了），`pt tasks` 看你在研究回路上派给它的任务、`pt task <编号> done|blocked "…"` 回一件任务。导入的对话不在项目目录里，可以点房间侧栏的「发送项目简报」把用法发给它。Papertown 每隔几秒同步一次它们的状态。守护进程没在运行时，Paseo 上的员工、负责人和小助手都显示「连不上」（空心的橙色圆点），小助手的输入框也先停用，守护进程起来以后页面自己接上。Paseo 用它自己的登录和设置，Papertown 不碰任何 key。
 
@@ -361,20 +363,20 @@ pi 用它自己的模型设置和登录，认证由 pi 自己管理，项目用�
 
 每个在做的项目有一位常驻负责人，使用设置中的默认运行方式（Paseo、herdr、tmux 或 headless）和负责人模型。它的工作目录是 Papertown 自己的 `server/var/projects/<项目>/lead`，可以阅读代码和论文目录、查看 git，修改工作由代码员工和写作员工完成。项目主页的开关和状态来自 `line.lead`，启动失败的原因显示在 `note` 中，60 秒后重试。
 
-- **巡检**：负责人在开关开启期间保持会话。Papertown 每隔 `PAPERTOWN_LEAD_TICK` 秒比对一次每个项目的状况（项目状态、工序、实验任务、员工状态、等你回答的问题），有变化（实验结束或失败、员工结束一轮、工序变了、你回答了问题、硬检查的结果变了、研究回路上派给员工的任务完成或卡住了）或者有到期的软检查，就在负责人空下来、离上次巡检超过 `PAPERTOWN_LEAD_GAP` 秒时给它发一条 `<checkin>`，写着这段时间变了什么和项目现在的样子。在跑的项目和接入的本地项目没有动静时也会隔一阵（默认 60 分钟，侧栏可以改成 15 分钟到 8 小时）来一条，接连三次没有新动静就停下，直到项目又有变化。侧栏的「巡检」控制监督消息，项目主页的负责人开关控制常驻。
+- **巡检**：负责人在开关开启期间保持会话。Papertown 每隔 `lead_tick` 秒比对一次每个项目的状况（项目状态、工序、实验任务、员工状态、等你回答的问题），有变化（实验结束或失败、员工结束一轮、工序变了、你回答了问题、硬检查的结果变了、研究回路上派给员工的任务完成或卡住了）或者有到期的软检查，就在负责人空下来、离上次巡检超过 `lead_gap` 秒时给它发一条 `<checkin>`，写着这段时间变了什么和项目现在的样子。在跑的项目和接入的本地项目没有动静时也会隔一阵（默认 60 分钟，侧栏可以改成 15 分钟到 8 小时）来一条，接连三次没有新动静就停下，直到项目又有变化。侧栏的「巡检」控制监督消息，项目主页的负责人开关控制常驻。
 - **项目卡片**：「进展」页上的卡片只在你按了「更新」后由它填写（收到 `<card>` 消息，读项目，`pt card set '<JSON>'` 或 `pt card set 文件.json` 交回。`pt card` 看字段和现在的卡片），存在 `projects/<项目>/card.json`，连同上一张和正在等的请求。接口：`GET /api/cards`（连同卡片显示哪些部分）、`GET /api/lines/<id>/card`、`POST /api/cards/layout`（`{panes}`，空的还原默认）、`POST /api/lines/<id>/card`（`{note}`）、`POST /api/lines/<id>/card/cancel`、`POST /api/cards/update`。
 - **项目的对话**：「进展」里的对话、中控屏的侧边栏和员工面板里，你和负责人说的是同一段会话。使用 Paseo 时，Papertown 按 `papertown.agent` 标签认出这个负责人的每段对话，用你在里面说的第一句话命名（存在它目录的 `conversations.json`）。「新对话」把当前这段放到一边，用同一个供应商、模型和思考强度马上开一段新的（它照常先写一条汇报），切回旧的就接着那段聊。代码员工和写作员工在员工面板里也一样能开新对话、切回旧的。你问它项目的事，它读完回答，要列表格、画图的写成一页（`pt publish 页面.html --kind explain`）。你交代它办的事，它在工作边界内办或派给员工。检索项目的卡片、汇报、工序产出、实验任务、代码、论文（去掉导言区和 LaTeX 命令）和导入的对话用 `pt recall "…"`（BM25，中文按字的二元组切分，英文按词并拆开驼峰）。接口：`GET /api/agents/<id>/conversations`、`POST /api/agents/<id>/conversations/new`、`POST /api/agents/<id>/conversations/<对话>`、`GET /api/lines/<id>/search?q=`。记忆是 `GET /api/lines/<id>/memory`、`GET /api/lines/<id>/memory/scan`、`POST /api/lines/<id>/memory/import`（`{keys}`）、`GET|DELETE /api/lines/<id>/memory/<mid>`。
 - **它在忙时**：输入框旁边出现「插话 | 排队」（员工面板里和员工的对话也一样）。插话把消息送进它手上的事，它做完当前这一步就会看到（pi 用 steer，Paseo 送进当前这一轮）。排队等它把手上的事做完再交给它（pi 用 followUp。Paseo 自己没有队列，消息先存在 Papertown，等它这一轮结束再发过去，期间在对话里标着「排队中」）。没打字时发送键变成停止键，点一下打断它。
-- **推进工序**：新 idea 通过 `POST /api/ideas {text}` 立即成为 `running` 项目，idea 工序完成、hatch 工序开工并唤起负责人。负责人先用 `pt survey` 读取代码计算的查重结果，`pt library "关键词" [--top N]` 检索馆藏，`pt output hatch '<JSON>'` 提交差异分析和建议，再用 `pt report --key` 汇报、`pt ask` 询问是否继续。`pt hire coder|writer [--runtime R] [--cli C] [--model M] [--thinking T]` 启动员工，默认使用 `PAPERTOWN_WORKER_MODEL`，留空时沿用负责人的默认模型。
+- **推进工序**：新 idea 通过 `POST /api/ideas {text}` 立即成为 `running` 项目，idea 工序完成、hatch 工序开工并唤起负责人。负责人先用 `pt survey` 读取代码计算的查重结果，`pt library "关键词" [--top N]` 检索馆藏，`pt output hatch '<JSON>'` 提交差异分析和建议，再用 `pt report --key` 汇报、`pt ask` 询问是否继续。`pt hire coder|writer [--runtime R] [--cli C] [--model M] [--thinking T]` 启动员工，默认使用 `[agents] worker_model`，留空时沿用负责人的默认模型。
 - **产出与卡口**：`pt stage` 查看八道工序的状态、负责人岗位、产出格式和硬卡口。`pt output <工序> '<JSON>'` 或 `pt output <工序> @文件` 提交 hatch、method、exp、write、review 的产出，员工也能提交自己负责的工序。`pt stage run|done|todo <工序> ["说明"] [--pct N]` 开工、收尾或重做。hatch、method、review 收尾前必须交产出，阻断级硬检查通过或用户放行后才可收尾，下一道尚未开始的工序随即开工。team 收尾记录实际启动的员工，ship 收尾打包 `paper.zip` 并将项目设为 `done`。查重的 similarity 和 verdict 始终由服务端代码计算。
 - **它能做的**：`pt status` 看项目、`pt worker coder|writer` 读员工最近的对话、`pt jobs` 看任务和日志、`pt tell coder|writer "…" [--now]` 给员工派活或提醒（默认等员工做完手上的事再交给它，`--now` 插进去）、`pt report "…" [--key]` 给你写汇报、`pt ask "问题" [--choice 选项]…` 问你、`pt rules` 看边界、`pt checks [run]` 看检查和硬检查没过的位置、`pt tasks` 和 `pt task <编号> done|blocked "…"` 看和回研究回路上派的任务、`pt check <编号> pass|warn|fail "理由"` 记下软检查的判断。员工收到的消息开头是 `<msg from="#5 的项目负责人">`，员工也能用 `pt tell lead` 回话。
 - **汇报和问题**：它和员工等你回答的问题钉在和负责人的对话里、输入框上面（「进展」的项目页和对话页、中控屏的侧边栏都有），点选项或写几句回答，回答会发回提问的 agent。汇报列在项目页和对话页的左边，要紧的标出来并在屏幕上弹一下。员工面板的侧栏只放巡检设置和去对话的入口。问题如果是工作边界拦下的动作（见「工作边界」），你答「可以」时 Papertown 就替它执行。数据在 `GET /api/lines/<id>/lead`（含 `resident` 和 `settings.on`）、`GET /api/reports`，`POST /api/lines/<id>/lead {on}` 切换常驻，回答用 `POST /api/reports/<id>/answer`。
 
 ### 默认模型和新模型
 
-可选的供应商、模型和思考强度都是从 Paseo 读出来的（`paseo provider ls` 和 `paseo provider models <供应商>`，缓存 5 分钟），不在 Papertown 里写死。小助手、项目负责人和员工启动时预先选好的模型，在设置页「员工 Agent」里从这份列表中选，存在数据目录的 `paseo.json`。没选过时用 `PAPERTOWN_ASSISTANT_MODEL` / `PAPERTOWN_LEAD_MODEL` / `PAPERTOWN_WORKER_MODEL`，员工模型留空时沿用负责人默认值。选好的模型如果后来在 Paseo 里没了，设置页会提示，启动时退回到这个供应商的第一个模型。默认只管以后启动的，已经在跑的负责人和小助手不受影响（小助手开新对话时换上）。
+可选的供应商、模型和思考强度都是从 Paseo 读出来的（`paseo provider ls` 和 `paseo provider models <供应商>`，缓存 5 分钟），不在 Papertown 里写死。小助手、项目负责人和员工启动时预先选好的模型，在设置页「员工 Agent」里从这份列表中选，存在数据目录的 `paseo.json`。没选过时用 `papertown.toml` 里 `[agents]` 的 `assistant_model` / `lead_model` / `worker_model`，员工模型留空时沿用负责人默认值。选好的模型如果后来在 Paseo 里没了，设置页会提示，启动时退回到这个供应商的第一个模型。默认只管以后启动的，已经在跑的负责人和小助手不受影响（小助手开新对话时换上）。
 
-Papertown 每隔一阵（`PAPERTOWN_PASEO_WATCH`）重读一次 Paseo 的列表，设置页的「重新读取」也会读。已知供应商里多出来的模型算新模型，中控屏右上角（手机上在底部）会弹出一张卡片，列出新模型，问你要不要让小助手、项目负责人以后默认用它：思考强度沿用原来的，新模型没有时用它自己的默认。选择切换或关闭提醒都会收起这次通知，× 只是先收起，下次打开页面还会提醒。第一次读到的模型、新出现的供应商的模型只记下来，不提醒。接口：`GET /api/paseo`（`?fresh=1` 重读）、`POST /api/paseo/defaults`、`GET /api/paseo/news`、`POST /api/paseo/news/dismiss`。
+Papertown 每隔一阵（`[paseo] paseo_watch`）重读一次 Paseo 的列表，设置页的「重新读取」也会读。已知供应商里多出来的模型算新模型，中控屏右上角（手机上在底部）会弹出一张卡片，列出新模型，问你要不要让小助手、项目负责人以后默认用它：思考强度沿用原来的，新模型没有时用它自己的默认。选择切换或关闭提醒都会收起这次通知，× 只是先收起，下次打开页面还会提醒。第一次读到的模型、新出现的供应商的模型只记下来，不提醒。接口：`GET /api/paseo`（`?fresh=1` 重读）、`POST /api/paseo/defaults`、`GET /api/paseo/news`、`POST /api/paseo/news/dismiss`。
 
 ### 小助手
 
@@ -420,7 +422,7 @@ uv run papertown job list
 
 ## Skills 热插拔
 
-员工的能力在 `server/skills/` 下，每个目录是一个标准的 Agent Skill（`SKILL.md` + `references/` + `scripts/`）。后端每 2 秒扫一次目录，新增的 skill 会立刻出现在界面上，并分给 `metadata.roles` 里写的岗位。
+员工的能力在 skills 目录下（默认 `server/skills/`，`[server] skills_dir` 可改），每个目录是一个标准的 Agent Skill（`SKILL.md` + `references/` + `scripts/`）。后端每 2 秒扫一次目录，新增的 skill 会立刻出现在界面上，并分给 `metadata.roles` 里写的岗位。
 
 试一下：把 `server/skills-extra/reproducibility-check` 复制到 `server/skills/`，员工下一次读取技能清单时即可采用这份可复现性检查。
 

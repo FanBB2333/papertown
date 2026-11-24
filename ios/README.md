@@ -56,9 +56,9 @@ Local paths in the answers are replaced by `~/papertown/...`. Never point it at 
 
 A server is a base URL and an access key:
 
-1. Make the server reachable from the device: `papertown serve --host 0.0.0.0` on a network you trust, or `tailscale serve 8000` or another HTTPS proxy in front of it.
+1. Make the server reachable from the device. On a network you trust, set `host = "0.0.0.0"` under `[server]` in `papertown.toml` (or choose all networks under Settings › Network & Security in the web app) and restart the server. Or keep it on `127.0.0.1` and put `tailscale serve 31640` or another HTTPS proxy in front of it. The device has to come from a source allowed under `[network]`, the LAN and Tailscale by default.
 2. Make a key for the device on the server, `uv run papertown key create --name iPhone` in `server/`, or under Settings › Access & sign-in in the web app. It is shown once.
-3. In the app, **Add Server**: the address (`http://192.168.x.x:8000`, `https://mac.tailnet.ts.net`, or a relay with a path prefix; `/api` is appended) and the key.
+3. In the app, **Add Server**: the address (`http://<Tailscale or LAN IP>:31640`, `https://mac.tailnet.ts.net`, or a relay with a path prefix; `/api` is appended) and the key.
 
 Before signing in the app checks `GET /api/health` for `"app": "papertown"`, so a wrong address says so. A key the server no longer accepts (revoked, or copied wrong) stops the connection with that message, and `papertown key revoke <id>` shuts out one device without touching the others. The access password still works for servers set up that way: choose **Access Password** in the same form.
 

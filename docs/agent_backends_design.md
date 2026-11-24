@@ -54,7 +54,7 @@ herdr 后端里 Claude Code 和 Codex 的状态直接用 herdr 自己识别的 `
 | Antigravity | `--model M`、`--add-dir <主目录>`、`--settings '{"statusLine":{"type":"command","command":"<pt> hook agy","stack_with_default":true}}'`、`-i <第一条消息>` |
 
    第一条消息只有一行：「请先完整阅读 <主目录>/.papertown/intro.md，其中是你在 Papertown 的工作说明和项目简报。读完后说说你打算怎么开始。」单行能直接作为启动参数（herdr 的 `agent.start` 不接受含换行的参数），也避免在 CLI 还没就绪时粘贴长文本。
-4. CLI 的路径依次取设置（`PAPERTOWN_CLAUDE_BIN`、`PAPERTOWN_CODEX_BIN`、`PAPERTOWN_AGY_BIN`）和 PATH，跳过其他程序装的包装脚本（例如 cmux 的 `agy` 包装会给会话装 cmux 自己的 hooks）。
+4. CLI 的路径依次取设置（`papertown.toml` 里 `[agents]` 的 `claude_bin`、`codex_bin`、`agy_bin`）和 PATH，跳过其他程序装的包装脚本（例如 cmux 的 `agy` 包装会给会话装 cmux 自己的 hooks）。
 5. 首次在某个目录启动 Claude Code 会出现「是否信任此目录」，Codex 可能出现 hooks 审核等对话框。这时员工处于「等你」，员工页显示终端画面和按键，由用户处理。Papertown 不替用户回答，也不写用户的信任配置。
 6. 已关闭的员工再次启动时，若知道上次的会话 id，就接着那个会话：Claude Code 用 `--resume <id>`，Codex 用 `resume <id>`，Antigravity 用 `--conversation <id>`。这时的第一条消息改为告诉它 Papertown 重新接上了会话，说明和简报若有更新请重读，然后继续之前的工作。
 
@@ -119,7 +119,7 @@ Claude Code 的会话 id 在启动时就写进 `agent_sessions`。Codex 和 Anti
 - **员工页**：终端员工的行带后端标签（herdr、tmux）。选中后中栏与 herdr 终端会话相同，分「对话」「终端」两个标签（见 3.9），下方是共用的输入框（插话、排队、打断并发送、停止，排队的消息可现在发或撤回）。右栏显示后端、CLI、模型、会话 id、接入方式（tmux 为 `tmux -L papertown attach -t <会话>:<窗口>`，herdr 为工作区和标签页）和「关闭终端」，可收起，窗口窄于 1180px 时改为抽屉。
 - **新建员工**：员工页左上角的按钮打开弹窗，依次选择项目、岗位（代码员工、写作员工、项目负责人）、运行方式（Paseo、herdr、tmux、pi，不可用的置灰并写明原因）和模型，直接启动。该岗位的员工已在运行时改为「打开对话」。
 - 由 herdr 后端启动的员工不再出现在「终端」或「其他终端」里。
-- **设置 › 员工 Agent**：新增「默认运行方式」（Paseo、herdr、tmux），节点任务派发、负责人常驻和 `pt hire` 启动员工时使用。模型按各岗位默认设置，`PAPERTOWN_WORKER_MODEL` 留空时沿用负责人默认值。
+- **设置 › 员工 Agent**：新增「默认运行方式」（Paseo、herdr、tmux），节点任务派发、负责人常驻和 `pt hire` 启动员工时使用。模型按各岗位默认设置，`[agents] worker_model` 留空时沿用负责人默认值。
 
 ### 3.9 对话记录与提示弹窗
 

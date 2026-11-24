@@ -87,10 +87,10 @@ Start the backend:
 git clone https://github.com/FanBB2333/papertown.git
 cd papertown/server
 uv sync
-uv run papertown serve            # http://127.0.0.1:8000
+uv run papertown serve            # http://127.0.0.1:31640
 ```
 
-Frontend, in another terminal (`/api` is proxied to port 8000):
+Frontend, in another terminal (`/api` is proxied to the port set in `papertown.toml`, 31640 by default):
 
 ```bash
 cd papertown/web
@@ -100,9 +100,9 @@ pnpm dev                          # http://127.0.0.1:5173
 
 After `pnpm build`, `papertown serve` serves `web/dist` itself, so the backend alone is enough.
 
-On the first start of an empty town, five prebuilt sample projects show different stages with their outputs, paper sources, and a placeholder lead conversation. They carry a Sample tag and their lead switches start off. Turning on an unfinished sample's lead hands it to a real agent. `PAPERTOWN_SAMPLES=0` turns automatic seeding off, and samples can also be added from Settings.
+On the first start of an empty town, five prebuilt sample projects show different stages with their outputs, paper sources, and a placeholder lead conversation. They carry a Sample tag and their lead switches start off. Turning on an unfinished sample's lead hands it to a real agent. `samples = false` under `[server]` in `papertown.toml` turns automatic seeding off, and samples can also be added from Settings.
 
-Pick the default runtime (`paseo`, `herdr`, `tmux`, or `headless`) in Settings or with `PAPERTOWN_AGENT_RUNTIME`. Papertown never starts or stops the Paseo or herdr daemon. Start it yourself before using that runtime. If the runtime is unavailable, the lead shows as blocked with the reason. To use Paseo, start its daemon with the web UI enabled and install the SDK once:
+Pick the default runtime (`paseo`, `herdr`, `tmux`, or `headless`) in Settings or with `agent_runtime` under `[agents]` in `papertown.toml`. Papertown never starts or stops the Paseo or herdr daemon. Start it yourself before using that runtime. If the runtime is unavailable, the lead shows as blocked with the reason. To use Paseo, start its daemon with the web UI enabled and install the SDK once:
 
 ```bash
 paseo daemon start
@@ -121,7 +121,7 @@ Write it in the assistant box at the bottom of any page with **New idea** select
 
 ### Control the lead
 
-Use the switch at the top of a project page, also shown on its card and in the lead's conversation. Turn it off when the project should rest, and on again to carry on from the same conversation. A blocked lead names the reason there, for example a runtime that is not running. Fix the cause and turn the switch on again to retry at once. `PAPERTOWN_LEAD_RESIDENT=0` turns off automatic lead startup for the whole town, for tests and diagnosis. You can still start a lead by hand from its conversation.
+Use the switch at the top of a project page, also shown on its card and in the lead's conversation. Turn it off when the project should rest, and on again to carry on from the same conversation. A blocked lead names the reason there, for example a runtime that is not running. Fix the cause and turn the switch on again to retry at once. `lead_resident = false` under `[agents]` turns off automatic lead startup for the whole town, for tests and diagnosis. You can still start a lead by hand from its conversation.
 
 ### What the lead and workers can do
 
@@ -142,7 +142,7 @@ Workers have the subset for their own work. In an agent's working directory, `.p
 
 ### Link your own projects
 
-Write `projects.json` in the data directory (it stays out of git):
+Write `projects.json` in the data directory (it stays out of git), or point `projects` under `[server]` at another file:
 
 ```json
 {"projects": [{"key": "my-proj", "code": "~/repos/my-code", "paper": "~/repos/overleaf/my-paper", "match": ["my-code", "my-proj"]}]}
@@ -161,10 +161,15 @@ uv run papertown job list
 
 ### Open it from another device
 
-The server listens on `127.0.0.1` only. Make the port reachable (for example `tailscale serve 8000`, or `papertown serve --host 0.0.0.0` on a network you trust), then:
+By default the server listens on `127.0.0.1:31640`, this machine only. Make it reachable from other devices in one of two ways:
+
+- Set `host = "0.0.0.0"` under `[server]` in `papertown.toml`, or choose all networks under Settings › Network & Security, and restart the server. Do this on a network you trust.
+- Keep it on `127.0.0.1` and put `tailscale serve 31640` (or another HTTPS proxy) in front of it.
+
+Other devices may come from your LAN and your tailnet by default. `sources` under `[network]` (also under Settings › Network & Security) changes that. Then:
 
 - **Browser**: set an access password under Settings › Access & sign-in and sign in with it.
-- **iPhone and Mac apps, scripts**: make an access key for each device, with `uv run papertown key create --name iPhone` in `server/` or under Settings › Access & sign-in, and enter the server address and the key in the app. A key is shown once, sent as `Authorization: Bearer <key>`, stored only as a hash, and revoked on its own (`papertown key list`, `papertown key revoke <id>`). Keys are made and revoked on the server's own machine or from a browser signed in with the password, never with another key.
+- **iPhone, iPad and Mac apps, scripts**: make an access key for each device, with `uv run papertown key create --name iPhone` in `server/` or under Settings › Access & sign-in, and add the server in the app with that key: `http://<Tailscale or LAN IP>:31640`, or the `tailscale serve` address. A key is shown once, sent as `Authorization: Bearer <key>`, stored only as a hash, and revoked on its own (`papertown key list`, `papertown key revoke <id>`). Keys are made and revoked on the server's own machine or from a browser signed in with the password, never with another key.
 
 `GET /api/health` answers before signing in, with `"app": "papertown"`, so a client can tell it has found a Papertown server.
 
@@ -183,21 +188,28 @@ The server listens on `127.0.0.1` only. Make the port reachable (for example `ta
 
 ## Configuration
 
-Papertown reads its settings from the environment, and agent authentication stays with the installed CLI.
+Every setting lives in one file, `papertown.toml` at the root of the checkout. It stays out of git, and `PAPERTOWN_CONFIG` can point at a file elsewhere. Start one from [`papertown.example.toml`](papertown.example.toml), which lists every setting under its table with its default and what it does:
 
-| Variable | Purpose |
+```bash
+cp papertown.example.toml papertown.toml   # uncomment and change what you need
+cd server && uv run papertown config show  # the settings in effect
+```
+
+A command-line flag (`papertown serve --host`, `--port`) wins over an environment variable `PAPERTOWN_<NAME>` (such as `PAPERTOWN_PORT`), which wins over the file, which wins over the built-in default. Relative paths in the file are relative to the file. `papertown config path` prints the file in use, and `papertown config example` prints the example again.
+
+| Table | What it holds |
 | --- | --- |
-| `PAPERTOWN_AGENT_RUNTIME` | Default runtime: `paseo`, `herdr`, `tmux` or `headless` |
-| `PAPERTOWN_LEAD_RESIDENT` | Resident leads, on by default. `0` turns off automatic startup |
-| `PAPERTOWN_ASSISTANT_MODEL`, `PAPERTOWN_LEAD_MODEL` | Default models of the assistant and the leads, as `provider/model@thinking` |
-| `PAPERTOWN_WORKER_MODEL` | Default model of coders and writers, following the lead default when empty |
-| `PAPERTOWN_DATA_DIR` | Where data is kept (default `server/var`) |
-| `PAPERTOWN_PROJECTS` | Your own projects (default `projects.json` in the data directory) |
-| `PAPERTOWN_NVIDB` | `0` turns off reading the nvidb GPU queue |
-| `PAPERTOWN_SAMPLES` | `0` turns off the sample projects |
-| `PAPERTOWN_PRICES` | Model price overrides for the token usage statistics |
+| `[server]` | `host` and `port` where `papertown serve` listens (`127.0.0.1`, `31640`), the `url` agents on this machine use to reach it, `data_dir` (default `server/var`), `skills_dir`, `projects` (your own projects), `samples`, and `local_jobs` |
+| `[agents]` | the default runtime (`agent_runtime`: `paseo`, `herdr`, `tmux` or `headless`), the default models of the assistant, the leads and the workers as `provider/model@thinking`, resident leads (`lead_resident`), how often leads are checked on, and the paths of the agent CLIs |
+| `[paseo]` | Paseo's CLI, web app and daemon endpoint, and how often its model list is read |
+| `[terminal]` | tmux and herdr with their sockets, and the timings that tell a terminal agent is waiting, held or stopped |
+| `[history]` | where Claude Code, Codex and Antigravity keep their conversations, and reading transcripts and usage logs |
+| `[services]` | the arXiv dock, LaTeX compiling, extra MCP servers, the nvidb GPU queue, and skim |
+| `[network]` | where other devices may come from (`sources`), password sign-in, access keys, and how many days a sign-in lasts |
 
-The complete list is in [`.env.example`](.env.example) and [`server/papertown/config.py`](server/papertown/config.py).
+Settings › Network & Security in the web app edits `host` and `port` under `[server]` and the `[network]` table, and writes them back into `papertown.toml` with the rest of the file kept as it is. `host` and `port` take effect when the server restarts, the rest at once. The runtime and models chosen under Settings › Agents are kept in the data directory and take precedence over the defaults in the file.
+
+Agent authentication stays with the installed CLI. Two values are read from the environment only: `S2_API_KEY` for `papertown ingest --refs`, and `PAPERTOWN_PRICES` for model price overrides in the token usage statistics.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -211,7 +223,7 @@ The full guide is in Simplified Chinese: [`docs/guide.zh-CN.md`](docs/guide.zh-C
 - [`docs/agent_backends_design.md`](docs/agent_backends_design.md): terminal runtimes: herdr, tmux and headless
 - [`docs/usage_budget_design.md`](docs/usage_budget_design.md): subscription usage and project budgets
 
-Skills the agents use live in `server/skills/` and are picked up while the server runs. The library is a SQLite full-text index seeded with 346 arXiv papers, searched with BM25 and keyword coverage.
+Skills the agents use live in `server/skills/` (`skills_dir` under `[server]`) and are picked up while the server runs. The library is a SQLite full-text index seeded with 346 arXiv papers, searched with BM25 and keyword coverage.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -245,7 +257,7 @@ Interface strings are written in Simplified Chinese in the source and translated
 
 - Papertown calls no model itself. What a project achieves depends on the agents and models you run, and resident leads use your subscription while the town runs.
 - Papertown does not start or stop Paseo or herdr. A lead on an unavailable runtime stays blocked until the runtime is back.
-- One user on one machine: the server listens on localhost, and remote access goes through your own tunnel and the access password.
+- One user on one machine: the server listens on this machine only unless `papertown.toml` says otherwise, and other devices come in through your own network or tunnel with the access password or an access key.
 - Developed and tested on macOS only. Linux and Windows are untested.
 - The library uses BM25 and keyword coverage, not embeddings, so the novelty check can miss work described in different words. The lead is asked to search with other phrasings as well.
 - nvidb is read only. Experiments submitted through Papertown run on the built-in local farm or through the agents' own tools.

@@ -50,7 +50,7 @@ This specification defines **English (`en`) as the primary UI & development lang
 | **Nav Bar** | `Cancel` · `Connect Server` (`Edit Server`) · `Connect` | `取消` · `连接服务器`（`编辑服务器`） · `连接` |
 | **Section 1 Header** | `Server Address` | `服务器地址` |
 | **Field · Name** | Label: `Name` · Placeholder: `e.g., Home Mac` | `名称` · `例如：家里 Mac` |
-| **Field · URL** | Label: `URL` · Placeholder: `https://example.com or http://192.168.1.10:8000` | `根地址` · `https://example.com 或 http://192.168.1.10:8000` |
+| **Field · URL** | Label: `URL` · Placeholder: `https://example.com or http://192.168.1.10:31640` | `根地址` · `https://example.com 或 http://192.168.1.10:31640` |
 | **Section 1 Footer** | `Enter the root URL of your Mac or self-hosted relay. Path prefixes are supported; /api is appended automatically. For direct LAN access, keep both devices on the same network.` | `填写电脑或自建中转的根地址，可包含路径前缀；客户端会自动追加 /api。局域网直连请确保手机与电脑在同一网络。` |
 | **Section 2 Header** | `Authentication` | `访问鉴权` |
 | **Field · Password** | Label: `Password` · Placeholder: `Optional on local network` | `访问密码` · `局域网免密可留空` |
