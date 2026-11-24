@@ -80,40 +80,94 @@ struct TerminalPane: View {
 
     // MARK: Screen
 
-    /// Runs of blank lines collapse to one, and the trailing blank ones go.
-    private var lines: [String] {
-        var out: [String] = []
+    private static let plainBackground = Color(red: 0.11, green: 0.11, blue: 0.12)
+
+    /// The lines to draw: runs of blank lines collapse to one, and the trailing blank ones go. A line with a background
+    /// colour is not blank.
+    private func shownLines() -> [Int] {
+        var out: [Int] = []
         var blank = 0
-        for line in (state.screen ?? "").split(separator: "\n", omittingEmptySubsequences: false) {
-            let l = String(line).replacingOccurrences(of: "\t", with: "    ")
-            if l.trimmingCharacters(in: .whitespaces).isEmpty {
+        let count: Int
+        let isBlank: (Int) -> Bool
+        if let styled = state.styledScreen {
+            count = styled.lines.count
+            isBlank = { i in
+                styled.lines[i].allSatisfy { run in
+                    run.text.trimmingCharacters(in: .whitespaces).isEmpty && (run.style >= styled.styles.count || styled.styles[run.style].bg == nil)
+                }
+            }
+        } else {
+            let plain = plainLines
+            count = plain.count
+            isBlank = { plain[$0].trimmingCharacters(in: .whitespaces).isEmpty }
+        }
+        for i in 0..<count {
+            if isBlank(i) {
                 blank += 1
                 if blank > 1 { continue }
             } else {
                 blank = 0
             }
-            out.append(l)
+            out.append(i)
         }
-        while out.last?.trimmingCharacters(in: .whitespaces).isEmpty == true { out.removeLast() }
+        while let last = out.last, isBlank(last) { out.removeLast() }
         return out
     }
 
+    private var plainLines: [String] {
+        (state.screen ?? "").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    }
+
+    /// One line as the server styled it: colours, bold, italic, underline and strikethrough.
+    private func attributed(_ runs: [ScreenRun], _ styled: StyledScreen) -> AttributedString {
+        var out = AttributedString()
+        for run in runs {
+            var a = AttributedString(run.text.replacingOccurrences(of: "\t", with: "    "))
+            let st = run.style < styled.styles.count ? styled.styles[run.style] : nil
+            if let fg = st?.fg { a.foregroundColor = Self.color(fg) }
+            if let bg = st?.bg { a.backgroundColor = Self.color(bg) }
+            var font = Font.system(size: size, weight: st?.b == true ? .bold : .regular, design: .monospaced)
+            if st?.i == true { font = font.italic() }
+            a.font = font
+            if st?.u == true { a.underlineStyle = .single }
+            if st?.s == true { a.strikethroughStyle = .single }
+            out += a
+        }
+        return out
+    }
+
+    static func color(_ hex: String) -> Color {
+        let v = UInt32(hex.dropFirst(), radix: 16) ?? 0
+        return Color(red: Double(v >> 16 & 0xff) / 255, green: Double(v >> 8 & 0xff) / 255, blue: Double(v & 0xff) / 255)
+    }
+
     private func screen(_ lang: AppLanguage) -> some View {
-        let rows = lines
+        let rows = shownLines()
+        let styled = state.styledScreen
+        let plain = styled == nil ? plainLines : []
         let font = Font.system(size: size, design: .monospaced)
+        let ink = styled.map { Self.color($0.theme.fg) } ?? Color(white: 0.9)
+        let paper = styled.map { Self.color($0.theme.bg) } ?? Self.plainBackground
         return ScrollViewReader { proxy in
             ScrollView(wrap ? [.vertical] : [.vertical, .horizontal]) {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if rows.isEmpty {
                         Text(lang.string(state.screen == nil ? "term.loading" : "term.empty"))
-                            .font(font).foregroundStyle(Color.white.opacity(0.5))
+                            .font(font).foregroundStyle(ink.opacity(0.5))
                     }
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, line in
-                        Text(line.isEmpty ? " " : line)
-                            .font(font)
-                            .foregroundStyle(Color(white: 0.9))
-                            .fixedSize(horizontal: !wrap, vertical: true)
-                            .frame(maxWidth: wrap ? .infinity : nil, alignment: .leading)
+                    ForEach(rows, id: \.self) { i in
+                        Group {
+                            if let styled {
+                                let runs = styled.lines[i]
+                                Text(runs.isEmpty ? AttributedString(" ") : attributed(runs, styled))
+                            } else {
+                                Text(plain[i].isEmpty ? " " : plain[i].replacingOccurrences(of: "\t", with: "    "))
+                            }
+                        }
+                        .font(font)
+                        .foregroundStyle(ink)
+                        .fixedSize(horizontal: !wrap, vertical: true)
+                        .frame(maxWidth: wrap ? .infinity : nil, alignment: .leading)
                     }
                     Color.clear.frame(height: 1).id("end")
                 }
@@ -121,7 +175,7 @@ struct TerminalPane: View {
                 .padding(10)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Color(red: 0.11, green: 0.11, blue: 0.12), in: RoundedRectangle(cornerRadius: 12))
+            .background(paper, in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, 10)
             .onAppear { proxy.scrollTo("end", anchor: .bottom) }
             .onChange(of: state.screen) { _ in

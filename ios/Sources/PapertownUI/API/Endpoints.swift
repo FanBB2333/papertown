@@ -77,7 +77,9 @@ public extension PapertownClient {
     }
 
     func timeline(agentID: String) async throws -> AgentTimeline { try await get(["agents", agentID, "timeline"]) }
-    func screen(agentID: String) async throws -> AgentScreen { try await get(["agents", agentID, "screen"]) }
+    func screen(agentID: String, styled: Bool = false) async throws -> AgentScreen {
+        try await get(["agents", agentID, "screen"], query: styled ? [URLQueryItem(name: "styled", value: "1")] : [])
+    }
 
     func keys(agentID: String, _ keys: [String]) async throws {
         struct Body: Encodable { let keys: [String] }
@@ -123,7 +125,9 @@ public extension PapertownClient {
 
     // MARK: Terminals
 
-    func terminal(id: String) async throws -> TerminalDetail { try await get(["terminals", id]) }
+    func terminal(id: String, styled: Bool = false) async throws -> TerminalDetail {
+        try await get(["terminals", id], query: styled ? [URLQueryItem(name: "styled", value: "1")] : [])
+    }
     func terminalTimeline(id: String) async throws -> TerminalTimeline { try await get(["terminals", id, "timeline"]) }
 
     func terminalSay(_ text: String, to id: String, mode: DeliveryMode?) async throws {

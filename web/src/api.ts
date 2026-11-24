@@ -107,7 +107,11 @@ export interface TerminalQueue { id: number; terminal_id: string; text: string; 
 export interface TermPrompt { digest: string; title: string; body: string[]; options: { index: number; label: string; current: boolean; key: string | null }[]; hint: string }
 // whether the session log behind a terminal conversation could be read, and why not
 export interface Transcript { ok: boolean; note: string | null }
-export interface TerminalDetail { terminal: Terminal; text: string; queued: TerminalQueue[]; prompt?: TermPrompt | null }
+export interface TerminalDetail extends Partial<StyledScreen> { terminal: Terminal; text: string; queued: TerminalQueue[]; prompt?: TermPrompt | null }
+// A terminal's colours, read by the server so the web and the app draw it alike: per line, [text, index into styles].
+// Colours are hex, already reversed, dimmed or hidden; a missing one is the theme's.
+export interface ScreenStyle { fg?: string; bg?: string; b?: boolean; i?: boolean; u?: boolean; s?: boolean }
+export interface StyledScreen { lines: [string, number][][]; styles: ScreenStyle[]; theme: { fg: string; bg: string } }
 export interface HerdrInfo { ok: boolean; note: string; live: boolean; socket: string; count: number; installed: boolean; enabled: boolean }
 
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act'; data: any }
@@ -502,7 +506,7 @@ export const api = {
   roster: (role: AgentRole) => call<Roster>('GET', `/api/agents?role=${role}`),
   overview: () => call<Overview>('GET', '/api/agents/overview', undefined, asIs),
   herdr: () => call<HerdrInfo>('GET', '/api/herdr', undefined, asIs),
-  terminal: (id: string) => call<TerminalDetail>('GET', `/api/terminals/${encodeURIComponent(id)}`, undefined, asIs),
+  terminal: (id: string, styled = false) => call<TerminalDetail>('GET', `/api/terminals/${encodeURIComponent(id)}${styled ? '?styled=1' : ''}`, undefined, asIs),
   terminalSay: (id: string, text: string, mode?: SayMode) => call<unknown>('POST', `/api/terminals/${encodeURIComponent(id)}/say`, { text, mode }, asIs),
   terminalKeys: (id: string, keys: string[]) => call<unknown>('POST', `/api/terminals/${encodeURIComponent(id)}/keys`, { keys }, asIs),
   terminalTimeline: (id: string) => call<{ terminal: Terminal; items: PaseoItem[]; transcript: Transcript }>('GET', `/api/terminals/${encodeURIComponent(id)}/timeline`, undefined, asIs),
@@ -519,7 +523,7 @@ export const api = {
   backends: () => call<Backends>('GET', '/api/backends'),
   defaultRuntime: () => call<{ runtime: DefaultRuntime; paseo_chat?: boolean }>('GET', '/api/agents/runtime'),
   setDefaultRuntime: (runtime: DefaultRuntime) => call<{ runtime: DefaultRuntime }>('POST', '/api/agents/runtime', { runtime }),
-  agentScreen: (id: string) => call<{ text: string; term: AgentTerm; prompt?: TermPrompt | null }>('GET', `/api/agents/${id}/screen`, undefined, asIs),
+  agentScreen: (id: string, styled = false) => call<{ text: string; term: AgentTerm; prompt?: TermPrompt | null } & Partial<StyledScreen>>('GET', `/api/agents/${id}/screen${styled ? '?styled=1' : ''}`, undefined, asIs),
   answerPrompt: (id: string, digest: string, option: number) => call<{ ok: boolean }>('POST', `/api/agents/${id}/prompt`, { digest, option }),
   agentKeys: (id: string, keys: string[]) => call('POST', `/api/agents/${id}/keys`, { keys }),
   closeTerminal: (id: string) => call<Agent>('POST', `/api/agents/${id}/close`),

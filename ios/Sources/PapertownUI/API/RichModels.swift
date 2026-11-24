@@ -768,6 +768,48 @@ public struct AgentScreen: Decodable, Sendable {
     public let text: String
     public let term: AgentTermInfo?
     public let prompt: TermPrompt?
+    /// With `styled`: the screen's colours, read by the server so the web and the app draw it alike.
+    public let lines: [[ScreenRun]]?
+    public let styles: [ScreenStyle]?
+    public let theme: ScreenTheme?
+
+    public var styled: StyledScreen? {
+        guard let lines, let styles, let theme else { return nil }
+        return StyledScreen(lines: lines, styles: styles, theme: theme)
+    }
+}
+
+/// A stretch of a terminal line in one style: `[text, index into the styles]`.
+public struct ScreenRun: Decodable, Sendable, Equatable {
+    public let text: String
+    public let style: Int
+
+    public init(from decoder: Decoder) throws {
+        var c = try decoder.unkeyedContainer()
+        text = try c.decode(String.self)
+        style = try c.decode(Int.self)
+    }
+}
+
+/// How a run looks: colours as hex, already reversed, dimmed or hidden by the server; nil for the theme's own.
+public struct ScreenStyle: Decodable, Sendable, Equatable {
+    public let fg: String?
+    public let bg: String?
+    public let b: Bool?
+    public let i: Bool?
+    public let u: Bool?
+    public let s: Bool?
+}
+
+public struct ScreenTheme: Decodable, Sendable, Equatable {
+    public let fg: String
+    public let bg: String
+}
+
+public struct StyledScreen: Sendable, Equatable {
+    public let lines: [[ScreenRun]]
+    public let styles: [ScreenStyle]
+    public let theme: ScreenTheme
 }
 
 /// An agent history read through GET /api/agents/{id}, with the agent in full.
@@ -798,6 +840,14 @@ public struct TerminalDetail: Decodable, Sendable {
     public let text: String
     public let queued: [TerminalQueueItem]?
     public let prompt: TermPrompt?
+    public let lines: [[ScreenRun]]?
+    public let styles: [ScreenStyle]?
+    public let theme: ScreenTheme?
+
+    public var styled: StyledScreen? {
+        guard let lines, let styles, let theme else { return nil }
+        return StyledScreen(lines: lines, styles: styles, theme: theme)
+    }
 }
 
 public struct TerminalTimeline: Decodable, Sendable {

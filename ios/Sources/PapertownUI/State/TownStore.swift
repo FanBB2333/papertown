@@ -760,9 +760,11 @@ public final class TownStore: ObservableObject {
                         state.transcriptNote = tl.transcript?.ok == false ? tl.transcript?.note : nil
                         if let term = tl.agent.term {
                             // the screen (with its scrollback) is read while it shows, works or waits on a dialog
-                            if (activeChat == target && chatShowsTerminal) || ["working", "starting", "blocked"].contains(term.status) {
-                                let screen = try? await client.screen(agentID: id)
+                            let shown = activeChat == target && chatShowsTerminal
+                            if shown || ["working", "starting", "blocked"].contains(term.status) {
+                                let screen = try? await client.screen(agentID: id, styled: shown)
                                 state.screen = screen?.text ?? state.screen
+                                state.styledScreen = shown ? (screen?.styled ?? state.styledScreen) : nil
                                 state.prompt = screen?.prompt
                             } else {
                                 state.prompt = nil
@@ -788,11 +790,13 @@ public final class TownStore: ObservableObject {
                     state.permissions = state.agent?.watch?.permissions ?? []
                 }
             case .terminal(let id):
-                async let detail = client.terminal(id: id)
+                let shown = activeChat == target && chatShowsTerminal
+                async let detail = client.terminal(id: id, styled: shown)
                 async let tl = try? client.terminalTimeline(id: id)
                 let d = try await detail
                 state.terminal = d.terminal
                 state.screen = d.text
+                state.styledScreen = d.styled
                 state.prompt = d.prompt
                 state.queued = (d.queued ?? []).filter { $0.state == "queued" }.map { QueuedMessage(id: $0.id, text: $0.text) }
                 state.permissions = d.terminal.watch?.permissions ?? []

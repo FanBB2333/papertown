@@ -1,6 +1,6 @@
 import { Button } from '@cloudflare/kumo';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, listen, type Agent, type AgentEvent, type AgentRole, type PaseoItem, type StartOpts, type TermPrompt, type Terminal, type Transcript } from '../api';
+import { api, listen, type Agent, type AgentEvent, type AgentRole, type PaseoItem, type StartOpts, type StyledScreen, type TermPrompt, type Terminal, type Transcript } from '../api';
 import { fold, PaseoLog, RuntimePick } from '../components/AgentRoom';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
@@ -14,13 +14,13 @@ const UNSURE = tr('发送结果未确认，请查看终端后决定是否再次�
 const STEER = tr('消息将直接发送至终端，处理方式由终端内的 agent 决定。');
 
 type Subject = Watched & { id: string };
-interface Reading<T> { subject: T; queued: AgentEvent[]; text?: string; prompt?: TermPrompt | null; items?: PaseoItem[]; transcript?: Transcript }
+interface Reading<T> { subject: T; queued: AgentEvent[]; text?: string; styled?: StyledScreen | null; prompt?: TermPrompt | null; items?: PaseoItem[]; transcript?: Transcript }
 // What a conversation in a terminal needs from where it runs. Employees in herdr or tmux and herdr sessions that
 // are not employees both plug in here, and a further backend only has to supply these.
 interface Source<T extends Subject> {
   first: T; name: (x: T) => string; about: (x: T) => string;
   blocked: (x: T) => boolean; exited: (x: T) => boolean;
-  read: (want: { chat: boolean; screen: boolean }) => Promise<Reading<T>>;
+  read: (want: { chat: boolean; screen: boolean; styled: boolean }) => Promise<Reading<T>>;
   mine: (e: any) => boolean; // a bus event about this conversation
   compose: ComposeAdapter; keys: (keys: string[]) => Promise<unknown>; answer: (digest: string, option: number) => Promise<unknown>;
   restart?: () => Promise<unknown>;
@@ -29,10 +29,26 @@ interface Source<T extends Subject> {
 }
 
 const tail = (text: string, lines = 18) => text.split('\n').filter(l => l.trim()).slice(-lines).join('\n');
+const styledOf = (r: Partial<StyledScreen>): StyledScreen | null => r.lines && r.styles && r.theme ? { lines: r.lines, styles: r.styles, theme: r.theme } : null;
+
+// The screen as the server styled it. Runs of blank lines collapse to one and the trailing ones go, as in the app.
+function StyledLines({ screen }: { screen: StyledScreen }) {
+  const blank = (line: [string, number][]) => line.every(([t, s]) => !t.trim() && !screen.styles[s]?.bg);
+  const shown: number[] = [];
+  screen.lines.forEach((line, i) => { if (!(blank(line) && shown.length && blank(screen.lines[shown[shown.length - 1]]))) shown.push(i); });
+  while (shown.length && blank(screen.lines[shown[shown.length - 1]])) shown.pop();
+  if (!shown.length) return <>{tr('终端暂未输出内容。')}</>;
+  return <>{shown.map(i => <span key={i}>{screen.lines[i].map(([t, s], j) => {
+    const st = screen.styles[s] ?? {};
+    if (!st.fg && !st.bg && !st.b && !st.i && !st.u && !st.s) return t;
+    return <span key={j} style={{ color: st.fg, background: st.bg, fontWeight: st.b ? 700 : undefined, fontStyle: st.i ? 'italic' : undefined,
+      textDecoration: [st.u && 'underline', st.s && 'line-through'].filter(Boolean).join(' ') || undefined }}>{t}</span>;
+  })}{'\n'}</span>)}</>;
+}
 
 function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<T>; toast: (s: string) => void; tools?: React.ReactNode }) {
   const [subject, setSubject] = useState(source.first), [queued, setQueued] = useState<AgentEvent[]>([]);
-  const [text, setText] = useState<string | null>(null), [prompt, setPrompt] = useState<TermPrompt | null>(null);
+  const [text, setText] = useState<string | null>(null), [prompt, setPrompt] = useState<TermPrompt | null>(null), [styled, setStyled] = useState<StyledScreen | null>(null);
   const [items, setItems] = useState<PaseoItem[] | null>(null), [transcript, setTranscript] = useState<Transcript | null>(null);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [draft, setDraft] = useState('');
   const [tab, setTab] = useState<'chat' | 'screen'>('chat'), [asking, setAsking] = useState(false), [switching, setSwitching] = useState(false);
@@ -52,11 +68,11 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
       clearTimeout(timer); reading = true;
       const { source: s, subject: x } = latest.current;
       try {
-        const r = await s.read({ chat: once || view.current === 'chat', screen: once || view.current === 'screen' || s.blocked(x) });
+        const r = await s.read({ chat: once || view.current === 'chat', screen: once || view.current === 'screen' || s.blocked(x), styled: view.current === 'screen' });
         if (!alive) return;
         once = false;
         latest.current.subject = r.subject; setSubject(r.subject); setQueued(r.queued); setError('');
-        if (r.text !== undefined) { setText(r.text); setPrompt(r.prompt ?? null); }
+        if (r.text !== undefined) { setText(r.text); setStyled(r.styled ?? null); setPrompt(r.prompt ?? null); }
         if (r.transcript) {
           setTranscript(r.transcript); setItems(r.items ?? []);
           const list = r.items ?? [], ok = r.transcript.ok;
@@ -117,8 +133,9 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
       {transcript?.ok && !rows.length && !sent.length && <div className="room-empty small-empty"><p>{tr('暂无对话。')}</p></div>}
       {!transcript && !error && <div className="room-empty small-empty"><p>{tr('加载中…')}</p></div>}
       <PaseoLog rows={rows} sent={sent.map(m => m.text)} asks={[]} working={working && !blocked} onPermit={() => {}} />
-    </div> : <pre className="terminal-screen" key="screen" ref={el => { pane.current = el; }} tabIndex={0} aria-label={tr('终端内容')} onScroll={scrolled}>
-      {text === null ? tr('加载中…') : text.replace(/\n(?:[ \t]*\n){2,}/g, '\n\n') || tr('终端暂未输出内容。')}
+    </div> : <pre className="terminal-screen" key="screen" ref={el => { pane.current = el; }} tabIndex={0} aria-label={tr('终端内容')} onScroll={scrolled}
+      style={styled ? { color: styled.theme.fg, background: styled.theme.bg } : undefined}>
+      {styled ? <StyledLines screen={styled} /> : text === null ? tr('加载中…') : text.replace(/\n(?:[ \t]*\n){2,}/g, '\n\n') || tr('终端暂未输出内容。')}
     </pre>}
     {exited ? <div className="term-wait term-off" role="status">
       <div className="term-off-row">
@@ -168,11 +185,11 @@ export function TerminalRoom({ terminal, toast, tools }: { terminal: Terminal; t
     name: t => t.name || kindName(t.kind) || tr('终端'),
     about: t => [kindName(t.kind), 'herdr', t.title, ago(t.watch.since)].filter(Boolean).join(' · '),
     blocked: t => t.watch.bucket === 'needs', exited: () => false,
-    read: async ({ chat }) => {
-      const [d, t] = await Promise.all([api.terminal(id), chat ? api.terminalTimeline(id).catch(() => null) : null]);
+    read: async ({ chat, styled }) => {
+      const [d, t] = await Promise.all([api.terminal(id, styled), chat ? api.terminalTimeline(id).catch(() => null) : null]);
       const queued: AgentEvent[] = d.queued.map(q => ({ id: q.id, agent_id: id, ts: q.created_at, kind: 'user',
         data: { text: q.text, error: ['failed', 'sending'].includes(q.state) ? UNSURE : undefined } }));
-      return { subject: d.terminal, queued, text: d.text, prompt: d.prompt ?? null,
+      return { subject: d.terminal, queued, text: d.text, styled: styledOf(d), prompt: d.prompt ?? null,
         ...(chat ? { items: t?.items ?? [], transcript: t?.transcript ?? { ok: false, note: '这个终端会话没有可读取的对话记录。' } } : {}) };
     },
     mine: e => e.type === 'terminal' && e.id === id,
@@ -194,10 +211,10 @@ export function HostedRoom({ agent, toast, tools }: { agent: Agent; toast: (s: s
     name: a => a.name,
     about: a => [kindName(a.term?.provider), a.runtime, a.term?.model].filter(Boolean).join(' · '),
     blocked: a => a.watch?.why === 'terminal', exited: a => a.term?.status === 'exited',
-    read: async ({ screen }) => {
-      const [t, s] = await Promise.all([api.timeline(id), screen ? api.agentScreen(id) : null]);
+    read: async ({ screen, styled }) => {
+      const [t, s] = await Promise.all([api.timeline(id), screen ? api.agentScreen(id, styled) : null]);
       return { subject: t.agent, queued: t.queued.map(held), items: t.items, transcript: t.transcript ?? { ok: true, note: null },
-        ...(s ? { text: s.text, prompt: s.prompt ?? null } : {}) };
+        ...(s ? { text: s.text, styled: styledOf(s), prompt: s.prompt ?? null } : {}) };
     },
     mine: e => (e.type === 'agent' && e.agent?.id === id) || (e.type === 'agent_event' && e.event?.agent_id === id),
     compose: {

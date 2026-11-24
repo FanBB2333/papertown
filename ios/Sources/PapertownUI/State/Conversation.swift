@@ -73,6 +73,8 @@ public struct ConversationState: Sendable {
     public var queued: [QueuedMessage] = []
     public var permissions: [PermissionPrompt] = []
     public var screen: String?
+    /// The screen with its colours, read while the terminal tab shows.
+    public var styledScreen: StyledScreen?
     public var prompt: TermPrompt?
     public var transcriptNote: String?
     public var pending: [PendingMessage] = []
