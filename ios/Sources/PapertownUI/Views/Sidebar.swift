@@ -1,10 +1,11 @@
 import PapertownCore
 import SwiftUI
 
-// The sidebar on iPad and iPhone, after the Claude app's: the same quiet colour as the page, grey icons, the four
-// sections, the projects opened lately, and the server along the bottom like an account. On iPad it stands beside the
-// page (SplitShell); on an iPhone, or any narrow window, it slides over the page from the left (DrawerShell), opened
-// from the button the pages put at their top left (papertownSidebarButton). The Mac keeps SidebarShell.
+// The sidebar on iPad and iPhone held wide, after the Claude app's: the same quiet colour as the page, grey icons, the
+// four sections, and the server along the bottom like an account. Where there is room it stands beside the page
+// (SplitShell); where there is not it slides over the page from the left (DrawerShell), opened from the button the
+// pages put at their top left (papertownSidebarButton). Held upright the app has tabs instead (TabShell); the Mac keeps
+// SidebarShell.
 
 // MARK: - Opening it from a page
 

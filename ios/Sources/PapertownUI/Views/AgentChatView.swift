@@ -150,6 +150,7 @@ struct AgentChatView: View {
             store.setActiveChat(target)
         }
         .onDisappear { store.leaveChat(target) }
+        .papertownHidesTabBar()
         .onChange(of: showTerminal) { on in
             store.chatShowsTerminal = on
             if !on { typingInTerminal = false }

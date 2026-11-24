@@ -64,6 +64,7 @@ struct LoopCanvasPage: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .papertownHidesTabBar()
         .navigationDestination(isPresented: $showList) { LoopPage(projectID: projectID) }
         .navigationDestination(isPresented: $showOutline) { OutlinePage(projectID: projectID) }
     }

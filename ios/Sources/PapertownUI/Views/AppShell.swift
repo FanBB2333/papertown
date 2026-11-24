@@ -1,13 +1,14 @@
 import PapertownCore
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
-// The app's frame for the space it has. A sidebar beside the page on the Mac, on iPad, and on an iPhone wide enough
-// for one (iPhone Duo open, Plus and Max models in landscape); tabs along the bottom on an iPhone or a narrow window
-// (iPad Split View, iPhone Duo folded). The pages are the same in both. Switching frames keeps the section and what is
-// open in it, because both live in TownStore.
-//
-// On iPad and iPhone the sidebar is Papertown's own (Sidebar.swift): beside the page where there is room, sliding over
-// it from the left where there is not. The Mac keeps the system's list in SidebarShell.
+// The app's frame for the shape it has. Taller than wide (an iPhone or iPad held upright, a narrow iPad window): tabs
+// along the bottom, the server behind the connection pill. Wider than tall: a sidebar, beside the page where there is
+// room for one (iPad, Plus and Max iPhones) and sliding over it from the left where there is not. The Mac keeps the
+// system's list in SidebarShell. The pages are the same in every frame, and turning the device keeps the section and
+// what is open in it, because both live in TownStore.
 
 struct AppSection: Identifiable {
     let tab: TownStore.Tab
@@ -39,17 +40,85 @@ struct AppShell: View {
     @ObservedObject var store: TownStore
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var width
+    @State private var tall = AppShell.startsTall
     #endif
 
     var body: some View {
         #if os(macOS)
         SidebarShell(store: store)
         #else
-        if width == .regular {
-            SplitShell(store: store)
-        } else {
-            DrawerShell(store: store)
+        Group {
+            if tall {
+                TabShell(store: store, width: width)
+            } else if width == .regular {
+                SplitShell(store: store)
+            } else {
+                DrawerShell(store: store)
+            }
         }
+        // the whole window, keyboard and all: typing does not turn an upright iPad into a wide one
+        .background(
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { tall = g.size.height > g.size.width }
+                    .onChange(of: g.size) { tall = $0.height > $0.width }
+            }
+            .ignoresSafeArea()
+        )
+        #endif
+    }
+
+    #if os(iOS)
+    /// The window's shape at launch, so the first frame is already the right one.
+    private static var startsTall: Bool {
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+        guard let b = (windows.first { $0.isKeyWindow } ?? windows.first)?.bounds, b.width > 0 else {
+            return UIDevice.current.userInterfaceIdiom == .phone
+        }
+        return b.height > b.width
+    }
+    #endif
+}
+
+#if os(iOS)
+/// Upright: the four sections as tabs along the bottom. The server opens from the connection pill on the pages, so a
+/// server section chosen in another frame becomes its page over the Inbox here.
+struct TabShell: View {
+    @ObservedObject var store: TownStore
+    /// The width the pages get: on an iPad the tab bar is told the width is compact, which keeps it along the bottom.
+    let width: UserInterfaceSizeClass?
+
+    var body: some View {
+        let lang = store.language
+        TabView(selection: $store.selectedTab) {
+            ForEach(AppSection.all.filter { $0.tab != .server }) { section in
+                AppSection.page(section.tab)
+                    .environment(\.horizontalSizeClass, width)
+                    .tabItem { Label(lang.string(section.title), systemImage: section.symbol) }
+                    .badge(section.tab == .inbox ? store.inboxItems.count : 0)
+                    .tag(section.tab)
+            }
+        }
+        .environment(\.horizontalSizeClass, .compact)
+        .onAppear { leaveServer() }
+        .onChange(of: store.selectedTab) { _ in leaveServer() }
+    }
+
+    private func leaveServer() {
+        guard store.selectedTab == .server else { return }
+        store.selectedTab = .inbox
+        store.inboxPath.append(InboxRoute.server)
+    }
+}
+#endif
+
+extension View {
+    /// A page that wants the whole height (the canvas, a conversation): the tab bar steps aside while it shows.
+    func papertownHidesTabBar() -> some View {
+        #if os(iOS)
+        toolbar(.hidden, for: .tabBar)
+        #else
+        self
         #endif
     }
 }
