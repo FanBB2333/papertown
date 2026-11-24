@@ -687,28 +687,51 @@ public final class TownStore: ObservableObject {
         do {
             switch target {
             case .agent(let id):
-                if state.agent?.usesTimeline != true {
+                var useTimeline = state.agent?.usesTimeline == true && state.agent?.started == true
+                if !useTimeline {
                     let read = try await client.agentEvents(agentID: id, after: state.lastEventID)
                     state.agent = read.agent
-                    if !read.agent.usesTimeline { state.merge(read.events) }
-                }
-                if state.agent?.usesTimeline == true {
-                    let tl = try await client.timeline(agentID: id)
-                    state.agent = tl.agent
-                    var entries = ConversationState.entries(from: tl.items)
-                    // an agent's asks and acts live in its events even when its words are in a transcript
-                    if target.isAssistant {
-                        let extra = ((assistant?.asks ?? []) + (assistant?.acts ?? [])).sorted { $0.id < $1.id }
-                        entries += ConversationState.entries(from: extra)
+                    useTimeline = read.agent.usesTimeline && read.agent.started == true
+                    if !useTimeline {
+                        state.screen = nil
+                        state.prompt = nil
+                        state.merge(read.events)
                     }
-                    state.entries = entries
-                    state.queued = (tl.queued ?? []).map { QueuedMessage(id: $0.id, text: $0.data.field("text")?.stringValue ?? "") }
-                    state.permissions = tl.agent.watch?.permissions ?? tl.paseo?.permissions ?? []
-                    state.transcriptNote = tl.transcript?.ok == false ? tl.transcript?.note : nil
-                    if tl.agent.term != nil {
-                        let screen = try? await client.screen(agentID: id)
-                        state.screen = screen?.text
-                        state.prompt = screen?.prompt
+                }
+                if useTimeline {
+                    do {
+                        let tl = try await client.timeline(agentID: id)
+                        state.agent = tl.agent
+                        var entries = ConversationState.entries(from: tl.items)
+                        // an agent's asks and acts live in its events even when its words are in a transcript
+                        if target.isAssistant {
+                            let extra = ((assistant?.asks ?? []) + (assistant?.acts ?? [])).sorted { $0.id < $1.id }
+                            entries += ConversationState.entries(from: extra)
+                        }
+                        state.entries = entries
+                        state.queued = (tl.queued ?? []).map { QueuedMessage(id: $0.id, text: $0.data.field("text")?.stringValue ?? "") }
+                        state.permissions = tl.agent.watch?.permissions ?? tl.paseo?.permissions ?? []
+                        state.transcriptNote = tl.transcript?.ok == false ? tl.transcript?.note : nil
+                        if tl.agent.term != nil {
+                            let screen = try? await client.screen(agentID: id)
+                            state.screen = screen?.text
+                            state.prompt = screen?.prompt
+                        } else {
+                            state.screen = nil
+                            state.prompt = nil
+                        }
+                    } catch {
+                        // Detached (e.g. assistantNew) or switched runtime since last read: fall back to agentEvents.
+                        let read = try await client.agentEvents(agentID: id, after: 0)
+                        state.agent = read.agent
+                        if read.agent.usesTimeline && read.agent.started == true { throw error }
+                        state.lastEventID = 0
+                        state.events = []
+                        state.screen = nil
+                        state.prompt = nil
+                        state.transcriptNote = nil
+                        state.merge(read.events)
+                        state.permissions = read.agent.watch?.permissions ?? []
                     }
                 } else {
                     state.permissions = state.agent?.watch?.permissions ?? []

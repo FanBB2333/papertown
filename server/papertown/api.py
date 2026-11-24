@@ -306,6 +306,7 @@ class StartIn(BaseModel):
 
 
 class NodeAgentIn(BaseModel):
+    runtime: str | None = None
     provider: str | None = None
     model: str | None = None
     thinking: str | None = None
@@ -1096,7 +1097,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/agent")
     def canvas_bind(line_id: str, node_id: str, body: NodeAgentIn):
-        return canvas(town.canvas.bind, line_id, node_id, body.provider, body.model, body.thinking, body.ext_id)
+        return canvas(town.canvas.bind, line_id, node_id, body.provider, body.model, body.thinking, body.ext_id, body.runtime)
 
     @app.post("/api/lines/{line_id}/canvas/nodes/{node_id}/back")
     def canvas_back(line_id: str, node_id: str, body: BackIn):

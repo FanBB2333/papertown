@@ -474,6 +474,17 @@ def test_default_runtime_for_lead_and_canvas(tmp_path, monkeypatch):
     t.canvas.bind('line-hosted', 'task-default', 'claude', 'chosen-model', 'high')
     assert calls[-1][1:] == ('tmux', 'claude', 'chosen-model', 'high')
     assert data['nodes'][0]['agent_id'] == calls[-1][0]
+    data['nodes'].append({'id': 'task-explicit', 'kind': 'task', 'status': 'draft', 'to': 'writer', 'title': 'Task 2'})
+    t.canvas.bind('line-hosted', 'task-explicit', 'codex', 'm2', 'low', runtime='headless')
+    assert calls[-1][1:] == ('headless', 'codex', 'm2', 'low')
+    assert data['nodes'][1]['agent_id'] == calls[-1][0]
+    with pytest.raises(Exception):
+        t.canvas.bind('line-hosted', 'task-explicit', 'claude', runtime='pi')
+    # switching an off lead from an older Paseo session to a terminal backend detaches cleanly
+    t.agents._set(lead['id'], runtime='paseo', ext_id='old-conv', status='idle', term=None)
+    t.leads.configure('line-hosted', on=False)
+    t.agents.start(lead['id'], 'herdr', 'claude', 'chosen-model', 'medium')
+    assert calls[-1][1:] == ('herdr', 'claude', 'chosen-model', 'medium')
 
 
 def test_hook_auth_independent_of_browser_login(tmp_path):

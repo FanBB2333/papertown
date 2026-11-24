@@ -63,6 +63,7 @@ public struct ConversationState: Sendable {
 
     public var isOffline: Bool {
         guard let agent else { return terminal == nil }
+        if agent.started != true { return true }
         if agent.term != nil { return agent.term?.status == "exited" }
         return agent.isOffline || agent.status == "stopped"
     }

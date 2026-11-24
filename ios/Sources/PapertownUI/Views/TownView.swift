@@ -22,7 +22,11 @@ struct TownView: View {
                             }
                             Spacer()
                             let pending = (store.assistant?.acts ?? []).filter { $0.data.field("status")?.stringValue == "pending" }.count
-                            if pending > 0 { Pill(text: "\(pending)", color: .purple, symbol: "hand.raised.fill") }
+                            if pending > 0 {
+                                Pill(text: "\(pending)", color: .purple, symbol: "hand.raised.fill")
+                            } else if let a = store.assistantAgent, a.started != true {
+                                Text(lang.string("staff.not_started")).font(.caption).foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }

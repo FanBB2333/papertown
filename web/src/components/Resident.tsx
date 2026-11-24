@@ -38,8 +38,8 @@ export function useResidentLine(id: string) {
   return [line, () => setBump(n => n + 1)] as const;
 }
 
-export function ResidentControl({ lineId, resident, model, sample, talk, toast, onChanged }: {
-  lineId: string; resident: Resident; model?: string | null; sample?: boolean; talk?: string;
+export function ResidentControl({ lineId, resident, model, sample, talk, onStartWith, toast, onChanged }: {
+  lineId: string; resident: Resident; model?: string | null; sample?: boolean; talk?: string; onStartWith?: () => void;
   toast: (s: string) => void; onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -61,7 +61,10 @@ export function ResidentControl({ lineId, resident, model, sample, talk, toast, 
       {(resident.state === 'starting' || resident.state === 'ended' || (resident.state === 'off' && !sample)) && <p className="muted small">{ABOUT[resident.state]}</p>}
     </div>
     {resident.state !== 'ended' && <div className="resident-actions">
-      {resident.state === 'blocked' && <><button className="btn" disabled={busy} onClick={() => set(true)}>{tr('重试')}</button>{talk && <a className="btn" href={href(talk)} onClick={e => follow(e, talk)}>{tr('在对话中手动启动')}</a>}</>}
+      {resident.state === 'blocked' && <button className="btn" disabled={busy} onClick={() => set(true)}>{tr('重试')}</button>}
+      {(resident.state === 'off' || resident.state === 'blocked') && (onStartWith
+        ? <button className="btn" disabled={busy} onClick={onStartWith}>{tr('选择方式启动')}</button>
+        : resident.state === 'blocked' && talk && <a className="btn" href={href(talk)} onClick={e => follow(e, talk)}>{tr('在对话中手动启动')}</a>)}
       <button type="button" role="switch" aria-checked={resident.on} aria-label={tr('项目负责人开关')} className="resident-switch" disabled={busy} onClick={() => set(!resident.on)}><span aria-hidden /></button>
     </div>}
   </section>;

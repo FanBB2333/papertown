@@ -129,6 +129,7 @@
 "staff.sort.project" = "Group by Project";
 "staff.section.town" = "Town";
 "staff.assistant.sub" = "Cross-project status, actions, and new ideas";
+"staff.not_started" = "Not started";
 "staff.no_messages" = "No messages yet";
 "staff.town_wide" = "Town-wide";
 
@@ -142,7 +143,10 @@
 "chat.queue.withdraw" = "Withdraw";
 "chat.permission.warning" = "Steering declines the pending permission prompt before sending. Use Allow or Deny on the prompt first.";
 "chat.placeholder.idle" = "Message %@ to start a new turn…";
-"chat.placeholder.offline" = "Agent is paused. Start it from the project page.";
+"chat.placeholder.offline" = "This agent is not running yet. Pick a runtime to start it.";
+"chat.assistant_offline" = "The assistant is not running yet. Pick a runtime to start it.";
+"chat.term_exited" = "The terminal is closed. Resume it or pick another runtime.";
+"chat.resume_session" = "Resume Session";
 "chat.mode.steer" = "Steer";
 "chat.mode.steer.placeholder" = "Add instructions to the current turn…";
 "chat.mode.steer.hint" = "Joins the current turn after the active step completes.";
@@ -531,7 +535,12 @@
 "loop.task.back.placeholder" = "What to redo";
 "loop.task.reply" = "Reply";
 "loop.task.reply.placeholder" = "Your reply";
-"loop.task.no_agent" = "%@ has not started. Start it on the Staff page first.";
+"loop.task.no_agent" = "%@ has not started yet. Start it above or assign a dedicated agent.";
+"loop.task.agent" = "Agent Session";
+"loop.task.dedicated" = "Dedicated Session";
+"loop.task.assign_dedicated" = "Assign Dedicated Agent…";
+"loop.task.dedicated_footer" = "Uses the project role's shared session, or assign a dedicated session before sending.";
+"loop.task.start_agent" = "Start %@…";
 "loop.task.remove" = "Delete Task";
 "loop.task.remove.confirm" = "Delete “%@”?";
 "loop.add" = "Add to the Loop";
@@ -628,11 +637,17 @@
 "usage.settings.saved" = "Usage settings saved.";
 "hire.title" = "New Staff";
 "hire.start_title" = "Start";
+"hire.assistant_title" = "Start Assistant";
+"hire.start_assistant" = "Start Assistant";
+"hire.node_title" = "Assign Dedicated Agent";
+"hire.node_start" = "Start & Assign";
 "hire.project" = "Project";
 "hire.post" = "Post";
 "hire.post.coder" = "Writes and runs the project's code and experiments.";
 "hire.post.writer" = "Writes and typesets the paper.";
 "hire.post.lead" = "Runs the project and reports to you.";
+"hire.post.assistant" = "Town-wide assistant across projects for questions and actions.";
+"hire.post.node" = "Creates a dedicated session for this task node.";
 "hire.no_projects" = "No projects yet. Add an idea first.";
 "hire.running" = "This post's staff member is already running.";
 "hire.open" = "Open Conversation";
@@ -648,6 +663,7 @@
 "hire.no_paseo_models" = "Paseo is not connected, so the CLI's default model is used.";
 "hire.paseo_down" = "Paseo is not connected.";
 "hire.pi_lead" = "Leads do not run in pi yet.";
+"hire.pi_node" = "Task agents cannot run in pi yet.";
 "hire.no_cli" = "No Claude Code, Codex or Antigravity found on the server's machine.";
 "hire.start" = "Start";
 "hire.untitled" = "(untitled)";
@@ -716,7 +732,7 @@
 "access.keys.revoke" = "Revoke";
 "access.keys.revoke.confirm" = "Revoke the key “%@”?";
 "agents.runtime" = "Default Runtime";
-"agents.runtime.footer" = "New node agents and project leads use this runtime.";
+"agents.runtime.footer" = "Default for auto-started leads, pt hire and newly created agents. You can still pick another runtime when starting manually.";
 "agents.status" = "Status";
 "agents.running" = "Running";
 "agents.available" = "Available";

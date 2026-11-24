@@ -338,12 +338,14 @@ struct LoopTaskPage: View {
     @EnvironmentObject private var store: TownStore
     @Environment(\.dismiss) private var dismiss
     @State private var confirmRemove = false
+    @State private var showBindNode = false
+    @State private var showStartRole = false
 
     var body: some View {
         let lang = store.language
         LivePage(load: { try await $0.loop(projectID: projectID) }, events: loopEvents, projectID: projectID) { v, act in
             let t = v.nodes.first { $0.id == nodeID }
-            let there = v.agents?[t?.to ?? "lead"]?.there ?? false
+            let there = (t?.agentID != nil) || (v.agents?[t?.to ?? "lead"]?.there ?? false)
             let after = draftsAfter(v)
             List {
                 if let t {
@@ -359,6 +361,7 @@ struct LoopTaskPage: View {
                         if let at = t.sentAt { InfoRow(label: lang.string("loop.task.sent_at"), value: Stamp.short(at, lang)) }
                         if let at = t.doneAt { InfoRow(label: lang.string("loop.task.done_at"), value: Stamp.short(at, lang)) }
                     }
+                    sessionSection(t, there: there, lang)
                     if let r = t.result?.displayText, !r.isEmpty {
                         Section(lang.string("loop.task.result")) { Text(lang.server(r)).font(.footnote).textSelection(.enabled) }
                     }
@@ -392,8 +395,68 @@ struct LoopTaskPage: View {
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)
             .navigationTitle(lang.server(t?.title ?? ""))
+            .sheet(isPresented: $showBindNode) {
+                HireSheet(projectID: projectID, role: t?.to ?? "coder", nodeID: nodeID) { _ in
+                    act.run { _ = try await $0.loop(projectID: projectID) }
+                }
+                .papertownSheetFrame(height: 540)
+                .environmentObject(store)
+                .tint(store.appearance.tintColor)
+            }
+            .sheet(isPresented: $showStartRole) {
+                HireSheet(projectID: projectID, role: t?.to ?? "lead") { _ in
+                    act.run { _ = try await $0.loop(projectID: projectID) }
+                }
+                .papertownSheetFrame(height: 540)
+                .environmentObject(store)
+                .tint(store.appearance.tintColor)
+            }
         }
         .papertownInlineTitle()
+    }
+
+    @ViewBuilder
+    private func sessionSection(_ t: LoopNode, there: Bool, _ lang: AppLanguage) -> some View {
+        let role = t.to ?? "lead"
+        let who = TextFormatters.roleName(role, language: lang)
+        let canManage = store.connectionStatus == .connected && !store.isDemo
+        if let aid = t.agentID {
+            Section(lang.string("loop.task.agent")) {
+                NavigationLink {
+                    AgentChatView(agentID: aid, role: role, subtitle: lang.server(t.title ?? ""))
+                } label: {
+                    HStack(spacing: 10) {
+                        RoleBadgeView(role: role, size: 28)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(lang.string("loop.task.dedicated")).font(.subheadline.weight(.medium))
+                            Text([t.agent?.runtime, t.agent?.model].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                }
+            }
+            .papertownRowBackground(store.appearance)
+        } else if canManage && ((t.status ?? "draft") == "draft" || !there) {
+            Section {
+                if (t.status ?? "draft") == "draft" {
+                    Button { showBindNode = true } label: {
+                        Label(lang.string("loop.task.assign_dedicated"), systemImage: "person.badge.plus")
+                    }
+                }
+                if !there {
+                    Button { showStartRole = true } label: {
+                        Label(lang.format("loop.task.start_agent", who), systemImage: "play.circle")
+                    }
+                }
+            } header: {
+                Text(lang.string("loop.task.agent"))
+            } footer: {
+                if (t.status ?? "draft") == "draft" {
+                    Text(lang.string("loop.task.dedicated_footer"))
+                }
+            }
+            .papertownRowBackground(store.appearance)
+        }
     }
 
     @ViewBuilder

@@ -3,10 +3,9 @@
 // one; what it waits on you for, pinned above the message box.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, type Agent, type AgentEvent, type AssistantConv, type Report, type StartOpts, type DefaultRuntime } from '../api';
-import { fold, PaseoLog, PaseoPick, PiLog, usePiTalk, usePaseoTalk } from '../components/AgentRoom';
+import { api, type Agent, type AgentEvent, type AssistantConv, type Report, type StartOpts } from '../api';
+import { fold, PaseoLog, PiLog, RuntimePick, usePiTalk, usePaseoTalk } from '../components/AgentRoom';
 import { HostedRoom } from '../agents/Terminal';
-import { TerminalPick } from '../agents/TerminalPick';
 import { Compose } from '../agents/Compose';
 import { ResidentControl, ResidentMark, useResidentLine } from '../components/Resident';
 import { tr, trx } from '../i18n';
@@ -21,8 +20,6 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
   lineId: string; seq: number; layout: Layout; onClose?: () => void; toast: (t: string) => void;
 }) {
   const [v, again] = useLead(lineId);
-  const [runtime, setRuntime] = useState<DefaultRuntime>('paseo');
-  useEffect(() => { api.defaultRuntime().then(d => setRuntime(d.runtime)).catch(e => toast((e as Error).message)); }, []);
   const [history, setHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   const a = v?.agent ?? null;
@@ -43,7 +40,7 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
     setBusy(true);
     try {
       const x = a ?? await api.openAgent(lineId, 'lead');
-      await api.startAgent(x.id, { ...o, runtime: o.runtime ?? runtime });
+      await api.startAgent(x.id, o);
       await api.setLead(lineId, { on: true });
       again();
     } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
@@ -82,9 +79,8 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
               <p className="as-lead">{tr('负责人推进此项目：启动员工、派发任务、提交工序产出、收尾并向你汇报。工作目录为 Papertown 自有目录。')}</p>
               {a && <Earlier agent={a.id} at={a.ext_id} limit={3} title={tr('继续此前对话')} onPick={resume} />}
               {['off', 'blocked'].includes(v.resident.state) && <details className="hire-card">
-                <summary>{tr('手动启动')}</summary>
-                <h3>{runtime === 'paseo' ? 'Paseo' : tr('终端')}</h3>
-                {runtime === 'paseo' ? <PaseoPick busy={busy} onStart={start} role="lead" /> : <TerminalPick busy={busy} onStart={start} role="lead" />}
+                <summary>{tr('选择方式启动')}</summary>
+                <RuntimePick busy={busy} onStart={start} role="lead" />
               </details>}
             </div>
           </>

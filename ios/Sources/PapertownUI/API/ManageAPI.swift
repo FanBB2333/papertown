@@ -208,6 +208,14 @@ public struct LoopHumanItem: Decodable, Sendable, Equatable {
     public var gate: String? = nil
 }
 
+public struct LoopAgentRef: Decodable, Sendable, Equatable {
+    public let id: String
+    public let role: String
+    public var status: String? = nil
+    public var runtime: String? = nil
+    public var model: String? = nil
+}
+
 /// A node of the loop. Only the parts the app shows are read; each kind fills its own.
 public struct LoopNode: Decodable, Sendable, Identifiable, Equatable {
     public let id: String
@@ -228,6 +236,7 @@ public struct LoopNode: Decodable, Sendable, Identifiable, Equatable {
     public let waitNote: String?
     public let stale: String?
     public let agentID: String?
+    public let agent: LoopAgentRef?
     public let loop: String?
     public let round: Int?
     public let log: [LoopLogEntry]?
@@ -239,10 +248,10 @@ public struct LoopNode: Decodable, Sendable, Identifiable, Equatable {
         mod = c.opt(.mod); title = c.opt(.title); text = c.opt(.text); status = c.opt(.status); to = c.opt(.to)
         note = c.opt(.note); pct = c.opt(.pct); gate = c.opt(.gate); check = c.opt(.check); items = c.opt(.items)
         sentAt = c.opt(.sentAt); doneAt = c.opt(.doneAt); result = c.opt(.result); waitNote = c.opt(.waitNote)
-        stale = c.opt(.stale); agentID = c.opt(.agentID); loop = c.opt(.loop); round = c.opt(.round); log = c.opt(.log)
+        stale = c.opt(.stale); agentID = c.opt(.agentID); agent = c.opt(.agent); loop = c.opt(.loop); round = c.opt(.round); log = c.opt(.log)
     }
     enum CodingKeys: String, CodingKey {
-        case id, kind, mod, title, text, status, to, note, pct, gate, check, items, result, stale, loop, round, log
+        case id, kind, mod, title, text, status, to, note, pct, gate, check, items, result, stale, agent, loop, round, log
         case sentAt = "sent_at", doneAt = "done_at", waitNote = "wait_note", agentID = "agent_id"
     }
 }
@@ -389,6 +398,21 @@ public struct StartOptions: Encodable, Sendable {
     public var thinking: String?
     public init(runtime: String?, provider: String?, model: String?, thinking: String?) {
         self.runtime = runtime; self.provider = provider; self.model = model; self.thinking = thinking
+    }
+}
+
+public struct NodeAgentOptions: Encodable, Sendable {
+    public var runtime: String?
+    public var provider: String?
+    public var model: String?
+    public var thinking: String?
+    public var extID: String?
+    public init(runtime: String? = nil, provider: String? = nil, model: String? = nil, thinking: String? = nil, extID: String? = nil) {
+        self.runtime = runtime; self.provider = provider; self.model = model; self.thinking = thinking; self.extID = extID
+    }
+    enum CodingKeys: String, CodingKey {
+        case runtime, provider, model, thinking
+        case extID = "ext_id"
     }
 }
 
@@ -614,6 +638,9 @@ public extension PapertownClient {
     }
     func backTask(projectID: String, nodeID: String, text: String) async throws {
         let _: Ack = try await send(.post, ["lines", projectID, "canvas", "nodes", nodeID, "back"], body: ["text": text])
+    }
+    func bindNode(projectID: String, nodeID: String, _ options: NodeAgentOptions) async throws -> LoopView {
+        try await send(.post, ["lines", projectID, "canvas", "nodes", nodeID, "agent"], body: options)
     }
     func editNode(projectID: String, nodeID: String, _ edit: LoopNodeEdit) async throws {
         let _: Ack = try await send(.put, ["lines", projectID, "canvas", "nodes", nodeID], body: edit)

@@ -108,8 +108,12 @@ struct AgentChatView: View {
             }
         }
         .sheet(isPresented: $showStart) {
-            HireSheet(projectID: state.agent?.lineID, role: role) { _ in Task { await store.refreshChat(target) } }
-                .papertownSheetFrame(height: 520)
+            let targetID: String? = {
+                if case .agent(let id) = target { return id }
+                return nil
+            }()
+            HireSheet(projectID: state.agent?.lineID, role: role, agentID: targetID) { _ in Task { await store.refreshChat(target) } }
+                .papertownSheetFrame(height: 540)
                 .environmentObject(store)
                 .tint(store.appearance.tintColor)
         }
@@ -321,7 +325,7 @@ struct AgentChatView: View {
             if let sendError {
                 Text(sendError).font(.caption).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading)
             }
-            if state.isOffline && !target.isAssistant, case .agent(let id) = target, state.agent != nil {
+            if state.isOffline, case .agent(let id) = target, state.agent != nil {
                 offlineBar(agentID: id, lang)
             } else {
                 if state.isWorking {
@@ -393,7 +397,7 @@ struct AgentChatView: View {
                 }
             }
             #endif
-            if !target.isAssistant && agent?.lineID != nil && (agent?.started != true || agent?.isOffline == true) {
+            if store.connectionStatus == .connected && !store.isDemo && (agent?.started != true || state.isOffline) {
                 Divider()
                 Button { showStart = true } label: { Label(lang.string("chat.start_with"), systemImage: "play.circle") }
             }
@@ -409,16 +413,27 @@ struct AgentChatView: View {
     }
 
     private func offlineBar(agentID: String, _ lang: AppLanguage) -> some View {
-        HStack {
-            Text(state.agent?.down.map(lang.server) ?? lang.string("chat.placeholder.offline"))
+        let exited = state.agent?.term?.status == "exited"
+        let note = state.agent?.down.map(lang.server) ?? lang.string(exited ? "chat.term_exited" : (target.isAssistant ? "chat.assistant_offline" : "chat.placeholder.offline"))
+        return HStack(spacing: 8) {
+            Text(note)
                 .font(.footnote).foregroundStyle(.secondary)
             Spacer()
-            if role != "lead" {
-                Button(lang.string("chat.start")) {
-                    Task { await store.act(on: target) { try await $0.startAgent(agentID) } }
+            if store.connectionStatus == .connected && !store.isDemo {
+                if exited {
+                    Button(lang.string("chat.start_with")) { showStart = true }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    Button(lang.string("chat.resume_session")) {
+                        Task { await store.act(on: target) { try await $0.startAgent(agentID) } }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } else {
+                    Button(lang.string("chat.start_with")) { showStart = true }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
             }
         }
     }

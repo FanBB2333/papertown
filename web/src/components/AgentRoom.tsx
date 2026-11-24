@@ -219,6 +219,28 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
   );
 }
 
+// Choosing Paseo or a hosted terminal backend (herdr, tmux, headless), preselected from the town's default runtime.
+export function RuntimePick({ busy, onStart, role, allowPi }: {
+  busy: boolean; onStart: (o: StartOpts) => void; role?: AgentRole; allowPi?: boolean;
+}) {
+  const [mode, setMode] = useState<'paseo' | 'terminal' | 'pi'>('paseo');
+  useEffect(() => {
+    let alive = true;
+    api.defaultRuntime().then(d => { if (alive) setMode(d.runtime === 'paseo' ? 'paseo' : 'terminal'); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  return <>
+    <div className="seg mini" role="radiogroup" aria-label={tr('运行方式')}>
+      <button type="button" role="radio" aria-checked={mode === 'paseo'} className={mode === 'paseo' ? 'on' : ''} disabled={busy} onClick={() => setMode('paseo')}>Paseo</button>
+      <button type="button" role="radio" aria-checked={mode === 'terminal'} className={mode === 'terminal' ? 'on' : ''} disabled={busy} onClick={() => setMode('terminal')}>{tr('终端')}</button>
+      {allowPi && <button type="button" role="radio" aria-checked={mode === 'pi'} className={mode === 'pi' ? 'on' : ''} disabled={busy} onClick={() => setMode('pi')}>pi</button>}
+    </div>
+    {mode === 'paseo' ? <PaseoPick busy={busy} onStart={onStart} role={role === 'lead' || role === 'assistant' ? role : undefined} />
+      : mode === 'terminal' ? <TerminalPick busy={busy} onStart={onStart} role={role} />
+        : <button type="button" className="btn pri" disabled={busy} onClick={() => onStart({ runtime: 'pi' })}>{busy ? tr('启动中…') : tr('启动 pi')}</button>}
+  </>;
+}
+
 // an existing Paseo conversation on this machine, taken over as this project's agent
 export function ImportCard({ busy, onPick }: { busy: boolean; onPick: (id: string) => void }) {
   const [list, setList] = useState<PaseoConversation[] | null>(null);

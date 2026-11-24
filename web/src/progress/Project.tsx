@@ -4,13 +4,15 @@
 
 import { useEffect, useState } from 'react';
 import { type PaseoDefaults, type ProjectCard } from '../api';
+import { agentsPath } from '../agents/Agents';
+import { HireDialog } from '../agents/Hire';
 import { ResidentControl, useResidentLine } from '../components/Resident';
 import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
 import { ProjectUsage } from '../usage/Usage';
-import { follow, href, PATHS } from '../route';
+import { follow, go, href, PATHS } from '../route';
 import { askPath, ChatBox } from './Ask';
 import { DecideList } from './Decide';
 import { LoopCard } from './LoopCard';
@@ -30,6 +32,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
   const acts = useCardActs(r, toast, onChange);
   const [note, setNote] = useState('');
   const [viewer, setViewer] = useState<{ id: string; msg?: number } | null>(null);
+  const [hiring, setHiring] = useState<'coder' | 'writer' | 'lead' | null>(null);
   const { line, card } = r;
   const ask = askPath(line.seq);
   const [liveLine, reloadLead] = useResidentLine(line.id);
@@ -51,10 +54,11 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
         </div>
         <div className="pj-acts">
           <a className="btn pri" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={14} />{tr('对话')}</a>
+          <button className="btn" onClick={() => setHiring('coder')}><Icon n="plus" size={14} />{tr('新建员工')}</button>
           <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏查看该项目详情')}><Icon n="board" size={14} />{tr('中控屏')}</button>
         </div>
       </header>
-      <ResidentControl lineId={line.id} resident={liveLine?.lead ?? line.lead} sample={liveLine?.sample ?? line.sample} model={liveLine?.team.find(a => a.role === 'lead')?.model ?? r.lead?.model} talk={ask} toast={toast} onChanged={reloadLead} />
+      <ResidentControl lineId={line.id} resident={liveLine?.lead ?? line.lead} sample={liveLine?.sample ?? line.sample} model={liveLine?.team.find(a => a.role === 'lead')?.model ?? r.lead?.model} talk={ask} onStartWith={() => setHiring('lead')} toast={toast} onChanged={reloadLead} />
       {(r.decisions?.length ?? 0) > 0 && (
         <section className="psec pj-decide" id="decide">
           <header className="psec-h"><h3><Icon n="bell" size={16} />{tr('待你决定')}<span className="pj-n">{r.decisions!.length}</span></h3></header>
@@ -197,6 +201,8 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
         </aside>
       </div>
       {viewer && <MemoryViewer lineId={line.id} id={viewer.id} msg={viewer.msg} onClose={() => setViewer(null)} />}
+      {hiring && <HireDialog lineId={line.id} initialPost={hiring} lockLine onClose={() => setHiring(null)}
+        onStarted={a => { reloadLead(); go(agentsPath(a.id)); }} onOpen={a => go(agentsPath(a.id))} />}
     </div>
   );
 }

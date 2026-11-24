@@ -325,7 +325,7 @@ function Agents() {
   return (
     <>
       <Card title={tr('默认运行方式')}>
-        <Row label={tr('默认运行方式')} desc={tr('新建节点 Agent 和项目负责人使用此运行方式。')}>
+        <Row label={tr('默认运行方式')} desc={tr('自动启动的项目负责人、pt hire 招募的员工及新建 Agent 默认预选此运行方式，手动启动时仍可自由切换。')}>
           <Select aria-label={tr('默认运行方式')} disabled={savingRuntime} value={runtime} items={{ paseo: 'Paseo', herdr: 'herdr', tmux: 'tmux', headless: 'headless' }} onValueChange={v => saveRuntime(v as DefaultRuntime)} />
         </Row>
         {runtimeError && <Warn bad>{runtimeError}</Warn>}

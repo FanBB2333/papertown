@@ -1,16 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { api, type Agent, type CanvasNode, type DefaultRuntime } from '../api';
-import { fold, ImportCard, PaseoLog, PaseoPick, usePaseoTalk } from '../components/AgentRoom';
+import { useMemo, useState } from 'react';
+import { api, type Agent, type CanvasNode } from '../api';
+import { fold, ImportCard, PaseoLog, RuntimePick, usePaseoTalk } from '../components/AgentRoom';
 import { AGENT_STATUS } from '../components/MillRoom';
 import { HostedRoom, HostedContext } from '../agents/Terminal';
-import { TerminalPick } from '../agents/TerminalPick';
 import { Compose } from '../agents/Compose';
 import { tr } from '../i18n';
 import type { Act } from './Checks';
 
 export function NodeConversation({ node, lineId, busy, act }: { node: CanvasNode; lineId: string; busy: boolean; act: Act }) {
-  const [runtime, setRuntime] = useState<DefaultRuntime>('paseo'), [error, setError] = useState('');
-  useEffect(() => { api.defaultRuntime().then(d => setRuntime(d.runtime)).catch(e => setError((e as Error).message)); }, []);
+  const [error, setError] = useState('');
   const [configure, setConfigure] = useState(false);
   const agent = node.agent;
   const canBind = !node.agent_id && node.status === 'draft';
@@ -20,8 +18,9 @@ export function NodeConversation({ node, lineId, busy, act }: { node: CanvasNode
       : <p className="small muted">{tr('当前使用项目岗位的共享会话。可为尚未派发的任务创建或导入独立会话。')}</p>}
     {canBind && <button className="btn" disabled={busy} onClick={() => setConfigure(x => !x)}>{configure ? tr('收起') : tr('安排独立 Agent')}</button>}
     {canBind && configure ? <>
-      {runtime === 'paseo' ? <PaseoPick busy={busy} onStart={options => act(() => api.bindNode(lineId, node.id, options))} />
-        : <TerminalPick busy={busy} fixedBackend={runtime} onStart={options => act(() => api.bindNode(lineId, node.id, options))} />}
+      <div className="hire-card">
+        <RuntimePick busy={busy} onStart={options => act(() => api.bindNode(lineId, node.id, options))} role={node.to} />
+      </div>
       <ImportCard busy={busy} onPick={ext_id => act(() => api.bindNode(lineId, node.id, { ext_id }))} />
     </> : agent?.term ? <><HostedRoom agent={agent} toast={setError} /><HostedContext agent={agent} toast={setError} /></> : agent?.runtime === 'paseo' && agent.ext_id ? <Talk key={agent.ext_id} initial={agent} />
       : <p className="muted small">{tr('暂无可打开的会话。')}</p>}

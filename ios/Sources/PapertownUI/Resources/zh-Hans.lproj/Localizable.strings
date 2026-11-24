@@ -129,6 +129,7 @@
 "staff.sort.project" = "按项目分组";
 "staff.section.town" = "全局";
 "staff.assistant.sub" = "跨项目查询、调度与新建 Idea";
+"staff.not_started" = "未启动";
 "staff.no_messages" = "暂无对话";
 "staff.town_wide" = "全局";
 
@@ -142,7 +143,10 @@
 "chat.queue.withdraw" = "撤回";
 "chat.permission.warning" = "插话会先拒绝当前权限请求，再发送消息。请优先使用权限卡片上的「允许」或「拒绝」。";
 "chat.placeholder.idle" = "对%@说点什么，开始新一轮任务…";
-"chat.placeholder.offline" = "当前员工未启动，请先在项目页开启。";
+"chat.placeholder.offline" = "当前员工未启动，可选择运行方式启动。";
+"chat.assistant_offline" = "小助手尚未启动，请选择运行方式。";
+"chat.term_exited" = "终端已关闭，可续接会话或选择其他方式启动。";
+"chat.resume_session" = "接着会话启动";
 "chat.mode.steer" = "插话";
 "chat.mode.steer.placeholder" = "补充当前任务的指令…";
 "chat.mode.steer.hint" = "当前步骤完成后，消息将加入当前轮次。";
@@ -531,7 +535,12 @@
 "loop.task.back.placeholder" = "需要重做的内容";
 "loop.task.reply" = "回复并继续";
 "loop.task.reply.placeholder" = "你的回复";
-"loop.task.no_agent" = "%@尚未启动，请先在员工页启动。";
+"loop.task.no_agent" = "%@尚未启动，可在上方选择方式启动，或为任务安排独立 Agent。";
+"loop.task.agent" = "执行会话";
+"loop.task.dedicated" = "独立会话";
+"loop.task.assign_dedicated" = "安排独立 Agent…";
+"loop.task.dedicated_footer" = "当前使用项目岗位的共享会话，也可为尚未派发的任务安排独立会话。";
+"loop.task.start_agent" = "选择方式启动%@…";
 "loop.task.remove" = "删除任务";
 "loop.task.remove.confirm" = "删除「%@」？";
 "loop.add" = "添加至回路";
@@ -628,11 +637,17 @@
 "usage.settings.saved" = "用量设置已保存。";
 "hire.title" = "新建员工";
 "hire.start_title" = "启动";
+"hire.assistant_title" = "启动小助手";
+"hire.start_assistant" = "启动小助手";
+"hire.node_title" = "安排独立 Agent";
+"hire.node_start" = "启动并绑定";
 "hire.project" = "项目";
 "hire.post" = "岗位";
 "hire.post.coder" = "编写并运行项目的代码和实验。";
 "hire.post.writer" = "撰写论文并排版。";
 "hire.post.lead" = "推进项目并向你汇报。";
+"hire.post.assistant" = "全局小助手，可跨项目查看进展、协调与代办。";
+"hire.post.node" = "为该任务节点创建独立会话，派发、补充与返工均在此处理。";
 "hire.no_projects" = "暂无项目。请先放入一颗 idea。";
 "hire.running" = "该岗位的员工已在运行。";
 "hire.open" = "打开对话";
@@ -648,6 +663,7 @@
 "hire.no_paseo_models" = "Paseo 未连接，将使用 CLI 默认模型。";
 "hire.paseo_down" = "Paseo 未连接。";
 "hire.pi_lead" = "项目负责人暂不支持 pi。";
+"hire.pi_node" = "节点 Agent 暂不支持 pi。";
 "hire.no_cli" = "本机未找到 Claude Code、Codex 或 Antigravity。";
 "hire.start" = "启动员工";
 "hire.untitled" = "（无标题）";
@@ -716,7 +732,7 @@
 "access.keys.revoke" = "撤销密钥";
 "access.keys.revoke.confirm" = "撤销「%@」的密钥？";
 "agents.runtime" = "默认运行方式";
-"agents.runtime.footer" = "新建节点 Agent 和项目负责人使用此运行方式。";
+"agents.runtime.footer" = "自动启动的项目负责人、pt hire 招募的员工及新建 Agent 默认预选此运行方式，手动启动时仍可自由切换。";
 "agents.status" = "状态";
 "agents.running" = "运行中";
 "agents.available" = "可用";

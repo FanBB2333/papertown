@@ -1,7 +1,7 @@
 import { Button } from '@cloudflare/kumo';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, listen, type Agent, type AgentEvent, type PaseoItem, type TermPrompt, type Terminal, type Transcript } from '../api';
-import { fold, PaseoLog } from '../components/AgentRoom';
+import { api, listen, type Agent, type AgentEvent, type AgentRole, type PaseoItem, type StartOpts, type TermPrompt, type Terminal, type Transcript } from '../api';
+import { fold, PaseoLog, RuntimePick } from '../components/AgentRoom';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
 import { Compose, type ComposeAdapter } from './Compose';
@@ -24,6 +24,8 @@ interface Source<T extends Subject> {
   mine: (e: any) => boolean; // a bus event about this conversation
   compose: ComposeAdapter; keys: (keys: string[]) => Promise<unknown>; answer: (digest: string, option: number) => Promise<unknown>;
   restart?: () => Promise<unknown>;
+  switchRuntime?: (o: StartOpts) => Promise<unknown>;
+  role?: AgentRole; allowPi?: boolean;
 }
 
 const tail = (text: string, lines = 18) => text.split('\n').filter(l => l.trim()).slice(-lines).join('\n');
@@ -33,7 +35,7 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
   const [text, setText] = useState<string | null>(null), [prompt, setPrompt] = useState<TermPrompt | null>(null);
   const [items, setItems] = useState<PaseoItem[] | null>(null), [transcript, setTranscript] = useState<Transcript | null>(null);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [draft, setDraft] = useState('');
-  const [tab, setTab] = useState<'chat' | 'screen'>('chat'), [asking, setAsking] = useState(false);
+  const [tab, setTab] = useState<'chat' | 'screen'>('chat'), [asking, setAsking] = useState(false), [switching, setSwitching] = useState(false);
   const [sent, setSent] = useState<{ text: string; had: number; at: number }[]>([]);
   // the tab follows what can be shown until the user picks one
   const picked = useRef(false), view = useRef(tab); view.current = tab;
@@ -119,8 +121,16 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
       {text === null ? tr('加载中…') : text.replace(/\n(?:[ \t]*\n){2,}/g, '\n\n') || tr('终端暂未输出内容。')}
     </pre>}
     {exited ? <div className="term-wait term-off" role="status">
-      <div><b>{tr('终端已关闭')}</b><p>{tr('再次启动时将续接上次会话。')}</p></div>
-      {source.restart && <button className="btn pri" disabled={busy} onClick={() => act(source.restart!)}>{tr('接着会话启动')}</button>}
+      <div className="term-off-row">
+        <div><b>{tr('终端已关闭')}</b><p>{tr('再次启动时将续接上次会话，也可换种运行方式启动。')}</p></div>
+        <div className="btns">
+          {source.switchRuntime && <button className="btn" disabled={busy} onClick={() => setSwitching(v => !v)}>{switching ? tr('收起') : tr('换种方式启动')}</button>}
+          {source.restart && <button className="btn pri" disabled={busy} onClick={() => act(source.restart!)}>{tr('接着会话启动')}</button>}
+        </div>
+      </div>
+      {switching && source.switchRuntime && <div className="term-switch">
+        <RuntimePick busy={busy} role={source.role} allowPi={source.allowPi} onStart={o => { void act(async () => { await source.switchRuntime!(o); setSwitching(false); }); }} />
+      </div>}
     </div> : blocked ? <div className="term-wait" role="status">
       <i className="aw-dot" aria-hidden="true" />
       <div><b>{tr('终端中有提示待你处理')}</b><p>{prompt?.title || tr('请查看终端画面，选择回答或按键。')}</p></div>
@@ -197,6 +207,12 @@ export function HostedRoom({ agent, toast, tools }: { agent: Agent; toast: (s: s
     },
     keys: keys => api.agentKeys(id, keys), answer: (digest, option) => api.answerPrompt(id, digest, option),
     restart: () => api.startAgent(id),
+    switchRuntime: async o => {
+      await api.startAgent(id, o);
+      if (agent.role === 'lead' && agent.line_id) await api.setLead(agent.line_id, { on: true });
+    },
+    role: agent.role,
+    allowPi: !agent.node_id && agent.role !== 'lead',
   }), [id]); // eslint-disable-line react-hooks/exhaustive-deps
   return <TermChat key={id} source={source} toast={toast} tools={tools} />;
 }

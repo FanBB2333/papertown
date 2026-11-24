@@ -149,7 +149,10 @@ html .theme-sketch .aw .transcript .msg-a.err { padding: 10px 14px; border: 1px 
 .term-wait p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .term-wait > .aw-dot { width: 9px; height: 9px; color: var(--warn); animation: aw-breathe 1.5s var(--in-out) infinite alternate; }
 .term-wait .btn { flex: none; }
-.term-off { border-color: var(--line); background: var(--panel); }
+.term-off { flex-direction: column; align-items: stretch; border-color: var(--line); background: var(--panel); }
+.term-off-row { display: flex; align-items: center; gap: 12px; width: 100%; }
+.term-off-row > div:first-child { flex: 1; min-width: 0; }
+.term-switch { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 
 .aw-context { min-width: 0; min-height: 0; overflow: hidden; background: var(--aw-list-bg); }
 .aw-context-in { box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; width: 304px; height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px 20px; box-shadow: inset 1px 0 0 var(--line); opacity: 0; transform: translateX(16px); transition: opacity .3s var(--out), transform .6s var(--out); }

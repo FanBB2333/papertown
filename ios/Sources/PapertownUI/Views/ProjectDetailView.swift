@@ -7,6 +7,8 @@ struct ProjectDetailView: View {
     @State private var ideaExpanded = false
     @State private var isUpdatingLead = false
     @State private var answering: ReportItem?
+    @State private var showHire = false
+    @State private var hiringRole: String? = nil
 
     private var project: ProjectSnapshot? {
         store.projects.first(where: { $0.id == projectID })
@@ -106,6 +108,22 @@ struct ProjectDetailView: View {
         }
         .sheet(item: $answering) { ask in
             AnswerSheet(ask: ask).environmentObject(store).papertownSheetFrame(height: 460)
+        }
+        .sheet(isPresented: $showHire) {
+            HireSheet(projectID: projectID) { _ in
+                Task { await store.refreshProject(id: projectID) }
+            }
+            .papertownSheetFrame(height: 540)
+            .environmentObject(store)
+            .tint(store.appearance.tintColor)
+        }
+        .sheet(isPresented: Binding(get: { hiringRole != nil }, set: { if !$0 { hiringRole = nil } })) {
+            HireSheet(projectID: projectID, role: hiringRole) { _ in
+                Task { await store.refreshProject(id: projectID) }
+            }
+            .papertownSheetFrame(height: 540)
+            .environmentObject(store)
+            .tint(store.appearance.tintColor)
         }
     }
 
@@ -219,11 +237,19 @@ struct ProjectDetailView: View {
                     }
                 }
 
-                if project.lead.state == "blocked" {
-                    Button(lang.string("action.retry")) {
-                        Task { await store.toggleLead(projectID: project.id, on: true) }
+                if project.lead.state == "blocked" || project.lead.state == "off" {
+                    HStack(spacing: 8) {
+                        if project.lead.state == "blocked" {
+                            Button(lang.string("action.retry")) {
+                                Task { await store.toggleLead(projectID: project.id, on: true) }
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        if store.connectionStatus == .connected && !store.isDemo {
+                            Button(lang.string("chat.start_with")) { hiringRole = "lead" }
+                                .buttonStyle(.bordered)
+                        }
                     }
-                    .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .padding(.leading, 40)
                 }
@@ -362,6 +388,12 @@ struct ProjectDetailView: View {
                     }
                     .papertownRowBackground(store.appearance)
                 }
+            }
+            if store.connectionStatus == .connected && !store.isDemo {
+                Button { showHire = true } label: {
+                    Label(lang.string("hire.title"), systemImage: "person.badge.plus")
+                }
+                .papertownRowBackground(store.appearance)
             }
         } header: {
             HStack {

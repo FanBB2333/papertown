@@ -732,18 +732,26 @@ class Agents:
             raise AgentError("没有这种运行方式")
         if runtime in RUNTIMES:
             if a.get("runtime") == "paseo" and a.get("ext_id"):
-                raise AgentError("请先结束当前 Paseo 会话后再切换运行方式")
+                lead_off = a["role"] == "lead" and a.get("line_id") and not self.town.leads.settings(a["line_id"])["on"]
+                if a["status"] == "stopped" or self.down(a) or lead_off:
+                    self.detach(agent_id)
+                    a = self.get(agent_id)
+                else:
+                    raise AgentError("请先结束当前 Paseo 会话后再切换运行方式")
             if a.get("runtime") == "pi" and self.alive(a):
                 raise AgentError("请先关闭 pi 会话后再切换运行方式")
             return self.hosted.start(a, runtime, provider, model, thinking)
         if a.get("runtime") in RUNTIMES:
             self.hosted.close(agent_id)
         if runtime == "paseo":
+            if a.get("runtime") == "paseo" and a.get("ext_id") and a["status"] == "stopped":
+                self.detach(agent_id)
+                a = self.get(agent_id)
             return self._start_paseo(a, provider, model, thinking)
         if a.get("node_id"):
-            raise AgentError("节点 Agent 只在 Paseo 里运行")
+            raise AgentError("节点 Agent 暂不支持 pi")
         if a["role"] == "lead":
-            raise AgentError("项目负责人只在 Paseo 里运行")
+            raise AgentError("项目负责人暂不支持 pi")
         if not (self.pi and self.tmux):
             raise AgentError(self.available()["note"])
         if self.alive(a):

@@ -48,6 +48,16 @@ struct StaffView: View {
                                         .foregroundStyle(.secondary)
                                         .lineLimit(1)
                                 }
+                                Spacer(minLength: 6)
+                                if assistant.started != true {
+                                    Text(lang.string("staff.not_started"))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                } else {
+                                    Text(TextFormatters.bucketLabel(assistant.effectiveBucket, offline: assistant.isOffline, language: lang))
+                                        .font(.caption)
+                                        .foregroundStyle(TextFormatters.bucketColor(assistant.effectiveBucket))
+                                }
                             }
                             .padding(.vertical, 2)
                         }

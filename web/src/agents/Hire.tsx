@@ -20,12 +20,12 @@ const RUNTIMES: [Runtime, string, string][] = [
   ['pi', 'pi', tr('本机 pi，使用其自身的模型设置与登录。')],
 ];
 
-export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
-  lineId?: string | null; onClose: () => void; onStarted: (a: Agent) => void; onOpen: (a: Agent) => void;
+export function HireDialog({ lineId, initialPost, lockLine, onClose, onStarted, onOpen }: {
+  lineId?: string | null; initialPost?: Post; lockLine?: boolean; onClose: () => void; onStarted: (a: Agent) => void; onOpen: (a: Agent) => void;
 }) {
   const [rosters, setRosters] = useState<Record<Post, Roster> | null>(null), [backends, setBackends] = useState<Backends | null>(null);
   const [info, setInfo] = useState<PaseoInfo | null>(null);
-  const [line, setLine] = useState(lineId ?? ''), [post, setPost] = useState<Post>('coder'), [runtime, setRuntime] = useState<Runtime>('paseo');
+  const [line, setLine] = useState(lineId ?? ''), [post, setPost] = useState<Post>(initialPost ?? 'coder'), [runtime, setRuntime] = useState<Runtime>('paseo');
   const [provider, setProvider] = useState(''), [model, setModel] = useState(''), [thinking, setThinking] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
 
@@ -41,7 +41,8 @@ export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
   }, []);
 
   const terminal = runtime !== 'paseo' && runtime !== 'pi';
-  const row = rosters?.[post].roster.find(r => r.line.id === line), existing = row?.agent?.started ? row.agent : null;
+  const row = rosters?.[post].roster.find(r => r.line.id === line);
+  const existing = row?.agent?.started && row.agent.status !== 'stopped' && row.agent.term?.status !== 'exited' && !row.agent.down ? row.agent : null;
   // why a runtime cannot be chosen now, or '' when it can
   const blocked = (r: Runtime) => !backends || !info || !rosters ? ''
     : r === 'paseo' ? (info.status.ok ? '' : info.status.note)
@@ -73,7 +74,9 @@ export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
     setBusy(true); setError('');
     try {
       const a = row?.agent ?? await api.openAgent(line, post as AgentRole);
-      onStarted(await api.startAgent(a.id, runtime === 'pi' ? { runtime } : { runtime, provider: provider || undefined, model: model || undefined, thinking: thinking || undefined }));
+      const started = await api.startAgent(a.id, runtime === 'pi' ? { runtime } : { runtime, provider: provider || undefined, model: model || undefined, thinking: thinking || undefined });
+      if (post === 'lead') await api.setLead(line, { on: true });
+      onStarted(started);
       onClose();
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
@@ -84,9 +87,9 @@ export function HireDialog({ lineId, onClose, onStarted, onOpen }: {
       <Dialog.Title>{tr('新建员工')}</Dialog.Title>
       <Dialog.Description>{tr('为项目指定岗位启动员工。工作目录为该项目在小镇中的目录，启动时将收到项目简报。')}</Dialog.Description>
       {!ready ? <p className="aw-hire-wait">{error || tr('加载中…')}</p> : !rosters.coder.roster.length ? <Banner description={tr('暂无项目。请先在小镇中放入一颗 idea。')} /> : <form onSubmit={start}>
-        <div className="aw-hire-row">
+        {!lockLine && <div className="aw-hire-row">
           <Select label={tr('项目')} value={line} items={Object.fromEntries(rosters.coder.roster.map(r => [r.line.id, `#${r.line.seq} ${r.line.title}`]))} onValueChange={v => setLine(String(v))} disabled={busy} />
-        </div>
+        </div>}
         <div className="aw-hire-row">
           <span className="aw-hire-label">{tr('岗位')}</span>
           <Tabs variant="segmented" value={post} onValueChange={v => setPost(v as Post)} tabs={POSTS.map(([value, label]) => ({ value, label }))} />

@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING
 from .agents import ROLES, AgentError
 from .checks import BAD, GATE, HARD_IDS, STATUS as CHECK_STATUS, CheckError, clip
 from .db import now, write_json
+from .hosted import RUNTIMES
 from .pipeline import INDEX, MODULES, NAMES, STAGE_MOD
 
 if TYPE_CHECKING:
@@ -1495,10 +1496,16 @@ class Canvas:
                 or (not node.get("agent_id") and agent["id"] == f"lead-{agent['line_id']}"))
 
     def bind(self, line_id: str, node_id: str, provider: str | None = None, model: str | None = None,
-             thinking: str | None = None, ext_id: str | None = None) -> dict:
-        """Bind a task to its own native Paseo session; its project role remains a prompt template. The session is made
-        without holding the canvas lock (Paseo's CLI can take a while), and the task is checked again before it is bound:
-        a task deleted, sent, rebound or given to another role meanwhile leaves the new session stopped."""
+             thinking: str | None = None, ext_id: str | None = None, runtime: str | None = None) -> dict:
+        """Bind a task to its own session (Paseo or a hosted terminal); its project role remains a prompt template.
+        The session is made without holding the canvas lock (CLI startup can take a while), and the task is checked
+        again before it is bound: a task deleted, sent, rebound or given to another role meanwhile leaves the new
+        session stopped."""
+        if not ext_id and runtime is not None:
+            if runtime == "pi":
+                raise CanvasError("节点 Agent 暂不支持 pi")
+            if runtime not in ("paseo", *RUNTIMES):
+                raise CanvasError("没有这种运行方式")
         key = (line_id, node_id)
         with self._lock:
             n = self._node(self._load(line_id), node_id)
@@ -1515,7 +1522,7 @@ class Canvas:
             if ext_id:
                 a = self.town.agents.import_session(a["id"], ext_id)
             else:
-                a = self.town.agents.start(a["id"], self.town.paseo_models.runtime(), provider, model, thinking)
+                a = self.town.agents.start(a["id"], runtime or self.town.paseo_models.runtime(), provider, model, thinking)
         finally:
             with self._lock:
                 self._binding.discard(key)
