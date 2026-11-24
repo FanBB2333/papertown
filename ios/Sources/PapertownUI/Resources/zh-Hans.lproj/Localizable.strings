@@ -933,3 +933,22 @@
 "term.key.pagedown" = "向下翻页";
 "term.key.4" = "4";
 "term.key./" = "斜杠";
+
+/* Chips above the chat input */
+"chat.context" = "上下文";
+"chat.context.of" = "上下文 %@ / %@";
+"chat.context.used" = "上下文 %@ tokens";
+"chat.context.hint" = "最近一次回复时模型读写的 token";
+"chat.usage" = "本会话用量";
+"chat.usage.tokens" = "本会话 %@ tokens";
+"chat.usage.cost" = "按 API 价格折算 %@";
+"chat.usage.hint" = "订阅额度内的用量同样计入";
+"chat.branch" = "分支";
+"chat.branch.copy" = "复制分支名";
+"chat.folder.copy" = "复制路径";
+"chat.git.changed" = "%d 个文件有改动";
+"chat.git.ahead" = "领先上游 %d 个提交";
+"chat.git.behind" = "落后上游 %d 个提交";
+"chat.limits" = "订阅额度";
+"chat.limit" = "%1$@ 额度已用 %2$d%%";
+"chat.limit.reset" = "%@ 后重置";

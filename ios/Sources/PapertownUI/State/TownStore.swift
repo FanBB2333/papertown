@@ -759,6 +759,10 @@ public final class TownStore: ObservableObject {
                         state.permissions = tl.agent.watch?.permissions ?? tl.paseo?.permissions ?? []
                         state.transcriptNote = tl.transcript?.ok == false ? tl.transcript?.note : nil
                         state.title = tl.transcript?.title ?? state.title
+                        state.context = tl.transcript?.context
+                        state.usage = tl.usage
+                        state.git = tl.git
+                        state.limits = tl.limits ?? []
                         if let term = tl.agent.term {
                             // the screen (with its scrollback) is read while it shows, works or waits on a dialog
                             let shown = activeChat == target && chatShowsTerminal
@@ -784,6 +788,10 @@ public final class TownStore: ObservableObject {
                         state.screen = nil
                         state.prompt = nil
                         state.transcriptNote = nil
+                        state.context = nil
+                        state.usage = nil
+                        state.git = nil
+                        state.limits = []
                         state.merge(read.events)
                         state.permissions = read.agent.watch?.permissions ?? []
                     }
@@ -805,6 +813,10 @@ public final class TownStore: ObservableObject {
                     state.entries = ConversationState.entries(from: t.items)
                     state.transcriptNote = t.transcript?.ok == false ? t.transcript?.note : nil
                     state.title = t.transcript?.title ?? state.title
+                    state.context = t.transcript?.context
+                    state.usage = t.usage
+                    state.git = t.git
+                    state.limits = t.limits ?? []
                 }
             }
             state.isLoading = false

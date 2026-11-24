@@ -742,6 +742,46 @@ public struct TranscriptState: Decodable, Sendable, Equatable {
     public let note: String?
     /// The conversation's title as the CLI named it.
     public let title: String?
+    /// How full the context is after the last reply.
+    public let context: TranscriptContext?
+}
+
+/// The tokens the model last read and wrote, and its context window where the CLI logs it (Codex does, Claude Code
+/// does not).
+public struct TranscriptContext: Decodable, Sendable, Equatable {
+    public let used: Int
+    public let window: Int?
+
+    public var fraction: Double? { window.map { Double(used) / Double(max($0, 1)) } }
+}
+
+/// What one CLI session has used so far: its tokens and their cost at API prices (`priced` is false when a model has
+/// no price).
+public struct SessionUsage: Decodable, Sendable, Equatable {
+    public let cost: Double
+    public let tokens: Int
+    public let priced: Bool
+}
+
+/// Where the CLI works: the branch, how many files have changed and how far it is ahead of and behind its upstream
+/// (nil where git could not tell).
+public struct GitState: Decodable, Sendable, Equatable {
+    public let branch: String
+    public let changed: Int?
+    public let ahead: Int?
+    public let behind: Int?
+}
+
+/// A subscription window ("5h", "7d"): the percentage used and when it resets.
+public struct UsageLimit: Decodable, Sendable, Equatable {
+    public let window: String
+    public let used: Double
+    public let resetsAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case window, used
+        case resetsAt = "resets_at"
+    }
 }
 
 /// A file kept on the server to go with the next message.
@@ -759,6 +799,9 @@ public struct AgentTimeline: Decodable, Sendable {
     public let queued: [AgentEvent]?
     public let paseo: Paseo?
     public let transcript: TranscriptState?
+    public let usage: SessionUsage?
+    public let git: GitState?
+    public let limits: [UsageLimit]?
 }
 
 /// GET /api/agents/{id}/models: the model the conversation is on and the ones it can switch to. `how` is "resume" for a
@@ -864,4 +907,7 @@ public struct TerminalTimeline: Decodable, Sendable {
     public let terminal: TerminalInfo
     public let items: [TimelineItem]
     public let transcript: TranscriptState?
+    public let usage: SessionUsage?
+    public let git: GitState?
+    public let limits: [UsageLimit]?
 }

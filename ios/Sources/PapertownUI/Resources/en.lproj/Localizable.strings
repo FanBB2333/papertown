@@ -933,3 +933,22 @@
 "term.key.pagedown" = "Page Down";
 "term.key.4" = "4";
 "term.key./" = "Slash";
+
+/* Chips above the chat input */
+"chat.context" = "Context";
+"chat.context.of" = "Context %@ / %@";
+"chat.context.used" = "Context %@ tokens";
+"chat.context.hint" = "Tokens the model read and wrote in its last reply";
+"chat.usage" = "Session Usage";
+"chat.usage.tokens" = "This session %@ tokens";
+"chat.usage.cost" = "%@ at API prices";
+"chat.usage.hint" = "Includes use covered by a subscription";
+"chat.branch" = "Branch";
+"chat.branch.copy" = "Copy Branch Name";
+"chat.folder.copy" = "Copy Path";
+"chat.git.changed" = "%d changed files";
+"chat.git.ahead" = "%d commits ahead of upstream";
+"chat.git.behind" = "%d commits behind upstream";
+"chat.limits" = "Subscription Limits";
+"chat.limit" = "%1$@ window %2$d%% used";
+"chat.limit.reset" = "Resets in %@";

@@ -217,16 +217,16 @@ struct AgentChatView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// The model the CLI runs, with its thinking level.
-    private var modelLabel: String? {
+    /// The model the CLI runs and its thinking level.
+    private var modelParts: (name: String, thinking: String?)? {
         guard !target.isAssistant else { return nil }
         let cur = models?.current
         let name = cur.flatMap { c in c.model.isEmpty ? nil : (models?.models.first { $0.id == c.model }?.name ?? c.model) }
             ?? state.agent?.displayModel
         guard let name, !name.isEmpty else { return nil }
         let short = name.split(separator: "/").last.map(String.init) ?? name
-        if let t = cur?.thinking, !t.isEmpty { return "\(short) · \(t)" }
-        return short
+        let thinking = cur?.thinking.isEmpty == false ? cur?.thinking : nil
+        return (short, thinking)
     }
 
     @ViewBuilder
@@ -569,53 +569,174 @@ struct AgentChatView: View {
         .background(.bar)
     }
 
-    /// What sits above the input row: the model the CLI runs (a menu when it can switch) and, while the agent works,
-    /// how a message reaches it.
+    /// The status line above the input, as a terminal's status line shows it: the model and its thinking level (a menu
+    /// when it can switch), how a message reaches the agent while it works, how full the context is, what the session
+    /// has used, the branch with its changes, and the subscription's windows. One line where it fits, two where it does
+    /// not; each part opens its details.
     @ViewBuilder
     private func chipsRow(_ lang: AppLanguage) -> some View {
-        let model = modelLabel
-        if model != nil || state.isWorking {
-            HStack(spacing: 8) {
-                if let model {
-                    if canSwitchModel, let m = models {
-                        Menu { modelMenu(m, lang) } label: { chip(model, symbol: "cpu", menu: true) }
-                            .accessibilityLabel(lang.string("model.menu"))
-                    } else {
-                        chip(model, symbol: "cpu", menu: false)
-                    }
-                }
-                if state.isWorking {
-                    Menu {
-                        ForEach([DeliveryMode.steer, .queue, .interrupt], id: \.self) { m in
-                            Button { deliveryMode = m } label: {
-                                if m == deliveryMode { Image(systemName: "checkmark") }
-                                Text(TextFormatters.deliveryModeLabel(m, language: lang))
-                                Text(TextFormatters.deliveryModeHint(m, language: lang))
-                            }
-                        }
-                    } label: {
-                        chip(TextFormatters.deliveryModeLabel(deliveryMode, language: lang), symbol: Self.deliverySymbol(deliveryMode), menu: true)
-                    }
-                    .accessibilityLabel(lang.string("chat.delivery"))
-                }
-                Spacer(minLength: 0)
+        let model = modelParts
+        if model != nil || state.isWorking || state.context != nil || state.usage != nil || state.git != nil || !state.limits.isEmpty {
+            ChipFlow(spacing: 12, lineSpacing: 5) {
+                if let model { modelSegment(model, lang) }
+                if state.isWorking { deliverySegment(lang) }
+                if let c = state.context { contextSegment(c, lang) }
+                if let u = state.usage { usageSegment(u, lang) }
+                if let g = state.git { gitSegment(g, lang) }
+                ForEach(state.limits, id: \.window) { limitSegment($0, lang) }
             }
+            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
             .menuStyle(.borderlessButton)
-            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 4)
         }
     }
 
-    private func chip(_ text: String, symbol: String, menu: Bool) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: symbol).font(.system(size: 11, weight: .medium))
-            Text(text).font(.caption.weight(.medium)).lineLimit(1)
-            if menu { Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)) }
+    @ViewBuilder
+    private func modelSegment(_ m: (name: String, thinking: String?), _ lang: AppLanguage) -> some View {
+        let label = HStack(spacing: 5) {
+            Text(m.name).fontWeight(.semibold).foregroundStyle(Color.teal)
+            if let t = m.thinking { Text(t).foregroundStyle(Color.pink) }
+            if canSwitchModel, models != nil {
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(Self.muted)
+            }
         }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .frame(height: 26)
-        .background(Color.secondary.opacity(0.1), in: Capsule())
-        .contentShape(Capsule())
+        .lineLimit(1)
+        if canSwitchModel, let ms = models {
+            Menu { modelMenu(ms, lang) } label: { label }
+                .accessibilityLabel(lang.string("model.menu"))
+        } else {
+            label
+        }
+    }
+
+    private func deliverySegment(_ lang: AppLanguage) -> some View {
+        Menu {
+            ForEach([DeliveryMode.steer, .queue, .interrupt], id: \.self) { m in
+                Button { deliveryMode = m } label: {
+                    if m == deliveryMode { Image(systemName: "checkmark") }
+                    Text(TextFormatters.deliveryModeLabel(m, language: lang))
+                    Text(TextFormatters.deliveryModeHint(m, language: lang))
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: Self.deliverySymbol(deliveryMode)).font(.system(size: 9, weight: .bold))
+                Text(TextFormatters.deliveryModeLabel(deliveryMode, language: lang))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(Color.purple)
+            .lineLimit(1)
+        }
+        .accessibilityLabel(lang.string("chat.delivery"))
+    }
+
+    /// ctx, a bar and the percentage where the window is known, then the tokens over the window.
+    private func contextSegment(_ c: TranscriptContext, _ lang: AppLanguage) -> some View {
+        Menu {
+            if let window = c.window {
+                Text(lang.format("chat.context.of", Self.tokens(c.used), Self.tokens(window)))
+            } else {
+                Text(lang.format("chat.context.used", Self.tokens(c.used)))
+            }
+            Text(lang.string("chat.context.hint"))
+        } label: {
+            HStack(spacing: 5) {
+                Text("ctx").foregroundStyle(Self.muted)
+                if let f = c.fraction {
+                    CellBar(fraction: f, cells: 8, tint: Self.level(f))
+                    Text("\(Int((f * 100).rounded()))%").foregroundStyle(Self.level(f))
+                }
+                Text(c.window.map { "\(Self.tokens(c.used))/\(Self.tokens($0))" } ?? Self.tokens(c.used)).foregroundStyle(Self.muted)
+            }
+            .lineLimit(1)
+        }
+        .accessibilityLabel(lang.string("chat.context"))
+    }
+
+    /// What the session has used, at API prices where its model has one.
+    private func usageSegment(_ u: SessionUsage, _ lang: AppLanguage) -> some View {
+        let cost = u.cost < 0.01 ? "<$0.01" : String(format: "$%.2f", u.cost)
+        return Menu {
+            Text(lang.format("chat.usage.tokens", Self.tokens(u.tokens)))
+            if u.priced { Text(lang.format("chat.usage.cost", cost)) }
+            Text(lang.string("chat.usage.hint"))
+        } label: {
+            Text(u.priced ? cost : Self.tokens(u.tokens) + " tok")
+                .foregroundStyle(u.priced ? Color.green : Self.muted)
+                .lineLimit(1)
+        }
+        .accessibilityLabel(lang.string("chat.usage"))
+    }
+
+    /// The branch, its changed files (*13) and how far it is ahead of (↑) and behind (↓) its upstream.
+    private func gitSegment(_ g: GitState, _ lang: AppLanguage) -> some View {
+        let folder = state.agent?.cwd ?? state.terminal?.cwd
+        return Menu {
+            if let folder { Text(folder) }
+            if let n = g.changed, n > 0 { Text(lang.format("chat.git.changed", n)) }
+            if let n = g.ahead, n > 0 { Text(lang.format("chat.git.ahead", n)) }
+            if let n = g.behind, n > 0 { Text(lang.format("chat.git.behind", n)) }
+            if let folder {
+                Button { Pasteboard.copy(folder) } label: { Label(lang.string("chat.folder.copy"), systemImage: "doc.on.doc") }
+            }
+            Button { Pasteboard.copy(g.branch) } label: { Label(lang.string("chat.branch.copy"), systemImage: "arrow.triangle.branch") }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "arrow.triangle.branch").font(.system(size: 9, weight: .bold))
+                Text(g.branch).truncationMode(.middle)
+                if let n = g.changed, n > 0 { Text("*\(n)") }
+                if let n = g.ahead, n > 0 { Text("↑\(n)").foregroundStyle(Self.muted) }
+                if let n = g.behind, n > 0 { Text("↓\(n)").foregroundStyle(Self.muted) }
+            }
+            .foregroundStyle(Color.orange)
+            .lineLimit(1)
+        }
+        .accessibilityLabel(lang.string("chat.branch"))
+    }
+
+    /// A subscription window: its length, a bar, the percentage used and the time until it resets.
+    private func limitSegment(_ l: UsageLimit, _ lang: AppLanguage) -> some View {
+        let f = l.used / 100
+        let left = Self.remaining(l.resetsAt)
+        return Menu {
+            Text(lang.format("chat.limit", l.window, Int(l.used.rounded())))
+            if let left { Text(lang.format("chat.limit.reset", left)) }
+        } label: {
+            HStack(spacing: 5) {
+                Text(l.window).foregroundStyle(Self.muted)
+                CellBar(fraction: f, cells: 6, tint: Self.level(f))
+                Text("\(Int(l.used.rounded()))%").foregroundStyle(Self.level(f))
+                if let left { Text(left).foregroundStyle(Self.muted) }
+            }
+            .lineLimit(1)
+        }
+        .accessibilityLabel(lang.string("chat.limits"))
+    }
+
+    /// The status line's quiet parts: plain gray, since a menu's label would tint `.secondary` with the accent.
+    private static let muted = Color.gray
+
+    /// Green while there is room, orange past half, red from four fifths.
+    private static func level(_ f: Double) -> Color {
+        f >= 0.8 ? .red : f >= 0.5 ? .orange : .green
+    }
+
+    /// 87772 as 88k, 1297424 as 1.3M.
+    private static func tokens(_ n: Int) -> String {
+        if n >= 1_000_000 { return String(format: "%.1fM", Double(n) / 1_000_000) }
+        if n >= 1_000 { return "\(Int((Double(n) / 1_000).rounded()))k" }
+        return "\(n)"
+    }
+
+    /// The time until a reset: 6d19h, 4h32m, 12m.
+    private static func remaining(_ iso: String?) -> String? {
+        guard let iso, let at = TextFormatters.parseISO8601(iso) else { return nil }
+        let s = Int(at.timeIntervalSinceNow)
+        guard s > 0 else { return nil }
+        let d = s / 86_400, h = s % 86_400 / 3_600, m = s % 3_600 / 60
+        if d > 0 { return "\(d)d\(h)h" }
+        if h > 0 { return "\(h)h\(m)m" }
+        return "\(max(m, 1))m"
     }
 
     private static func deliverySymbol(_ m: DeliveryMode) -> String {
@@ -971,6 +1092,63 @@ struct FlowButtons: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
+        }
+    }
+}
+
+/// A bar of small cells that fill as a share does, like a terminal status line's.
+private struct CellBar: View {
+    let fraction: Double
+    let cells: Int
+    let tint: Color
+
+    var body: some View {
+        let on = fraction <= 0 ? 0 : min(cells, max(1, Int((fraction * Double(cells)).rounded())))
+        HStack(spacing: 1.5) {
+            ForEach(0..<cells, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(i < on ? tint : Color.secondary.opacity(0.25))
+                    .frame(width: 3.5, height: 8)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Chips laid out left to right, wrapping to a new line when the next one does not fit.
+struct ChipFlow: Layout {
+    var spacing: CGFloat = 6
+    var lineSpacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                y += line + lineSpacing
+                x = 0
+                line = 0
+            }
+            x += size.width + spacing
+            line = max(line, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: proposal.width ?? widest, height: y + line)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, line: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + size.width > bounds.maxX {
+                y += line + lineSpacing
+                x = bounds.minX
+                line = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: min(size.width, bounds.width), height: size.height))
+            x += size.width + spacing
+            line = max(line, size.height)
         }
     }
 }

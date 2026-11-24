@@ -101,6 +101,12 @@ public struct ConversationState: Sendable {
     public var styledScreen: StyledScreen?
     public var prompt: TermPrompt?
     public var transcriptNote: String?
+    /// The status line above the input: how full the context is, what the session has used, where it works and the
+    /// subscription's windows.
+    public var context: TranscriptContext?
+    public var usage: SessionUsage?
+    public var git: GitState?
+    public var limits: [UsageLimit] = []
     public var pending: [PendingMessage] = []
     public var isLoading = false
     public var error: String?
