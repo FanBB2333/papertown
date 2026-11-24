@@ -90,10 +90,12 @@ class Hosted:
                 term['seq'] += 1
             term.update(status=status, since=now(), reason=reason)
 
-    def argv(self, a, provider, executable, model, thinking, resume, note=None):
+    def argv(self, a, provider, executable, model, thinking, resume, quiet=False):
+        """`quiet`: open the CLI on its session with no first message, to wait for the next one (after a change of model)."""
         home, pt = self.a.home(a), self.a.pt(a)
-        prompt = note or (f'Papertown 重新接上了这个会话。工作说明和项目简报在 {home}/.papertown/intro.md，如有更新请重新阅读，然后继续之前的工作。'
+        prompt = None if quiet else (f'Papertown 重新接上了这个会话。工作说明和项目简报在 {home}/.papertown/intro.md，如有更新请重新阅读，然后继续之前的工作。'
                   if resume else f'请先完整阅读 {home}/.papertown/intro.md，其中是你在 Papertown 的工作说明和项目简报。读完后说说你打算怎么开始。')
+        first = [prompt] if prompt else []
         argv = [executable]
         sid = resume
         if provider == 'claude':
@@ -108,7 +110,7 @@ class Hosted:
                 argv += ['--model', model]
             if thinking in ('low', 'medium', 'high', 'xhigh', 'max'):
                 argv += ['--effort', thinking]
-            argv += [prompt]
+            argv += first
         elif provider == 'codex':
             if resume:
                 argv += ['resume', resume]
@@ -122,18 +124,19 @@ class Hosted:
             if self.s.codex_bypass_hook_trust:
                 # no one is at the keyboard to answer Codex's review of new hooks, so it would wait there
                 argv += ['--dangerously-bypass-hook-trust']
-            argv += ['-c', 'notify=' + json.dumps([str(pt), 'hook', 'codex']), prompt]
+            argv += ['-c', 'notify=' + json.dumps([str(pt), 'hook', 'codex'])] + first
         else:
             if resume:
                 argv += ['--conversation', resume]
             if model:
                 argv += ['--model', model]
             argv += ['--add-dir', str(home), '--settings', json.dumps({'statusLine': {
-                'type': 'command', 'command': shlex.join([str(pt), 'hook', 'agy']), 'stack_with_default': True}}), '-i', prompt]
+                'type': 'command', 'command': shlex.join([str(pt), 'hook', 'agy']), 'stack_with_default': True}})] + (['-i', prompt] if prompt else [])
         return argv, sid
 
-    def start(self, a, runtime, provider=None, model=None, thinking=None, note=None):
-        """`note`: the first message of a resumed launch, instead of asking it to carry on with its work."""
+    def start(self, a, runtime, provider=None, model=None, thinking=None, quiet=False):
+        """`quiet`: a resumed launch opens with no first message and waits for the next one (after a change of model).
+        A launch that starts a new session always carries one: the instructions to read."""
         old = a.get('term') or {}
         if a.get('runtime') in RUNTIMES and old.get('status') != 'exited' and old.get('handle'):
             try:
@@ -158,7 +161,8 @@ class Hosted:
         (home / '.papertown/hook-agy.json').unlink(missing_ok=True)
         (home / '.papertown/intro.md').write_text(intro, encoding='utf-8')
         resume = a.get('session_id') if provider == old.get('provider') else None
-        argv, sid = self.argv(a, provider, executable, model, thinking, resume, note if resume else None)
+        quiet = bool(quiet and resume)
+        argv, sid = self.argv(a, provider, executable, model, thinking, resume, quiet)
         line = self.db.one('select seq, title from lines where id = ?', a['line_id']) if a['line_id'] else None
         seq = str(line['seq']) if line else 'assistant'
         name = re.sub('[^a-z0-9_-]', '-', f"pt{seq}-{a.get('node_id') or a['role']}".lower())
@@ -176,7 +180,7 @@ class Hosted:
                'PAPERTOWN_AGENT_ROLE': a['role'], 'PATH': str(bindir) + os.pathsep + os.environ.get('PATH', '')}
         term = {'backend': runtime, 'provider': provider, 'model': model, 'thinking': thinking, 'status': 'starting',
                 'seq': old.get('seq', 0), 'seen_seq': old.get('seen_seq', 0), 'since': now(), 'started': time.time(),
-                'screen_at': time.time(), 'generation': uuid4().hex, 'handle': None}
+                'screen_at': time.time(), 'generation': uuid4().hex, 'handle': None, 'quiet': quiet}
         self.a._set(a['id'], runtime=runtime, ext_id=None, term=term, session_id=sid, status='starting',
                     model='/'.join(x for x in (provider, model) if x))
         if sid:
@@ -338,10 +342,14 @@ class Hosted:
                             count = term['seq']
                             self.transition(term, status, term.get('reason') if status == 'blocked' and term.get('reason') == 'still' and not changed else None)
                             term['seq'] = count
-                    # Every launch carries its first message, so a working CLI shows a timer or spinner at once. A start
-                    # that stays still is waiting on a dialog: trusting the folder, signing in, reviewing hooks.
+                    # A launch with its first message shows a timer or spinner at once, so a start that stays still is
+                    # waiting on a dialog: trusting the folder, signing in, reviewing hooks. A quiet launch (a change of
+                    # model) has no first message: a still screen there is the CLI ready for one, unless it shows a dialog.
                     if term['status'] == 'starting' and text.strip() and at - term['screen_at'] >= self.s.terminal_ready:
-                        self.transition(term, 'blocked', 'startup')
+                        if term.get('quiet') and not prompts.parse(text):
+                            self.transition(term, 'idle')
+                        else:
+                            self.transition(term, 'blocked', 'startup')
                     elif (term['status'] == 'working' and term.get('escaped_at') and at - term['escaped_at'] >= self.s.terminal_settle
                           and at - term['screen_at'] >= self.s.terminal_settle):
                         # Claude Code runs no Stop hook and Codex sends no notify for a turn cut short with Esc.
@@ -522,9 +530,7 @@ class Hosted:
             return self.a.public(a)
         if t['status'] != 'exited':
             self.close(id)
-        name = ' / '.join(x for x in (model, thinking) if x) or 'CLI 默认模型'
-        note = f'Papertown 把这个会话换到了 {name}，之前的对话都在。请用一句话确认，然后等待下一条消息。'
-        return self.start(self.a.get(id), a['runtime'], t.get('provider'), model or '', thinking or '', note)
+        return self.start(self.a.get(id), a['runtime'], t.get('provider'), model or '', thinking or '', quiet=True)
 
     def close(self, id):
         with self.lock:

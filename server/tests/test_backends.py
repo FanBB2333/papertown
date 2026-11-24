@@ -531,9 +531,24 @@ def test_switching_model_resumes_the_same_session(tmp_path, monkeypatch):
     argv = opened[-1]['argv']
     assert argv[argv.index('resume') + 1] == 'sess-1'
     assert argv[argv.index('-m') + 1] == 'm2' and 'model_reasoning_effort="low"' in argv
-    assert 'm2 / low' in argv[-1]
+    # no first message: the CLI opens on its session and waits for the next one
+    assert argv[-2] == '-c' and argv[-1].startswith('notify=')
     assert b.closed
     assert t.agents.models(aid)['current'] == {'provider': 'codex', 'model': 'm2', 'thinking': 'low'}
+    assert t.agents.get(aid)['term']['quiet']
+
+
+def test_a_quiet_start_is_ready_when_still_unless_a_dialog_shows(tmp_path):
+    t, h, b, aid = memory_employee(tmp_path, 'codex')
+    term = t.agents.get(aid)['term'] | {'quiet': True}
+    t.db.update('agents', {'id': aid}, term=term)
+    b.text = '› Ask Codex to do anything'
+    assert status(h, aid) == 'starting'; time.sleep(.06)
+    assert status(h, aid) == 'idle' and t.agents.get(aid)['term']['seq'] == 0
+    t.db.update('agents', {'id': aid}, term=term | {'screen_hash': None})
+    b.text = 'Resume this session?\n› 1. Resume from summary\n  2. Resume full session as-is'
+    h.refresh(aid); time.sleep(.06)
+    assert status(h, aid) == 'blocked' and t.agents.get(aid)['term']['reason'] == 'startup'
 
 
 def test_paseo_chat_off_runs_agents_in_a_terminal(tmp_path, monkeypatch):
