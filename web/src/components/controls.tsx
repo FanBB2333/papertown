@@ -37,7 +37,7 @@ export function Pick<T extends string>({ value, options, onChange, label, small 
   return <Tabs variant="segmented" size={small ? 'sm' : 'base'} value={value} onValueChange={v => onChange(v as T)} tabs={options.map(([v, l]) => ({ value: v, label: l }))} />;
 }
 
-export const Toggle = ({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) => <Switch aria-label={label} checked={value} onCheckedChange={onChange} />;
+export const Toggle = ({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) => <Switch aria-label={label} checked={value} onCheckedChange={onChange} disabled={disabled} />;
 
 export function Range({ label, value, min, max, step, fmt, onChange }: { label: string; value: number; min: number; max: number; step?: number; fmt: (v: number) => string; onChange: (v: number) => void }) {
   return (

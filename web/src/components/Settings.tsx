@@ -2,10 +2,10 @@
 // settings (settings.ts) and the server's model, agents, access and demo samples.
 
 import { Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Table, Text } from '@cloudflare/kumo';
-import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
+import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, ShieldCheckIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, type AccessKey, type DefaultRuntime, type AuthState, type Hud, type HerdrInfo, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
+import { api, type AccessKey, type DefaultRuntime, type AuthState, type NetworkSettings, type NetworkView, type SourceKind, type Hud, type HerdrInfo, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { Logo } from '../art';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
@@ -20,7 +20,7 @@ import { go } from '../route';
 import { UsageSettings } from '../usage/Settings';
 
 // each section: its address, name, what is in it, icon, and the colour of its tile in the macOS look
-type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'agents' | 'access' | 'demo' | 'keys';
+type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'agents' | 'network' | 'access' | 'demo' | 'keys';
 const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
   [tr('界面'), [
     ['look', tr('外观与动效'), tr('界面风格、明暗、语言和动画'), PaletteIcon, '#5856d6'],
@@ -37,6 +37,7 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
     ['agents', tr('员工 Agent'), tr('Paseo、herdr 和本机 pi'), RobotIcon, '#a2845e'],
   ]],
   [tr('系统'), [
+    ['network', tr('网络与安全'), tr('监听地址、端口、允许的来源和登录方式'), ShieldCheckIcon, '#0a84ff'],
     ['access', tr('访问与登录'), tr('其他设备的访问密码与 App 访问密钥'), LockKeyIcon, '#8e8e93'],
     ['demo', tr('展示模式'), tr('样例项目和调研文章'), FlaskIcon, '#e6a700'],
     ['keys', tr('快捷键'), tr('所有按键一览'), KeyboardIcon, '#636366'],
@@ -436,7 +437,7 @@ function Access() {
         <Row label={tr('这台设备')} desc={a.local ? tr('运行 Papertown 的电脑：直接进入') : tr('用访问密码登录的设备')}>
           {!a.local && <Button onClick={() => run(api.logout).then(() => go('/'))}>{tr('退出登录')}</Button>}
         </Row>
-        <Row label={tr('访问密码')} desc={a.password ? tr('手机及其他设备在首页用此密码登录') : tr('尚未设置：其他设备的浏览器无法登录')}>
+        <Row label={tr('访问密码')} desc={a.methods?.password === false ? tr('密码登录已在「网络与安全」中关闭') : a.password ? tr('手机及其他设备在首页用此密码登录') : tr('尚未设置：其他设备的浏览器无法登录')}>
           {!form && <Button onClick={() => setForm(true)}>{a.password ? tr('修改密码') : tr('设置密码')}</Button>}
         </Row>
         {form && (
@@ -451,7 +452,7 @@ function Access() {
           </form>
         )}
         {a.password && (
-          <Row label={tr('已登录设备')} desc={tr('{0} 个设备登录仍在有效期内（30 天）', a.sessions ?? 0)}>
+          <Row label={tr('已登录设备')} desc={tr('{0} 个设备登录仍在有效期内（{1} 天）', a.sessions ?? 0, a.days ?? 30)}>
             <Button disabled={!a.sessions} onClick={() => run(api.logoutAll, tr('所有设备均需重新登录。'))}>{tr('全部退出登录')}</Button>
           </Row>
         )}
@@ -472,14 +473,119 @@ function Access() {
         )}
         {msg && <Note>{msg}</Note>}
       </Card>
-      {(a.local || a.signed_in) && <AccessKeys />}
-      <Note>{tr('Papertown 默认仅监听本机。如需在其他设备上打开，请先开启网络访问（如 tailscale serve 8000 或 papertown serve --host 0.0.0.0），再在浏览器用访问密码登录，或在 App 中填写服务器地址和访问密钥。')}</Note>
+      {(a.local || a.signed_in) && <AccessKeys off={a.methods?.keys === false} />}
+      <Note>{tr('其他设备要打开 Papertown，先在「网络与安全」中把监听地址改为所有网络并重启服务，或用 tailscale serve 转发。之后在浏览器用访问密码登录，或在 App 中填写服务器地址和访问密钥。')}</Note>
+    </>
+  );
+}
+
+// where the server listens, which addresses may reach it at all, and how other devices sign in (network.py).
+// Host and port wait for the next start; the rest holds from the next request
+const PICK = (v: NetworkView): NetworkSettings => ({ host: v.host, port: v.port, sources: v.sources, password: v.password, keys: v.keys, days: v.days });
+const PRESETS: [string, string, string][] = [
+  ['lan', tr('局域网'), tr('10.0.0.0/8、172.16.0.0/12、192.168.0.0/16 等私有地址')],
+  ['tailscale', 'Tailscale', tr('100.64.0.0/10，包括 tailscale serve 转发的访问')],
+  ['any', tr('任意来源'), tr('包括公网，建议只在 HTTPS 反向代理之后开启')],
+];
+const KIND: Record<string, string> = { tailscale: 'Tailscale', lan: tr('局域网') };
+const kindName = (k: SourceKind) => (k && KIND[k]) || tr('其他网络');
+
+function Network() {
+  const [v, setV] = useState<NetworkView | null>(null);
+  const [d, setD] = useState<NetworkSettings | null>(null);
+  const [add, setAdd] = useState('');
+  const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.network().then(r => { setV(r); setD(PICK(r)); }, e => setErr((e as Error).message)); }, []);
+  if (err) return <Warn bad>{err}</Warn>;
+  if (!v || !d) return <Note>{tr('加载中…')}</Note>;
+  const ro = !v.can_edit;
+  const edit = (x: Partial<NetworkSettings>) => { setMsg(''); setD({ ...d, ...x }); };
+  const has = (s: string) => d.sources.includes(s);
+  const flip = (s: string, on: boolean) => edit({ sources: on ? [...d.sources, s] : d.sources.filter(x => x !== s) });
+  const custom = d.sources.filter(s => !(s in v.presets));
+  const dirty = JSON.stringify(PICK(v)) !== JSON.stringify(d);
+  const now = v.listening;
+  const waits = now && (now.host !== v.host || now.port !== v.port);
+  async function save() {
+    setBusy(true); setMsg('');
+    try {
+      const r = await api.setNetwork(d!);
+      const moved = r.host !== v!.host || r.port !== v!.port;
+      setV(r); setD(PICK(r));
+      setMsg(moved ? tr('已保存。监听地址和端口在重启服务后生效。') : tr('已保存。'));
+    } catch (e) { setMsg((e as Error).message); }
+    setBusy(false);
+  }
+  function addSource(e: React.FormEvent) {
+    e.preventDefault();
+    const s = add.trim();
+    if (s && !d!.sources.includes(s)) edit({ sources: [...d!.sources, s] });
+    setAdd('');
+  }
+  const urls = d.host === '127.0.0.1' ? [] : v.addresses;
+  const [inFile, editable] = tr('以上设置保存在 {0}，也可直接编辑该文件。').split('{0}');
+  return (
+    <>
+      <Card title={tr('监听')}>
+        <Row label={tr('监听地址')} desc={tr('仅本机：只有这台电脑能打开。所有网络：允许来源内的设备可以连接，仍需登录')}>
+          {ro ? <Text>{d.host === '127.0.0.1' ? tr('仅本机') : tr('所有网络')}</Text>
+            : <Pick label={tr('监听地址')} value={d.host === '127.0.0.1' ? '127.0.0.1' : '0.0.0.0'} options={[['127.0.0.1', tr('仅本机')], ['0.0.0.0', tr('所有网络')]]} onChange={h => edit({ host: h })} />}
+        </Row>
+        <Row label={tr('端口')} desc={tr('1024 到 65535')}>
+          {ro ? <Text>{d.port}</Text>
+            : <Input className="st-port" aria-label={tr('端口')} type="number" min={1024} max={65535} value={String(d.port)} onChange={e => edit({ port: Number(e.target.value) || 0 })} />}
+        </Row>
+        {waits && <Warn>{tr('当前监听 {0}:{1}，已保存的设置在重启服务后生效。启动命令中写了 --host 或 --port 时，以命令为准。', now!.host, now!.port)}</Warn>}
+        <Row label={tr('其他设备的连接地址')} desc={d.host === '127.0.0.1' ? tr('仅本机监听时，其他设备无法连接') : tr('在其他设备的浏览器或 App 中填写')}>
+          {urls.length > 0 && <div className="st-addr">{urls.map(a => <code key={a.ip} title={kindName(a.kind)}>{`http://${a.ip.includes(':') ? `[${a.ip}]` : a.ip}:${d.port}`}</code>)}</div>}
+        </Row>
+      </Card>
+      <Card title={tr('允许的来源')}>
+        <Note>{tr('这台电脑始终可以访问。来源不在范围内的设备会被直接拒绝，登录页也无法打开。')}</Note>
+        {PRESETS.map(([k, name, about]) => (
+          <Row key={k} label={name} desc={about}><Toggle label={name} value={has(k)} disabled={ro} onChange={on => flip(k, on)} /></Row>
+        ))}
+        {custom.map(s => (
+          <Row key={s} label={s} desc={tr('手动添加')}>
+            {!ro && <Button variant="secondary-destructive" onClick={() => flip(s, false)}>{tr('移除')}</Button>}
+          </Row>
+        ))}
+        {!ro && (
+          <form className="st-form st-src-new" onSubmit={addSource}>
+            <Input label={tr('添加 IP 或网段')} placeholder={tr('例如 203.0.113.7 或 203.0.113.0/24')} value={add} maxLength={60} onChange={e => setAdd(e.target.value)} />
+            <div className="st-btns"><Button type="submit" disabled={!add.trim()}>{tr('添加')}</Button></div>
+          </form>
+        )}
+        <Row label={tr('你当前的来源')} desc={v.you.local ? tr('这台电脑') : `${v.you.ip ?? '?'} · ${kindName(v.you.kind)}`} />
+      </Card>
+      <Card title={tr('登录方式')}>
+        <Row label={tr('密码登录')} desc={tr('其他设备的浏览器用访问密码登录。关闭后已登录的设备一并退出')}>
+          <Toggle label={tr('密码登录')} value={d.password} disabled={ro} onChange={on => edit({ password: on })} />
+        </Row>
+        <Row label={tr('访问密钥')} desc={tr('iPhone 与 Mac App、脚本用访问密钥连接')}>
+          <Toggle label={tr('访问密钥')} value={d.keys} disabled={ro} onChange={on => edit({ keys: on })} />
+        </Row>
+        <Row label={tr('登录有效期')} desc={tr('用密码登录后，多久需要重新登录')}>
+          {ro ? <Text>{tr('{0} 天', d.days)}</Text>
+            : <Pick label={tr('登录有效期')} value={String(d.days)} options={[['1', tr('1 天')], ['7', tr('7 天')], ['30', tr('30 天')], ['90', tr('90 天')]]} onChange={x => edit({ days: Number(x) })} />}
+        </Row>
+      </Card>
+      {v.file && <Note>{inFile}<code className="st-file">{v.file}</code>{editable}</Note>}
+      {ro ? <Note>{tr('只能在运行 Papertown 的电脑上，或用访问密码登录后修改。')}</Note> : (
+        <div className="st-btns">
+          <Button variant="primary" disabled={!dirty || busy} onClick={save}>{tr('保存')}</Button>
+          <Button disabled={!dirty || busy} onClick={() => { setD(PICK(v)); setMsg(''); }}>{tr('还原')}</Button>
+        </div>
+      )}
+      {msg && <Note>{msg}</Note>}
     </>
   );
 }
 
 // keys for the iPhone and Mac apps (and scripts): one per device, shown once, revoked one by one
-function AccessKeys() {
+function AccessKeys({ off }: { off?: boolean }) {
   const [keys, setKeys] = useState<AccessKey[] | null>(null);
   const [name, setName] = useState('');
   const [made, setMade] = useState<AccessKey | null>(null);
@@ -499,6 +605,7 @@ function AccessKeys() {
   return (
     <Card>
       <Row label={tr('访问密钥')} desc={tr('iPhone 与 Mac App 用服务器地址加访问密钥连接。每个设备一个密钥，可单独撤销。')} />
+      {off && <Warn>{tr('访问密钥已在「网络与安全」中关闭，现有密钥暂时无法连接。')}</Warn>}
       <form className="st-form st-key-new" onSubmit={create}>
         <Input label={tr('设备名称')} placeholder={tr('例如 iPhone')} value={name} maxLength={60} onChange={e => setName(e.target.value)} />
         <div className="st-btns"><Button variant="primary" type="submit">{tr('新建密钥')}</Button></div>
@@ -616,6 +723,7 @@ export function SettingsPage({ section, hud, onClose }: { section?: string; hud:
             {key === 'map' && <MapSection s={s} />}
             {key === 'walk' && <Walk s={s} />}
             {key === 'agents' && <Agents />}
+            {key === 'network' && <Network />}
             {key === 'access' && <Access />}
             {key === 'demo' && <Demo hud={hud} />}
             {key === 'keys' && <Keys />}

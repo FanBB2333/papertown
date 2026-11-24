@@ -38,6 +38,12 @@
   background: color-mix(in srgb, var(--ok, #2a9d5c) 10%, transparent); }
 .st-key-text { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .st-key-text code { flex: 1; min-width: 0; font: 13px/1.5 var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; user-select: all; }
+.st-addr { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.st-addr code { font: 13px/1.5 var(--mono, ui-monospace, monospace); user-select: all; }
+.st-port { width: 120px; }
+.st-file { font-family: var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; user-select: all; }
+.st-src-new { flex-direction: row; align-items: flex-end; max-width: 520px; }
+.st-src-new > :first-child { flex: 1; }
 .st-models, .st-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: flex-end; }
 .st-dlg { display: flex; flex-direction: column; gap: 10px; padding: 22px 24px 18px; }
 .st-dlg h2 { font-size: 16px; font-weight: 600; }

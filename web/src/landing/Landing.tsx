@@ -144,6 +144,10 @@ function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] 
   );
 }
 
+// where to open Papertown on the computer that runs it: the port this page came from. The server speaks
+// plain http, so https or no port means a proxy in between, whose port says nothing about the server's
+const onHost = location.protocol === 'http:' && location.port ? `http://127.0.0.1:${location.port}` : '';
+
 // the way in: straight in locally, a password elsewhere, or instructions when none is set yet
 function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: string; reload: () => Promise<AuthState | null>; enter: () => void }) {
   const [pw, setPw] = useState('');
@@ -204,7 +208,7 @@ function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: strin
         <h2>{tr('暂无法进入')}</h2>
         <p className="muted">{tr('尚未设置访问密码，仅运行 Papertown 的电脑可打开。')}</p>
         <ol className="ld-steps">
-          <li>{tr('在那台电脑上打开 Papertown（{0}）', 'http://127.0.0.1:8000')}</li>
+          <li>{onHost ? tr('在那台电脑上打开 Papertown（{0}）', onHost) : tr('在那台电脑上打开 Papertown')}</li>
           <li>{tr('在该页面设置访问密码')}</li>
           <li>{tr('返回此处用密码登录')}</li>
         </ol>

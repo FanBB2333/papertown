@@ -266,8 +266,19 @@ export interface MemoryFull extends MemoryItem { messages?: { role: 'user' | 'as
 
 export type PageKind = 'report' | 'explain' | 'answer';
 export interface Page { id: string; n: number; title: string; kind: PageKind; by: string; agent: string; question: string | null; at: string; size: number }
-export interface AuthState { local: boolean; password: boolean; authed: boolean; signed_in: boolean; key?: boolean; via?: 'local' | 'password' | 'key' | null; sessions?: number; keys?: number }
+export interface AuthState { local: boolean; password: boolean; authed: boolean; signed_in: boolean; key?: boolean; via?: 'local' | 'password' | 'key' | null; sessions?: number; keys?: number; methods?: { password: boolean; keys: boolean }; days?: number }
 // an access key for the apps: its text comes back once, when it is made
+// where the server listens, which addresses may reach it, how devices sign in (network.py)
+export type SourceKind = 'tailscale' | 'lan' | null;
+export interface NetworkSettings { host: string; port: number; sources: string[]; password: boolean; keys: boolean; days: number }
+export interface NetworkView extends NetworkSettings {
+  listening: { host: string; port: number } | null;
+  addresses: { ip: string; kind: SourceKind }[];
+  presets: Record<string, string[]>;
+  you: { local: boolean; ip: string | null; kind: SourceKind };
+  can_edit: boolean;
+  file: string; // the config file these are saved in (papertown.toml)
+}
 export interface AccessKey { id: string; name: string; hint: string; at: string; seen: string | null; key?: string }
 export interface LeadView { agent: Agent | null; resident: Resident; settings: { on: boolean; supervise: boolean; every: number }; reports: Report[]; asks: Report[] }
 
@@ -547,6 +558,8 @@ export const api = {
   logoutAll: () => call<{ ok: boolean; ended: number }>('POST', '/api/auth/logout-all'),
   setPassword: (password: string, old?: string) => call<AuthState>('POST', '/api/auth/password', { password, ...(old ? { old } : {}) }),
   clearPassword: () => call<AuthState>('DELETE', '/api/auth/password'),
+  network: () => call<NetworkView>('GET', '/api/network'),
+  setNetwork: (v: Partial<NetworkSettings>) => call<NetworkView>('PUT', '/api/network', v),
   accessKeys: () => call<{ keys: AccessKey[] }>('GET', '/api/auth/keys'),
   createKey: (name: string) => call<AccessKey & { key: string }>('POST', '/api/auth/keys', { name }),
   decideCard: (lineId: string, d: { kind: Decision['kind']; id: string; agent: string | null; value: DecisionOption['value'] | null; text?: string }) =>
