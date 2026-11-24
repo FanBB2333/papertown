@@ -740,6 +740,16 @@ public struct TermPrompt: Decodable, Sendable, Equatable {
 public struct TranscriptState: Decodable, Sendable, Equatable {
     public let ok: Bool
     public let note: String?
+    /// The conversation's title as the CLI named it.
+    public let title: String?
+}
+
+/// A file kept on the server to go with the next message.
+public struct UploadedFile: Decodable, Sendable, Equatable {
+    public let id: String
+    public let name: String
+    public let path: String
+    public let kind: String
 }
 
 public struct AgentTimeline: Decodable, Sendable {

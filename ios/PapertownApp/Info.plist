@@ -27,6 +27,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Papertown uses the camera to take a photo you send to an agent.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Papertown uses Face ID to unlock your saved server password in Keychain for automatic sign-in.</string>
 	<key>NSLocalNetworkUsageDescription</key>

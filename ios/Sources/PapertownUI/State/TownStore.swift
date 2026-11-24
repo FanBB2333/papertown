@@ -758,6 +758,7 @@ public final class TownStore: ObservableObject {
                         state.queued = (tl.queued ?? []).map { QueuedMessage(id: $0.id, text: $0.data.field("text")?.stringValue ?? "") }
                         state.permissions = tl.agent.watch?.permissions ?? tl.paseo?.permissions ?? []
                         state.transcriptNote = tl.transcript?.ok == false ? tl.transcript?.note : nil
+                        state.title = tl.transcript?.title ?? state.title
                         if let term = tl.agent.term {
                             // the screen (with its scrollback) is read while it shows, works or waits on a dialog
                             let shown = activeChat == target && chatShowsTerminal
@@ -803,6 +804,7 @@ public final class TownStore: ObservableObject {
                 if let t = await tl {
                     state.entries = ConversationState.entries(from: t.items)
                     state.transcriptNote = t.transcript?.ok == false ? t.transcript?.note : nil
+                    state.title = t.transcript?.title ?? state.title
                 }
             }
             state.isLoading = false
@@ -819,9 +821,10 @@ public final class TownStore: ObservableObject {
     }
 
     /// Sends a message: it shows at once as yours, and stays until the conversation itself shows it.
-    public func sendMessage(_ text: String, to target: ChatTarget, mode: DeliveryMode?) async {
+    public func sendMessage(_ text: String, files: [OutgoingFile] = [], to target: ChatTarget, mode: DeliveryMode?) async {
         var state = conversation(target)
-        let pending = PendingMessage(text: text, mode: mode, had: state.seen(text))
+        var pending = PendingMessage(text: text, mode: mode, files: files, had: 0)
+        pending.had = state.seen(pending.match)
         state.pending.append(pending)
         conversations[target.key] = state
         await deliver(pending, to: target)
@@ -833,13 +836,21 @@ public final class TownStore: ObservableObject {
             return
         }
         do {
+            // the files go first, and the message names them by where the server keeps them
+            var ids: [String] = []
+            for f in p.files {
+                switch target {
+                case .agent(let id): ids.append(try await client.upload(f.data, name: f.name, type: f.type, toAgent: id).id)
+                case .terminal(let id): ids.append(try await client.upload(f.data, name: f.name, type: f.type, toTerminal: id).id)
+                }
+            }
             switch target {
-            case .agent where target.isAssistant && p.mode == nil:
+            case .agent where target.isAssistant && p.mode == nil && ids.isEmpty:
                 try await client.assistantSay(p.text)
             case .agent(let id):
-                try await client.say(p.text, to: id, mode: p.mode)
+                try await client.say(p.text, to: id, mode: p.mode, attachments: ids)
             case .terminal(let id):
-                try await client.terminalSay(p.text, to: id, mode: p.mode)
+                try await client.terminalSay(p.text, to: id, mode: p.mode, attachments: ids)
             }
             setPending(p.id, in: target, .sent)
             await markSeen(target)
@@ -863,7 +874,7 @@ public final class TownStore: ObservableObject {
         guard var state = conversations[target.key], let i = state.pending.firstIndex(where: { $0.id == id }) else { return }
         let old = state.pending.remove(at: i)
         conversations[target.key] = state
-        await sendMessage(old.text, to: target, mode: old.mode)
+        await sendMessage(old.text, files: old.files, to: target, mode: old.mode)
     }
 
     public func dropPending(_ id: String, in target: ChatTarget) {

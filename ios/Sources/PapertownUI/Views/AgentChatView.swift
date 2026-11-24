@@ -1,6 +1,10 @@
 import Foundation
 import PapertownCore
+import PhotosUI
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 /// One conversation: an agent of the town, the assistant, or a terminal the town watches. Messages, tool calls,
 /// questions and proposed actions in order, then what you sent from here until the conversation shows it, and what the
@@ -30,7 +34,16 @@ struct AgentChatView: View {
     @State private var showConversations = false
     @State private var showStart = false
     @State private var modelChoice: ModelChoice?
+    @State private var files: [OutgoingFile] = []
+    @State private var thumbs: [String: CGImage] = [:]
+    @State private var photoItems: [PhotosPickerItem] = []
+    @State private var pickingPhotos = false
+    @State private var pickingFiles = false
+    @State private var takingPhoto = false
     @FocusState private var typing: Bool
+
+    /// One height for the input row: the add button, the text box, hiding the keyboard and sending.
+    private static let rowHeight: CGFloat = 36
 
     private struct ModelChoice: Identifiable {
         let model: String
@@ -40,10 +53,30 @@ struct AgentChatView: View {
 
     private var state: ConversationState { store.conversation(target) }
 
-    private var title: String {
+    /// Who the conversation is with, for the placeholder.
+    private var memberName: String {
         if case .terminal = target { return state.terminal?.name ?? state.terminal?.title ?? store.language.string("chat.terminal") }
         return TextFormatters.roleName(role, language: store.language)
     }
+
+    /// The member's project number, as `#6`.
+    private var number: String? {
+        guard case .agent(let id) = target, !target.isAssistant else { return nil }
+        let line = state.agent?.lineID ?? id.split(separator: "-", maxSplits: 1).last.map(String.init) ?? ""
+        if let p = store.projects.first(where: { $0.id == line }) { return "#\(p.seq)" }
+        if let n = line.split(separator: "_").last, Int(n) != nil { return "#\(n)" }
+        return nil
+    }
+
+    /// The conversation's title as its CLI named it, else what the member works on.
+    private var conversationTitle: String {
+        if let t = state.title, !t.isEmpty { return t }
+        if case .terminal = target { return memberName }
+        if target.isAssistant { return memberName }
+        return state.agent?.task?.title ?? store.language.string("chat.untitled")
+    }
+
+    private var title: String { [number, conversationTitle].compactMap { $0 }.joined(separator: " ") }
 
     var body: some View {
         let lang = store.language
@@ -68,7 +101,7 @@ struct AgentChatView: View {
         .navigationTitle(title)
         .papertownInlineTitle()
         .toolbar {
-            ToolbarItem(placement: .principal) { titleMenu(lang) }
+            ToolbarItem(placement: .principal) { titleView }
             if case .agent(let id) = target {
                 ToolbarItem(placement: .automatic) { moreMenu(id, lang) }
             }
@@ -130,20 +163,34 @@ struct AgentChatView: View {
                 .tint(store.appearance.tintColor)
         }
         .refreshable { await store.refreshChat(target) }
+        .photosPicker(isPresented: $pickingPhotos, selection: $photoItems, maxSelectionCount: ChatFiles.maxFiles, matching: .images)
+        .onChange(of: photoItems) { items in
+            guard !items.isEmpty else { return }
+            photoItems = []
+            Task { await addPhotos(items) }
+        }
+        .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            switch result {
+            case .success(let urls): addFiles(urls)
+            case .failure(let error): notice = error.localizedDescription
+            }
+        }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $takingPhoto) {
+            CameraPicker { image in
+                takingPhoto = false
+                if let data = image?.jpegData(compressionQuality: 0.95),
+                   let f = ChatFiles.photo(data, name: "photo-\(ChatFiles.stamp())") { add([f]) }
+            }
+            .ignoresSafeArea()
+        }
+        #endif
         .alert(item: $modelChoice) { choice in
             Alert(title: Text(lang.format("model.confirm.title", modelName(choice, lang))),
                   message: Text(lang.string("model.confirm.message")),
                   primaryButton: .default(Text(lang.string("model.confirm.switch"))) { Task { await switchModel(choice) } },
                   secondaryButton: .cancel(Text(lang.string("action.cancel"))))
         }
-    }
-
-    private func subtitleLine(_ lang: AppLanguage) -> String {
-        var parts = [subtitle]
-        if let model = state.agent?.displayModel { parts.append(model) }
-        if let thinking = models?.current?.thinking, !thinking.isEmpty { parts.append(thinking) }
-        if let term = state.agent?.term { parts.append(term.backend) }
-        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     // MARK: Model
@@ -160,23 +207,26 @@ struct AgentChatView: View {
         models?.how == "resume" && state.agent?.started == true && !store.isDemo
     }
 
-    @ViewBuilder
-    private func titleMenu(_ lang: AppLanguage) -> some View {
-        let label = VStack(spacing: 1) {
-            Text(title).font(.headline).foregroundStyle(.primary).lineLimit(1)
-            HStack(spacing: 3) {
-                Text(subtitleLine(lang)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                if canSwitchModel {
-                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(.secondary)
-                }
+    private var titleView: some View {
+        HStack(spacing: 6) {
+            if let number {
+                Text(number).font(.headline.monospacedDigit()).foregroundStyle(.secondary)
             }
+            Text(conversationTitle).font(.headline).foregroundStyle(.primary).lineLimit(1)
         }
-        if canSwitchModel, let m = models {
-            Menu { modelMenu(m, lang) } label: { label }
-                .accessibilityLabel(lang.string("model.menu"))
-        } else {
-            label
-        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// The model the CLI runs, with its thinking level.
+    private var modelLabel: String? {
+        guard !target.isAssistant else { return nil }
+        let cur = models?.current
+        let name = cur.flatMap { c in c.model.isEmpty ? nil : (models?.models.first { $0.id == c.model }?.name ?? c.model) }
+            ?? state.agent?.displayModel
+        guard let name, !name.isEmpty else { return nil }
+        let short = name.split(separator: "/").last.map(String.init) ?? name
+        if let t = cur?.thinking, !t.isEmpty { return "\(short) · \(t)" }
+        return short
     }
 
     @ViewBuilder
@@ -327,12 +377,15 @@ struct AgentChatView: View {
         }
     }
 
-    private func userBubble(_ text: String, dim: Bool = false) -> some View {
-        Text(text)
-            .textSelection(.enabled)
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .foregroundStyle(.white)
-            .background(store.appearance.tintColor.opacity(dim ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 16))
+    private func userBubble(_ text: String, files: [(image: Bool, name: String)]? = nil, dim: Bool = false) -> some View {
+        let split = files == nil ? ChatFiles.split(text) : (text: text, files: files ?? [])
+        return VStack(alignment: .trailing, spacing: 6) {
+            if !split.text.isEmpty { Text(split.text).textSelection(.enabled) }
+            if !split.files.isEmpty { AttachmentTags(files: split.files) }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .foregroundStyle(.white)
+        .background(store.appearance.tintColor.opacity(dim ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 16))
     }
 
     /// A message sent from here: shown at once, with how far it got and what can be done when it did not get through.
@@ -340,7 +393,7 @@ struct AgentChatView: View {
         VStack(alignment: .trailing, spacing: 4) {
             HStack {
                 Spacer(minLength: 48)
-                userBubble(p.text, dim: p.phase != .sent)
+                userBubble(p.text, files: p.files.map { (image: $0.isImage, name: $0.name) }, dim: p.phase != .sent)
             }
             HStack(spacing: 6) {
                 switch p.phase {
@@ -362,6 +415,9 @@ struct AgentChatView: View {
                     Button(lang.string("chat.uncertain.resend")) { Task { await store.resendPending(p.id, in: target) } }
                     Button(lang.string("chat.pending.edit")) {
                         draft = p.text
+                        files = []
+                        thumbs = [:]
+                        add(p.files)
                         store.dropPending(p.id, in: target)
                         typing = true
                     }
@@ -498,52 +554,208 @@ struct AgentChatView: View {
             if state.isOffline, case .agent(let id) = target, state.agent != nil {
                 offlineBar(agentID: id, lang)
             } else {
-                if state.isWorking {
-                    Picker("", selection: $deliveryMode) {
-                        ForEach([DeliveryMode.steer, .queue, .interrupt], id: \.self) { m in
-                            Text(TextFormatters.deliveryModeLabel(m, language: lang)).tag(m)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    if deliveryMode == .steer && !state.permissions.isEmpty {
-                        Text(lang.string("chat.permission.warning")).font(.caption2).foregroundStyle(.orange)
-                    }
-                }
-                HStack(alignment: .bottom, spacing: 8) {
-                    TextField(placeholder(lang), text: $draft, axis: .vertical)
-                        .lineLimit(1...6)
-                        .textFieldStyle(.plain)
-                        .focused($typing)
-                        .padding(.horizontal, 12).padding(.vertical, 8)
-                        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 18))
-                    #if os(iOS)
-                    if typing {
-                        Button { typing = false } label: {
-                            Image(systemName: "keyboard.chevron.compact.down")
-                                .font(.system(size: 20))
-                                .frame(width: 30, height: 30)
-                        }
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(lang.string("chat.hide_keyboard"))
-                    }
-                    #endif
-                    Button(action: send) {
-                        Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
-                    }
-                    .disabled(!canSend)
-                    .accessibilityLabel(lang.string("action.send"))
-                }
-                if state.isWorking {
-                    Text(TextFormatters.deliveryModeHint(deliveryMode, language: lang))
-                        .font(.caption2).foregroundStyle(.secondary)
+                if state.isWorking && deliveryMode == .steer && !state.permissions.isEmpty {
+                    Text(lang.string("chat.permission.warning")).font(.caption2).foregroundStyle(.orange)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                chipsRow(lang)
+                if !files.isEmpty {
+                    AttachmentStrip(files: files, thumbs: thumbs, remove: { id in
+                        files.removeAll { $0.id == id }
+                        thumbs[id] = nil
+                    }, removeLabel: lang.string("attach.remove"))
+                }
+                inputRow(lang)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.bar)
     }
+
+    /// What sits above the input row: the model the CLI runs (a menu when it can switch) and, while the agent works,
+    /// how a message reaches it.
+    @ViewBuilder
+    private func chipsRow(_ lang: AppLanguage) -> some View {
+        let model = modelLabel
+        if model != nil || state.isWorking {
+            HStack(spacing: 8) {
+                if let model {
+                    if canSwitchModel, let m = models {
+                        Menu { modelMenu(m, lang) } label: { chip(model, symbol: "cpu", menu: true) }
+                            .accessibilityLabel(lang.string("model.menu"))
+                    } else {
+                        chip(model, symbol: "cpu", menu: false)
+                    }
+                }
+                if state.isWorking {
+                    Menu {
+                        ForEach([DeliveryMode.steer, .queue, .interrupt], id: \.self) { m in
+                            Button { deliveryMode = m } label: {
+                                if m == deliveryMode { Image(systemName: "checkmark") }
+                                Text(TextFormatters.deliveryModeLabel(m, language: lang))
+                                Text(TextFormatters.deliveryModeHint(m, language: lang))
+                            }
+                        }
+                    } label: {
+                        chip(TextFormatters.deliveryModeLabel(deliveryMode, language: lang), symbol: Self.deliverySymbol(deliveryMode), menu: true)
+                    }
+                    .accessibilityLabel(lang.string("chat.delivery"))
+                }
+                Spacer(minLength: 0)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func chip(_ text: String, symbol: String, menu: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).font(.system(size: 11, weight: .medium))
+            Text(text).font(.caption.weight(.medium)).lineLimit(1)
+            if menu { Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)) }
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .frame(height: 26)
+        .background(Color.secondary.opacity(0.1), in: Capsule())
+        .contentShape(Capsule())
+    }
+
+    private static func deliverySymbol(_ m: DeliveryMode) -> String {
+        switch m {
+        case .steer: return "arrow.turn.down.right"
+        case .queue: return "clock"
+        case .interrupt: return "bolt"
+        }
+    }
+
+    /// The add button, the text box, hiding the keyboard and sending, all one height.
+    private func inputRow(_ lang: AppLanguage) -> some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            if canAttach { addMenu(lang) }
+            TextField(placeholder(lang), text: $draft, axis: .vertical)
+                .lineLimit(1...6)
+                .textFieldStyle(.plain)
+                .focused($typing)
+                .padding(.horizontal, 14).padding(.vertical, 7)
+                .frame(minHeight: Self.rowHeight)
+                .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: Self.rowHeight / 2))
+            #if os(iOS)
+            if typing {
+                Button { typing = false } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(width: Self.rowHeight, height: Self.rowHeight)
+                        .background(Color.secondary.opacity(0.1), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(lang.string("chat.hide_keyboard"))
+            }
+            #endif
+            Button(action: send) {
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: Self.rowHeight, height: Self.rowHeight)
+                    .background(canSend ? store.appearance.tintColor : Color.secondary.opacity(0.35), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSend)
+            .accessibilityLabel(lang.string("action.send"))
+        }
+    }
+
+    /// Photos, the camera, files and a copied image, to go with the message.
+    private func addMenu(_ lang: AppLanguage) -> some View {
+        Menu {
+            Section(lang.string("attach.header")) {
+                Button { pickingPhotos = true } label: { Label(lang.string("attach.photos"), systemImage: "photo.on.rectangle") }
+                #if os(iOS)
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button { takingPhoto = true } label: { Label(lang.string("attach.camera"), systemImage: "camera") }
+                }
+                #endif
+                Button { pickingFiles = true } label: { Label(lang.string("attach.files"), systemImage: "folder") }
+                #if os(iOS)
+                Button { pasteImages() } label: { Label(lang.string("attach.paste"), systemImage: "doc.on.clipboard") }
+                    .disabled(!UIPasteboard.general.hasImages)
+                #endif
+            }
+            if state.hasScreen {
+                Section {
+                    Button { showTerminal.toggle() } label: {
+                        Label(lang.string(showTerminal ? "attach.show_chat" : "attach.show_terminal"),
+                              systemImage: showTerminal ? "bubble.left.and.bubble.right" : "terminal")
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: Self.rowHeight, height: Self.rowHeight)
+                .background(Color.secondary.opacity(0.1), in: Circle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(files.count >= ChatFiles.maxFiles)
+        .accessibilityLabel(lang.string("attach.menu"))
+    }
+
+    /// Files go to a member or a terminal of a project; the town's assistant takes text.
+    private var canAttach: Bool { !target.isAssistant && !store.isDemo }
+
+    private func add(_ new: [OutgoingFile]) {
+        var room = ChatFiles.maxFiles - files.count
+        for f in new {
+            if f.data.count > ChatFiles.maxBytes {
+                notice = store.language.format("attach.too_big", f.name)
+                continue
+            }
+            guard room > 0 else {
+                notice = store.language.string("attach.too_many")
+                break
+            }
+            files.append(f)
+            room -= 1
+            if f.isImage, let t = ChatFiles.thumbnail(f.data) { thumbs[f.id] = t }
+        }
+    }
+
+    private func addPhotos(_ items: [PhotosPickerItem]) async {
+        var out: [OutgoingFile] = []
+        for (i, item) in items.enumerated() {
+            if let data = try? await item.loadTransferable(type: Data.self),
+               let f = ChatFiles.photo(data, name: "photo-\(ChatFiles.stamp())-\(i + 1)") {
+                out.append(f)
+            } else {
+                notice = store.language.string("attach.failed")
+            }
+        }
+        add(out)
+    }
+
+    private func addFiles(_ urls: [URL]) {
+        var out: [OutgoingFile] = []
+        for url in urls {
+            do { out.append(try ChatFiles.file(at: url)) } catch { notice = error.localizedDescription }
+        }
+        add(out)
+    }
+
+    #if os(iOS)
+    private func pasteImages() {
+        let images = UIPasteboard.general.images ?? []
+        let out = images.enumerated().compactMap { i, image in
+            image.jpegData(compressionQuality: 0.95).flatMap { ChatFiles.photo($0, name: "pasted-\(ChatFiles.stamp())-\(i + 1)") }
+        }
+        if out.isEmpty { notice = store.language.string("attach.failed") }
+        add(out)
+    }
+    #endif
 
     /// A screen on the terminal Papertown cannot answer for you: typed text would go into it, so sending waits.
     private func heldCard(_ lang: AppLanguage) -> some View {
@@ -563,7 +775,8 @@ struct AgentChatView: View {
     }
 
     private var canSend: Bool {
-        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !(state.heldByScreen && !(state.isWorking && deliveryMode == .queue))
+        (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !files.isEmpty)
+            && !(state.heldByScreen && !(state.isWorking && deliveryMode == .queue))
     }
 
     /// What else there is to do with this member: its conversations, the brief, its terminal, how it starts.
@@ -609,7 +822,7 @@ struct AgentChatView: View {
     private func placeholder(_ lang: AppLanguage) -> String {
         if state.heldByScreen { return lang.string("chat.placeholder.held") }
         if state.isWorking { return TextFormatters.deliveryModePlaceholder(deliveryMode, language: lang) }
-        return lang.format("chat.placeholder.idle", title)
+        return lang.format("chat.placeholder.idle", memberName)
     }
 
     private func offlineBar(agentID: String, _ lang: AppLanguage) -> some View {
@@ -721,11 +934,14 @@ struct AgentChatView: View {
     /// The draft leaves the box at once and shows as yours while it is on its way; the box stays free for the next one.
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard canSend else { return }
         let mode: DeliveryMode? = state.isWorking ? deliveryMode : nil
+        let sending = files
         draft = ""
+        files = []
+        thumbs = [:]
         notice = nil
-        Task { await store.sendMessage(text, to: target, mode: mode) }
+        Task { await store.sendMessage(text, files: sending, to: target, mode: mode) }
     }
 }
 

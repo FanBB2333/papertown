@@ -104,9 +104,22 @@ public extension PapertownClient {
     func stopAgent(_ agentID: String) async throws { let _: Ack = try await send(.post, ["agents", agentID, "stop"], body: Empty()) }
 
     /// Says something to an agent and returns nothing: a terminal agent answers with its queue state, a pi agent with an event.
-    func say(_ text: String, to agentID: String, mode: DeliveryMode?) async throws {
-        struct Body: Encodable { let text: String; let mode: DeliveryMode? }
-        let _: Ack = try await send(.post, ["agents", agentID, "say"], body: Body(text: text, mode: mode))
+    func say(_ text: String, to agentID: String, mode: DeliveryMode?, attachments: [String] = []) async throws {
+        struct Body: Encodable { let text: String; let mode: DeliveryMode?; let attachments: [String] }
+        let _: Ack = try await send(.post, ["agents", agentID, "say"], body: Body(text: text, mode: mode, attachments: attachments))
+    }
+
+    /// A file for the next message to this member, kept where its CLI can read it.
+    func upload(_ data: Data, name: String, type: String, toAgent agentID: String) async throws -> UploadedFile {
+        let reply = try await self.data(.post, path: ["agents", agentID, "uploads"], query: [URLQueryItem(name: "name", value: name)],
+                                        body: data, contentType: type)
+        return try JSONDecoder().decode(UploadedFile.self, from: reply)
+    }
+
+    func upload(_ data: Data, name: String, type: String, toTerminal id: String) async throws -> UploadedFile {
+        let reply = try await self.data(.post, path: ["terminals", id, "uploads"], query: [URLQueryItem(name: "name", value: name)],
+                                        body: data, contentType: type)
+        return try JSONDecoder().decode(UploadedFile.self, from: reply)
     }
 
     // MARK: Assistant
@@ -130,9 +143,9 @@ public extension PapertownClient {
     }
     func terminalTimeline(id: String) async throws -> TerminalTimeline { try await get(["terminals", id, "timeline"]) }
 
-    func terminalSay(_ text: String, to id: String, mode: DeliveryMode?) async throws {
-        struct Body: Encodable { let text: String; let mode: DeliveryMode? }
-        let _: Ack = try await send(.post, ["terminals", id, "say"], body: Body(text: text, mode: mode))
+    func terminalSay(_ text: String, to id: String, mode: DeliveryMode?, attachments: [String] = []) async throws {
+        struct Body: Encodable { let text: String; let mode: DeliveryMode?; let attachments: [String] }
+        let _: Ack = try await send(.post, ["terminals", id, "say"], body: Body(text: text, mode: mode, attachments: attachments))
     }
 
     func terminalKeys(id: String, _ keys: [String]) async throws {

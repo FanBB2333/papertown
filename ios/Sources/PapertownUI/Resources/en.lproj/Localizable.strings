@@ -905,3 +905,19 @@
 "term.key.3" = "3";
 "term.key.y" = "y";
 "term.key.n" = "n";
+
+/* Conversation header and composer */
+"chat.untitled" = "New Conversation";
+"chat.delivery" = "Delivery";
+"attach.menu" = "Add";
+"attach.header" = "Add to Message";
+"attach.photos" = "Photos";
+"attach.camera" = "Take Photo";
+"attach.files" = "Files";
+"attach.paste" = "Paste Image";
+"attach.show_terminal" = "Show Terminal";
+"attach.show_chat" = "Show Conversation";
+"attach.remove" = "Remove";
+"attach.too_big" = "%@ is over 25 MB";
+"attach.too_many" = "A message takes up to 10 files";
+"attach.failed" = "An image could not be read";

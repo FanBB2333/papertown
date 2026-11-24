@@ -51,18 +51,40 @@ public struct PendingMessage: Identifiable, Equatable, Sendable {
     public let id: String
     public let text: String
     public let mode: DeliveryMode?
+    /// Files that go with it, uploaded before the message is sent.
+    public let files: [OutgoingFile]
+    /// What the conversation shows of it once it arrives: its text, or for files alone the line the server puts
+    /// before them.
+    var match: String { text.isEmpty && !files.isEmpty ? "附件：" : text }
     public var phase: Phase
     /// How many of your messages with this text the conversation held when it was sent.
-    let had: Int
+    var had: Int
     let at: Date
 
-    init(text: String, mode: DeliveryMode?, had: Int) {
+    init(text: String, mode: DeliveryMode?, files: [OutgoingFile] = [], had: Int) {
         id = UUID().uuidString
         self.text = text
         self.mode = mode
+        self.files = files
         phase = .sending
         self.had = had
         at = Date()
+    }
+}
+
+/// A photo or file picked to go with a message.
+public struct OutgoingFile: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let name: String
+    public let type: String
+    public let data: Data
+    public var isImage: Bool { type.hasPrefix("image/") }
+
+    public init(name: String, type: String, data: Data) {
+        id = UUID().uuidString
+        self.name = name
+        self.type = type
+        self.data = data
     }
 }
 
@@ -73,6 +95,8 @@ public struct ConversationState: Sendable {
     public var queued: [QueuedMessage] = []
     public var permissions: [PermissionPrompt] = []
     public var screen: String?
+    /// The conversation's title as the CLI named it.
+    public var title: String?
     /// The screen with its colours, read while the terminal tab shows.
     public var styledScreen: StyledScreen?
     public var prompt: TermPrompt?
@@ -113,7 +137,7 @@ public struct ConversationState: Sendable {
     /// Sent messages the conversation now shows, or that it has not shown for ten minutes, are let go.
     mutating func settlePending() {
         let now = Date()
-        let kept = pending.filter { p in !(p.phase == .sent && (seen(p.text) > p.had || now.timeIntervalSince(p.at) > 600)) }
+        let kept = pending.filter { p in !(p.phase == .sent && (seen(p.match) > p.had || now.timeIntervalSince(p.at) > 600)) }
         pending = kept
     }
 

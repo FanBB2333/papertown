@@ -905,3 +905,19 @@
 "term.key.3" = "3";
 "term.key.y" = "y";
 "term.key.n" = "n";
+
+/* Conversation header and composer */
+"chat.untitled" = "新对话";
+"chat.delivery" = "发送方式";
+"attach.menu" = "添加";
+"attach.header" = "添加到消息";
+"attach.photos" = "照片";
+"attach.camera" = "拍照";
+"attach.files" = "文件";
+"attach.paste" = "粘贴图片";
+"attach.show_terminal" = "查看终端";
+"attach.show_chat" = "查看对话";
+"attach.remove" = "移除附件";
+"attach.too_big" = "%@ 超过 25 MB";
+"attach.too_many" = "一条消息最多带 10 个附件";
+"attach.failed" = "有图片无法读取";
