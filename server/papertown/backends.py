@@ -59,6 +59,12 @@ class TerminalBackend(ABC):
     def close(self, handle: dict) -> None: ...
 
 
+# tmux's names for the keys a terminal takes (terminals.KEYS); a single character is sent as itself
+TMUX_KEYS = {'enter': 'Enter', 'esc': 'Escape', 'tab': 'Tab', 'shift+tab': 'BTab', 'space': 'Space', 'backspace': 'BSpace',
+             'up': 'Up', 'down': 'Down', 'left': 'Left', 'right': 'Right', 'pageup': 'PPage', 'pagedown': 'NPage',
+             'ctrl+c': 'C-c', 'ctrl+d': 'C-d', 'ctrl+o': 'C-o', 'ctrl+t': 'C-t'}
+
+
 class TmuxBackend(TerminalBackend):
     def __init__(self, executable: str | None, socket: str, runner=None):
         self.executable, self.socket, self.runner = executable, socket, runner
@@ -130,9 +136,7 @@ class TmuxBackend(TerminalBackend):
     def keys(self, handle, keys):
         if not self.alive(handle):
             raise BackendError('终端会话已退出')
-        mapping = {'enter': 'Enter', 'esc': 'Escape', 'tab': 'Tab', 'space': 'Space', 'backspace': 'BSpace',
-                   'up': 'Up', 'down': 'Down', 'left': 'Left', 'right': 'Right', 'ctrl+c': 'C-c'}
-        self.call('send-keys', '-t', handle['pane'], *[mapping.get(k, k) for k in keys])
+        self.call('send-keys', '-t', handle['pane'], *[TMUX_KEYS.get(k, k) for k in keys])
 
     def state(self, handle):
         return {'status': None if self.alive(handle) else 'exited', 'seq': None, 'since': None}

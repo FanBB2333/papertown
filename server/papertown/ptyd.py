@@ -28,7 +28,8 @@ from uuid import uuid4
 
 from .vt import Screen
 
-KEYS = {'enter': '\r', 'esc': '\x1b', 'ctrl+c': '\x03', 'tab': '\t', 'backspace': '\x7f', 'space': ' '}
+KEYS = {'enter': '\r', 'esc': '\x1b', 'tab': '\t', 'shift+tab': '\x1b[Z', 'backspace': '\x7f', 'space': ' ',
+        'pageup': '\x1b[5~', 'pagedown': '\x1b[6~', 'ctrl+c': '\x03', 'ctrl+d': '\x04', 'ctrl+o': '\x0f', 'ctrl+t': '\x14'}
 ARROWS = {'up': 'A', 'down': 'B', 'right': 'C', 'left': 'D'}
 PASTE_GAP = .1   # between a paste and its Enter, as a person would leave
 KEY_GAP = .03    # between keys, so a CLI reads them one at a time

@@ -599,3 +599,12 @@ def test_files_go_with_a_message_by_path(tmp_path, monkeypatch):
     assert c.post(url + '/say', json={'text': ' '}).status_code == 422
     assert c.post(url + '/uploads?name=empty', content=b'').status_code == 400
     assert len(said) == 2
+
+
+def test_every_terminal_key_reaches_each_backend():
+    from papertown import backends, ptyd
+    from papertown.terminals import KEYS
+    for k in KEYS:
+        single = len(k) == 1 and k.isprintable()
+        assert k in backends.TMUX_KEYS or single, k
+        assert k in ptyd.KEYS or k in ptyd.ARROWS or single, k

@@ -921,3 +921,15 @@
 "attach.too_big" = "%@ 超过 25 MB";
 "attach.too_many" = "一条消息最多带 10 个附件";
 "attach.failed" = "有图片无法读取";
+
+/* Terminal key grid */
+"term.keys.show" = "显示按键";
+"term.key.shift+tab" = "Shift+Tab";
+"term.key.ctrl+d" = "Ctrl+D";
+"term.key.ctrl+o" = "Ctrl+O";
+"term.key.ctrl+t" = "Ctrl+T";
+"term.key.esc2" = "按两次 Esc";
+"term.key.pageup" = "向上翻页";
+"term.key.pagedown" = "向下翻页";
+"term.key.4" = "4";
+"term.key./" = "斜杠";

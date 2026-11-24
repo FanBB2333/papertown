@@ -17,7 +17,10 @@ from .project_dirs import owner, project_roots
 if TYPE_CHECKING:
     from .town import Town
 
-KEYS = {"enter", "esc", "tab", "space", "backspace", "up", "down", "left", "right", "1", "2", "3", "y", "n", "ctrl+c"}
+# the keys a conversation's terminal takes from the web and the app: moving, answering a dialog, and the agent CLIs'
+# shortcuts (Shift+Tab cycles Claude Code's modes, Ctrl+O and Ctrl+T show more, Esc twice goes back a turn)
+KEYS = {"enter", "esc", "tab", "shift+tab", "space", "backspace", "up", "down", "left", "right", "pageup", "pagedown",
+        "1", "2", "3", "4", "y", "n", "/", "ctrl+c", "ctrl+d", "ctrl+o", "ctrl+t"}
 INTERRUPT_TIMEOUT = 10
 
 

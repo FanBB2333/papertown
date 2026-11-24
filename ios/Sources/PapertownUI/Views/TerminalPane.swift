@@ -11,6 +11,7 @@ struct TerminalPane: View {
     @EnvironmentObject private var store: TownStore
     @AppStorage("PTTerminalWrap") private var wrap = true
     @AppStorage("PTTerminalSize") private var size = 10.0
+    @AppStorage("PTTerminalKeys") private var showKeys = true
     @State private var follow = true
     @State private var sending = false
     @State private var keyError: String?
@@ -27,7 +28,7 @@ struct TerminalPane: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14).padding(.top, 6)
             }
-            keyBar(lang)
+            if showKeys { keyGrid(lang) }
         }
     }
 
@@ -56,6 +57,7 @@ struct TerminalPane: View {
                     Text(lang.string("term.wrap")).tag(true)
                     Text(lang.string("term.nowrap")).tag(false)
                 }
+                Toggle(isOn: $showKeys) { Label(lang.string("term.keys.show"), systemImage: "keyboard") }
                 Section(lang.string("term.size")) {
                     Button { size = max(7, size - 1) } label: { Label(lang.string("term.smaller"), systemImage: "textformat.size.smaller") }
                     Button { size = min(16, size + 1) } label: { Label(lang.string("term.larger"), systemImage: "textformat.size.larger") }
@@ -189,36 +191,74 @@ struct TerminalPane: View {
 
     // MARK: Keys
 
-    private static let keys: [(label: String, key: String)] = [
-        ("Esc", "esc"), ("Tab", "tab"), ("↑", "up"), ("↓", "down"), ("←", "left"), ("→", "right"),
-        ("␣", "space"), ("⌫", "backspace"), ("⏎", "enter"), ("⌃C", "ctrl+c"),
-        ("1", "1"), ("2", "2"), ("3", "3"), ("y", "y"), ("n", "n"),
-    ]
-
-    private func keyBar(_ lang: AppLanguage) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(Self.keys, id: \.key) { k in
-                    Button { Task { await press(k.key) } } label: {
-                        Text(k.label)
-                            .font(.system(size: 14, weight: .medium, design: .monospaced))
-                            .frame(minWidth: 30, minHeight: 30)
-                            .padding(.horizontal, 4)
-                    }
-                    .buttonStyle(.bordered)
-                    .accessibilityLabel(lang.string("term.key.\(k.key)"))
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+    /// A key on the grid: what it shows, what it sends (a combination sends its keys in order), and its name for
+    /// VoiceOver and the long press.
+    private struct Key: Identifiable {
+        let label: String
+        let keys: [String]
+        let name: String
+        /// An SF Symbol drawn instead of the label.
+        let symbol: String?
+        var id: String { name }
+        init(_ label: String, _ keys: [String], _ name: String? = nil, symbol: String? = nil) {
+            self.label = label
+            self.keys = keys
+            self.name = name ?? keys[0]
+            self.symbol = symbol
         }
-        .disabled(sending || state.termStatus == "exited")
     }
 
-    private func press(_ key: String) async {
+    /// Three rows: moving and editing, the agent CLIs' shortcuts, and the answers a dialog takes.
+    private static let rows: [[Key]] = [
+        [Key("Esc", ["esc"]), Key("Tab", ["tab"], symbol: "arrow.right.to.line"),
+         Key("↑", ["up"], symbol: "arrow.up"), Key("↓", ["down"], symbol: "arrow.down"),
+         Key("←", ["left"], symbol: "arrow.left"), Key("→", ["right"], symbol: "arrow.right"),
+         Key("⌫", ["backspace"], symbol: "delete.left"), Key("⏎", ["enter"], symbol: "return")],
+        [Key("⌃C", ["ctrl+c"]), Key("⌃D", ["ctrl+d"]), Key("⇧Tab", ["shift+tab"], symbol: "arrow.left.to.line"),
+         Key("Esc×2", ["esc", "esc"], "esc2"), Key("⌃O", ["ctrl+o"]), Key("⌃T", ["ctrl+t"]),
+         Key("PgUp", ["pageup"]), Key("PgDn", ["pagedown"])],
+        [Key("1", ["1"]), Key("2", ["2"]), Key("3", ["3"]), Key("4", ["4"]),
+         Key("y", ["y"]), Key("n", ["n"]), Key("␣", ["space"], symbol: "space"), Key("/", ["/"])],
+    ]
+
+    private func keyGrid(_ lang: AppLanguage) -> some View {
+        VStack(spacing: 5) {
+            ForEach(Array(Self.rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 5) {
+                    ForEach(row) { k in
+                        Button { Task { await press(k.keys) } } label: {
+                            Group {
+                                if let symbol = k.symbol {
+                                    Image(systemName: symbol).font(.system(size: 14, weight: .medium))
+                                } else {
+                                    Text(k.label)
+                                        .font(.system(size: k.label.count > 2 ? 12 : 15, weight: .medium))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 32, maxHeight: 32)
+                                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+                                .contentShape(RoundedRectangle(cornerRadius: 7))
+                        }
+                        .buttonStyle(.plain)
+                        .help(lang.string("term.key.\(k.name)"))
+                        .accessibilityLabel(lang.string("term.key.\(k.name)"))
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .disabled(sending || state.termStatus == "exited")
+        .opacity(sending || state.termStatus == "exited" ? 0.5 : 1)
+    }
+
+    private func press(_ keys: [String]) async {
         sending = true
         keyError = nil
-        keyError = await store.pressKeys([key], on: target)
+        keyError = await store.pressKeys(keys, on: target)
         sending = false
         follow = true
         onKeys()

@@ -921,3 +921,15 @@
 "attach.too_big" = "%@ is over 25 MB";
 "attach.too_many" = "A message takes up to 10 files";
 "attach.failed" = "An image could not be read";
+
+/* Terminal key grid */
+"term.keys.show" = "Show Keys";
+"term.key.shift+tab" = "Shift+Tab";
+"term.key.ctrl+d" = "Ctrl+D";
+"term.key.ctrl+o" = "Ctrl+O";
+"term.key.ctrl+t" = "Ctrl+T";
+"term.key.esc2" = "Esc Twice";
+"term.key.pageup" = "Page Up";
+"term.key.pagedown" = "Page Down";
+"term.key.4" = "4";
+"term.key./" = "Slash";
