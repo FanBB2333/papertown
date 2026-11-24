@@ -1,11 +1,15 @@
-"""Who may open the town: this machine goes straight in; other devices need the access password,
-which is set from this machine. "This machine" is a loopback request with no forwarding headers:
+"""Who may open the town: this machine goes straight in; other devices sign in with the access password,
+or present an access key. "This machine" is a loopback request with no forwarding headers:
 `tailscale serve` and other reverse proxies connect from 127.0.0.1 too, but say whom they forward for.
 
-A login is a random token in an HttpOnly cookie; auth.json in the data directory keeps its hash and
-the password's scrypt hash:
+A password login is a random token in an HttpOnly cookie, for the browser. An access key is for apps
+(the iPhone and Mac apps, scripts): made on this machine or by a signed-in browser, named for the device,
+shown once, sent as `Authorization: Bearer <key>`, and revoked one by one. auth.json in the data directory
+keeps only hashes:
 
-    {"password": "scrypt$16384$8$1$<salt>$<hash>", "sessions": [{"id": "<sha256>", "at": ..., "seen": ..., "agent": ...}]}
+    {"password": "scrypt$16384$8$1$<salt>$<hash>",
+     "sessions": [{"id": "<sha256>", "at": ..., "seen": ..., "agent": ...}],
+     "keys": [{"id": "<8 hex>", "name": "iPhone", "hash": "<sha256>", "hint": "ptk_Ab3d", "at": ..., "seen": ...}]}
 """
 
 from __future__ import annotations
@@ -27,6 +31,8 @@ MIN_LEN = 6
 LOOPBACK = {"127.0.0.1", "::1", "localhost", "testclient"}
 FORWARDED = (b"x-forwarded-for", b"forwarded", b"x-real-ip", b"tailscale-user-login")
 TRIES, WINDOW, PAUSE = 5, 600, 60  # wrong passwords in a window, then a pause
+KEY_PREFIX = "ptk_"
+MAX_KEYS = 50
 
 
 class AuthError(Exception):
@@ -98,16 +104,81 @@ class Auth:
                     return True
         return False
 
+    @staticmethod
+    def bearer(scope: dict) -> str | None:
+        for k, v in scope.get("headers") or []:
+            if k == b"authorization":
+                kind, _, value = v.decode("latin-1").partition(" ")
+                if kind.lower() != "bearer":
+                    return None
+                return value.strip() or None
+        return None
+
+    def keyed(self, scope: dict) -> bool:
+        """The request carries an access key that has not been revoked."""
+        tok = self.bearer(scope)
+        if not tok or not tok.startswith(KEY_PREFIX):
+            return False
+        h = _sid(tok)
+        with self._lock:
+            d = self._read()
+            for k in d.get("keys") or []:
+                if hmac.compare_digest(k["hash"], h):
+                    if time.time() - k.get("seen_t", 0) > 3600:  # at most hourly
+                        k["seen"], k["seen_t"] = now(), time.time()
+                        self._write(d)
+                    return True
+        return False
+
     def allowed(self, scope: dict) -> bool:
-        return self.local(scope) or self.session(scope)
+        return self.local(scope) or self.session(scope) or self.keyed(scope)
 
     def state(self, scope: dict) -> dict:
         d = self._read()
         local, signed = self.local(scope), self.session(scope)
-        out = {"local": local, "password": bool(d.get("password")), "authed": local or signed, "signed_in": signed}
+        keyed = not local and not signed and self.keyed(scope)
+        out = {"local": local, "password": bool(d.get("password")), "authed": local or signed or keyed,
+               "signed_in": signed, "key": keyed, "via": "local" if local else "password" if signed else "key" if keyed else None}
         if out["authed"]:
             out["sessions"] = len(d.get("sessions") or [])
+            out["keys"] = len(d.get("keys") or [])
         return out
+
+    # access keys
+
+    def manage(self, scope: dict) -> None:
+        """Keys are made and revoked on this machine or from a browser signed in with the password,
+        so one leaked key cannot make more."""
+        if self.local(scope) or self.session(scope):
+            return
+        if self.keyed(scope):
+            raise AuthError(403, "访问密钥只能在运行 Papertown 的电脑上或用密码登录后管理")
+        raise AuthError(401, "先登录")
+
+    def keys(self) -> list[dict]:
+        return [{k: x.get(k) for k in ("id", "name", "hint", "at", "seen")} for x in self._read().get("keys") or []]
+
+    def create_key(self, name: str = "") -> dict:
+        """A new key; its text is in the reply only, never stored."""
+        tok = KEY_PREFIX + secrets.token_urlsafe(32)
+        entry = {"id": secrets.token_hex(4), "name": name.strip()[:60] or "设备", "hash": _sid(tok), "hint": tok[:8],
+                 "at": now(), "t": time.time(), "seen": None, "seen_t": 0}
+        with self._lock:
+            d = self._read()
+            if len(d.get("keys") or []) >= MAX_KEYS:
+                raise AuthError(400, f"访问密钥最多 {MAX_KEYS} 个，先撤销不用的")
+            d["keys"] = [*(d.get("keys") or []), entry]
+            self._write(d)
+        return {**{k: entry[k] for k in ("id", "name", "hint", "at", "seen")}, "key": tok}
+
+    def revoke_key(self, key_id: str) -> None:
+        with self._lock:
+            d = self._read()
+            keep = [k for k in d.get("keys") or [] if k["id"] != key_id]
+            if len(keep) == len(d.get("keys") or []):
+                raise AuthError(404, "没有这个访问密钥")
+            d["keys"] = keep
+            self._write(d)
 
     def set_password(self, scope: dict, new: str, old: str | None = None) -> None:
         if len(new) < MIN_LEN:
@@ -127,7 +198,7 @@ class Auth:
         if not self.local(scope):
             raise AuthError(403, "只有在运行 Papertown 的这台电脑上才能取消密码")
         with self._lock:
-            self._write({"sessions": []})
+            self._write({"sessions": [], "keys": self._read().get("keys") or []})  # keys are not the password's
 
     def _who(self, scope: dict) -> str:
         for k, v in scope.get("headers") or []:

@@ -31,7 +31,8 @@ final class Server {
     func probe() async -> Found {
         guard let (data, res) = try? await Self.get(base.appendingPathComponent("api/health")) else { return .nothing }
         let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        return res.statusCode == 200 && body?["ok"] as? Bool == true && body?["provider"] != nil ? .papertown : .other
+        let app = body?["app"] as? String
+        return res.statusCode == 200 && body?["ok"] as? Bool == true && (app == nil || app == "papertown") ? .papertown : .other
     }
 
     func servesPage() async -> Bool {

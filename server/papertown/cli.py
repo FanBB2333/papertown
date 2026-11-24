@@ -1,4 +1,4 @@
-"""papertown (the TUI) | tui | serve | ingest | mcp | skills | job"""
+"""papertown (the TUI) | tui | serve | ingest | mcp | skills | job | key"""
 
 from __future__ import annotations
 
@@ -28,6 +28,10 @@ def main() -> None:
     jb.add_argument("--name", default="job")
     jb.add_argument("--server", default=os.environ.get("PAPERTOWN_URL", "http://127.0.0.1:8000"))
     jb.add_argument("command", nargs=argparse.REMAINDER, help="after --: the shell command")
+    ky = sub.add_parser("key", help="access keys for the iPhone and Mac apps and other devices")
+    ky.add_argument("action", choices=["create", "list", "revoke"])
+    ky.add_argument("id", nargs="?", help="revoke: the key's id, from `papertown key list`")
+    ky.add_argument("--name", default="", help="create: the device it is for, e.g. iPhone")
     a = p.parse_args()
 
     if a.cmd in (None, "tui"):
@@ -59,6 +63,8 @@ def main() -> None:
         print(f"入馆 {len(added)} 篇，馆藏 {town.library.count()} 篇")
         if a.refs and added:
             print(f"引用边 {town.genealogy.fetch_references([x['arxiv_id'] for x in added])} 条")
+    elif a.cmd == "key":
+        key(a)
     elif a.cmd == "mcp":
         from .mcp_server import serve
         serve()
@@ -67,6 +73,33 @@ def main() -> None:
         from .skills import SkillRegistry
         for s in SkillRegistry(Settings().skills_dir).all():
             print(f"{s.name:22} {','.join(s.roles):18} {s.description[:60]}")
+
+
+def key(a: argparse.Namespace) -> None:
+    """Keys live in the data directory's auth.json, so this works with the server running or not."""
+    import sys
+    from .auth import Auth, AuthError
+    from .config import Settings
+    auth = Auth(Settings().data_dir)
+    try:
+        if a.action == "create":
+            k = auth.create_key(a.name)
+            print(f"新的访问密钥「{k['name']}」（id {k['id']}）：\n\n    {k['key']}\n")
+            print("它只显示这一次。在 App 里填服务器地址和这个密钥即可连接，地址是设备访问这台电脑用的那个，")
+            print("例如 http://<这台电脑的局域网或 Tailscale 地址>:8000，服务要用 `papertown serve --host 0.0.0.0` 启动。")
+        elif a.action == "list":
+            keys = auth.keys()
+            if not keys:
+                print("还没有访问密钥：papertown key create --name iPhone")
+            for k in keys:
+                print(f"{k['id']}  {k['hint']}…  {k['name']:16} 创建 {k['at'][:16]}  最近使用 {(k['seen'] or '从未')[:16]}")
+        else:
+            if not a.id:
+                sys.exit("要撤销哪一个：papertown key revoke <id>")
+            auth.revoke_key(a.id)
+            print(f"已撤销 {a.id}，用它连接的设备将无法再访问")
+    except AuthError as e:
+        sys.exit(str(e))
 
 
 if __name__ == "__main__":

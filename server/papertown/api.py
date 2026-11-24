@@ -41,6 +41,12 @@ from .town import Town
 from .workspace import WsError
 from .world import STAFF_AT
 
+try:
+    from importlib.metadata import version as _version
+    VERSION = _version("papertown")
+except Exception:  # running from a checkout without the package installed
+    VERSION = "0.1.0"
+
 FILES = {"main.tex", "refs.bib", "main.pdf", "paper.zip"}
 
 
@@ -109,6 +115,10 @@ class AnswerByIn(BaseModel):
 
 class LoginIn(BaseModel):
     password: str = Field(max_length=200)
+
+
+class KeyIn(BaseModel):
+    name: str = Field(default="", max_length=60)
 
 
 class PasswordIn(BaseModel):
@@ -471,9 +481,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authed(auth.clear_password, request.scope)
         return auth.state(request.scope)
 
+    # access keys for apps: `Authorization: Bearer <key>` (auth.py)
+    @app.get("/api/auth/keys")
+    def auth_keys(request: Request):
+        authed(auth.manage, request.scope)
+        return {"keys": auth.keys()}
+
+    @app.post("/api/auth/keys")
+    def auth_key_new(body: KeyIn, request: Request):
+        authed(auth.manage, request.scope)
+        return authed(auth.create_key, body.name)
+
+    @app.delete("/api/auth/keys/{key_id}")
+    def auth_key_revoke(key_id: str, request: Request):
+        authed(auth.manage, request.scope)
+        authed(auth.revoke_key, key_id)
+        return {"keys": auth.keys()}
+
     @app.get("/api/health")
     def health():
-        return {"ok": True, "ports": town.mcp.status}
+        # open to anyone: an app checks with it that the address is a Papertown server before signing in
+        return {"ok": True, "app": "papertown", "version": VERSION, "ports": town.mcp.status}
 
     @app.get("/api/world")
     def world():
