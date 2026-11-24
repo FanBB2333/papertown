@@ -30,13 +30,26 @@ public final class LocalServer: ObservableObject {
     }
 
     @Published public private(set) var state: State = .unknown
-    @Published public var repoPath: String { didSet { defaults.set(repoPath, forKey: Key.repo) } }
-    @Published public var port: Int { didSet { defaults.set(port, forKey: Key.port) } }
-    @Published public var command: String { didSet { defaults.set(command, forKey: Key.command) } }
+    @Published public var repoPath: String { didSet { defaults.set(repoPath, forKey: Key.repo); reloadConfig() } }
+    /// The port set in the app's settings, which wins over the checkout's config; nil follows the config.
+    @Published public var portSetting: Int? {
+        didSet {
+            if let portSetting { defaults.set(portSetting, forKey: Key.port) } else { defaults.removeObject(forKey: Key.port) }
+        }
+    }
+    /// The port the checkout's config gives the server (CheckoutConfig), read again before each check and start.
+    @Published public private(set) var configPort = CheckoutConfig.fallbackPort
+    @Published public var command: String {
+        didSet {
+            if command == Self.defaultCommand { defaults.removeObject(forKey: Key.command) } else { defaults.set(command, forKey: Key.command) }
+        }
+    }
     @Published public var autoStart: Bool { didSet { defaults.set(autoStart, forKey: Key.autoStart) } }
     @Published public var stopOnQuit: Bool { didSet { defaults.set(stopOnQuit, forKey: Key.stopOnQuit) } }
 
-    public static let defaultCommand = "uv run --frozen papertown serve --port $PAPERTOWN_PORT"
+    /// Without --port: the server reads its port from the checkout's papertown.toml, or from PAPERTOWN_PORT when the
+    /// app's settings set one.
+    public static let defaultCommand = "uv run --frozen papertown serve"
     /// Where the code is, written into Info.plist at build time (PT_REPO_ROOT).
     public static var defaultRepo: String {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: "PTRepoRoot") as? String, !raw.isEmpty, !raw.contains("$(") else { return "" }
@@ -49,20 +62,29 @@ public final class LocalServer: ObservableObject {
         static let command = "papertown.mac.local.command"
         static let autoStart = "papertown.mac.local.autoStart"
         static let stopOnQuit = "papertown.mac.local.stopOnQuit"
+        /// The saved server the app made for this Mac's own.
+        static let profile = "papertown.mac.local.profile"
     }
 
     private let defaults = UserDefaults.standard
     private var child: Child?
+    /// The port the app's own server was started on.
+    private var startedPort: Int?
+    /// The app's store, from prepare: after a start, its saved server for this Mac follows the port.
+    private weak var store: TownStore?
 
     private init() {
         let d = UserDefaults.standard
         repoPath = d.string(forKey: Key.repo) ?? Self.defaultRepo
-        port = d.object(forKey: Key.port) as? Int ?? 8000
+        portSetting = d.object(forKey: Key.port) as? Int
         command = d.string(forKey: Key.command) ?? Self.defaultCommand
         autoStart = d.object(forKey: Key.autoStart) as? Bool ?? true
         stopOnQuit = d.object(forKey: Key.stopOnQuit) as? Bool ?? true
+        reloadConfig()
     }
 
+    /// The server's port: the one the app started it on while it runs, else the app's setting, else the config's.
+    public var port: Int { (ownsServer ? startedPort : nil) ?? portSetting ?? configPort }
     public var address: String { "http://127.0.0.1:\(port)" }
     public var repoURL: URL { URL(fileURLWithPath: (repoPath as NSString).expandingTildeInPath) }
     public var ownsServer: Bool { child != nil && child?.status == nil }
@@ -71,25 +93,91 @@ public final class LocalServer: ObservableObject {
 
     public func restoreDefaults() {
         repoPath = Self.defaultRepo
-        port = 8000
+        portSetting = nil
         command = Self.defaultCommand
         autoStart = true
         stopOnQuit = true
     }
 
+    /// Reads the checkout's config again: the web app's Settings › Network & security, say, may have changed the port.
+    /// The login shell's environment counts once it has been read, as it does for the server the app starts.
+    private func reloadConfig(env: [String: String]? = nil) {
+        let read = CheckoutConfig.port(repo: repoURL.resolvingSymlinksInPath(), env: env ?? LoginEnv.current ?? [:])
+        if read != configPort { configPort = read }
+    }
+
     /// Whether a saved server is this Mac's own, on the port the app looks after.
     public func manages(_ profile: ServerProfile) -> Bool {
-        guard !profile.isDemo, let url = profile.url, let host = url.host?.lowercased() else { return false }
-        let portOf = url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
-        return ["127.0.0.1", "localhost", "::1"].contains(host) && portOf == port
+        isThisMac(profile) && profile.url.map(Self.portOf) == port
+    }
+
+    private func isThisMac(_ profile: ServerProfile) -> Bool {
+        guard !profile.isDemo, let host = profile.url?.host?.lowercased() else { return false }
+        return ["127.0.0.1", "localhost", "::1"].contains(host)
+    }
+
+    private static func portOf(_ url: URL) -> Int {
+        url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
+    }
+
+    /// Connects to this Mac's server: the saved server the app made for it, moved to the server's port, or a new one.
+    public func connect(_ store: TownStore) async {
+        await follow(store)
+        if let profile = store.profiles.first(where: { manages($0) }) {
+            await store.connect(to: profile)
+        } else {
+            await addProfile(to: store, connectNow: true)
+        }
+    }
+
+    /// Saves this Mac's server, remembered as the one whose port follows the server's.
+    private func addProfile(to store: TownStore, connectNow: Bool) async {
+        let profile = ServerProfile(name: store.language.string("local.profile.name"), addressString: address)
+        defaults.set(profile.id.uuidString, forKey: Key.profile)
+        await store.upsertProfile(profile, password: nil, connectNow: connectNow)
+    }
+
+    /// The saved server the app made for this Mac's own; one saved before the app remembered it is recognised by being
+    /// on this Mac under the name the app gives it.
+    private func localProfile(in store: TownStore) -> ServerProfile? {
+        if let raw = defaults.string(forKey: Key.profile), let id = UUID(uuidString: raw) {
+            return store.profiles.first { $0.id == id }
+        }
+        let names = Set([AppLanguage.english, .simplifiedChinese].map { $0.string("local.profile.name") })
+        guard let found = store.profiles.first(where: { names.contains($0.name) && isThisMac($0) }) else { return nil }
+        defaults.set(found.id.uuidString, forKey: Key.profile)
+        return found
+    }
+
+    /// Moves the saved server for this Mac's own to the port the server runs on. True when it moved.
+    @discardableResult
+    private func follow(_ store: TownStore) async -> Bool {
+        guard var profile = localProfile(in: store), let url = profile.url, Self.portOf(url) != port,
+              var parts = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return false }
+        parts.port = port
+        guard let moved = parts.string else { return false }
+        profile.addressString = moved
+        await store.upsertProfile(profile, password: nil, connectNow: false)
+        return true
+    }
+
+    /// Once the server answers: the saved server for this Mac's own follows its port, connected again when it is the
+    /// chosen one and was in use (before the first connection, the app's launch connects to it).
+    private func followStore() async {
+        guard let store, await follow(store), let current = store.currentProfile, manages(current),
+              store.connectionStatus != .disconnected else { return }
+        await store.connect(to: current)
     }
 
     /// Before the first connection: with no saved server, this Mac's own becomes the first; when the chosen server is
     /// this Mac's and nothing runs on its port, the app starts it.
     public func prepare(_ store: TownStore) async {
+        self.store = store
+        reloadConfig()
         if store.profiles.isEmpty, hasCode {
-            let profile = ServerProfile(name: store.language.string("local.profile.name"), addressString: address)
-            await store.upsertProfile(profile, password: nil, connectNow: false)
+            await addProfile(to: store, connectNow: false)
+        } else {
+            await follow(store)
         }
         guard let profile = store.currentProfile, manages(profile) else { return }
         if autoStart {
@@ -100,6 +188,7 @@ public final class LocalServer: ObservableObject {
     }
 
     public func refresh() async {
+        reloadConfig()
         if state != .starting { state = .checking }
         switch await probe() {
         case .papertown: state = ownsServer ? .running : .external
@@ -111,6 +200,7 @@ public final class LocalServer: ObservableObject {
     /// The server answers on the port, started now if nothing was there. True once it answers.
     @discardableResult
     public func ensure() async -> Bool {
+        reloadConfig()
         switch await probe() {
         case .papertown:
             state = ownsServer ? .running : .external
@@ -130,13 +220,18 @@ public final class LocalServer: ObservableObject {
             state = .failed(.noCode(repoURL.path))
             return false
         }
-        if await probe() == .papertown {
-            state = .external
-            return true
-        }
         state = .starting
         var env = await LoginEnv.get()
-        env["PAPERTOWN_PORT"] = String(port)
+        // the port the server will take: PAPERTOWN_PORT or PAPERTOWN_CONFIG in the login shell count for it too
+        reloadConfig(env: env)
+        if await probe() == .papertown {
+            state = .external
+            await followStore()
+            return true
+        }
+        let port = self.port
+        // only a port set in the app's settings overrides the config (or a command of one's own that asks for it)
+        if portSetting != nil || command.contains("PAPERTOWN_PORT") { env["PAPERTOWN_PORT"] = String(port) }
         Logs.begin(Logs.server, command)
         let started: Child
         do {
@@ -145,6 +240,7 @@ public final class LocalServer: ObservableObject {
             state = .failed(.spawn(error.localizedDescription))
             return false
         }
+        startedPort = port
         child = started
         started.onExit = { [weak self] _ in
             guard let self, self.child === started else { return }
@@ -156,6 +252,7 @@ public final class LocalServer: ObservableObject {
             if started.status != nil { break }
             if await probe() == .papertown {
                 state = .running
+                await followStore()
                 return true
             }
             try? await Task.sleep(for: .milliseconds(300))
@@ -211,11 +308,68 @@ public final class LocalServer: ObservableObject {
     }
 }
 
+// MARK: - The checkout's config
+
+/// The server's port as `papertown serve` finds it in a checkout (server/papertown/config.py): PAPERTOWN_PORT, else
+/// [server] port in papertown.toml at the root (or the file PAPERTOWN_CONFIG names), else the default that
+/// papertown.example.toml lists as `# port = …`, else `fallbackPort`.
+enum CheckoutConfig {
+    /// The last resort, for a checkout without papertown.example.toml: DEFAULT_PORT in config.py.
+    static let fallbackPort = 31640
+
+    static func port(repo: URL, env: [String: String]) -> Int {
+        if let raw = env["PAPERTOWN_PORT"], let port = int(raw) { return port }
+        if let port = value(in: file(repo: repo, env: env), section: "server", key: "port").flatMap(int) { return port }
+        let example = repo.appendingPathComponent("papertown.example.toml")
+        return value(in: example, section: "server", key: "port", commented: true).flatMap(int) ?? fallbackPort
+    }
+
+    /// papertown.toml: PAPERTOWN_CONFIG, else at the root of the checkout. A relative PAPERTOWN_CONFIG is taken from
+    /// the server folder, where the server runs.
+    static func file(repo: URL, env: [String: String]) -> URL {
+        let raw = (env["PAPERTOWN_CONFIG"] ?? "").trimmingCharacters(in: .whitespaces)
+        guard !raw.isEmpty else { return repo.appendingPathComponent("papertown.toml") }
+        let path = (raw as NSString).expandingTildeInPath
+        return path.hasPrefix("/") ? URL(fileURLWithPath: path) : repo.appendingPathComponent("server").appendingPathComponent(path)
+    }
+
+    /// The value of `key = value` in `[section]` of a TOML file, its quotes and trailing comment removed. `commented`
+    /// reads the `# key = value` lines instead, as papertown.example.toml lists the defaults.
+    static func value(in file: URL, section: String, key: String, commented: Bool = false) -> String? {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+        var inSection = false
+        for raw in text.split(whereSeparator: \.isNewline) {
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("[") {
+                inSection = line.dropFirst().prefix { $0 != "]" }.trimmingCharacters(in: .whitespaces) == section
+                continue
+            }
+            guard inSection else { continue }
+            if commented {
+                guard line.hasPrefix("#") else { continue }
+                line = String(line.drop { $0 == "#" }).trimmingCharacters(in: .whitespaces)
+            }
+            guard let eq = line.firstIndex(of: "="), line[..<eq].trimmingCharacters(in: .whitespaces) == key else { continue }
+            let rest = line[line.index(after: eq)...]
+            let value = (rest.firstIndex(of: "#").map { rest[..<$0] } ?? rest).trimmingCharacters(in: .whitespaces)
+            return value.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        }
+        return nil
+    }
+
+    private static func int(_ raw: String) -> Int? {
+        Int(raw.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "_", with: ""))
+    }
+}
+
 // MARK: - Processes
 
 /// The login shell's environment, read once: an app opened from Finder lacks the terminal's PATH (uv, node and so on).
 enum LoginEnv {
     private static var cached: [String: String]?
+
+    /// The environment once read, nil before.
+    static var current: [String: String]? { cached }
 
     static func get() async -> [String: String] {
         if let env = cached { return env }

@@ -228,7 +228,7 @@ struct AppSettings: View {
                 HStack {
                     Button(t("恢复默认")) {
                         shell.repoPath = Shell.defaultRepo
-                        shell.port = 8000
+                        shell.port = 31640
                         shell.command = Shell.defaultCommand
                         shell.autoBuild = true
                         shell.stopOnQuit = true

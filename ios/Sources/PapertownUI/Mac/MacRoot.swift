@@ -106,7 +106,9 @@ struct LocalServerSettings: View {
                         Button(lang.string("local.choose"), action: choose)
                     }
                 }
-                TextField(lang.string("local.port"), value: $local.port, format: .number.grouping(.never))
+                // empty follows [server] port in the checkout's papertown.toml, shown as the prompt
+                TextField(lang.string("local.port"), value: $local.portSetting, format: .number.grouping(.never),
+                          prompt: Text(String(local.configPort)))
                 VStack(alignment: .leading, spacing: 6) {
                     TextField(lang.string("local.command"), text: $local.command, axis: .vertical)
                         .font(.system(size: 12, design: .monospaced))
@@ -173,9 +175,7 @@ struct LocalServerSection: View {
                         .disabled(!local.isUp)
                 } else if !store.profiles.contains(where: { local.manages($0) }) {
                     Button(lang.string("local.connect")) {
-                        Task {
-                            await store.upsertProfile(ServerProfile(name: lang.string("local.profile.name"), addressString: local.address), password: nil)
-                        }
+                        Task { await local.connect(store) }
                     }
                     .disabled(!local.isUp)
                 }

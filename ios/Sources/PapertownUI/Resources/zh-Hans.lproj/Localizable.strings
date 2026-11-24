@@ -193,7 +193,7 @@
 "connect.field.name" = "名称";
 "connect.field.name.placeholder" = "例如：家里 Mac";
 "connect.field.url" = "根地址";
-"connect.field.url.placeholder" = "https://example.com 或 http://192.168.1.10:8000";
+"connect.field.url.placeholder" = "https://example.com 或 http://192.168.1.10:31640";
 "connect.section.address.footer" = "填写电脑或自建中转的根地址，可包含路径前缀，客户端会自动追加 /api。局域网直连请确保手机与电脑在同一网络。";
 "connect.section.auth" = "访问鉴权";
 "connect.field.password" = "访问密码";
@@ -415,7 +415,7 @@
 "local.choose" = "选择…";
 "local.port" = "端口";
 "local.command" = "启动命令";
-"local.command.footer" = "在代码的 server 目录中，以登录 shell 的环境运行。$PAPERTOWN_PORT 即上面的端口。端口上已有 Papertown 运行时，App 直接使用它。";
+"local.command.footer" = "在代码的 server 目录中，以登录 shell 的环境运行。端口留空时，服务使用代码中 papertown.toml 的 [server] port。上面填写的端口以 $PAPERTOWN_PORT 传给服务，优先于该文件。端口上已有 Papertown 运行时，App 直接使用它。";
 "local.auto_start" = "打开 App 时启动服务";
 "local.stop_on_quit" = "退出 App 时停止由 App 启动的服务";
 "local.defaults" = "恢复默认";

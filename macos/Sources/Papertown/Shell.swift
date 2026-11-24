@@ -48,7 +48,7 @@ final class Shell {
         let lang = Lang(rawValue: d.string(forKey: "lang") ?? "") ?? .system
         self.lang = lang
         repoPath = d.string(forKey: "repo") ?? Self.defaultRepo
-        port = d.object(forKey: "port") as? Int ?? 8000
+        port = d.object(forKey: "port") as? Int ?? 31640
         command = d.string(forKey: "command") ?? Self.defaultCommand
         autoBuild = d.object(forKey: "autoBuild") as? Bool ?? true
         stopOnQuit = d.object(forKey: "stopOnQuit") as? Bool ?? true

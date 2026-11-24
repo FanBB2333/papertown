@@ -193,7 +193,7 @@
 "connect.field.name" = "Name";
 "connect.field.name.placeholder" = "e.g., Home Mac";
 "connect.field.url" = "URL";
-"connect.field.url.placeholder" = "https://example.com or http://192.168.1.10:8000";
+"connect.field.url.placeholder" = "https://example.com or http://192.168.1.10:31640";
 "connect.section.address.footer" = "Enter the root URL of your Mac or self-hosted relay. Path prefixes are supported, and /api is appended automatically. For direct LAN access, keep both devices on the same network.";
 "connect.section.auth" = "Authentication";
 "connect.field.password" = "Password";
@@ -415,7 +415,7 @@
 "local.choose" = "Choose…";
 "local.port" = "Port";
 "local.command" = "Start command";
-"local.command.footer" = "Runs in the code's server folder with your login shell's environment. $PAPERTOWN_PORT is the port above. When Papertown already runs on that port, the app uses it.";
+"local.command.footer" = "Runs in the code's server folder with your login shell's environment. With the port left empty, the server uses [server] port in the code's papertown.toml. A port entered above reaches it as $PAPERTOWN_PORT and takes precedence over the file. When Papertown already runs on that port, the app uses it.";
 "local.auto_start" = "Start the server when the app opens";
 "local.stop_on_quit" = "Stop the server the app started when quitting";
 "local.defaults" = "Restore Defaults";
