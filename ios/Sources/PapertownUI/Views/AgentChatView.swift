@@ -61,12 +61,18 @@ struct AgentChatView: View {
         return TextFormatters.roleName(role, language: store.language)
     }
 
+    /// The project line the member works on.
+    private var lineID: String? {
+        guard case .agent(let id) = target, !target.isAssistant else { return nil }
+        return state.agent?.lineID ?? id.split(separator: "-", maxSplits: 1).last.map(String.init)
+    }
+
+    private var project: ProjectSnapshot? { lineID.flatMap { line in store.projects.first { $0.id == line } } }
+
     /// The member's project number, as `#6`.
     private var number: String? {
-        guard case .agent(let id) = target, !target.isAssistant else { return nil }
-        let line = state.agent?.lineID ?? id.split(separator: "-", maxSplits: 1).last.map(String.init) ?? ""
-        if let p = store.projects.first(where: { $0.id == line }) { return "#\(p.seq)" }
-        if let n = line.split(separator: "_").last, Int(n) != nil { return "#\(n)" }
+        if let p = project { return "#\(p.seq)" }
+        if let n = lineID?.split(separator: "_").last, Int(n) != nil { return "#\(n)" }
         return nil
     }
 
@@ -212,14 +218,39 @@ struct AgentChatView: View {
         models?.how == "resume" && state.agent?.started == true && !store.isDemo
     }
 
+    /// Two lines: the conversation's title, and under it the project (number and name), the member's role in its own
+    /// colour and the project's stage. The project's name gives way first when the line is short of room. A terminal
+    /// shows the folder it works in.
     private var titleView: some View {
-        HStack(spacing: 6) {
-            if let number {
-                Text(number).font(.headline.monospacedDigit()).foregroundStyle(.secondary)
-            }
+        VStack(spacing: 1) {
             Text(conversationTitle).font(.headline).foregroundStyle(.primary).lineLimit(1)
+            contextLine
         }
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var contextLine: some View {
+        let lang = store.language
+        if case .terminal = target {
+            if let cwd = state.terminal?.cwd, !cwd.isEmpty {
+                Text((cwd as NSString).abbreviatingWithTildeInPath)
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.head)
+            }
+        } else if !target.isAssistant {
+            HStack(spacing: 4) {
+                if let number { Text(number).monospacedDigit().fontWeight(.semibold).layoutPriority(2) }
+                if let p = project { Text(p.title).lineLimit(1).truncationMode(.tail) }
+                Text("·").layoutPriority(2)
+                Text(memberName).foregroundStyle(TextFormatters.roleTint(role)).lineLimit(1).layoutPriority(2)
+                if let p = project, !p.stage.isEmpty {
+                    Text("·").layoutPriority(2)
+                    Text(TextFormatters.stageName(p.stage, language: lang)).lineLimit(1).layoutPriority(2)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
     }
 
     /// The model the CLI runs and its thinking level.
