@@ -205,6 +205,8 @@ public struct ResearchCheck: Decodable, Sendable, Equatable, Identifiable {
     /// A hard check's allowance, a soft check's hours between rounds.
     public var max: Double? = nil
     public var every: Double? = nil
+    /// A sentinel whose next round is due.
+    public var due: Bool? = nil
 
     /// pass, warn, fail, none (not run yet) or wait (a sentinel waiting for its turn); off when switched off.
     public var status: String { on ? (last?.status ?? (kind == "soft" ? "wait" : "none")) : "off" }

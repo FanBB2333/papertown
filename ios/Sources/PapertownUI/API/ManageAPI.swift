@@ -179,17 +179,21 @@ public struct LoopGate: Decodable, Sendable, Equatable {
     public let waived: Bool?
     public let checks: [String]?
     public let open: Bool?
+    /// What its checks found in the first round and find now.
+    public var before: Int? = nil
+    public var now: Int? = nil
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         stage = try c.decode(String.self, forKey: .stage)
+        before = c.opt(.before); now = c.opt(.now)
         state = (c.opt(.state) as String?) ?? "none"
         name = c.opt(.name); pass = c.opt(.pass); total = c.opt(.total); blocking = c.opt(.blocking); policy = c.opt(.policy)
         ticket = c.opt(.ticket); ticketStatus = c.opt(.ticketStatus); round = c.opt(.round); escalated = c.opt(.escalated)
         waived = c.opt(.waived); checks = c.opt(.checks); open = c.opt(.open)
     }
     enum CodingKeys: String, CodingKey {
-        case stage, name, state, pass, total, blocking, policy, ticket, round, escalated, waived, checks, open
+        case stage, name, state, pass, total, blocking, policy, ticket, round, escalated, waived, checks, open, before, now
         case ticketStatus = "ticket_status"
     }
 }
@@ -240,11 +244,31 @@ public struct LoopNode: Decodable, Sendable, Identifiable, Equatable {
     public let loop: String?
     public let round: Int?
     public let log: [LoopLogEntry]?
+    /// Its place on the canvas (web pixels at 100%), and its size where it has its own (info cards).
+    public var x: Double = 0
+    public var y: Double = 0
+    public var w: Double? = nil
+    public var h: Double? = nil
+    /// The stage, gate, check or info card it stands for.
+    public var ref: String? = nil
+    /// A stage's station: the role that works it, and the gate that locks it.
+    public var role: String? = nil
+    public var locked: LoopLock? = nil
+    /// The spec's or clamp's rules.
+    public var rules: [LoopRule]? = nil
+    /// A task: what a queued one waits on, the counts its rework rounds went through, and how the loop stands on it.
+    public var waits: [LoopWait]? = nil
+    public var trail: [Int]? = nil
+    public var escalated: Bool? = nil
+    public var converged: Bool? = nil
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         kind = try c.decode(String.self, forKey: .kind)
+        x = c.opt(.x) ?? 0; y = c.opt(.y) ?? 0; w = c.opt(.w); h = c.opt(.h); ref = c.opt(.ref); role = c.opt(.role)
+        locked = c.opt(.locked); rules = c.opt(.rules); waits = c.opt(.waits); trail = c.opt(.trail)
+        escalated = c.opt(.escalated); converged = c.opt(.converged)
         mod = c.opt(.mod); title = c.opt(.title); text = c.opt(.text); status = c.opt(.status); to = c.opt(.to)
         note = c.opt(.note); pct = c.opt(.pct); gate = c.opt(.gate); check = c.opt(.check); items = c.opt(.items)
         sentAt = c.opt(.sentAt); doneAt = c.opt(.doneAt); result = c.opt(.result); waitNote = c.opt(.waitNote)
@@ -252,14 +276,60 @@ public struct LoopNode: Decodable, Sendable, Identifiable, Equatable {
     }
     enum CodingKeys: String, CodingKey {
         case id, kind, mod, title, text, status, to, note, pct, gate, check, items, result, stale, agent, loop, round, log
+        case x, y, w, h, ref, role, locked, rules, waits, trail, escalated, converged
         case sentAt = "sent_at", doneAt = "done_at", waitNote = "wait_note", agentID = "agent_id"
     }
+}
+
+public struct LoopLock: Decodable, Sendable, Equatable {
+    public let gate: String
+    public let title: String
+}
+
+public struct LoopRule: Decodable, Sendable, Equatable, Identifiable {
+    public let id: String
+    public let kind: String
+    public let text: String
+    public var from: String? = nil
+    public var action: String? = nil
+}
+
+public struct LoopWait: Decodable, Sendable, Equatable {
+    public let kind: String
+    public let id: String
+    public var title: String? = nil
+    public var status: String? = nil
+}
+
+/// A line between two nodes. No kind: one you drew.
+public struct LoopEdge: Decodable, Sendable, Equatable, Identifiable {
+    public let id: String
+    public let source: String
+    public let target: String
+    public var kind: String? = nil
+    public var label: String? = nil
+}
+
+/// A part of the research flow on the canvas: its slot, which the frame drawn around it pads.
+public struct LoopBlock: Decodable, Sendable, Equatable, Identifiable {
+    public var id: String { key }
+    public let key: String
+    public let title: String
+    public let x: Double
+    public let y: Double
+    public let w: Double
+    public let h: Double
 }
 
 public struct LoopView: Decodable, Sendable {
     public struct Rules: Decodable, Sendable { public var exclusive: Bool? = nil }
     public struct There: Decodable, Sendable { public var there: Bool? = nil; public var status: String? = nil; public var model: String? = nil }
+    public var seq: Int? = nil
+    public var title: String? = nil
     public let nodes: [LoopNode]
+    public var edges: [LoopEdge]? = nil
+    public var blocks: [LoopBlock]? = nil
+    public var checks: [ResearchCheck]? = nil
     public var gone: [LoopRef]? = nil
     public var spare: [LoopRef]? = nil
     public var rules: Rules? = nil
@@ -282,6 +352,8 @@ public struct NewLoopNode: Encodable, Sendable {
     public var send: Bool
     public var x: Double = 0
     public var y: Double = 0
+    /// A node it starts joined to.
+    public var link: String? = nil
     public init(kind: String, title: String, text: String, to: String = "lead", prio: String = "P1", send: Bool = false) {
         self.kind = kind; self.title = title; self.text = text; self.to = to; self.prio = prio; self.send = send
     }
@@ -290,7 +362,11 @@ public struct NewLoopNode: Encodable, Sendable {
 public struct LoopNodeEdit: Encodable, Sendable {
     public var status: String? = nil
     public var stale: Bool? = nil
-    public init(status: String? = nil, stale: Bool? = nil) { self.status = status; self.stale = stale }
+    public var title: String? = nil
+    public var text: String? = nil
+    public init(status: String? = nil, stale: Bool? = nil, title: String? = nil, text: String? = nil) {
+        self.status = status; self.stale = stale; self.title = title; self.text = text
+    }
 }
 
 // MARK: - New papers
@@ -656,6 +732,20 @@ public extension PapertownClient {
         let _: Ack = try await send(.delete, ["lines", projectID, "canvas", "nodes", nodeID], body: Empty())
     }
     func addNode(projectID: String, _ node: NewLoopNode) async throws { let _: Ack = try await send(.post, ["lines", projectID, "canvas", "nodes"], body: node) }
+    /// Puts nodes where they were dropped, by id: [x, y].
+    func moveNodes(projectID: String, _ at: [String: [Double]]) async throws {
+        let _: Ack = try await send(.post, ["lines", projectID, "canvas", "move"], body: ["at": at])
+    }
+    func connect(projectID: String, source: String, target: String) async throws {
+        let _: Ack = try await send(.post, ["lines", projectID, "canvas", "edges"], body: ["source": source, "target": target])
+    }
+    func disconnect(projectID: String, edgeID: String) async throws {
+        let _: Ack = try await send(.delete, ["lines", projectID, "canvas", "edges", edgeID], body: Empty())
+    }
+    /// Every node back to its part of the flow.
+    func tidyLoop(projectID: String) async throws {
+        let _: Ack = try await send(.post, ["lines", projectID, "canvas", "tidy"], body: Empty())
+    }
     func loopRules(projectID: String, exclusive: Bool) async throws {
         let _: Ack = try await send(.put, ["lines", projectID, "canvas", "rules"], body: ["exclusive": exclusive])
     }

@@ -96,7 +96,7 @@ struct ProjectsView: View {
             .papertownSidebarButton()
             .navigationDestination(for: ProjectRoute.self) { route in route.view }
             #if DEBUG
-            // -PTProject line_1 [-PTPage checks|overlap|method|exp|paper|reports|files|usage|outline] opens that page
+            // -PTProject line_1 [-PTPage checks|overlap|method|exp|paper|reports|files|usage|loop|canvas|outline] opens that page
             // at launch, for screenshots in the simulator.
             .task {
                 guard !Self.linked, let id = UserDefaults.standard.string(forKey: "PTProject") else { return }
@@ -282,6 +282,7 @@ enum ProjectRoute: Hashable {
             case "files": FilesPage(projectID: id, root: "paper")
             case "usage": ProjectUsagePage(projectID: id)
             case "loop": LoopPage(projectID: id)
+            case "canvas": LoopCanvasPage(projectID: id)
             case "pages": PagesPage(projectID: id)
             case "memory": MemoryPage(projectID: id)
             case "chat": AgentChatView(agentID: "lead-\(id)", role: "lead", subtitle: "#" + (id.split(separator: "_").last.map(String.init) ?? id))

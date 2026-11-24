@@ -31,6 +31,7 @@ struct ProjectDetailView: View {
                     } else {
                         asksSection(lang: lang)
                     }
+                    LoopPreviewSection(projectID: projectID)
                     leadSection(project, lang: lang)
                     progressSection(project, lang: lang)
                     if let card = store.cards[projectID] { ProgressCardSection(card: card) }
@@ -158,7 +159,6 @@ struct ProjectDetailView: View {
         }
         Section(lang.string("detail.section.research")) {
             link(lang.string("reports.nav"), "text.bubble", detail: nil) { ReportsPage(projectID: projectID) }
-            link(lang.string("loop.nav"), "arrow.triangle.capsulepath", detail: nil) { LoopPage(projectID: projectID) }
             link(lang.string("checks.nav"), "checklist", detail: checks.map { c in
                 c.hard.fail > 0 ? lang.format("checks.failing", c.hard.fail) : "\(c.hard.pass)/\(c.hard.total)"
             }) { ChecksPage(projectID: projectID) }
