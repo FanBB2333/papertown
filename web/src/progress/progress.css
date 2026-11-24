@@ -90,6 +90,12 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pp-repo > .pp-one b { font-weight: 500; }
 
 .pc-meter { display: flex; align-items: center; gap: 10px; min-height: 22px; }
+/* Fit (parts.tsx): a slot as wide as the widest thing it could hold; the ghosts lie under it, invisible */
+.fit { display: inline-grid; flex: none; align-items: center; }
+.fit > * { grid-area: 1 / 1; }
+.fit-end { justify-items: end; }
+.fit-g { visibility: hidden; pointer-events: none; }
+.pc-seq, .pc-pct, .pc-delta { font-variant-numeric: tabular-nums; }
 .pc-health { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 1px 10px 1px 8px; border-radius: 99px; font-size: 12.5px; font-weight: 600;
   color: var(--hc); background: color-mix(in srgb, var(--hc) 12%, transparent); }
 .pc-health i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
@@ -163,13 +169,16 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pr-acts .btn { padding-block: 3px; font-size: 13px; }
 .pg-rows:not(.folded) .pp h4 { display: none; }
 .pg-rows:not(.folded) .pr-cells > .pp:not(.pp-summary):not(.pp-metrics) { display: flex; align-items: flex-start; gap: 6px; }
+.pg-rows:not(.folded) .pr-cells > .pp > .pp-b { max-width: 100%; } /* a column of the cell: a long line ends in an ellipsis inside it */
 .pg-rows:not(.folded) .pp-b { flex: 1; }
 .pg-rows.folded { display: flex; flex-direction: column; }
 .pg-rows.folded .pr { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; }
 .pg-rows.folded .pr-stage { grid-column: 1 / -1; padding-top: 0; }
-.pg-rows.folded .pr-cells { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 6px 22px; }
+/* two parts to a line in every project, so a project with fewer parts keeps the same columns as the rest */
+.pg-rows.folded .pr-cells { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; }
+.pg-rows.folded.one .pr-cells { grid-template-columns: minmax(0, 1fr); }
 .pg-rows.folded .pr-cells:not(:has(.pp-b > :not(.pp-none), .pc-sum, .pc-metrics)) { display: none; }
-.pg-rows.folded .pr-cells > .pp:not(.pp-summary):not(.pp-metrics) { display: grid; grid-template-columns: var(--lw) minmax(0, 1fr) auto; column-gap: 8px; }
+.pg-rows.folded .pr-cells > .pp:not(.pp-summary):not(.pp-metrics) { display: grid; grid-template-columns: var(--lw) minmax(0, 1fr) auto; column-gap: 8px; align-items: start; }
 .pg-rows.folded .pr-cells > .pp:has(> .pp-b > .pp-none), .pg-rows.folded .pr-cells > .pp:has(.pc-empty) { display: none; }
 .pg-rows.folded .pr-acts { grid-column: 2; grid-row: 1; }
 

@@ -74,16 +74,31 @@ export function Stages({ r }: { r: ProjectCard }) {
   );
 }
 
+// A slot as wide as the widest thing it could hold, so the same slot lines up from one row or card to the next
+// whatever it holds in each. The ghosts are laid over it, invisible.
+export function Fit({ ghosts, className, children }: { ghosts: React.ReactNode[]; className?: string; children?: React.ReactNode }) {
+  return (
+    <span className={className ? `fit ${className}` : 'fit'}>
+      {children}
+      {ghosts.map((g, i) => <span key={i} className="fit-g" aria-hidden="true">{g}</span>)}
+    </span>
+  );
+}
+
+const HEALTH_GHOSTS = (Object.keys(HEALTH) as Health[]).map(h => <span className={`pc-health h-${h}`}><i />{HEALTH[h]}</span>);
+
 export function Meter({ r }: { r: ProjectCard }) {
   const card = r.card!;
   const delta = card.progress != null && r.prev != null ? card.progress - r.prev : 0;
   return (
     <div className="pc-meter">
-      <span className={`pc-health h-${card.health}`}><i />{HEALTH[card.health]}</span>
+      <Fit ghosts={HEALTH_GHOSTS}><span className={`pc-health h-${card.health}`}><i />{HEALTH[card.health]}</span></Fit>
       {card.progress != null && <>
         <span className="pc-bar" role="meter" aria-valuenow={card.progress} aria-valuemin={0} aria-valuemax={100} aria-label={tr('完成度')}><i style={{ width: `${card.progress}%` }} /></span>
-        <b className="pc-pct">{card.progress}%</b>
-        {delta !== 0 && <em className={`pc-delta${delta < 0 ? ' down' : ''}`} title={tr('较上一张卡片')}>{delta > 0 ? '+' : ''}{delta}</em>}
+        <Fit className="fit-end" ghosts={[<b className="pc-pct">100%</b>]}><b className="pc-pct">{card.progress}%</b></Fit>
+        <Fit ghosts={[<em className="pc-delta">+100</em>]}>
+          {delta !== 0 && <em className={`pc-delta${delta < 0 ? ' down' : ''}`} title={tr('较上一张卡片')}>{delta > 0 ? '+' : ''}{delta}</em>}
+        </Fit>
       </>}
     </div>
   );
