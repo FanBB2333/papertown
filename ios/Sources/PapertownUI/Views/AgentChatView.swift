@@ -30,6 +30,8 @@ struct AgentChatView: View {
     @State private var deliveryMode: DeliveryMode = .steer
     @State private var notice: String?
     @State private var showTerminal = false
+    /// Typing straight into the terminal: the keyboard goes to it and the composer steps aside.
+    @State private var typingInTerminal = false
     @State private var busy = false
     @State private var showConversations = false
     @State private var showStart = false
@@ -91,13 +93,15 @@ struct AgentChatView: View {
                 .padding(.vertical, 8)
             }
             if showTerminal && state.hasScreen {
-                TerminalPane(target: target)
+                TerminalPane(target: target, typing: $typingInTerminal)
             } else {
                 messages(lang)
             }
         }
         .background(store.appearance.groupedBackground ?? Color.clear)
-        .safeAreaInset(edge: .bottom) { composer(lang) }
+        .safeAreaInset(edge: .bottom) {
+            if !(showTerminal && typingInTerminal) { composer(lang) }
+        }
         .navigationTitle(title)
         .papertownInlineTitle()
         .toolbar {
@@ -142,6 +146,7 @@ struct AgentChatView: View {
         .onDisappear { store.leaveChat(target) }
         .onChange(of: showTerminal) { on in
             store.chatShowsTerminal = on
+            if !on { typingInTerminal = false }
             if on { Task { await store.refreshChat(target) } }
         }
         .sheet(isPresented: $showConversations) {

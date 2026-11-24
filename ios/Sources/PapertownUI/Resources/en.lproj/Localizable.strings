@@ -952,3 +952,8 @@
 "chat.limits" = "Subscription Limits";
 "chat.limit" = "%1$@ window %2$d%% used";
 "chat.limit.reset" = "Resets in %@";
+
+/* Typing straight into the terminal */
+"term.type.on" = "Type into the Terminal";
+"term.type.off" = "Hide Keyboard";
+"term.type.paste" = "Paste Clipboard into the Terminal";

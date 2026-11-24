@@ -3,9 +3,10 @@ import SwiftUI
 
 /// The terminal tab of a conversation: the CLI's own screen with the lines that scrolled off it, so scrolling up shows
 /// the same exchange as the chat tab in the CLI's own drawing, a status line, and the keys it takes. Messages go through
-/// the same composer below.
+/// the same composer below. Papertown's own terminals (tmux, headless) also take typing straight from the keyboard.
 struct TerminalPane: View {
     let target: ChatTarget
+    @Binding var typing: Bool
     var onKeys: () -> Void = {}
 
     @EnvironmentObject private var store: TownStore
@@ -15,20 +16,52 @@ struct TerminalPane: View {
     @State private var follow = true
     @State private var sending = false
     @State private var keyError: String?
+    @StateObject private var typer = TerminalTyper()
 
     private var state: ConversationState { store.conversation(target) }
+
+    /// The server says whether the terminal takes typing (not herdr's, which live in your herdr workspace).
+    private var canType: Bool { state.agent?.term?.typing == true && state.termStatus != "exited" }
 
     var body: some View {
         let lang = store.language
         VStack(spacing: 0) {
             header(lang)
             screen(lang)
-            if let keyError {
-                Text(keyError).font(.caption).foregroundStyle(.red)
+            if let error = keyError ?? typer.error {
+                Text(error).font(.caption).foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14).padding(.top, 6)
             }
             if showKeys { keyGrid(lang) }
+        }
+        .background {
+            if canType {
+                TerminalKeyboard(active: $typing) { input in
+                    follow = true
+                    typer.push(input)
+                }
+                .frame(width: 1, height: 1)
+                .opacity(0.01)
+                .allowsHitTesting(false)
+            }
+        }
+        .onAppear {
+            let store = store, target = target
+            typer.send = { input in
+                switch input {
+                case .text(let text): return await store.typeIntoTerminal(text, paste: false, on: target)
+                case .paste(let text): return await store.typeIntoTerminal(text, paste: true, on: target)
+                case .keys(let keys): return await store.sendKeys(keys, on: target)
+                }
+            }
+            typer.settled = {
+                try? await Task.sleep(nanoseconds: 150_000_000)  // let the screen redraw
+                await store.refreshChat(target)
+            }
+        }
+        .onChange(of: canType) { can in
+            if !can { typing = false }
         }
     }
 
@@ -48,6 +81,12 @@ struct TerminalPane: View {
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
+            if canType {
+                Button { typing.toggle() } label: {
+                    Image(systemName: typing ? "keyboard.chevron.compact.down" : "keyboard")
+                }
+                .accessibilityLabel(lang.string(typing ? "term.type.off" : "term.type.on"))
+            }
             Button { follow.toggle() } label: {
                 Image(systemName: follow ? "arrow.down.to.line.compact" : "pause")
             }
@@ -57,7 +96,12 @@ struct TerminalPane: View {
                     Text(lang.string("term.wrap")).tag(true)
                     Text(lang.string("term.nowrap")).tag(false)
                 }
-                Toggle(isOn: $showKeys) { Label(lang.string("term.keys.show"), systemImage: "keyboard") }
+                Toggle(isOn: $showKeys) { Label(lang.string("term.keys.show"), systemImage: "square.grid.3x3") }
+                if canType {
+                    Button {
+                        if let text = TerminalClipboard.text, !text.isEmpty { follow = true; typer.push(.paste(text)) }
+                    } label: { Label(lang.string("term.type.paste"), systemImage: "doc.on.clipboard") }
+                }
                 Section(lang.string("term.size")) {
                     Button { size = max(7, size - 1) } label: { Label(lang.string("term.smaller"), systemImage: "textformat.size.smaller") }
                     Button { size = min(16, size + 1) } label: { Label(lang.string("term.larger"), systemImage: "textformat.size.larger") }
@@ -178,6 +222,9 @@ struct TerminalPane: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .background(paper, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                if typing { RoundedRectangle(cornerRadius: 12).stroke(Color.accentColor, lineWidth: 1.5) }
+            }
             .padding(.horizontal, 10)
             .onAppear { proxy.scrollTo("end", anchor: .bottom) }
             .onChange(of: state.screen) { _ in

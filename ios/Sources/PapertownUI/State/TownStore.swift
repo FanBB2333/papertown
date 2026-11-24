@@ -895,6 +895,14 @@ public final class TownStore: ObservableObject {
 
     /// Keys typed into a conversation's terminal; the message why not, when they could not be.
     public func pressKeys(_ keys: [String], on target: ChatTarget) async -> String? {
+        if let error = await sendKeys(keys, on: target) { return error }
+        try? await Task.sleep(nanoseconds: 250_000_000)  // let the screen redraw
+        await refreshChat(target)
+        return nil
+    }
+
+    /// Keys sent with no redraw after them, for typing into the terminal (which redraws once it has all gone).
+    public func sendKeys(_ keys: [String], on target: ChatTarget) async -> String? {
         guard let client else { return message(for: ClientError.invalidAddress) }
         do {
             switch target {
@@ -905,8 +913,19 @@ public final class TownStore: ObservableObject {
             if isUnauthorized(error) { handleError(error) }
             return message(for: error)
         }
-        try? await Task.sleep(nanoseconds: 250_000_000)  // let the screen redraw
-        await refreshChat(target)
+        return nil
+    }
+
+    /// Text typed straight into an employee's terminal, with no Enter; `paste` puts it in as one paste.
+    public func typeIntoTerminal(_ text: String, paste: Bool, on target: ChatTarget) async -> String? {
+        guard let client else { return message(for: ClientError.invalidAddress) }
+        guard case .agent(let id) = target else { return nil }
+        do {
+            try await client.type(agentID: id, text: text, paste: paste)
+        } catch {
+            if isUnauthorized(error) { handleError(error) }
+            return message(for: error)
+        }
         return nil
     }
 

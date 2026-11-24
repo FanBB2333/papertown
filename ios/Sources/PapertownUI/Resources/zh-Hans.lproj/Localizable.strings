@@ -952,3 +952,8 @@
 "chat.limits" = "订阅额度";
 "chat.limit" = "%1$@ 额度已用 %2$d%%";
 "chat.limit.reset" = "%@ 后重置";
+
+/* Typing straight into the terminal */
+"term.type.on" = "用键盘直接输入到终端";
+"term.type.off" = "收起键盘";
+"term.type.paste" = "粘贴剪贴板到终端";

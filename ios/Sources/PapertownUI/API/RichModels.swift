@@ -718,6 +718,8 @@ public struct AgentTermInfo: Decodable, Sendable, Equatable {
     public let tool: String?
     public let model: String?
     public let note: String?
+    /// Whether what you type goes straight into the terminal: Papertown's own tmux and headless ones, not herdr's.
+    public let typing: Bool?
 }
 
 public struct TermOption: Decodable, Sendable, Equatable, Hashable, Identifiable {

@@ -86,6 +86,12 @@ public extension PapertownClient {
         let _: Ack = try await send(.post, ["agents", agentID, "keys"], body: Body(keys: keys))
     }
 
+    /// Text typed straight into the terminal with no Enter; `paste` puts it in as one paste.
+    func type(agentID: String, text: String, paste: Bool) async throws {
+        struct Body: Encodable { let text: String; let paste: Bool }
+        let _: Ack = try await send(.post, ["agents", agentID, "type"], body: Body(text: text, paste: paste))
+    }
+
     func answerPrompt(agentID: String, digest: String, option: Int) async throws {
         struct Body: Encodable { let digest: String; let option: Int }
         let _: Ack = try await send(.post, ["agents", agentID, "prompt"], body: Body(digest: digest, option: option))
