@@ -202,6 +202,32 @@ def parse(lines, provider):
                   if datetime.fromisoformat(row['ts']).tzinfo is None else datetime.fromisoformat(row['ts']))
 
 
+def title(lines, provider, home, sid):
+    """The conversation's title as the CLI named it: Claude Code's own or AI title, Codex's thread name."""
+    found = None
+    try:
+        if provider == 'claude':
+            named = {}
+            for raw in lines:
+                if b'-title"' in raw[:40]:
+                    row = json.loads(raw)
+                    if row.get('type') in ('custom-title', 'ai-title'):
+                        named[row['type']] = row.get('customTitle') or row.get('aiTitle')
+            found = named.get('custom-title') or named.get('ai-title')
+        elif provider == 'codex':
+            index = home / 'session_index.jsonl'
+            if safe(index, home) and index.stat().st_size < MAX_BYTES:
+                key = sid.encode()
+                for raw in index.read_bytes().splitlines():
+                    if key in raw:
+                        row = json.loads(raw)
+                        if row.get('id') == sid and row.get('thread_name'):
+                            found = row['thread_name']
+    except (OSError, ValueError, AttributeError):
+        return None
+    return cap(found.strip(), 200) if isinstance(found, str) and found.strip() else None
+
+
 def read(settings, provider, session_id, limit=200, started=None, missing_session=UNESTABLISHED):
     def empty(note):
         return {'items': [], 'transcript': {'ok': False, 'note': note}}
@@ -216,7 +242,8 @@ def read(settings, provider, session_id, limit=200, started=None, missing_sessio
         path = locate(home, provider, session_id, started)
         if not path or not safe(path, home):
             return empty(MISSING)
-        items = parse(tail(path, home), provider)
-        return {'items': items[-max(1, min(limit, 1000)):], 'transcript': {'ok': True, 'note': None}}
+        lines = tail(path, home)
+        items = parse(lines, provider)
+        return {'items': items[-max(1, min(limit, 1000)):], 'transcript': {'ok': True, 'note': None, 'title': title(lines, provider, home, session_id)}}
     except (OSError, ValueError, RuntimeError):
         return empty(MISSING)

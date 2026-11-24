@@ -52,7 +52,7 @@ def test_claude_blocks_results_interrupt_and_filtering(tmp_path):
         claude('user', '[Request interrupted by user for tool use]')]
     path = write(s, 'claude', records)
     result = tr.read(s, 'claude', SID)
-    assert result['transcript'] == {'ok': True, 'note': None}
+    assert result['transcript'] == {'ok': True, 'note': None, 'title': None}
     items = result['items']
     assert [r['kind'] for r in items] == ['user', 'assistant', 'tool', 'tool', 'note']
     assert items[2] == {'ts': TS, 'kind': 'tool', 'id': 'c1', 'name': 'Bash', 'arg': 'echo synthetic', 'status': 'completed', 'error': None}
@@ -216,7 +216,7 @@ def test_employee_timeline_endpoint_and_no_persistence(tmp_path, monkeypatch, ru
     assert set(data) == {'agent', 'items', 'queued', 'paseo', 'transcript'}
     assert data['queued'] == [held] and data['paseo'] == {}
     assert data['items'] == [{'ts': TS, 'kind': 'assistant', 'text': 'synthetic-private-answer'}]
-    assert data['transcript'] == {'ok': True, 'note': None}
+    assert data['transcript'] == {'ok': True, 'note': None, 'title': None}
     assert data['agent']['term']['status'] == hosted.refresh(aid)['term']['status']
     assert 'synthetic-private' not in json.dumps(events)
     assert 'synthetic-private' not in '\n'.join(town.db.conn.iterdump())
@@ -249,7 +249,7 @@ def test_herdr_terminal_timeline_and_session_fallback(setup, saved_id):
     assert set(result) == {'terminal', 'items', 'transcript'}
     assert result['terminal'] == client.get('/api/terminals/herdr:t1').json()['terminal']
     assert result['items'][0]['text'] == 'Synthetic terminal request'
-    assert result['transcript'] == {'ok': True, 'note': None}
+    assert result['transcript'] == {'ok': True, 'note': None, 'title': None}
     town.db.x('insert into terminal_sessions values (?, ?, ?, ?, ?)', SID, 'antigravity', saved_id, 'Synthetic terminal', '/synthetic')
     host.emit(agent_session={'kind': 'unknown'})
     town.terminals.refresh()
@@ -322,3 +322,15 @@ def test_timestamp_order_and_claude_argument_priority(tmp_path):
     items = tr.read(s, 'claude', SID)['items']
     assert [i['text'] for i in items if i['kind'] == 'user'] == ['Earlier', 'Later']
     assert [i['arg'] for i in items if i['kind'] == 'tool'] == ['command', 'file_path', 'path', 'pattern', 'url', 'query', 'description', 'prompt', '{"value":1}']
+
+
+def test_title_comes_from_each_clis_own_records(tmp_path):
+    from papertown.transcripts import title
+    lines = [b'{"type":"user","message":{"content":"hi"}}', b'{"type":"ai-title","aiTitle":"Fix the login"}',
+             b'{"type":"ai-title","aiTitle":"Fix the login page"}']
+    assert title(lines, 'claude', tmp_path, 'sid') == 'Fix the login page'
+    assert title(lines + [b'{"type":"custom-title","customTitle":"Mine"}'], 'claude', tmp_path, 'sid') == 'Mine'
+    assert title([b'{"type":"user"}'], 'claude', tmp_path, 'sid') is None
+    (tmp_path / 'session_index.jsonl').write_text(
+        '{"id":"other","thread_name":"No"}\n{"id":"sid-1","thread_name":"First"}\nnot json\n{"id":"sid-1","thread_name":"Renamed"}\n')
+    assert title([], 'codex', tmp_path, 'sid-1') == 'Renamed' and title([], 'codex', tmp_path, 'sid-2') is None

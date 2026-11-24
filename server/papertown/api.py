@@ -13,10 +13,10 @@ from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import samples, status as status_mod
+from . import samples, status as status_mod, uploads
 from .agents import AgentError, ROLES
 from .herdr import HerdrError
 from .prompts import PromptError
@@ -326,8 +326,15 @@ class SaveIn(BaseModel):
 
 
 class SayIn(BaseModel):
-    text: str = Field(min_length=1, max_length=20000)
+    text: str = Field(default="", max_length=20000)
     mode: Literal["steer", "queue", "interrupt"] | None = None
+    attachments: list[str] = Field(default_factory=list, max_length=uploads.MAX_FILES)  # ids from an upload
+
+    @model_validator(mode="after")
+    def _not_empty(self):
+        if not self.text.strip() and not self.attachments:
+            raise ValueError("消息是空的")
+        return self
 
 
 class QueueIn(BaseModel):
@@ -424,6 +431,17 @@ def mapped(*errors: type[Exception]):
     return call
 
 
+async def upload_body(request: Request) -> bytes:
+    if int(request.headers.get("content-length") or 0) > uploads.MAX_BYTES:
+        raise HTTPException(413, f"文件超过 {uploads.MAX_BYTES // 1024 // 1024} MB")
+    data = bytearray()
+    async for chunk in request.stream():
+        data += chunk
+        if len(data) > uploads.MAX_BYTES:
+            raise HTTPException(413, f"文件超过 {uploads.MAX_BYTES // 1024 // 1024} MB")
+    return bytes(data)
+
+
 def packed(request: Request, data):
     """A large JSON answer gzipped for a client that takes it: a terminal's screen with its colours runs to hundreds of
     kilobytes, read every two seconds while it shows."""
@@ -456,6 +474,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     authed, guard, ws, farm = mapped(AuthError), mapped(LineError), mapped(WsError), mapped(FarmError)
     agents, assistant = mapped(AgentError), mapped(AgentError, ActError)
     terminals = mapped(HerdrError)
+    files = mapped(uploads.UploadError, AgentError, HerdrError)
     agent_prompts, terminal_prompts = mapped(AgentError, PromptError), mapped(HerdrError, PromptError)
     leads = mapped(LeadError, AgentError, CardError)
     checks = mapped(CheckError, AgentError, LeadError)
@@ -778,7 +797,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/terminals/{id}/say")
     def terminal_say(id: str, body: SayIn):
-        return terminals(town.terminals.say, id, body.text, body.mode)
+        text = files(lambda: uploads.mention(body.text, uploads.resolve(town.terminals.uploads(id), body.attachments))) if body.attachments else body.text
+        return terminals(town.terminals.say, id, text, body.mode)
+
+    @app.post("/api/terminals/{id}/uploads")
+    async def terminal_upload(id: str, request: Request, name: str = "file"):
+        """A file to send with the next message: the request body is the file itself."""
+        data = await upload_body(request)
+        return files(lambda: uploads.save(town.terminals.uploads(id), name, data))
 
     @app.post("/api/terminals/{id}/keys")
     def terminal_keys(id: str, body: TerminalKeysIn):
@@ -949,7 +975,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/agents/{agent_id}/say")
     def agent_say(agent_id: str, body: SayIn):
-        return agents(town.agents.say, agent_id, body.text, body.mode)
+        text = files(lambda: uploads.mention(body.text, uploads.resolve(town.agents.uploads(agent_id), body.attachments))) if body.attachments else body.text
+        return agents(town.agents.say, agent_id, text, body.mode)
+
+    @app.post("/api/agents/{agent_id}/uploads")
+    async def agent_upload(agent_id: str, request: Request, name: str = "file"):
+        """A file to send with the next message: the request body is the file itself."""
+        data = await upload_body(request)
+        return files(lambda: uploads.save(town.agents.uploads(agent_id), name, data))
 
     @app.post("/api/agents/{agent_id}/seen")
     def agent_seen(agent_id: str):

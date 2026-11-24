@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import threading
 import time
@@ -125,6 +126,11 @@ class Terminals:
             if not a:
                 raise HerdrError(self._note if not self._ok else "没有这个终端会话")
             return a.copy()
+
+    def uploads(self, id: str) -> Path:
+        """Where files sent with a message to this terminal are kept."""
+        self._require(id)
+        return self.town.s.data_dir / "uploads" / "terminals" / re.sub(r"[^\w.-]", "_", id)[:80]
 
     def _current(self, id: str, timeout: float | None = None) -> dict:
         a = self._require(id)

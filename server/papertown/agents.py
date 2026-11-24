@@ -500,6 +500,15 @@ class Agents:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def uploads(self, agent_id: str) -> Path:
+        """Where files sent with a message to this member are kept: in its home, which its CLI may read."""
+        a = self.get(agent_id)
+        if not a:
+            raise AgentError("没有这个员工")
+        if not a.get("line_id"):
+            raise AgentError("这位成员暂不接收附件")
+        return self.home(a) / "uploads"
+
     def roster(self, role: str) -> list[dict]:
         """Every project with its agent for this role (None until one is created)."""
         lines = self.db.q("select id, seq, title, status, stage from lines where status != 'dropped' order by seq desc")
