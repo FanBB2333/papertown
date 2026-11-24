@@ -18,8 +18,18 @@ public enum JSONValue: Decodable, Sendable, Equatable {
 
 public struct AuthState: Decodable, Sendable {
     public let local, password, authed, signedIn: Bool
+    /// Let in by an access key (servers before keys leave it out).
+    public let key: Bool?
     public let sessions: Int?
-    enum CodingKeys: String, CodingKey { case local, password, authed, signedIn = "signed_in", sessions }
+    enum CodingKeys: String, CodingKey { case local, password, authed, signedIn = "signed_in", key, sessions }
+}
+
+/// `GET /api/health`, open before signing in: whether the address is a Papertown server.
+public struct ServerHealth: Decodable, Sendable {
+    public let ok: Bool
+    /// "papertown" (servers before access keys leave it out)
+    public let app: String?
+    public let version: String?
 }
 
 public struct TownProject: Decodable, Sendable, Identifiable {

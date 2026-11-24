@@ -52,9 +52,18 @@ struct ServerView: View {
                     } header: {
                         Text(lang.string("server.section.current"))
                     } footer: {
+                        #if os(macOS)
+                        Text(lang.string("server.current.footer.mac"))
+                        #else
                         Text(lang.string("server.current.footer"))
+                        #endif
                     }
                 }
+
+                #if os(macOS)
+                LocalServerSection()
+                    .papertownRowBackground(store.appearance)
+                #endif
 
                 Section(lang.string("server.section.saved")) {
                     if store.profiles.isEmpty {
@@ -109,6 +118,17 @@ struct ServerView: View {
                                 }
                                 .tint(.blue)
                             }
+                            .contextMenu {
+                                Button(lang.string("action.edit_address")) {
+                                    store.editingProfile = profile
+                                    store.showConnectSheet = true
+                                }
+                                Button(lang.string("action.delete"), role: .destructive) {
+                                    if let idx = store.profiles.firstIndex(of: profile) {
+                                        store.deleteProfiles(at: IndexSet(integer: idx))
+                                    }
+                                }
+                            }
                             .papertownRowBackground(store.appearance)
                         }
                     }
@@ -144,7 +164,8 @@ struct ServerView: View {
                     }
                     .papertownRowBackground(store.appearance)
 
-                    if store.authState?.signedIn == true || store.connectionStatus == .connected {
+                    // a password login only: this Mac and access keys have nothing to sign out of
+                    if store.authState?.signedIn == true {
                         Button(lang.string("action.sign_out"), role: .destructive) {
                             showSignOutConfirm = true
                         }
@@ -208,6 +229,7 @@ struct ServerView: View {
 
     private func sessionText(lang: AppLanguage) -> String {
         guard let auth = store.authState else { return lang.string("server.session.signed_out") }
+        if auth.key == true { return lang.string("server.session.key") }
         if auth.signedIn { return lang.string("server.session.signed_in") }
         if auth.local && auth.authed { return lang.string("server.session.local") }
         return lang.string("server.session.signed_out")

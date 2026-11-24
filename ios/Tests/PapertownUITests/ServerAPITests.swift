@@ -102,6 +102,15 @@ final class ServerAPITests: XCTestCase {
         XCTAssertEqual(ServerText.localized("Vela: Scaling VLA", .english), "Vela: Scaling VLA")
     }
 
+    func testServersSavedBeforeAccessKeysStillLoad() throws {
+        let saved = #"[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Lab","addressString":"http://10.0.0.2:8000","useBiometrics":true}]"#
+        let profiles = try JSONDecoder().decode([ServerProfile].self, from: Data(saved.utf8))
+        XCTAssertEqual(profiles.first?.name, "Lab")
+        XCTAssertEqual(profiles.first?.usesAccessKey, false)
+        let again = try JSONDecoder().decode([ServerProfile].self, from: try JSONEncoder().encode([ServerProfile(name: "Pi", addressString: "https://pt.example.com", usesAccessKey: true)]))
+        XCTAssertEqual(again.first?.usesAccessKey, true)
+    }
+
     func testPiEventsFoldIntoChatRows() throws {
         let json = """
         [{"id":1,"agent_id":"a","ts":"t","kind":"user","data":{"text":"hi"}},

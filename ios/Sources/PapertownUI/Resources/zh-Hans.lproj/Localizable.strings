@@ -60,7 +60,7 @@
 "lead.detail.off" = "已暂停。打开开关后，负责人将沿原对话推进项目。";
 "lead.detail.off_sample" = "此为样例项目，内含占位内容。打开开关后，将由真实负责人接管推进。";
 "lead.detail.ended" = "项目已经结束，负责人已停止常驻。";
-"lead.footer" = "关闭开关会暂停负责人并保留完整对话历史；重新开启将从原会话恢复。";
+"lead.footer" = "关闭开关会暂停负责人并保留完整对话历史，重新开启后从原会话恢复。";
 
 /* Staff Watch Buckets */
 "bucket.needs" = "待处理";
@@ -194,7 +194,7 @@
 "connect.field.name.placeholder" = "例如：家里 Mac";
 "connect.field.url" = "根地址";
 "connect.field.url.placeholder" = "https://example.com 或 http://192.168.1.10:8000";
-"connect.section.address.footer" = "填写电脑或自建中转的根地址，可包含路径前缀；客户端会自动追加 /api。局域网直连请确保手机与电脑在同一网络。";
+"connect.section.address.footer" = "填写电脑或自建中转的根地址，可包含路径前缀，客户端会自动追加 /api。局域网直连请确保手机与电脑在同一网络。";
 "connect.section.auth" = "访问鉴权";
 "connect.field.password" = "访问密码";
 "connect.field.password.placeholder" = "局域网免密可留空";
@@ -391,3 +391,51 @@
 "tools.count" = "%d 个工具";
 "tools.skills" = "技能";
 "staff.empty" = "还没有启动的员工。项目负责人开启后，会按需启动代码员工和写作员工。";
+
+/* Mac */
+"local.profile.name" = "本机";
+"local.section" = "本机服务";
+"local.status" = "状态";
+"local.address" = "地址";
+"local.state.checking" = "正在检查…";
+"local.state.external" = "运行中，由其他程序启动";
+"local.state.starting" = "正在启动…";
+"local.state.running" = "运行中";
+"local.state.stopped" = "未运行";
+"local.problem.no_code" = "在 %@ 找不到 Papertown 的代码";
+"local.problem.port_taken" = "端口 %d 已被其他程序占用";
+"local.problem.did_not_start" = "服务没有启动，详见日志";
+"local.problem.spawn" = "启动命令无法运行：%@";
+"local.start" = "启动服务";
+"local.stop" = "停止服务";
+"local.restart" = "重启服务";
+"local.log" = "查看服务日志";
+"local.connect" = "连接";
+"local.code" = "代码位置";
+"local.choose" = "选择…";
+"local.port" = "端口";
+"local.command" = "启动命令";
+"local.command.footer" = "在代码的 server 目录中，以登录 shell 的环境运行。$PAPERTOWN_PORT 即上面的端口。端口上已有 Papertown 运行时，App 直接使用它。";
+"local.auto_start" = "打开 App 时启动服务";
+"local.stop_on_quit" = "退出 App 时停止由 App 启动的服务";
+"local.defaults" = "恢复默认";
+"local.apply.footer" = "修改在下次启动服务时生效。";
+"menu.connect" = "连接服务器…";
+"menu.open_browser" = "在浏览器中打开";
+"menu.refresh" = "刷新";
+"menu.server" = "服务";
+"settings.general" = "通用";
+
+/* Access keys */
+"connect.method" = "登录方式";
+"connect.method.key" = "访问密钥";
+"connect.method.password" = "访问密码";
+"connect.field.key" = "访问密钥";
+"connect.field.key.placeholder" = "ptk_…";
+"connect.field.key.saved" = "已保存，留空则保持不变";
+"connect.section.key.footer" = "在服务器上运行 papertown key create，或在网页的「设置 › 访问与登录」中新建。每个设备使用各自的密钥，保存在本机钥匙串中。";
+"connect.key.missing" = "请填写在服务器上新建的访问密钥。";
+"error.key_rejected" = "服务器不接受这个访问密钥，它可能已被撤销。";
+"error.not_papertown" = "这个地址上没有 Papertown 服务。";
+"server.session.key" = "访问密钥";
+"server.current.footer.mac" = "窗口在后台时实时通道保持连接，Dock 图标上的数字随时更新。";

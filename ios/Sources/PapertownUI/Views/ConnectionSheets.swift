@@ -7,8 +7,12 @@ struct ConnectionSheet: View {
     @EnvironmentObject private var store: TownStore
     @Environment(\.dismiss) private var dismiss
 
+    enum Method: Hashable { case key, password }
+
     @State private var name: String
     @State private var urlString: String
+    @State private var method: Method
+    @State private var accessKey: String = ""
     @State private var password: String = ""
     @State private var useBiometrics: Bool
     @State private var isConnecting = false
@@ -21,6 +25,8 @@ struct ConnectionSheet: View {
         _name = State(initialValue: editing?.name ?? "")
         _urlString = State(initialValue: editing?.addressString ?? "")
         _useBiometrics = State(initialValue: editing?.useBiometrics ?? false)
+        // new servers sign in with a key; those saved earlier keep the password
+        _method = State(initialValue: editing.map { $0.usesAccessKey ? .key : .password } ?? .key)
     }
 
     var body: some View {
@@ -45,18 +51,35 @@ struct ConnectionSheet: View {
                 }
 
                 Section {
-                    LabeledContent(lang.string("connect.field.password")) {
-                        SecureField(lang.string("connect.field.password.placeholder"), text: $password)
-                            .multilineTextAlignment(.trailing)
+                    Picker(lang.string("connect.method"), selection: $method) {
+                        Text(lang.string("connect.method.key")).tag(Method.key)
+                        Text(lang.string("connect.method.password")).tag(Method.password)
                     }
-                    Toggle(
-                        lang.string(biometry == .touchID ? "connect.touch_id" : "connect.face_id"),
-                        isOn: $useBiometrics
-                    )
+                    .pickerStyle(.segmented)
+                    if method == .key {
+                        LabeledContent(lang.string("connect.field.key")) {
+                            SecureField(lang.string(editing?.usesAccessKey == true ? "connect.field.key.saved" : "connect.field.key.placeholder"), text: $accessKey)
+                                .multilineTextAlignment(.trailing)
+                                .font(.subheadline.monospaced())
+                                .papertownURLInput()
+                        }
+                    } else {
+                        LabeledContent(lang.string("connect.field.password")) {
+                            SecureField(lang.string("connect.field.password.placeholder"), text: $password)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        if biometry != .none {
+                            Toggle(
+                                lang.string(biometry == .touchID ? "connect.touch_id" : "connect.face_id"),
+                                isOn: $useBiometrics
+                            )
+                            .toggleStyle(.switch)
+                        }
+                    }
                 } header: {
                     Text(lang.string("connect.section.auth"))
                 } footer: {
-                    Text(lang.string("connect.section.auth.footer"))
+                    Text(lang.string(method == .key ? "connect.section.key.footer" : "connect.section.auth.footer"))
                 }
 
                 if editing == nil {
@@ -111,19 +134,26 @@ struct ConnectionSheet: View {
             validationError = lang.string("error.invalid_address")
             return
         }
+        let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = accessKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let keeping = editing?.usesAccessKey == true
+        if method == .key, key.isEmpty, !keeping, !(normalized.host.map { ["127.0.0.1", "localhost", "::1"].contains($0) } ?? false) {
+            validationError = lang.string("connect.key.missing")
+            return
+        }
         validationError = nil
         isConnecting = true
-
-        let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let profile = ServerProfile(
             id: editing?.id ?? UUID(),
             name: displayName.isEmpty ? (normalized.host ?? normalized.absoluteString) : displayName,
             addressString: normalized.absoluteString,
-            useBiometrics: useBiometrics
+            useBiometrics: method == .password && useBiometrics,
+            usesAccessKey: method == .key && (!key.isEmpty || keeping)
         )
 
         Task {
-            await store.upsertProfile(profile, password: password.isEmpty ? nil : password, connectNow: true)
+            await store.upsertProfile(profile, password: method == .password && !password.isEmpty ? password : nil,
+                                      accessKey: method == .key && !key.isEmpty ? key : nil, connectNow: true)
             isConnecting = false
             if let error = store.lastError, store.connectionStatus == .disconnected {
                 validationError = error

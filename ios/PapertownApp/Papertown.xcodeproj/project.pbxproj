@@ -17,6 +17,7 @@
 		A10000020000000000000001 /* PapertownApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PapertownApp.swift; sourceTree = "<group>"; };
 		A10000020000000000000002 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A10000020000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000020000000000000005 /* Info-macOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-macOS.plist"; sourceTree = "<group>"; };
 		A10000020000000000000004 /* Papertown.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Papertown.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -39,6 +40,7 @@
 				A10000020000000000000001 /* PapertownApp.swift */,
 				A10000020000000000000002 /* Assets.xcassets */,
 				A10000020000000000000003 /* Info.plist */,
+				A10000020000000000000005 /* Info-macOS.plist */,
 				A10000040000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -191,8 +193,22 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.papertown.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				"INFOPLIST_FILE[sdk=macosx*]" = "Info-macOS.plist";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = dev.papertown.mac;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				PT_REPO_ROOT = "$(SRCROOT)/../..";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -215,8 +231,22 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.papertown.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SDKROOT = auto;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				"INFOPLIST_FILE[sdk=macosx*]" = "Info-macOS.plist";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = dev.papertown.mac;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_HARDENED_RUNTIME = NO;
+				PT_REPO_ROOT = "$(SRCROOT)/../..";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

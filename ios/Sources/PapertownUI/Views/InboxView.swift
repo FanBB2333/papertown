@@ -1,19 +1,18 @@
 import PapertownCore
 import SwiftUI
 
-struct InboxView: View {
-    private enum InboxRoute: Hashable {
-        case project(String)
-        case chat(ChatRoute)
-    }
+enum InboxRoute: Hashable {
+    case project(String)
+    case chat(ChatRoute)
+}
 
+struct InboxView: View {
     @EnvironmentObject private var store: TownStore
-    @State private var path: [InboxRoute] = []
     @State private var answering: ReportItem?
 
     var body: some View {
         let lang = store.language
-        NavigationStack(path: $path) {
+        NavigationStack(path: $store.inboxPath) {
             List {
                 connectionBannerSection(lang: lang)
 
@@ -92,7 +91,7 @@ struct InboxView: View {
                 await store.refreshAll()
             }
             .sheet(item: $answering) { ask in
-                AnswerSheet(ask: ask).environmentObject(store)
+                AnswerSheet(ask: ask).environmentObject(store).papertownSheetFrame(height: 460)
             }
             .navigationDestination(for: InboxRoute.self) { route in
                 switch route {
@@ -257,7 +256,7 @@ struct InboxView: View {
                 .controlSize(.small)
             if let projectID = item.projectID {
                 Button(lang.string("action.open_project")) {
-                    path.append(.project(projectID))
+                    store.inboxPath.append(.project(projectID))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -276,7 +275,7 @@ struct InboxView: View {
             .controlSize(.small)
 
             Button(lang.string("action.view_chat")) {
-                path.append(.chat(ChatRoute(
+                store.inboxPath.append(.chat(ChatRoute(
                     agentID: agentID,
                     role: role,
                     subtitle: item.projectSeq.map { "#\($0)" } ?? item.projectTitle
@@ -292,7 +291,7 @@ struct InboxView: View {
             .controlSize(.small)
 
             Button(lang.string("action.open_project")) {
-                path.append(.project(project.id))
+                store.inboxPath.append(.project(project.id))
             }
             .buttonStyle(.bordered)
             .controlSize(.small)

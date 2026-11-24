@@ -1,8 +1,7 @@
 import PapertownCore
 import SwiftUI
-#if canImport(PDFKit) && canImport(UIKit)
+#if canImport(PDFKit)
 import PDFKit
-import UIKit
 #endif
 
 // The pages under a project: its reports and questions, gates and checks, and what each stage produced.
@@ -107,7 +106,7 @@ struct ReportsPage: View {
         .navigationTitle(lang.string("reports.nav"))
         .papertownInlineTitle()
         .sheet(item: $answering) { ask in
-            AnswerSheet(ask: ask).environmentObject(store)
+            AnswerSheet(ask: ask).environmentObject(store).papertownSheetFrame(height: 460)
         }
     }
 
@@ -729,6 +728,17 @@ struct PDFDataView: UIViewRepresentable {
         return v
     }
     func updateUIView(_ v: PDFView, context: Context) {}
+}
+#elseif canImport(PDFKit) && os(macOS)
+struct PDFDataView: NSViewRepresentable {
+    let data: Data
+    func makeNSView(context: Context) -> PDFView {
+        let v = PDFView()
+        v.autoScales = true
+        v.document = PDFDocument(data: data)
+        return v
+    }
+    func updateNSView(_ v: PDFView, context: Context) {}
 }
 #else
 struct PDFDataView: View {

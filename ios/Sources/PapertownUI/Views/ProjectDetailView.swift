@@ -52,7 +52,12 @@ struct ProjectDetailView: View {
                 .papertownListAppearance(store.appearance)
                 .navigationTitle("#\(project.seq)")
                 .papertownInlineTitle()
+                #if os(macOS)
+                // the window's title bar has room for both: number, then stage
+                .navigationSubtitle(TextFormatters.stageName(project.stage, language: lang))
+                #endif
                 .toolbar {
+                    #if os(iOS)
                     ToolbarItem(placement: .principal) {
                         VStack(spacing: 1) {
                             Text("#\(project.seq)")
@@ -62,6 +67,7 @@ struct ProjectDetailView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    #endif
                     if let leadAgentID = project.leadAgentID {
                         ToolbarItem(placement: .primaryAction) {
                             NavigationLink {
@@ -92,7 +98,7 @@ struct ProjectDetailView: View {
             await store.refreshProject(id: projectID)
         }
         .sheet(item: $answering) { ask in
-            AnswerSheet(ask: ask).environmentObject(store)
+            AnswerSheet(ask: ask).environmentObject(store).papertownSheetFrame(height: 460)
         }
     }
 
@@ -197,6 +203,7 @@ struct ProjectDetailView: View {
                             }
                         ))
                         .labelsHidden()
+                        .toggleStyle(.switch)
                         .disabled(isUpdatingLead)
                     }
                 }

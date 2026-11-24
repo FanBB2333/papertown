@@ -5,12 +5,27 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Hashable, Sendabl
     public var name: String
     public var addressString: String
     public var useBiometrics: Bool
+    /// Signs in with an access key, kept in the Keychain (KeychainStore), rather than the access password.
+    public var usesAccessKey: Bool
 
-    public init(id: UUID = UUID(), name: String, addressString: String, useBiometrics: Bool = false) {
+    public init(id: UUID = UUID(), name: String, addressString: String, useBiometrics: Bool = false, usesAccessKey: Bool = false) {
         self.id = id
         self.name = name
         self.addressString = addressString
         self.useBiometrics = useBiometrics
+        self.usesAccessKey = usesAccessKey
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, addressString, useBiometrics, usesAccessKey }
+
+    // servers saved before access keys have no usesAccessKey
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        addressString = try c.decode(String.self, forKey: .addressString)
+        useBiometrics = try c.decodeIfPresent(Bool.self, forKey: .useBiometrics) ?? false
+        usesAccessKey = try c.decodeIfPresent(Bool.self, forKey: .usesAccessKey) ?? false
     }
 
     public var url: URL? {

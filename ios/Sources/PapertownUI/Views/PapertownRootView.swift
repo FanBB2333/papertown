@@ -10,65 +10,45 @@ public struct PapertownRootView: View {
     }
 
     public var body: some View {
-        let lang = store.language
-        TabView(selection: $store.selectedTab) {
-            InboxView()
-                .tabItem {
-                    Label(lang.string("tab.inbox"), systemImage: "tray.fill")
-                }
-                .badge(store.inboxItems.count)
-                .tag(TownStore.Tab.inbox)
+        sections
+            .environmentObject(store)
+            .environment(\.locale, store.language.locale)
+            .tint(store.appearance.tintColor)
+            .preferredColorScheme(store.appearance.colorScheme)
+            .task {
+                #if os(macOS)
+                // this Mac's own server first, started if the chosen server is it and nothing runs there
+                let testRun = UserDefaults.standard.bool(forKey: "PTDemo") || UserDefaults.standard.string(forKey: "PTConnect") != nil
+                if !testRun { await LocalServer.shared.prepare(store) }
+                #endif
+                await store.onAppLaunch()
+            }
+            .onChange(of: scenePhase) { newPhase in
+                store.handleScenePhase(newPhase)
+            }
+            .sheet(isPresented: $store.showConnectSheet, onDismiss: {
+                store.editingProfile = nil
+            }) {
+                ConnectionSheet(editing: store.editingProfile)
+                    .papertownSheetFrame()
+                    .environmentObject(store)
+                    .environment(\.locale, store.language.locale)
+                    .tint(store.appearance.tintColor)
+                    .preferredColorScheme(store.appearance.colorScheme)
+            }
+            .sheet(isPresented: $store.showLoginSheet) {
+                LoginSheet(expired: store.loginExpired)
+                    .papertownSheetFrame(height: 360)
+                    .environmentObject(store)
+                    .environment(\.locale, store.language.locale)
+                    .tint(store.appearance.tintColor)
+                    .preferredColorScheme(store.appearance.colorScheme)
+            }
+    }
 
-            ProjectsView()
-                .tabItem {
-                    Label(lang.string("tab.projects"), systemImage: "folder.fill")
-                }
-                .tag(TownStore.Tab.projects)
-
-            StaffView()
-                .tabItem {
-                    Label(lang.string("tab.staff"), systemImage: "person.2.fill")
-                }
-                .tag(TownStore.Tab.staff)
-
-            TownView()
-                .tabItem {
-                    Label(lang.string("tab.town"), systemImage: "building.columns.fill")
-                }
-                .tag(TownStore.Tab.town)
-
-            ServerView()
-                .tabItem {
-                    Label(lang.string("tab.server"), systemImage: "server.rack")
-                }
-                .tag(TownStore.Tab.server)
-        }
-        .environmentObject(store)
-        .environment(\.locale, store.language.locale)
-        .tint(store.appearance.tintColor)
-        .preferredColorScheme(store.appearance.colorScheme)
-        .task {
-            await store.onAppLaunch()
-        }
-        .onChange(of: scenePhase) { newPhase in
-            store.handleScenePhase(newPhase)
-        }
-        .sheet(isPresented: $store.showConnectSheet, onDismiss: {
-            store.editingProfile = nil
-        }) {
-            ConnectionSheet(editing: store.editingProfile)
-                .environmentObject(store)
-                .environment(\.locale, store.language.locale)
-                .tint(store.appearance.tintColor)
-                .preferredColorScheme(store.appearance.colorScheme)
-        }
-        .sheet(isPresented: $store.showLoginSheet) {
-            LoginSheet(expired: store.loginExpired)
-                .environmentObject(store)
-                .environment(\.locale, store.language.locale)
-                .tint(store.appearance.tintColor)
-                .preferredColorScheme(store.appearance.colorScheme)
-        }
+    /// A sidebar or tabs, whichever fits (AppShell.swift).
+    private var sections: some View {
+        AppShell(store: store)
     }
 }
 
@@ -213,6 +193,16 @@ extension View {
     func papertownInlineTitle() -> some View {
         #if os(iOS)
         self.navigationBarTitleDisplayMode(.inline)
+        #else
+        self
+        #endif
+    }
+
+    /// A sheet on the Mac opens at its content's size, which for a form is too small: give it room.
+    @ViewBuilder
+    func papertownSheetFrame(width: CGFloat = 520, height: CGFloat = 560) -> some View {
+        #if os(macOS)
+        self.frame(minWidth: width, idealWidth: width, minHeight: height, idealHeight: height)
         #else
         self
         #endif

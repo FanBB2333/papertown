@@ -12,6 +12,12 @@ public enum BiometryKind: Sendable {
 
 public enum KeychainStore {
     private static let service = "com.papertown.ios.server-password"
+    /// Access keys, kept apart from passwords: a key is read for every connection, with no Face ID or Touch ID prompt.
+    private static let keyService = "com.papertown.server-access-key"
+
+    public static func save(accessKey: String, for serverID: UUID) { save(accessKey, for: serverID, service: keyService) }
+    public static func loadAccessKey(for serverID: UUID) -> String? { load(for: serverID, service: keyService) }
+    public static func deleteAccessKey(for serverID: UUID) { delete(for: serverID, service: keyService) }
 
     public static func availableBiometry() -> BiometryKind {
         #if canImport(LocalAuthentication)
@@ -30,9 +36,13 @@ public enum KeychainStore {
         #endif
     }
 
-    public static func save(password: String, for serverID: UUID) {
+    public static func save(password: String, for serverID: UUID) { save(password, for: serverID, service: service) }
+    public static func load(for serverID: UUID) -> String? { load(for: serverID, service: service) }
+    public static func delete(for serverID: UUID) { delete(for: serverID, service: service) }
+
+    private static func save(_ password: String, for serverID: UUID, service: String) {
         let account = serverID.uuidString
-        delete(for: serverID)
+        delete(for: serverID, service: service)
         guard !password.isEmpty, let data = password.data(using: .utf8) else { return }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -44,7 +54,7 @@ public enum KeychainStore {
         SecItemAdd(query as CFDictionary, nil)
     }
 
-    public static func load(for serverID: UUID) -> String? {
+    private static func load(for serverID: UUID, service: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -61,7 +71,7 @@ public enum KeychainStore {
         return password
     }
 
-    public static func delete(for serverID: UUID) {
+    private static func delete(for serverID: UUID, service: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

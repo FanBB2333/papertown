@@ -194,7 +194,7 @@
 "connect.field.name.placeholder" = "e.g., Home Mac";
 "connect.field.url" = "URL";
 "connect.field.url.placeholder" = "https://example.com or http://192.168.1.10:8000";
-"connect.section.address.footer" = "Enter the root URL of your Mac or self-hosted relay. Path prefixes are supported; /api is appended automatically. For direct LAN access, keep both devices on the same network.";
+"connect.section.address.footer" = "Enter the root URL of your Mac or self-hosted relay. Path prefixes are supported, and /api is appended automatically. For direct LAN access, keep both devices on the same network.";
 "connect.section.auth" = "Authentication";
 "connect.field.password" = "Password";
 "connect.field.password.placeholder" = "Optional on local network";
@@ -391,3 +391,51 @@
 "tools.count" = "Tools: %d";
 "tools.skills" = "Skills";
 "staff.empty" = "No staff started yet. A project's lead starts its coding and writing agents once it is switched on.";
+
+/* Mac */
+"local.profile.name" = "This Mac";
+"local.section" = "This Mac's Server";
+"local.status" = "Status";
+"local.address" = "Address";
+"local.state.checking" = "Checking…";
+"local.state.external" = "Running, started elsewhere";
+"local.state.starting" = "Starting…";
+"local.state.running" = "Running";
+"local.state.stopped" = "Not running";
+"local.problem.no_code" = "Papertown's code is not at %@";
+"local.problem.port_taken" = "Port %d is in use by another program";
+"local.problem.did_not_start" = "The server did not start. See the log.";
+"local.problem.spawn" = "The start command could not run: %@";
+"local.start" = "Start Server";
+"local.stop" = "Stop Server";
+"local.restart" = "Restart Server";
+"local.log" = "Show Server Log";
+"local.connect" = "Connect";
+"local.code" = "Code folder";
+"local.choose" = "Choose…";
+"local.port" = "Port";
+"local.command" = "Start command";
+"local.command.footer" = "Runs in the code's server folder with your login shell's environment. $PAPERTOWN_PORT is the port above. When Papertown already runs on that port, the app uses it.";
+"local.auto_start" = "Start the server when the app opens";
+"local.stop_on_quit" = "Stop the server the app started when quitting";
+"local.defaults" = "Restore Defaults";
+"local.apply.footer" = "Changes apply the next time the server starts.";
+"menu.connect" = "Connect to Server…";
+"menu.open_browser" = "Open in Browser";
+"menu.refresh" = "Refresh";
+"menu.server" = "Server";
+"settings.general" = "General";
+
+/* Access keys */
+"connect.method" = "Sign in with";
+"connect.method.key" = "Access Key";
+"connect.method.password" = "Password";
+"connect.field.key" = "Access key";
+"connect.field.key.placeholder" = "ptk_…";
+"connect.field.key.saved" = "Saved. Leave empty to keep it.";
+"connect.section.key.footer" = "Make a key on the server with papertown key create, or in the web app under Settings › Access. Each device gets its own key, kept in this device's Keychain.";
+"connect.key.missing" = "Enter the access key made on the server.";
+"error.key_rejected" = "The server did not accept this access key. It may have been revoked.";
+"error.not_papertown" = "No Papertown server answers at this address.";
+"server.session.key" = "Access key";
+"server.current.footer.mac" = "Live updates continue while the window is in the background, so the Dock badge stays current.";

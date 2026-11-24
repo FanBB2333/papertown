@@ -18,24 +18,29 @@ private final class RedirectPolicy: NSObject, URLSessionTaskDelegate {
 
 public final class PapertownClient: Sendable {
     public let address: URL
+    /// An access key made on the server (`papertown key create`, or Settings › Access in the web app), sent with every
+    /// request as `Authorization: Bearer`. Without one the client signs in with the access password (a cookie).
+    public let accessKey: String?
     let session: URLSession
 
-    public convenience init(address: URL) throws {
-        try self.init(address: address, configuration: .ephemeral)
+    public convenience init(address: URL, accessKey: String? = nil) throws {
+        try self.init(address: address, configuration: .ephemeral, accessKey: accessKey)
     }
 
     /// A client whose requests go through the given URL protocols first, as the offline demo's do.
-    public convenience init(address: URL, protocolClasses: [AnyClass]) throws {
+    public convenience init(address: URL, protocolClasses: [AnyClass], accessKey: String? = nil) throws {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = protocolClasses + (configuration.protocolClasses ?? [])
-        try self.init(address: address, configuration: configuration)
+        try self.init(address: address, configuration: configuration, accessKey: accessKey)
     }
 
-    init(address: URL, configuration: URLSessionConfiguration) throws {
+    init(address: URL, configuration: URLSessionConfiguration, accessKey: String? = nil) throws {
         guard ["http", "https"].contains(address.scheme?.lowercased()), let host = address.host,
               !host.isEmpty, address.user == nil, address.password == nil,
               address.query == nil, address.fragment == nil else { throw ClientError.invalidAddress }
         self.address = address
+        let key = accessKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.accessKey = key?.isEmpty == false ? key : nil
         configuration.urlCache = nil
         session = URLSession(configuration: configuration, delegate: RedirectPolicy(), delegateQueue: nil)
     }
@@ -52,6 +57,7 @@ public final class PapertownClient: Sendable {
         var request = URLRequest(url: target)
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let accessKey { request.setValue("Bearer \(accessKey)", forHTTPHeaderField: "Authorization") }
         return request
     }
 
@@ -68,6 +74,11 @@ public final class PapertownClient: Sendable {
             }
             throw ClientError.http(status: http.statusCode, detail: message)
         }
+    }
+
+    /// Whether a Papertown server answers at the address, before signing in.
+    public func health() async throws -> ServerHealth {
+        try JSONDecoder().decode(ServerHealth.self, from: try await data(path: ["health"]))
     }
 
     public func data(_ method: HTTPMethod = .get, path: [String], query: [URLQueryItem] = [],

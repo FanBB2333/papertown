@@ -26,6 +26,8 @@ public struct InboxItem: Identifiable, Equatable, Sendable {
     public let kind: InboxItemKind
 }
 
+enum TownStoreError: Error { case notPapertown }
+
 @MainActor
 public final class TownStore: ObservableObject {
     public enum Tab: Hashable {
@@ -34,6 +36,9 @@ public final class TownStore: ObservableObject {
 
     // Navigation & Preferences
     @Published public var selectedTab: Tab = .inbox
+    /// What is open in Projects and in the Inbox: kept here so a change of frame (tabs, sidebar) keeps it.
+    @Published var projectsPath: [ProjectRoute] = []
+    @Published var inboxPath: [InboxRoute] = []
     @Published public var language: AppLanguage
     @Published public var appearance: AppAppearance
 
@@ -193,6 +198,15 @@ public final class TownStore: ObservableObject {
             await openDemo(persist: false)
             return
         }
+        // -PTConnect <address> [-PTKey <access key>]: connects for a test run, saving neither the server nor the key
+        if let address = args.string(forKey: "PTConnect") {
+            let key = args.string(forKey: "PTKey")
+            let profile = ServerProfile(name: address, addressString: address, usesAccessKey: key != nil)
+            profiles.append(profile)
+            showConnectSheet = false
+            await connect(to: profile, accessKey: key)
+            return
+        }
         #endif
         guard let profile = currentProfile else {
             showConnectSheet = true
@@ -207,8 +221,13 @@ public final class TownStore: ObservableObject {
             if client != nil && sseTask == nil && connectionStatus != .authRequired(expired: false) && connectionStatus != .authRequired(expired: true) {
                 startEventStream()
             }
-        case .background, .inactive:
+        case .background:
             stopEventStream()
+        case .inactive:
+            // on the Mac a window in the background stays live: the Dock badge and the Inbox keep up
+            #if !os(macOS)
+            stopEventStream()
+            #endif
         @unknown default:
             break
         }
@@ -216,7 +235,9 @@ public final class TownStore: ObservableObject {
 
     // MARK: - Server Profiles & Connection
 
-    public func upsertProfile(_ profile: ServerProfile, password: String?, connectNow: Bool = true) async {
+    /// Saves a server. `accessKey`: a new key for it (nil keeps the saved one); with `usesAccessKey` off, a saved key
+    /// is deleted.
+    public func upsertProfile(_ profile: ServerProfile, password: String?, accessKey: String? = nil, connectNow: Bool = true) async {
         if let idx = profiles.firstIndex(where: { $0.id == profile.id }) {
             profiles[idx] = profile
         } else {
@@ -229,15 +250,23 @@ public final class TownStore: ObservableObject {
         } else if !profile.useBiometrics {
             KeychainStore.delete(for: profile.id)
         }
+        if !profile.usesAccessKey {
+            KeychainStore.deleteAccessKey(for: profile.id)
+        } else if let accessKey, !accessKey.isEmpty {
+            KeychainStore.save(accessKey: accessKey, for: profile.id)
+        }
 
         if connectNow {
-            await connect(to: profile, explicitPassword: password, allowBiometricAutoLogin: false)
+            await connect(to: profile, explicitPassword: password, accessKey: accessKey, allowBiometricAutoLogin: false)
         }
     }
 
     public func deleteProfiles(at offsets: IndexSet) {
         let removedIDs = offsets.map { profiles[$0].id }
-        for id in removedIDs { KeychainStore.delete(for: id) }
+        for id in removedIDs {
+            KeychainStore.delete(for: id)
+            KeychainStore.deleteAccessKey(for: id)
+        }
         profiles.remove(atOffsets: offsets)
         profileStore.saveProfiles(profiles)
 
@@ -259,6 +288,7 @@ public final class TownStore: ObservableObject {
     public func connect(
         to profile: ServerProfile,
         explicitPassword: String? = nil,
+        accessKey explicitKey: String? = nil,
         allowBiometricAutoLogin: Bool = false
     ) async {
         stopEventStream()
@@ -273,12 +303,22 @@ public final class TownStore: ObservableObject {
             return
         }
 
+        let key = profile.usesAccessKey ? (explicitKey?.isEmpty == false ? explicitKey : KeychainStore.loadAccessKey(for: profile.id)) : nil
         do {
             let newClient = profile.isDemo
                 ? try PapertownClient(address: url, protocolClasses: [DemoServer.self])
-                : try PapertownClient(address: url)
+                : try PapertownClient(address: url, accessKey: key)
             client = newClient
             clearTownData()
+
+            if !profile.isDemo {
+                // a clear message for an address that is not a Papertown server, before any sign-in
+                let health: ServerHealth
+                do { health = try await newClient.health() } catch ClientError.http, DecodingError.dataCorrupted, DecodingError.keyNotFound, DecodingError.typeMismatch {
+                    throw TownStoreError.notPapertown
+                }
+                if !health.ok || (health.app != nil && health.app != "papertown") { throw TownStoreError.notPapertown }
+            }
 
             let state = try await newClient.authState()
             authState = state
@@ -303,13 +343,20 @@ public final class TownStore: ObservableObject {
                 loginExpired = false
                 await refreshAll()
                 startEventStream()
+            } else if key != nil {
+                keyRejected()
             } else {
                 connectionStatus = .authRequired(expired: false)
                 loginExpired = false
                 showLoginSheet = true
             }
+        } catch TownStoreError.notPapertown {
+            connectionStatus = .disconnected
+            lastError = language.string("error.not_papertown")
         } catch {
-            if isUnauthorized(error) {
+            if isUnauthorized(error), key != nil {
+                keyRejected()
+            } else if isUnauthorized(error) {
                 connectionStatus = .authRequired(expired: false)
                 loginExpired = false
                 showLoginSheet = true
@@ -522,8 +569,19 @@ public final class TownStore: ObservableObject {
         }
     }
 
+    /// A key the server does not know (revoked, or copied wrong): the password sheet would not help, so the connection
+    /// stops with a message, and the live feed stays off until the key is changed.
+    private func keyRejected() {
+        stopEventStream()
+        client = nil
+        connectionStatus = .disconnected
+        lastError = language.string("error.key_rejected")
+    }
+
     private func handleStreamTermination(_ error: Error) {
-        if isUnauthorized(error) {
+        if isUnauthorized(error), client?.accessKey != nil {
+            keyRejected()
+        } else if isUnauthorized(error) {
             stopEventStream()
             connectionStatus = .authRequired(expired: true)
             loginExpired = true
@@ -721,7 +779,9 @@ public final class TownStore: ObservableObject {
     }
 
     private func handleError(_ error: Error) {
-        if isUnauthorized(error) {
+        if isUnauthorized(error), client?.accessKey != nil {
+            keyRejected()
+        } else if isUnauthorized(error) {
             stopEventStream()
             connectionStatus = .authRequired(expired: true)
             loginExpired = true

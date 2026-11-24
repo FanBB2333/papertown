@@ -2,6 +2,9 @@ import PapertownCore
 import SwiftUI
 
 struct ProjectsView: View {
+    #if DEBUG
+    private static var linked = false
+    #endif
     enum Filter: String, CaseIterable, Identifiable {
         case all, needs, active, done
         var id: String { rawValue }
@@ -11,7 +14,6 @@ struct ProjectsView: View {
     @State private var filter: Filter = .all
     @State private var searchText = ""
     @State private var showNewIdea = false
-    @State private var path: [ProjectRoute] = []
 
     private var filteredProjects: [ProjectSnapshot] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -39,7 +41,7 @@ struct ProjectsView: View {
 
     var body: some View {
         let lang = store.language
-        NavigationStack(path: $path) {
+        NavigationStack(path: $store.projectsPath) {
             List {
                 Section {
                     Picker(lang.string("tab.projects"), selection: $filter) {
@@ -86,9 +88,9 @@ struct ProjectsView: View {
             // -PTProject line_1 [-PTPage checks|overlap|method|exp|paper|reports|files|usage|outline] opens that page
             // at launch, for screenshots in the simulator.
             .task {
-                guard path.isEmpty, let id = UserDefaults.standard.string(forKey: "PTProject") else { return }
-                path.append(.project(id))
-                if let page = UserDefaults.standard.string(forKey: "PTPage") { path.append(.page(id, page)) }
+                guard !Self.linked, let id = UserDefaults.standard.string(forKey: "PTProject") else { return }
+                Self.linked = true
+                store.projectsPath = [.project(id)] + (UserDefaults.standard.string(forKey: "PTPage").map { [.page(id, $0)] } ?? [])
             }
             #endif
             .papertownLargeTitle()
@@ -109,6 +111,7 @@ struct ProjectsView: View {
             }
             .sheet(isPresented: $showNewIdea) {
                 NewIdeaSheet()
+                    .papertownSheetFrame(height: 420)
                     .environmentObject(store)
                     .environment(\.locale, store.language.locale)
                     .tint(store.appearance.tintColor)
