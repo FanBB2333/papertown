@@ -53,6 +53,9 @@ class TerminalBackend(ABC):
     def submit(self, handle: dict, text: str) -> None: ...
     @abstractmethod
     def keys(self, handle: dict, keys: list[str]) -> None: ...
+    def type(self, handle: dict, text: str, paste: bool = False) -> None:
+        """Text as it is typed, with no Enter; `paste` puts it in as one paste. Only Papertown's own terminals take it."""
+        raise BackendError('这个终端不接受直接输入')
     @abstractmethod
     def state(self, handle: dict) -> dict: ...
     @abstractmethod
@@ -137,6 +140,19 @@ class TmuxBackend(TerminalBackend):
         if not self.alive(handle):
             raise BackendError('终端会话已退出')
         self.call('send-keys', '-t', handle['pane'], *[TMUX_KEYS.get(k, k) for k in keys])
+
+    def type(self, handle, text, paste=False):
+        if not self.alive(handle):
+            raise BackendError('终端会话已退出')
+        if not paste:
+            self.call('send-keys', '-t', handle['pane'], '-l', '--', text)
+            return
+        name = 'pt-' + uuid4().hex
+        self.call('load-buffer', '-b', name, '-', input=text)
+        try:
+            self.call('paste-buffer', '-p', '-r', '-d', '-b', name, '-t', handle['pane'])
+        finally:
+            self.call('delete-buffer', '-b', name, check=False)
 
     def state(self, handle):
         return {'status': None if self.alive(handle) else 'exited', 'seq': None, 'since': None}
@@ -361,6 +377,16 @@ class HeadlessBackend(TerminalBackend):
     def keys(self, handle, keys):
         try:
             self._call('keys', id=handle['id'], keys=keys)
+        except Stopped as e:
+            raise BackendError('终端会话已退出') from e
+
+    def type(self, handle, text, paste=False):
+        # a few typed characters go in one by one, as keys; a paste, or anything a key cannot carry, as one paste
+        try:
+            if not paste and len(text) <= 64 and all(c.isprintable() for c in text):
+                self._call('keys', id=handle['id'], keys=list(text))
+            else:
+                self._call('paste', id=handle['id'], text=text, enter=False)
         except Stopped as e:
             raise BackendError('终端会话已退出') from e
 

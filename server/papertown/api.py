@@ -350,6 +350,11 @@ class TerminalKeysIn(BaseModel):
     keys: list[str] = Field(min_length=1, max_length=32)
 
 
+class TypeIn(BaseModel):
+    text: str = Field(min_length=1, max_length=20000)
+    paste: bool = False
+
+
 class JobIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     command: str = Field(min_length=1, max_length=4000)
@@ -837,6 +842,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/agents/{agent_id}/keys")
     def agent_keys(agent_id: str, body: TerminalKeysIn):
         agents(town.agents.hosted.keys, agent_id, body.keys)
+        return {"ok": True}
+
+    @app.post("/api/agents/{agent_id}/type")
+    def agent_type(agent_id: str, body: TypeIn):
+        agents(town.agents.hosted.type, agent_id, body.text, body.paste)
         return {"ok": True}
 
     @app.post("/api/agents/{agent_id}/close")

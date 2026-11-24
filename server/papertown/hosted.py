@@ -27,6 +27,9 @@ def native(a) -> bool:
     sees Antigravity work and stop but never counts a finished turn, so Antigravity follows its status line there too."""
     return a['runtime'] == 'herdr' and (a.get('term') or {}).get('provider') != 'antigravity'
 PUBLIC = ('backend', 'provider', 'status', 'seq', 'seen_seq', 'since', 'tool', 'model', 'thinking', 'note')
+# Papertown's own terminals take what you type as it is. herdr's live in your herdr workspace, where you may be typing
+# at the Mac, so they keep to messages and keys.
+TYPED = ('tmux', 'headless')
 
 
 class Hosted:
@@ -71,7 +74,7 @@ class Hosted:
 
     def public(self, a):
         term = a.get('term') or {}
-        return {k: term.get(k) for k in PUBLIC}
+        return {k: term.get(k) for k in PUBLIC} | {'typing': a.get('runtime') in TYPED}
 
     def attach(self, a):
         handle = (a.get('term') or {}).get('handle')
@@ -406,6 +409,19 @@ class Hosted:
             try:
                 self.backends[a['runtime']].keys(a['term']['handle'], keys)
             except (HerdrError, BackendError) as e:
+                raise self.error(e) from e
+
+    def type(self, id, text, paste=False):
+        """Text typed straight into the terminal, with no Enter; `paste` puts it in as one paste."""
+        with self.lock:
+            a = self.require(id)
+            if a['runtime'] not in TYPED:
+                raise self.error('这个终端在 herdr 里，请用消息和按键发送')
+            if a['term']['status'] == 'exited':
+                raise self.error('终端会话已退出')
+            try:
+                self.backends[a['runtime']].type(a['term']['handle'], text, paste)
+            except BackendError as e:
                 raise self.error(e) from e
 
     def stop(self, id):

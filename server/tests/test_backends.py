@@ -279,11 +279,13 @@ def test_binary_skips_wrappers(tmp_path, monkeypatch):
 class MemoryTerminal:
     def __init__(self):
         self.text, self.live, self.sent, self.closed = 'ready', True, [], False
+        self.typed = []
     def state(self, handle): return {'status': None if self.live else 'exited', 'seq': None, 'since': None}
     def screen(self, handle, colours=False): return self.text
     def glance(self, handle): return self.text
     def submit(self, handle, text): self.sent.append(text)
     def keys(self, handle, keys): pass
+    def type(self, handle, text, paste=False): self.typed.append((text, paste))
     def close(self, handle): self.live = False; self.closed = True
     def attach(self, handle): return 'isolated'
 
@@ -623,3 +625,31 @@ def test_every_terminal_key_reaches_each_backend():
         single = len(k) == 1 and k.isprintable()
         assert k in backends.TMUX_KEYS or single, k
         assert k in ptyd.KEYS or k in ptyd.ARROWS or single, k
+
+
+def test_typing_goes_straight_into_papertowns_own_terminals(tmp_path):
+    from types import SimpleNamespace
+    t, h, b, aid = memory_employee(tmp_path, 'codex')
+    assert t.agents.public(t.agents.get(aid))['term']['typing'] is True
+    h.type(aid, 'ls -la')
+    h.type(aid, 'line one\nline two', paste=True)
+    assert b.typed == [('ls -la', False), ('line one\nline two', True)]
+    # herdr's terminals live in your herdr workspace: no typing there
+    t.db.update('agents', {'id': aid}, runtime='herdr')
+    assert h.public(t.agents.get(aid))['typing'] is False
+    with pytest.raises(AgentError):
+        h.type(aid, 'x')
+    # tmux takes typed text literally (a leading dash is text, not an option) and a paste without Enter
+    calls = []
+    from papertown.backends import HeadlessBackend, TmuxBackend
+    tmux = object.__new__(TmuxBackend); tmux.alive = lambda handle: True
+    tmux.call = lambda *args, **kw: calls.append(args) or SimpleNamespace(stdout='')
+    tmux.type({'pane': '%1'}, '-rf')
+    assert calls == [('send-keys', '-t', '%1', '-l', '--', '-rf')]
+    calls.clear(); tmux.type({'pane': '%1'}, 'a\nb', paste=True)
+    assert [c[0] for c in calls] == ['load-buffer', 'paste-buffer', 'delete-buffer'] and 'Enter' not in sum(calls, ())
+    # the headless terminal: a few characters as keys, a paste as one
+    sent = []
+    headless = object.__new__(HeadlessBackend); headless._call = lambda op, **kw: sent.append((op, kw))
+    headless.type({'id': 'x'}, 'ab'); headless.type({'id': 'x'}, 'a\nb')
+    assert sent == [('keys', {'id': 'x', 'keys': ['a', 'b']}), ('paste', {'id': 'x', 'text': 'a\nb', 'enter': False})]
