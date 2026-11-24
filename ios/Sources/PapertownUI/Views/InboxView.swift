@@ -4,6 +4,7 @@ import SwiftUI
 enum InboxRoute: Hashable {
     case project(String)
     case chat(ChatRoute)
+    case server
 }
 
 struct InboxView: View {
@@ -85,7 +86,7 @@ struct InboxView: View {
             .papertownLargeTitle()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    ConnectionPillButton()
+                    ConnectionPillButton { store.inboxPath.append(InboxRoute.server) }
                 }
             }
             .refreshable {
@@ -104,6 +105,8 @@ struct InboxView: View {
                     )
                 case .project(let projectID):
                     ProjectDetailView(projectID: projectID)
+                case .server:
+                    ServerPage(pushed: true)
                 }
             }
         }

@@ -21,12 +21,13 @@ extension EnvironmentValues {
 }
 
 private struct SidebarButton: ViewModifier {
+    var shown = true
     @Environment(\.openSidebar) private var open
     @EnvironmentObject private var store: TownStore
 
     func body(content: Content) -> some View {
         #if os(iOS)
-        if let open {
+        if shown, let open {
             content.toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: open) {
@@ -52,8 +53,8 @@ private struct SidebarButton: ViewModifier {
 
 extension View {
     /// The top-left button that opens the sidebar, on the first page of each section; shown only in the drawer frame.
-    func papertownSidebarButton() -> some View {
-        modifier(SidebarButton())
+    func papertownSidebarButton(_ shown: Bool = true) -> some View {
+        modifier(SidebarButton(shown: shown))
     }
 }
 

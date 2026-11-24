@@ -5,6 +5,7 @@ import SwiftUI
 /// model quotas, and the MCP servers and skills the agents use.
 struct TownView: View {
     @EnvironmentObject private var store: TownStore
+    @State private var showServer = false
 
     var body: some View {
         let lang = store.language
@@ -57,7 +58,8 @@ struct TownView: View {
             .navigationTitle(lang.string("tab.town"))
             .papertownSidebarButton()
             .papertownLargeTitle()
-            .toolbar { ToolbarItem(placement: .primaryAction) { ConnectionPillButton() } }
+            .toolbar { ToolbarItem(placement: .primaryAction) { ConnectionPillButton { showServer = true } } }
+            .navigationDestination(isPresented: $showServer) { ServerPage(pushed: true) }
             .refreshable { await store.refreshAll() }
         }
     }

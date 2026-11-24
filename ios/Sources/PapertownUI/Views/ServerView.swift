@@ -1,13 +1,22 @@
 import PapertownCore
 import SwiftUI
 
+/// The server section: its page in a navigation stack of its own.
 struct ServerView: View {
+    var body: some View {
+        NavigationStack { ServerPage() }
+    }
+}
+
+/// The servers, the connection and the session. `pushed`: opened from the connection pill over another page, which it
+/// slides in over with a way back, rather than taking the section's place.
+struct ServerPage: View {
+    var pushed = false
     @EnvironmentObject private var store: TownStore
     @State private var showSignOutConfirm = false
 
     var body: some View {
         let lang = store.language
-        NavigationStack {
             List {
                 if store.isDemo {
                     Section {
@@ -180,7 +189,7 @@ struct ServerView: View {
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)
             .navigationTitle(lang.string("tab.server"))
-            .papertownSidebarButton()
+            .papertownSidebarButton(!pushed)
             .papertownLargeTitle()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -205,7 +214,6 @@ struct ServerView: View {
             } message: {
                 Text(lang.string("server.sign_out.confirm.message"))
             }
-        }
     }
 
     private var statusColor: Color {

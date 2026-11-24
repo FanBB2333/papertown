@@ -127,6 +127,9 @@ struct RoleBadgeView: View {
 }
 
 struct ConnectionPillButton: View {
+    /// How the server page opens: slid in over the page the pill sits on. Without it (in the sidebar) the server
+    /// section takes the page's place.
+    var open: (() -> Void)? = nil
     @EnvironmentObject private var store: TownStore
 
     var body: some View {
@@ -136,6 +139,8 @@ struct ConnectionPillButton: View {
                 store.showLoginSheet = true
             } else if store.currentProfile == nil {
                 store.showConnectSheet = true
+            } else if let open {
+                open()
             } else {
                 store.selectedTab = .server
             }
