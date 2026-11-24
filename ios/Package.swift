@@ -9,11 +9,14 @@ let package = Package(
         .library(name: "PapertownCore", targets: ["PapertownCore"]),
         .library(name: "PapertownUI", targets: ["PapertownUI"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
+    ],
     targets: [
         .target(name: "PapertownCore"),
         .target(
             name: "PapertownUI",
-            dependencies: ["PapertownCore"],
+            dependencies: ["PapertownCore", .product(name: "MarkdownUI", package: "swift-markdown-ui")],
             resources: [.process("Resources")]
         ),
         .testTarget(name: "PapertownCoreTests", dependencies: ["PapertownCore"]),

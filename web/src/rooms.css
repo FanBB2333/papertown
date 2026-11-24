@@ -311,6 +311,31 @@
 .msg-a ul, .msg-a ol, .msg-u ul, .msg-u ol { margin: 0 0 6px; padding-left: 20px; }
 .msg-a li, .msg-u li { margin: 2px 0; line-height: 1.55; }
 .msg-a :is(ul, ol):last-child { margin-bottom: 0; }
+
+/* Markdown in a message (react-markdown in AgentRoom's Text): line breaks are <br>, so its text wraps normally */
+div.md-body { white-space: normal; overflow-wrap: anywhere; }
+div.md-body :is(p, li, td, th, blockquote, h1, h2, h3, h4, h5, h6) { white-space: normal; }
+div.md-body > :first-child { margin-top: 0; }
+div.md-body > :last-child { margin-bottom: 0; }
+div.md-body :is(h1, h2, h3, h4, h5, h6) { margin: 10px 0 4px; font-weight: 650; line-height: 1.35; }
+div.md-body h1 { font-size: 1.25em; }
+div.md-body h2 { font-size: 1.15em; }
+div.md-body h3 { font-size: 1.05em; }
+div.md-body :is(h4, h5, h6) { font-size: 1em; }
+div.md-body :is(ul, ol) { margin: 0 0 6px; padding-left: 20px; }
+div.md-body li > :is(ul, ol) { margin: 2px 0 0; }
+div.md-body li > p { margin: 0; }
+div.md-body li:has(> input[type=checkbox]) { list-style: none; margin-left: -18px; }
+div.md-body li > input[type=checkbox] { margin: 0 6px 0 0; vertical-align: -1px; }
+div.md-body blockquote { margin: 0 0 6px; padding: 1px 0 1px 10px; border-left: 3px solid var(--line); color: var(--muted); }
+div.md-body hr { margin: 10px 0; border: 0; border-top: 1px solid var(--line); }
+div.md-body .md-c { padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, currentColor 9%, transparent); font: .9em/1.4 ui-monospace, Menlo, monospace; }
+div.md-body .md-table { max-width: 100%; margin: 4px 0 8px; overflow-x: auto; }
+div.md-body table { border-collapse: collapse; font-size: .92em; }
+div.md-body :is(th, td) { padding: 4px 10px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+div.md-body th { font-weight: 600; background: color-mix(in srgb, currentColor 5%, transparent); }
+div.md-body tbody tr:nth-child(even) td { background: color-mix(in srgb, currentColor 3%, transparent); }
+div.md-body img { max-width: 100%; }
 .md-c { padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--ink) 7%, transparent); font: .9em ui-monospace, Menlo, monospace; word-break: break-word; }
 .md-hr { margin: 8px 0; border: 0; border-top: 1px dashed var(--line); }
 .md-h { font-weight: 700; }

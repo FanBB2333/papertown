@@ -338,8 +338,7 @@ struct AgentChatView: View {
         case .assistant:
             HStack(alignment: .top, spacing: 8) {
                 RoleBadgeView(role: role, size: 24)
-                Text(markdown(lang.server(e.text)))
-                    .textSelection(.enabled)
+                ChatMarkdown(text: lang.server(e.text))
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 16))
                 Spacer(minLength: 24)
@@ -380,7 +379,7 @@ struct AgentChatView: View {
     private func userBubble(_ text: String, files: [(image: Bool, name: String)]? = nil, dim: Bool = false) -> some View {
         let split = files == nil ? ChatFiles.split(text) : (text: text, files: files ?? [])
         return VStack(alignment: .trailing, spacing: 6) {
-            if !split.text.isEmpty { Text(split.text).textSelection(.enabled) }
+            if !split.text.isEmpty { ChatMarkdown(text: split.text, onTint: true) }
             if !split.files.isEmpty { AttachmentTags(files: split.files) }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -485,9 +484,6 @@ struct AgentChatView: View {
         return s < 60 ? "\(s)s" : s < 3600 ? String(format: "%dm %02ds", s / 60, s % 60) : String(format: "%dh %02dm", s / 3600, s % 3600 / 60)
     }
 
-    private func markdown(_ s: String) -> AttributedString {
-        (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
-    }
 
     private func askCard(_ e: ChatEntry, _ lang: AppLanguage) -> some View {
         VStack(alignment: .leading, spacing: 8) {

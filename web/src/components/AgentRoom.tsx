@@ -3,7 +3,10 @@
 
 import { HostedRoom, HostedContext } from '../agents/Terminal';
 import { TerminalPick } from '../agents/TerminalPick';
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Children, createElement, useEffect, useMemo, useRef, useState } from 'react';
+import Markdown, { type Components } from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import { api, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
@@ -741,43 +744,38 @@ export interface Linker {
   text?: (s: string) => React.ReactNode[];
   code?: (s: string) => React.ReactNode | null;
 }
-export function Text({ text, link }: { text: string; link?: Linker }) {
-  const parts = String(text ?? '').split(/```[a-zA-Z0-9_-]*\n?/);
-  return <>{parts.map((t, i) => i % 2 ? <pre key={i} className="code">{t.replace(/\n$/, '')}</pre> : <Blocks key={i} text={t} link={link} />)}</>;
-}
-
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
-function Blocks({ text, link }: { text: string; link?: Linker }) {
-  const blocks = text.split(/\n\s*\n/).map(b => b.replace(/^\n+|\n+$/g, '')).filter(b => b.trim());
-  while (blocks.length && RULE.test(blocks[0])) blocks.shift();
-  while (blocks.length && RULE.test(blocks[blocks.length - 1])) blocks.pop();
-  return <>{blocks.map((b, i) => {
-    if (RULE.test(b)) return <hr key={i} className="md-hr" />;
-    const lines = b.split('\n');
-    if (lines.every(l => /^\s*([-*•]|\d+[.)])\s+/.test(l))) {
-      const items = lines.map(l => l.replace(/^\s*([-*•]|\d+[.)])\s+/, ''));
-      return /^\s*\d/.test(lines[0])
-        ? <ol key={i}>{items.map((x, k) => <li key={k}><Inline text={x} link={link} /></li>)}</ol>
-        : <ul key={i}>{items.map((x, k) => <li key={k}><Inline text={x} link={link} /></li>)}</ul>;
-    }
-    const h = /^#{1,6}\s+(.*)$/.exec(lines[0]);
-    if (h && lines.length === 1) return <p key={i} className="md-h"><Inline text={h[1]} link={link} /></p>;
-    return <p key={i}><Inline text={b} link={link} /></p>;
-  })}</>;
+const PLUGINS = [remarkGfm, remarkBreaks];
+
+/** Rules that open or close a reply (some agents frame theirs with them) say nothing in a bubble. */
+function unframed(text: string) {
+  const lines = String(text ?? '').split('\n');
+  while (lines.length && (!lines[0].trim() || RULE.test(lines[0]))) lines.shift();
+  while (lines.length && (!lines[lines.length - 1].trim() || RULE.test(lines[lines.length - 1]))) lines.pop();
+  return lines.join('\n');
 }
 
-function Inline({ text, link }: { text: string; link?: Linker }) {
-  const out: React.ReactNode[] = [];
-  const re = /\*\*(.+?)\*\*|`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g;
-  const plain = (s: string, k: number) => out.push(link?.text ? <Fragment key={`t${k}`}>{link.text(s)}</Fragment> : s);
-  let at = 0, m: RegExpExecArray | null;
-  while ((m = re.exec(text))) {
-    if (m.index > at) plain(text.slice(at, m.index), at);
-    out.push(m[1] != null ? <strong key={m.index}><Inline text={m[1]} link={link} /></strong>
-      : m[2] != null ? <Fragment key={m.index}>{link?.code?.(m[2]) ?? <code className="md-c">{m[2]}</code>}</Fragment>
-        : <a key={m.index} href={m[4]} target="_blank" rel="noreferrer">{m[3]}</a>);
-    at = re.lastIndex;
-  }
-  if (at < text.length) plain(text.slice(at), at);
-  return <>{out}</>;
+/** Markdown as GitHub draws it (react-markdown with remark-gfm: tables, task lists, strikethrough), a line break kept
+ *  as one (remark-breaks), the way the agents' CLIs show it. `link` turns names in the text and in inline code into
+ *  links. Raw HTML in the text stays text. */
+export function Text({ text, link }: { text: string; link?: Linker }) {
+  const components = useMemo<Components>(() => {
+    const linked = (children: React.ReactNode) =>
+      link?.text ? Children.map(children, c => typeof c === 'string' ? <>{link.text!(c)}</> : c) : children;
+    const tag = <T extends 'p' | 'li' | 'td' | 'th' | 'strong' | 'em' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'>(T: T) =>
+      ({ node: _, children, ...props }: React.ComponentProps<T> & { node?: unknown }) => createElement(T, props, linked(children));
+    return {
+      p: tag('p'), li: tag('li'), td: tag('td'), th: tag('th'), strong: tag('strong'), em: tag('em'),
+      h1: tag('h1'), h2: tag('h2'), h3: tag('h3'), h4: tag('h4'), h5: tag('h5'), h6: tag('h6'),
+      pre: ({ children }) => <pre className="code">{children}</pre>,
+      code: ({ className, children }) => {
+        const s = String(children ?? '');
+        if (className || s.includes('\n')) return <code className={className}>{children}</code>;
+        return <>{link?.code?.(s) ?? <code className="md-c">{children}</code>}</>;
+      },
+      a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
+      table: ({ children }) => <div className="md-table"><table>{children}</table></div>,
+    };
+  }, [link]);
+  return <div className="md-body"><Markdown remarkPlugins={PLUGINS} components={components}>{unframed(text)}</Markdown></div>;
 }
