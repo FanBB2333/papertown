@@ -65,7 +65,7 @@ struct InboxView: View {
                                 NavigationLink {
                                     ProjectDetailView(projectID: project.id)
                                 } label: {
-                                    activeProjectRow(project, lang: lang)
+                                    HomeProjectCard(project: project, card: store.cards[project.id])
                                 }
                                 .papertownRowBackground(store.appearance)
                             }
@@ -300,24 +300,6 @@ struct InboxView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
         }
-    }
-
-    private func activeProjectRow(_ project: ProjectSnapshot, lang: AppLanguage) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("#\(project.seq) \(lang.server(project.title))")
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(1)
-                Spacer(minLength: 4)
-                Text("\(TextFormatters.stageName(project.stage, language: lang)) · \(project.pct)%")
-                    .font(.caption)
-                    .foregroundStyle(project.lead.state == "blocked" ? .red : .secondary)
-                    .lineLimit(1)
-            }
-            ProgressView(value: Double(project.pct), total: 100)
-                .tint(project.lead.state == "blocked" ? .red : store.appearance.tintColor)
-        }
-        .padding(.vertical, 2)
     }
 }
 

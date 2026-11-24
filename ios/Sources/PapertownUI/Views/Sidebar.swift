@@ -203,7 +203,7 @@ struct PapertownSidebar: View {
                             selected: isSelected(section.tab)
                         ) { go(section.tab) }
                     }
-                    recents(lang)
+                    matches(lang)
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 12)
@@ -260,10 +260,10 @@ struct PapertownSidebar: View {
     }
 
     @ViewBuilder
-    private func recents(_ lang: AppLanguage) -> some View {
-        let list = recentProjects
+    private func matches(_ lang: AppLanguage) -> some View {
+        let list = matchingProjects
         if !list.isEmpty {
-            Text(lang.string(query.isEmpty ? "sidebar.recent" : "tab.projects"))
+            Text(lang.string("tab.projects"))
                 .font(.footnote.weight(.medium))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
@@ -296,26 +296,20 @@ struct PapertownSidebar: View {
         }
     }
 
-    /// When searching, every project that matches; otherwise the ones opened lately, then the unfinished rest.
-    private var recentProjects: [ProjectSnapshot] {
+    /// The projects matching a search. Without one the sidebar lists no projects: the Inbox and Projects pages show
+    /// them, with more about each.
+    private var matchingProjects: [ProjectSnapshot] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !q.isEmpty {
-            return store.projects.filter {
-                $0.title.lowercased().contains(q) || $0.idea.lowercased().contains(q) || "#\($0.seq)".contains(q)
-            }
+        guard !q.isEmpty else { return [] }
+        return store.projects.filter {
+            $0.title.lowercased().contains(q) || $0.idea.lowercased().contains(q) || "#\($0.seq)".contains(q)
         }
-        let byID = Dictionary(store.projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let seen = store.recentProjectIDs.compactMap { byID[$0] }
-        let seenIDs = Set(seen.map(\.id))
-        let rest = store.projects.filter { !seenIDs.contains($0.id) && !$0.isDone }
-        return Array((seen + rest).prefix(8))
     }
 
     // MARK: Actions
 
-    /// Projects is marked while its list shows; with a project open, that project is marked among the recent ones.
     private func isSelected(_ tab: TownStore.Tab) -> Bool {
-        store.selectedTab == tab && !(tab == .projects && store.currentProjectID != nil)
+        store.selectedTab == tab
     }
 
     private func go(_ tab: TownStore.Tab) {

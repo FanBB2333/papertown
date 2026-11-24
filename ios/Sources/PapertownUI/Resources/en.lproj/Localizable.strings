@@ -957,3 +957,11 @@
 "term.type.on" = "Type into the Terminal";
 "term.type.off" = "Hide Keyboard";
 "term.type.paste" = "Paste Clipboard into the Terminal";
+
+/* Project cards on the home page */
+"home.lead" = "Lead";
+"home.checks" = "Checks";
+"home.running" = "%d running";
+"home.queued" = "%d queued";
+"home.waiting" = "%d for you";
+"home.words" = "paper %@ words";

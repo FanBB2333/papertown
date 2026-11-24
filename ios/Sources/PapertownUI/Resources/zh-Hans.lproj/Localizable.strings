@@ -957,3 +957,11 @@
 "term.type.on" = "用键盘直接输入到终端";
 "term.type.off" = "收起键盘";
 "term.type.paste" = "粘贴剪贴板到终端";
+
+/* Project cards on the home page */
+"home.lead" = "负责人";
+"home.checks" = "卡口";
+"home.running" = "%d 运行中";
+"home.queued" = "%d 排队";
+"home.waiting" = "待你 %d";
+"home.words" = "论文 %@ 字";
