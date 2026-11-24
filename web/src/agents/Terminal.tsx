@@ -1,5 +1,5 @@
 import { Button } from '@cloudflare/kumo';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type Agent, type AgentEvent, type AgentRole, type PaseoItem, type StartOpts, type StyledScreen, type TermPrompt, type Terminal, type Transcript } from '../api';
 import { fold, PaseoLog, RuntimePick } from '../components/AgentRoom';
 import { ago } from '../console/util';
@@ -26,6 +26,41 @@ interface Source<T extends Subject> {
   restart?: () => Promise<unknown>;
   switchRuntime?: (o: StartOpts) => Promise<unknown>;
   role?: AgentRole; allowPi?: boolean;
+  // typing straight into the terminal, where the server allows it (Papertown's own terminals, not herdr's)
+  type?: (text: string, paste: boolean) => Promise<unknown>; typing?: (x: T) => boolean;
+}
+
+type Typed = { text: string } | { paste: string } | { keys: string[] };
+
+// The keys a terminal takes by name; other printable keys go in as text.
+function keyName(e: React.KeyboardEvent): string | null {
+  if (e.ctrlKey && !e.metaKey && !e.altKey && /^[cdot]$/i.test(e.key)) return 'ctrl+' + e.key.toLowerCase();
+  const named: Record<string, string> = { Enter: 'enter', Escape: 'esc', Backspace: 'backspace', ArrowUp: 'up', ArrowDown: 'down',
+    ArrowLeft: 'left', ArrowRight: 'right', PageUp: 'pageup', PageDown: 'pagedown' };
+  if (e.key === 'Tab') return e.shiftKey ? 'shift+tab' : 'tab';
+  return named[e.key] ?? null;
+}
+
+// Sends what is typed one request at a time and in order, merging text typed while a request is out, and redraws once
+// it has all gone.
+function useTyper(send: (t: Typed) => Promise<unknown>, settled: () => void, fail: (message: string) => void) {
+  const queue = useRef<Typed[]>([]), running = useRef(false);
+  const fns = useRef({ send, settled, fail }); fns.current = { send, settled, fail };
+  return useCallback((t: Typed) => {
+    const last = queue.current[queue.current.length - 1];
+    if ('text' in t && last && 'text' in last) queue.current[queue.current.length - 1] = { text: last.text + t.text };
+    else queue.current.push(t);
+    if (running.current) return;
+    running.current = true;
+    void (async () => {
+      while (queue.current.length) {
+        const next = queue.current.shift()!;
+        try { await fns.current.send(next); } catch (e) { queue.current = []; fns.current.fail((e as Error).message); }
+      }
+      running.current = false;
+      setTimeout(() => fns.current.settled(), 150);
+    })();
+  }, []);
 }
 
 const tail = (text: string, lines = 18) => text.split('\n').filter(l => l.trim()).slice(-lines).join('\n');
@@ -58,6 +93,22 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
   const latest = useRef({ source, subject, items: items ?? [] }); latest.current = { source, subject, items: items ?? [] };
   const reload = useRef<() => void>(() => {}), pane = useRef<HTMLElement | null>(null), stick = useRef(true);
   const id = source.first.id, blocked = source.blocked(subject), exited = source.exited(subject), working = isWorking(subject);
+  const canType = !!source.type && !!source.typing?.(subject) && !exited;
+  const typeIn = useTyper(t => 'keys' in t ? source.keys(t.keys) : source.type!('text' in t ? t.text : t.paste, 'paste' in t),
+    () => reload.current(), toast);
+  const typed = canType ? {
+    'data-typing': '', title: tr('点击画面后可直接用键盘输入'),
+    onKeyDown: (e: React.KeyboardEvent<HTMLPreElement>) => {
+      if (e.nativeEvent.isComposing || e.metaKey) return; // ⌘C copies and ⌘V pastes as usual
+      const name = keyName(e);
+      if (name) { e.preventDefault(); stick.current = true; typeIn({ keys: [name] }); }
+      else if (e.key.length === 1 && !e.ctrlKey) { e.preventDefault(); stick.current = true; typeIn({ text: e.key }); }
+    },
+    onPaste: (e: React.ClipboardEvent<HTMLPreElement>) => {
+      const text = e.clipboardData.getData('text');
+      if (text) { e.preventDefault(); stick.current = true; typeIn({ paste: text }); }
+    },
+  } : {};
   const receipt = useReadReceipt(id, text === null && items === null ? null : `${text}\n${items?.length}\n${bucketOf(subject)}\n${subject.watch?.since}`);
   const times = (list: PaseoItem[], t: string) => list.filter(i => i.kind === 'user' && (i.text ?? '').trim() === t).length;
 
@@ -133,7 +184,7 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
       {transcript?.ok && !rows.length && !sent.length && <div className="room-empty small-empty"><p>{tr('暂无对话。')}</p></div>}
       {!transcript && !error && <div className="room-empty small-empty"><p>{tr('加载中…')}</p></div>}
       <PaseoLog rows={rows} sent={sent.map(m => m.text)} asks={[]} working={working && !blocked} onPermit={() => {}} />
-    </div> : <pre className="terminal-screen" key="screen" ref={el => { pane.current = el; }} tabIndex={0} aria-label={tr('终端内容')} onScroll={scrolled}
+    </div> : <pre className="terminal-screen" key="screen" ref={el => { pane.current = el; }} tabIndex={0} aria-label={tr('终端内容')} onScroll={scrolled} {...typed}
       style={styled ? { color: styled.theme.fg, background: styled.theme.bg } : undefined}>
       {styled ? <StyledLines screen={styled} /> : text === null ? tr('加载中…') : text.replace(/\n(?:[ \t]*\n){2,}/g, '\n\n') || tr('终端暂未输出内容。')}
     </pre>}
@@ -223,6 +274,7 @@ export function HostedRoom({ agent, toast, tools }: { agent: Agent; toast: (s: s
       stop: async () => { await api.stopAgent(id); }, steerHint: STEER,
     },
     keys: keys => api.agentKeys(id, keys), answer: (digest, option) => api.answerPrompt(id, digest, option),
+    type: (text, paste) => api.agentType(id, text, paste), typing: a => !!a.term?.typing,
     restart: () => api.startAgent(id),
     switchRuntime: async o => {
       await api.startAgent(id, o);

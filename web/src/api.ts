@@ -138,6 +138,7 @@ export interface Agent {
 export interface AgentTerm {
   backend: TermBackend; provider: string; status: 'starting' | 'idle' | 'working' | 'blocked' | 'done' | 'exited';
   seq: number; seen_seq: number; since: string; tool?: string | null; model?: string | null; thinking?: string | null; note?: string | null;
+  typing?: boolean; // what you type goes straight in: Papertown's own tmux and headless terminals, not herdr's
 }
 // where a CLI's real terminal interface runs: a herdr tab, a tmux window, or Papertown's own background terminal
 export type TermBackend = 'herdr' | 'tmux' | 'headless';
@@ -526,6 +527,7 @@ export const api = {
   agentScreen: (id: string, styled = false) => call<{ text: string; term: AgentTerm; prompt?: TermPrompt | null } & Partial<StyledScreen>>('GET', `/api/agents/${id}/screen${styled ? '?styled=1' : ''}`, undefined, asIs),
   answerPrompt: (id: string, digest: string, option: number) => call<{ ok: boolean }>('POST', `/api/agents/${id}/prompt`, { digest, option }),
   agentKeys: (id: string, keys: string[]) => call('POST', `/api/agents/${id}/keys`, { keys }),
+  agentType: (id: string, text: string, paste = false) => call('POST', `/api/agents/${id}/type`, { text, paste }),
   closeTerminal: (id: string) => call<Agent>('POST', `/api/agents/${id}/close`),
   startAgent: (id: string, o: StartOpts = {}) => call<Agent>('POST', `/api/agents/${id}/start`, o),
   openInPaseo: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/open`),

@@ -2456,6 +2456,7 @@
  "其他终端": "Other terminals",
  "发送结果未确认，请查看终端后决定是否再次发送。": "Delivery is unconfirmed. Check the terminal before deciding whether to send again.",
  "终端内容": "Terminal contents",
+ "点击画面后可直接用键盘输入": "Click the screen to type straight into the terminal",
  "终端暂未输出内容。": "The terminal has no output yet.",
  "请根据终端画面选择按键，处理当前对话框。": "Use the keys below to respond to the dialog shown in the terminal.",
  "终端按键": "Terminal keys",
