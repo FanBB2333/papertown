@@ -243,6 +243,7 @@ def test_cli_args_hook_whitelist_and_defaults(tmp_path):
         assert not any(('bypass' in x or 'trust' in x) and x != '--dangerously-bypass-hook-trust' for x in argv)
         assert ('--dangerously-bypass-hook-trust' in argv) == (provider == 'codex')
         if provider == 'codex':
+            assert argv[argv.index('--add-dir') + 1] == str(t.agents.home(a))
             assert json.loads(next(x.removeprefix('notify=') for x in argv if x.startswith('notify='))) == [str(t.agents.pt(a)), 'hook', 'codex']
         if provider == 'antigravity':
             assert json.loads(argv[argv.index('--settings') + 1])['statusLine']['stack_with_default']

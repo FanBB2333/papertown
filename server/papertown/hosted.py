@@ -116,6 +116,9 @@ class Hosted:
                 argv += ['-m', model]
             if thinking and thinking != 'off':
                 argv += ['-c', 'model_reasoning_effort=' + json.dumps(thinking)]
+            # pt writes its requests under the agent's home when the sandbox keeps it off the network, and a coder
+            # works in its project's repository, so the home has to be writable too
+            argv += ['--add-dir', str(home)]
             if self.s.codex_bypass_hook_trust:
                 # no one is at the keyboard to answer Codex's review of new hooks, so it would wait there
                 argv += ['--dangerously-bypass-hook-trust']
