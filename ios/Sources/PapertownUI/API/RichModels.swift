@@ -145,6 +145,9 @@ public struct ProjectCardView: Decodable, Sendable {
     public let repos: Repos?
     public let memory: MemoryCounts?
     public let checks: Checks?
+    /// What its agents wait on you for (servers before 待你决定 leave it out).
+    public var decisions: [Decision]? = nil
+    public var lead: CardLead? = nil
 }
 
 public struct CardsResponse: Decodable, Sendable {
@@ -199,6 +202,9 @@ public struct ResearchCheck: Decodable, Sendable, Equatable, Identifiable {
     public let history: [CheckPoint]?
     public let gate: String?
     public let asked: String?
+    /// A hard check's allowance, a soft check's hours between rounds.
+    public var max: Double? = nil
+    public var every: Double? = nil
 
     /// pass, warn, fail, none (not run yet) or wait (a sentinel waiting for its turn); off when switched off.
     public var status: String { on ? (last?.status ?? (kind == "soft" ? "wait" : "none")) : "off" }
@@ -673,6 +679,10 @@ public struct McpServer: Decodable, Sendable, Identifiable, Equatable {
     public let state: String
     public let error: String?
     public let tools: [Tool]?
+    public var command: String? = nil
+    public var args: [String]? = nil
+    /// The names of its environment variables; the values stay on the server.
+    public var env: [String]? = nil
 }
 
 public struct McpView: Decodable, Sendable {

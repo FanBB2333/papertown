@@ -91,6 +91,14 @@ public final class PapertownClient: Sendable {
         return data
     }
 
+    /// A GET whose reply headers matter too (a page's Content-Security-Policy).
+    public func fetch(path: [String], query: [URLQueryItem] = []) async throws -> (Data, HTTPURLResponse) {
+        let (data, response) = try await session.data(for: try request(.get, path: path, query: query))
+        try Self.validate(response, data: data)
+        guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
+        return (data, http)
+    }
+
     public func get<T: Decodable>(_ path: [String], query: [URLQueryItem] = []) async throws -> T {
         try JSONDecoder().decode(T.self, from: await data(path: path, query: query))
     }

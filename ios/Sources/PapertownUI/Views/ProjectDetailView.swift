@@ -23,10 +23,16 @@ struct ProjectDetailView: View {
         Group {
             if let project {
                 List {
-                    asksSection(lang: lang)
+                    // 待你决定 covers the lead's questions; servers before it list them on their own
+                    if store.cards[projectID]?.decisions != nil {
+                        DecisionsSection(projectID: projectID)
+                    } else {
+                        asksSection(lang: lang)
+                    }
                     leadSection(project, lang: lang)
                     progressSection(project, lang: lang)
                     if let card = store.cards[projectID] { ProgressCardSection(card: card) }
+                    CardRequestSection(project: project)
                     researchSection(project, lang: lang)
                     teamSection(project, lang: lang)
 
@@ -133,9 +139,14 @@ struct ProjectDetailView: View {
         }
         Section(lang.string("detail.section.research")) {
             link(lang.string("reports.nav"), "text.bubble", detail: nil) { ReportsPage(projectID: projectID) }
+            link(lang.string("loop.nav"), "arrow.triangle.capsulepath", detail: nil) { LoopPage(projectID: projectID) }
             link(lang.string("checks.nav"), "checklist", detail: checks.map { c in
                 c.hard.fail > 0 ? lang.format("checks.failing", c.hard.fail) : "\(c.hard.pass)/\(c.hard.total)"
             }) { ChecksPage(projectID: projectID) }
+            link(lang.string("pages.nav"), "doc.richtext.fill", detail: nil) { PagesPage(projectID: projectID) }
+            link(lang.string("memory.nav"), "brain", detail: store.cards[projectID]?.memory.map { m in
+                m.sessions + m.notes > 0 ? lang.format("memory.counts", m.sessions, m.notes) : lang.string("memory.none")
+            }) { MemoryPage(projectID: projectID) }
             link(lang.string("outline.nav"), "point.3.connected.trianglepath.dotted", detail: nil) { OutlinePage(projectID: projectID) }
             if reached("hatch") {
                 link(lang.string("overlap.nav"), "doc.text.magnifyingglass", detail: project.verdict.map(lang.server)) { OverlapPage(projectID: projectID) }
@@ -219,6 +230,9 @@ struct ProjectDetailView: View {
             }
             .padding(.vertical, 2)
             .papertownRowBackground(store.appearance)
+            if project.lead.state != "ended" {
+                LeadRoundsRows(projectID: projectID).papertownRowBackground(store.appearance)
+            }
         } header: {
             HStack {
                 Text(lang.string("detail.section.lead"))

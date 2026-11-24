@@ -24,7 +24,7 @@ struct ProjectsView: View {
             case .all:
                 break
             case .needs:
-                if project.lead.state != "blocked" && !askProjectIDs.contains(project.id) { return false }
+                if project.lead.state != "blocked" && !askProjectIDs.contains(project.id) && store.decisions(project.id).isEmpty { return false }
             case .active:
                 if project.isDone { return false }
             case .done:
@@ -79,6 +79,9 @@ struct ProjectsView: View {
                         }
                     }
                 }
+                if filter == .all && searchText.isEmpty && !store.projects.isEmpty {
+                    FreshPapersSection()
+                }
             }
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)
@@ -96,6 +99,9 @@ struct ProjectsView: View {
             .papertownLargeTitle()
             .searchable(text: $searchText, prompt: lang.string("projects.search"))
             .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    UpdateAllButton()
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showNewIdea = true
@@ -121,7 +127,9 @@ struct ProjectsView: View {
     }
 
     private func projectRow(_ project: ProjectSnapshot, lang: AppLanguage) -> some View {
-        let asksCount = store.openAsks.filter { $0.lineID == project.id && $0.data.open != false }.count
+        let decisions = store.cards[project.id]?.decisions
+        // 待你决定 counts the lead's questions with the rest; servers before it count the questions alone
+        let asksCount = decisions?.count ?? store.openAsks.filter { $0.lineID == project.id && $0.data.open != false }.count
         return VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("#\(project.seq) \(lang.server(project.title))")
@@ -158,7 +166,7 @@ struct ProjectsView: View {
                 Spacer()
 
                 if asksCount > 0 {
-                    Text(lang.format("projects.waiting_count", asksCount))
+                    Text(lang.format(decisions == nil ? "projects.waiting_count" : "projects.decide_count", asksCount))
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.orange)
                 }
@@ -260,6 +268,9 @@ enum ProjectRoute: Hashable {
             case "reports": ReportsPage(projectID: id)
             case "files": FilesPage(projectID: id, root: "paper")
             case "usage": ProjectUsagePage(projectID: id)
+            case "loop": LoopPage(projectID: id)
+            case "pages": PagesPage(projectID: id)
+            case "memory": MemoryPage(projectID: id)
             case "chat": AgentChatView(agentID: "lead-\(id)", role: "lead", subtitle: "#" + (id.split(separator: "_").last.map(String.init) ?? id))
             default: OutlinePage(projectID: id)
             }

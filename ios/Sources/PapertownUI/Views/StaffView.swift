@@ -9,6 +9,8 @@ struct StaffView: View {
     @EnvironmentObject private var store: TownStore
     @State private var searchText = ""
     @State private var sortMode: SortMode = .urgency
+    @State private var hiring = false
+    @State private var opened: StaffAgent?
 
     private var filteredEntries: [(project: ProjectRefInfo?, agent: StaffAgent)] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -117,9 +119,26 @@ struct StaffView: View {
                         Image(systemName: "arrow.up.arrow.down.circle")
                     }
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    Button { hiring = true } label: { Image(systemName: "person.badge.plus") }
+                        .accessibilityLabel(lang.string("hire.title"))
+                        .disabled(store.connectionStatus != .connected)
+                }
             }
             .refreshable {
                 await store.refreshAll()
+            }
+            .navigationDestination(isPresented: Binding(get: { opened != nil }, set: { if !$0 { opened = nil } })) {
+                if let a = opened {
+                    AgentChatView(agentID: a.id, role: a.role,
+                                  subtitle: store.projects.first { $0.id == a.lineID }.map { "#\($0.seq)" } ?? "")
+                }
+            }
+            .sheet(isPresented: $hiring) {
+                HireSheet { agent in opened = agent }
+                    .papertownSheetFrame(height: 560)
+                    .environmentObject(store)
+                    .tint(store.appearance.tintColor)
             }
         }
     }

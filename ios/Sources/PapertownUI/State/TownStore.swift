@@ -1,5 +1,6 @@
 import Foundation
 import PapertownCore
+import Combine
 import SwiftUI
 
 public enum ConnectionStatus: Equatable, Sendable {
@@ -36,6 +37,9 @@ public final class TownStore: ObservableObject {
 
     // Navigation & Preferences
     @Published public var selectedTab: Tab = .inbox
+    /// Every event from the server, for the pages that reload on their own events. Not @Published: an event redraws
+    /// only the pages that listen.
+    public let events = PassthroughSubject<(name: String, payload: [String: JSONValue]), Never>()
     /// What is open in Projects and in the Inbox: kept here so a change of frame (tabs, sidebar) keeps it.
     @Published var projectsPath: [ProjectRoute] = []
     @Published var inboxPath: [InboxRoute] = []
@@ -540,6 +544,7 @@ public final class TownStore: ObservableObject {
         case .reconnecting:
             connectionStatus = .reconnecting
         case .event(let name, let payload):
+            events.send((name, payload))
             if ["line", "agent", "report", "card", "checks", "job", "terminal", "usage"].contains(name) {
                 scheduleSnapshotRefresh(delayNanoseconds: 400_000_000)
             }

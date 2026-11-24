@@ -134,6 +134,10 @@ struct ServerView: View {
                     }
                 }
 
+                if store.connectionStatus == .connected && !store.isDemo {
+                    ServerSettingsSection()
+                }
+
                 Section(lang.string("server.section.preferences")) {
                     Picker(lang.string("server.appearance"), selection: Binding(
                         get: { store.appearance },

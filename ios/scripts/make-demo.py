@@ -62,7 +62,8 @@ for path, name in [("/api/auth/state", "auth_state"), ("/api/lines", "lines"), (
                    ("/api/agents/assistant?after=0", "agent-assistant"), ("/api/usage", "usage"), ("/api/gpus", "gpus"),
                    ("/api/departments", "departments"), ("/api/rag", "rag"), ("/api/jobs", "jobs"),
                    ("/api/library?q=&topic=&limit=400", "library"), ("/api/mcp", "mcp"), ("/api/skills", "skills"),
-                   ("/api/health", "health")]:
+                   ("/api/health", "health"), ("/api/papers/fresh", "fresh"), ("/api/skim?fresh=1", "skim"),
+                   ("/api/skim/resolve", "skim_resolve"), ("/api/bounds", "bounds"), ("/api/trace?limit=80", "trace")]:
     save(path, name)
 for ln in lines:
     i, n = ln["id"], ln["seq"]
@@ -70,7 +71,8 @@ for ln in lines:
                        (f"/api/lines/{i}/papers", "papers"), (f"/api/lines/{i}/data", "data"), (f"/api/lines/{i}/ws", "ws"),
                        (f"/api/lines/{i}/usage", "usage"), (f"/api/lines/{i}/lead", "lead"), (f"/api/reports?line_id={i}", "reports"),
                        (f"/api/jobs?line_id={i}", "jobs"), (f"/api/agents/lead-{i}?after=0", "agent-lead"),
-                       (f"/api/lines/{i}/canvas/outline", "outline")]:
+                       (f"/api/lines/{i}/canvas/outline", "outline"), (f"/api/lines/{i}/canvas", "canvas"),
+                       (f"/api/lines/{i}/memory", "memory"), (f"/api/lines/{i}/pages", "pages"), (f"/api/bounds?line_id={i}", "bounds")]:
         save(path, f"{name}-{n}")
     for root in ("code", "paper"):
         tree = save(f"/api/lines/{i}/ws/{root}/tree", f"tree-{root}-{n}")

@@ -1,8 +1,21 @@
 import Foundation
 
 /// Preserves server-defined keys in event payloads and new fields added by server releases.
-public enum JSONValue: Decodable, Sendable, Equatable {
+public enum JSONValue: Codable, Sendable, Equatable {
     case null, bool(Bool), integer(Int64), number(Double), string(String), array([JSONValue]), object([String: JSONValue])
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .null: try c.encodeNil()
+        case .bool(let b): try c.encode(b)
+        case .integer(let n): try c.encode(n)
+        case .number(let n): try c.encode(n)
+        case .string(let s): try c.encode(s)
+        case .array(let a): try c.encode(a)
+        case .object(let o): try c.encode(o)
+        }
+    }
 
     public init(from decoder: Decoder) throws {
         let value = try decoder.singleValueContainer()

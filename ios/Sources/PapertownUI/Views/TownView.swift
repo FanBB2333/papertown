@@ -42,6 +42,9 @@ struct TownView: View {
                     NavigationLink { ComputePage() } label: { Label(lang.string("town.compute"), systemImage: "cpu") }
                     NavigationLink { QuotaPage() } label: { Label(lang.string("town.usage"), systemImage: "gauge.with.dots.needle.33percent") }
                     NavigationLink { ToolsPage() } label: { Label(lang.string("town.tools"), systemImage: "puzzlepiece.extension") }
+                    NavigationLink { SkimPage() } label: { Label("Skills", systemImage: "sparkles") }
+                    NavigationLink { BoundsPage() } label: { Label(lang.string("bounds.nav"), systemImage: "shield.lefthalf.filled") }
+                    NavigationLink { TracePage() } label: { Label(lang.string("trace.nav"), systemImage: "clock.arrow.2.circlepath") }
                 }
                 .papertownRowBackground(store.appearance)
             }
@@ -169,6 +172,7 @@ struct DepartmentsPage: View {
 
 struct LibraryPage: View {
     @EnvironmentObject private var store: TownStore
+    @State private var options = false
     @State private var query = ""
     @State private var result: RagResult?
     @State private var searching = false
@@ -216,6 +220,14 @@ struct LibraryPage: View {
         .onSubmit(of: .search) { Task { await search() } }
         .onChange(of: query) { q in if q.isEmpty { result = nil } }
         .overlay { if searching { ProgressView() } }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { options = true } label: { Image(systemName: "slider.horizontal.3") }.accessibilityLabel(lang.string("rag.title"))
+            }
+        }
+        .sheet(isPresented: $options) {
+            RagOptionsSheet().papertownSheetFrame(height: 380).environmentObject(store).tint(store.appearance.tintColor)
+        }
         .navigationTitle(lang.string("town.library"))
         .papertownInlineTitle()
     }
@@ -362,57 +374,3 @@ struct QuotaPage: View {
 
 // MARK: - MCP servers and skills
 
-struct ToolsPage: View {
-    @EnvironmentObject private var store: TownStore
-
-    private struct Loaded { let mcp: McpView?; let skills: [TownSkill] }
-
-    var body: some View {
-        let lang = store.language
-        LoadingList(load: { client -> Loaded in
-            async let m = try? client.mcp()
-            async let s = (try? client.skills()) ?? []
-            return Loaded(mcp: await m, skills: await s)
-        }) { v in
-            List {
-                Section(lang.string("tools.mcp")) {
-                    if (v.mcp?.servers ?? []).isEmpty { Text(lang.string("tools.mcp.empty")).font(.footnote).foregroundStyle(.secondary) }
-                    ForEach(v.mcp?.servers ?? []) { srv in
-                        DisclosureGroup {
-                            ForEach(srv.tools ?? [], id: \.self) { t in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(t.name).font(.caption.monospaced())
-                                    if let d = t.description { Text(lang.server(d)).font(.caption2).foregroundStyle(.secondary).lineLimit(3) }
-                                }
-                            }
-                            if let e = srv.error { Text(lang.server(e)).font(.caption).foregroundStyle(.red) }
-                        } label: {
-                            HStack {
-                                Image(systemName: Tone.symbol(srv.state == "ok" ? "pass" : srv.state)).foregroundStyle(Tone.color(srv.state == "ok" ? "pass" : srv.state))
-                                Text(srv.name).font(.subheadline.weight(.medium))
-                                Spacer()
-                                Text(lang.format("tools.count", srv.tools?.count ?? 0)).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-                Section(lang.string("tools.skills")) {
-                    ForEach(v.skills) { sk in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(sk.name).font(.subheadline.weight(.medium))
-                            if let d = sk.description { Text(lang.server(d)).font(.caption).foregroundStyle(.secondary).lineLimit(3) }
-                            if let roles = sk.roles, !roles.isEmpty {
-                                Text(roles.map { TextFormatters.roleName($0, language: lang) }.joined(separator: " · "))
-                                    .font(.caption2).foregroundStyle(store.appearance.tintColor)
-                            }
-                        }
-                    }
-                }
-            }
-            .papertownInsetGroupedList()
-            .papertownListAppearance(store.appearance)
-        }
-        .navigationTitle(lang.string("town.tools"))
-        .papertownInlineTitle()
-    }
-}

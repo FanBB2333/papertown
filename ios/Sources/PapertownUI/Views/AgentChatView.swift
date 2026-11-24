@@ -28,6 +28,8 @@ struct AgentChatView: View {
     @State private var showUncertainAlert = false
     @State private var showScreen = false
     @State private var busy = false
+    @State private var showConversations = false
+    @State private var showStart = false
 
     private var state: ConversationState { store.conversation(target) }
 
@@ -65,6 +67,9 @@ struct AgentChatView: View {
                     Text(subtitleLine(lang)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
+            if case .agent(let id) = target {
+                ToolbarItem(placement: .automatic) { moreMenu(id, lang) }
+            }
             if state.isWorking || target.isAssistant {
             ToolbarItem(placement: .primaryAction) {
                 HStack(spacing: 12) {
@@ -94,6 +99,20 @@ struct AgentChatView: View {
         }
         .onAppear { store.setActiveChat(target) }
         .onDisappear { store.setActiveChat(nil) }
+        .sheet(isPresented: $showConversations) {
+            if case .agent(let id) = target {
+                ConversationsSheet(agentID: id) { Task { await store.refreshChat(target) } }
+                    .papertownSheetFrame(height: 480)
+                    .environmentObject(store)
+                    .tint(store.appearance.tintColor)
+            }
+        }
+        .sheet(isPresented: $showStart) {
+            HireSheet(projectID: state.agent?.lineID, role: role) { _ in Task { await store.refreshChat(target) } }
+                .papertownSheetFrame(height: 520)
+                .environmentObject(store)
+                .tint(store.appearance.tintColor)
+        }
         .refreshable { await store.refreshChat(target) }
         .alert(lang.string("chat.uncertain.title"), isPresented: $showUncertainAlert) {
             Button(lang.string("chat.uncertain.refresh")) {
@@ -342,6 +361,46 @@ struct AgentChatView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(.bar)
+    }
+
+    /// What else there is to do with this member: its conversations, the brief, its terminal, how it starts.
+    private func moreMenu(_ id: String, _ lang: AppLanguage) -> some View {
+        let agent = state.agent
+        let hosted = agent?.term != nil
+        return Menu {
+            if agent?.runtime == "paseo" || target.isAssistant {
+                Button { showConversations = true } label: { Label(lang.string("convs.title"), systemImage: "clock.arrow.circlepath") }
+            }
+            if !target.isAssistant && !hosted && agent?.started == true && (agent?.runtime == "paseo" || agent?.runtime == "pi") {
+                Button { Task { await store.act(on: target) { try await $0.newConversation(agentID: id) } } } label: {
+                    Label(lang.string("chat.new_conversation"), systemImage: "square.and.pencil")
+                }
+            }
+            if !target.isAssistant && agent?.started == true {
+                Button { Task { await store.act(on: target) { try await $0.brief(agentID: id) } } } label: {
+                    Label(lang.string("chat.brief"), systemImage: "doc.text")
+                }
+            }
+            if hosted && agent?.term?.status != "exited" {
+                Button(role: .destructive) { Task { await store.act(on: target) { try await $0.closeTerminal(agentID: id) } } } label: {
+                    Label(lang.string("chat.close_terminal"), systemImage: "xmark.rectangle")
+                }
+            }
+            #if os(macOS)
+            if agent?.extID != nil {
+                Button { Task { await store.act(on: target) { try await $0.openInPaseo(agentID: id) } } } label: {
+                    Label(lang.string("chat.open_paseo"), systemImage: "arrow.up.forward.app")
+                }
+            }
+            #endif
+            if !target.isAssistant && agent?.lineID != nil && (agent?.started != true || agent?.isOffline == true) {
+                Divider()
+                Button { showStart = true } label: { Label(lang.string("chat.start_with"), systemImage: "play.circle") }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .accessibilityLabel(lang.string("chat.more"))
     }
 
     private func placeholder(_ lang: AppLanguage) -> String {
