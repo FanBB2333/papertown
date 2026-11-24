@@ -228,6 +228,66 @@ def title(lines, provider, home, sid):
     return cap(found.strip(), 200) if isinstance(found, str) and found.strip() else None
 
 
+def context(lines, provider):
+    """How full the conversation's context is after its last reply: the tokens the model last read and wrote, and its
+    window where the CLI logs it (Codex does, Claude Code does not)."""
+    if provider not in ('claude', 'codex'):
+        return None
+    mark = b'"token_count"' if provider == 'codex' else b'"usage"'
+    for raw in reversed(lines):
+        if mark not in raw:
+            continue
+        try:
+            r = json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(r, dict):
+            continue
+        if provider == 'codex':
+            info = (r.get('payload') or {}).get('info') or {}
+            last, window = info.get('last_token_usage') or {}, info.get('model_context_window')
+            used = last.get('total_tokens')
+            if isinstance(used, int) and used > 0:
+                return {'used': used, 'window': window if isinstance(window, int) and window > 0 else None}
+        elif r.get('type') == 'assistant' and not r.get('isSidechain'):
+            u = (r.get('message') or {}).get('usage') or {}
+            used = sum(v for k in ('input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens')
+                       if isinstance(v := u.get(k), int))
+            if used > 0:
+                return {'used': used, 'window': None}
+    return None
+
+
+def span(minutes):
+    if not isinstance(minutes, int) or minutes <= 0:
+        return None
+    return f'{minutes // 1440}d' if minutes % 1440 == 0 else f'{round(minutes / 60)}h'
+
+
+def limits(lines, provider):
+    """Codex's subscription windows as its last turn left them (Claude Code does not log them)."""
+    if provider != 'codex':
+        return None
+    for raw in reversed(lines):
+        if b'"rate_limits"' not in raw:
+            continue
+        try:
+            r = json.loads(raw)
+        except ValueError:
+            continue
+        found = (r.get('payload') or {}).get('rate_limits') if isinstance(r, dict) else None
+        if not isinstance(found, dict):
+            continue
+        out = []
+        for w in (found.get('primary'), found.get('secondary')):
+            if isinstance(w, dict) and isinstance(w.get('used_percent'), (int, float)) and (name := span(w.get('window_minutes'))):
+                reset = w.get('resets_at')
+                out.append({'window': name, 'used': float(w['used_percent']),
+                            'resets_at': datetime.fromtimestamp(reset, timezone.utc).isoformat() if isinstance(reset, (int, float)) else None})
+        return sorted(out, key=lambda w: (w['window'][-1] == 'd', w['window'])) or None
+    return None
+
+
 def read(settings, provider, session_id, limit=200, started=None, missing_session=UNESTABLISHED):
     def empty(note):
         return {'items': [], 'transcript': {'ok': False, 'note': note}}
@@ -244,6 +304,8 @@ def read(settings, provider, session_id, limit=200, started=None, missing_sessio
             return empty(MISSING)
         lines = tail(path, home)
         items = parse(lines, provider)
-        return {'items': items[-max(1, min(limit, 1000)):], 'transcript': {'ok': True, 'note': None, 'title': title(lines, provider, home, session_id)}}
+        return {'items': items[-max(1, min(limit, 1000)):], 'transcript': {'ok': True, 'note': None, 'title': title(lines, provider, home, session_id),
+                                                                       'context': context(lines, provider)},
+                'limits': limits(lines, provider)}
     except (OSError, ValueError, RuntimeError):
         return empty(MISSING)

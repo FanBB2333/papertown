@@ -530,3 +530,29 @@ def test_logins_paseo_stops_listing_are_dropped(usage):
     readers.paseo = lambda force: (_ for _ in ()).throw(UsageError("Paseo 用量读取超时"))
     clock.at += 60
     assert service.poll(force=True)["providers"][0]["windows"]
+
+
+def test_one_session_usage_sums_its_rows_only(usage):
+    service, clock, _ = usage
+    row = {"minute": 1, "bucket_start": START, "provider": "claude", "model": "claude-sonnet-5-5", "session_id": "mine",
+           "cwd": "/w", "line_id": "a", "first_at": START, "last_at": START,
+           "input": 1000, "cache_write": 0, "cache_write_1h": 0, "cache_read": 2000, "output": 500}
+    service.db.insert("usage_tokens", row)
+    service.db.insert("usage_tokens", row | {"minute": 2, "input": 3000})
+    service.db.insert("usage_tokens", row | {"session_id": "other"})
+    service.db.insert("usage_tokens", row | {"session_id": "odd", "model": "no-such-model"})
+    got = service.session("claude", "mine")
+    assert got["tokens"] == 1000 + 3000 + 2 * (2000 + 500) and got["cost"] > 0 and got["priced"]
+    assert service.session("codex", "mine") is None and service.session("claude", None) is None
+    assert service.session("claude", "odd")["priced"] is False
+
+
+def test_limits_leave_out_windows_that_have_reset(usage):
+    service, clock, _ = usage
+    future, past = iso(clock() + 3600), iso(clock() - 60)
+    service._state = {"providers": {"claude": {"accounts": {"me": {"windows": [
+        {"id": "five_hour", "used": 26.0, "resets_at": past},
+        {"id": "weekly", "used": 95.0, "resets_at": future},
+        {"id": "weekly_model_fable", "used": 100.0, "resets_at": future}]}}}}}
+    assert service.limits("claude") == [{"window": "7d", "used": 95.0, "resets_at": future}]
+    assert service.limits("codex") is None and service.limits(None) is None

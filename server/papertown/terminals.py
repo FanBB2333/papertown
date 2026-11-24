@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from .db import now
 from . import ansi, prompts, transcripts
 from .herdr import Feed, Herdr, HerdrError
-from .project_dirs import owner, project_roots
+from .project_dirs import owner, project_roots, repo
 
 if TYPE_CHECKING:
     from .town import Town
@@ -224,7 +224,9 @@ class Terminals:
                               terminal['id'], terminal['terminal_id'])
             if row:
                 provider, sid = row['provider'], row['session_id']
-        return {'terminal': terminal, **transcripts.read(self.town.s, provider, sid, limit, missing_session=transcripts.NO_TERMINAL)}
+        result = transcripts.read(self.town.s, provider, sid, limit, missing_session=transcripts.NO_TERMINAL)
+        return {'terminal': terminal, **result, 'limits': result.get('limits') or self.town.usage.limits(provider),
+                'usage': self.town.usage.session(provider, sid), 'git': repo(terminal.get('cwd'))}
 
     def prompt(self, id, digest, option):
         with self._delivery:

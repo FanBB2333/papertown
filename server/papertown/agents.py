@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 from .db import now, read_json, write_json
 from .paseo import Feed, Paseo, PaseoError
 from .hosted import Hosted, RUNTIMES
+from .project_dirs import repo
 from .paseo_models import PASEO_OFF
 
 if TYPE_CHECKING:
@@ -963,7 +964,10 @@ class Agents:
             a = self.hosted.refresh(agent_id)
             result = read(self.s, a['term']['provider'], a.get('session_id'), limit, a['term'].get('started'))
             queued = self.db.q("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1 order by id", agent_id)
-            return {"agent": self.public(a), "paseo": {}, "queued": queued, **result}
+            provider = a['term']['provider']
+            return {"agent": self.public(a), "paseo": {}, "queued": queued, **result,
+                    "limits": result.get("limits") or self.town.usage.limits(provider),
+                    "usage": self.town.usage.session(provider, a.get('session_id')), "git": repo(a.get("cwd"))}
         a = self._paseo_agent(agent_id)
         version = self._versions.get(agent_id, 0)
         try:

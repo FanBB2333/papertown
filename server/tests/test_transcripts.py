@@ -52,7 +52,7 @@ def test_claude_blocks_results_interrupt_and_filtering(tmp_path):
         claude('user', '[Request interrupted by user for tool use]')]
     path = write(s, 'claude', records)
     result = tr.read(s, 'claude', SID)
-    assert result['transcript'] == {'ok': True, 'note': None, 'title': None}
+    assert result['transcript'] == {'ok': True, 'note': None, 'title': None, 'context': None}
     items = result['items']
     assert [r['kind'] for r in items] == ['user', 'assistant', 'tool', 'tool', 'note']
     assert items[2] == {'ts': TS, 'kind': 'tool', 'id': 'c1', 'name': 'Bash', 'arg': 'echo synthetic', 'status': 'completed', 'error': None}
@@ -213,10 +213,10 @@ def test_employee_timeline_endpoint_and_no_persistence(tmp_path, monkeypatch, ru
         app = create_app()
     client = TestClient(app)
     data = client.get(f'/api/agents/{aid}/timeline?limit=1').json()
-    assert set(data) == {'agent', 'items', 'queued', 'paseo', 'transcript'}
+    assert set(data) == {'agent', 'items', 'queued', 'paseo', 'transcript', 'limits', 'usage', 'git'}
     assert data['queued'] == [held] and data['paseo'] == {}
     assert data['items'] == [{'ts': TS, 'kind': 'assistant', 'text': 'synthetic-private-answer'}]
-    assert data['transcript'] == {'ok': True, 'note': None, 'title': None}
+    assert data['transcript'] == {'ok': True, 'note': None, 'title': None, 'context': None}
     assert data['agent']['term']['status'] == hosted.refresh(aid)['term']['status']
     assert 'synthetic-private' not in json.dumps(events)
     assert 'synthetic-private' not in '\n'.join(town.db.conn.iterdump())
@@ -246,10 +246,10 @@ def test_herdr_terminal_timeline_and_session_fallback(setup, saved_id):
     town.terminals.refresh()
     write(town.s, 'antigravity', [agy('USER_INPUT', 0, content='Synthetic terminal request')])
     result = client.get(url).json()
-    assert set(result) == {'terminal', 'items', 'transcript'}
+    assert set(result) == {'terminal', 'items', 'transcript', 'limits', 'usage', 'git'}
     assert result['terminal'] == client.get('/api/terminals/herdr:t1').json()['terminal']
     assert result['items'][0]['text'] == 'Synthetic terminal request'
-    assert result['transcript'] == {'ok': True, 'note': None, 'title': None}
+    assert result['transcript'] == {'ok': True, 'note': None, 'title': None, 'context': None}
     town.db.x('insert into terminal_sessions values (?, ?, ?, ?, ?)', SID, 'antigravity', saved_id, 'Synthetic terminal', '/synthetic')
     host.emit(agent_session={'kind': 'unknown'})
     town.terminals.refresh()
@@ -334,3 +334,50 @@ def test_title_comes_from_each_clis_own_records(tmp_path):
     (tmp_path / 'session_index.jsonl').write_text(
         '{"id":"other","thread_name":"No"}\n{"id":"sid-1","thread_name":"First"}\nnot json\n{"id":"sid-1","thread_name":"Renamed"}\n')
     assert title([], 'codex', tmp_path, 'sid-1') == 'Renamed' and title([], 'codex', tmp_path, 'sid-2') is None
+
+
+def test_context_reads_the_last_reply_and_codex_window():
+    codex = [json.dumps({'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {
+                 'last_token_usage': {'total_tokens': n}, 'model_context_window': 400000}}}).encode() for n in (5000, 88000)]
+    assert tr.context(codex + [b'{"type": "response_item"}'], 'codex') == {'used': 88000, 'window': 400000}
+    usage = {'input_tokens': 10, 'cache_creation_input_tokens': 200, 'cache_read_input_tokens': 3000, 'output_tokens': 40}
+    claude = [json.dumps({'type': 'assistant', 'message': {'usage': usage}}).encode(),
+              json.dumps({'type': 'assistant', 'isSidechain': True, 'message': {'usage': {'input_tokens': 9}}}).encode(),
+              b'not json "usage"']
+    assert tr.context(claude, 'claude') == {'used': 3250, 'window': None}
+    assert tr.context(claude, 'antigravity') is None and tr.context([], 'codex') is None
+
+
+def test_branch_reads_head_from_the_folder_or_above(tmp_path):
+    from papertown.project_dirs import branch
+    repo = tmp_path / 'repo'; (repo / '.git').mkdir(parents=True); (repo / 'src').mkdir()
+    (repo / '.git/HEAD').write_text('ref: refs/heads/feature/x\n')
+    assert branch(repo) == 'feature/x' and branch(repo / 'src') == 'feature/x'
+    (repo / '.git/HEAD').write_text('0123456789abcdef\n')
+    assert branch(repo) == '0123456'
+    tree = tmp_path / 'tree'; tree.mkdir(); (repo / '.git/worktrees/t').mkdir(parents=True)
+    (repo / '.git/worktrees/t/HEAD').write_text('ref: refs/heads/wt\n')
+    (tree / '.git').write_text(f'gitdir: {repo}/.git/worktrees/t\n')
+    assert branch(tree) == 'wt' and branch(None) is None and branch(tmp_path / 'none') is None
+
+
+def test_codex_limits_come_from_its_last_turn():
+    rl = {'primary': {'used_percent': 41.0, 'window_minutes': 10080, 'resets_at': 1795753563},
+          'secondary': {'used_percent': 3.5, 'window_minutes': 300, 'resets_at': None}}
+    lines = [json.dumps({'type': 'event_msg', 'payload': {'type': 'token_count', 'rate_limits': rl}}).encode()]
+    got = tr.limits(lines, 'codex')
+    assert [w['window'] for w in got] == ['5h', '7d'] and got[1]['used'] == 41.0 and got[1]['resets_at'].startswith('2026-')
+    assert tr.limits(lines, 'claude') is None and tr.limits([], 'codex') is None
+
+
+def test_repo_counts_changes_and_upstream(tmp_path):
+    import subprocess
+    from papertown import project_dirs
+    git = lambda *a: subprocess.run(['git', '-C', str(tmp_path / 'r'), *a], check=True, capture_output=True)
+    (tmp_path / 'r').mkdir()
+    git('init', '-q', '-b', 'trunk'); git('config', 'user.email', 'a@b'); git('config', 'user.name', 'a')
+    (tmp_path / 'r/a.txt').write_text('a'); git('add', '.'); git('commit', '-qm', 'a')
+    (tmp_path / 'r/a.txt').write_text('b'); (tmp_path / 'r/new.txt').write_text('n')
+    got = project_dirs.repo(tmp_path / 'r')
+    assert got == {'branch': 'trunk', 'changed': 2, 'ahead': None, 'behind': None}
+    assert project_dirs.repo(tmp_path / 'none') is None

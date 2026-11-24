@@ -233,6 +233,26 @@ class Usage:
         return self.db.q("select * from usage_tokens where line_id = ? and first_at >= ? and minute <= ?",
                          line["id"], stamp(line["created_at"]) or 0, int(at // 60))
 
+    def session(self, provider: str | None, session_id: str | None) -> dict | None:
+        """What one CLI session has used so far, priced at API rates; `priced` is false when a model has no price."""
+        if not provider or not session_id:
+            return None
+        rows = self.db.q("select * from usage_tokens where provider = ? and session_id = ?", provider, session_id)
+        if not rows:
+            return None
+        t = totals(rows)
+        return {"cost": t["cost"], "tokens": sum(t["tokens"].values()), "priced": not unpriced(rows)}
+
+    def limits(self, provider: str | None) -> list[dict] | None:
+        """The subscription's five-hour and weekly windows from the last reading, leaving out any that have reset since
+        (that reading no longer says anything)."""
+        names, at, out = {"five_hour": "5h", "weekly": "7d"}, self.clock(), {}
+        for w in self._windows(provider) if provider else []:
+            name, reset = names.get(w["id"]), stamp(w.get("resets_at"))
+            if name and name not in out and isinstance(w.get("used"), (int, float)) and reset and reset > at:
+                out[name] = {"window": name, "used": float(w["used"]), "resets_at": w["resets_at"]}
+        return list(out.values()) or None
+
     def line(self, line_id: str) -> dict:
         line = self.db.one("select id, usage_budget, created_at from lines where id = ?", line_id)
         if line is None:
