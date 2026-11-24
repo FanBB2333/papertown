@@ -1,4 +1,4 @@
-"""arXiv API client that parses the Atom feed into plain dicts.
+"""arXiv API client that parses the Atom feed into plain dicts. The endpoint is [services] arxiv_api.
 
 The API asks for at most one request every 3 seconds; callers that loop must sleep.
 """
@@ -10,7 +10,6 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
-API = "https://export.arxiv.org/api/query"
 NS = {"a": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 FIELD = re.compile(r"\b(ti|au|abs|co|jr|cat|rn|id|all):")
 STOP = {"a", "an", "the", "of", "for", "and", "or", "in", "on", "with", "to", "via", "by", "from", "using", "towards"}
@@ -53,24 +52,27 @@ def parse_feed(xml: str) -> list[dict]:
     return out
 
 
-def _get(params: dict, timeout: float) -> list[dict]:
-    r = httpx.get(API, params=params, timeout=timeout, follow_redirects=True)
+def _get(params: dict, timeout: float, api: str) -> list[dict]:
+    if not api:
+        from ..config import Settings
+        api = Settings().arxiv_api
+    r = httpx.get(api, params=params, timeout=timeout, follow_redirects=True)
     r.raise_for_status()
     return parse_feed(r.text)
 
 
-def search(query: str, max_results: int = 10, sort: str = "relevance", timeout: float = 20.0) -> list[dict]:
-    """sort: relevance | submittedDate"""
+def search(query: str, max_results: int = 10, sort: str = "relevance", timeout: float = 20.0, api: str = "") -> list[dict]:
+    """sort: relevance | submittedDate. api: the endpoint; empty: the settings'."""
     q = build_query(query)
     params = {"search_query": q, "max_results": max(1, min(max_results, 100)),
               "sortBy": sort, "sortOrder": "descending"}
-    hits = _get(params, timeout)
+    hits = _get(params, timeout, api)
     if not hits and " AND " in q:
-        hits = _get({**params, "search_query": q.replace(" AND ", " OR ")}, timeout)
+        hits = _get({**params, "search_query": q.replace(" AND ", " OR ")}, timeout, api)
     return hits
 
 
-def get(ids: list[str], timeout: float = 20.0) -> list[dict]:
+def get(ids: list[str], timeout: float = 20.0, api: str = "") -> list[dict]:
     if not ids:
         return []
-    return _get({"id_list": ",".join(ids), "max_results": len(ids)}, timeout)
+    return _get({"id_list": ",".join(ids), "max_results": len(ids)}, timeout, api)

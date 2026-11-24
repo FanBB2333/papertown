@@ -20,11 +20,12 @@ from .herdr import HerdrError
 from .prompts import PromptError
 from .ask import AskError
 from .assistant import ID as ASSISTANT, ActError
-from .auth import COOKIE, DAYS, Auth, AuthError, Gate
+from .auth import COOKIE, Auth, AuthError, Gate
 from .bounds import BoundsError
 from .canvas import CanvasError
 from .cards import CardError
 from .decisions import DecisionError
+from .network import Network, NetworkError
 from .checks import CheckError
 from .paseo_models import ModelError
 from .usage import UsageError
@@ -128,6 +129,15 @@ class DecideCardIn(BaseModel):
 
 class KeyIn(BaseModel):
     name: str = Field(default="", max_length=60)
+
+
+class NetworkIn(BaseModel):
+    host: str | None = Field(default=None, max_length=40)
+    port: int | None = None
+    sources: list[str] | None = Field(default=None, max_length=64)
+    password: bool | None = None
+    keys: bool | None = None
+    days: int | None = None
 
 
 class PasswordIn(BaseModel):
@@ -453,7 +463,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Papertown", lifespan=lifespan)
     app.state.town = town
-    auth = Auth(town.s.data_dir)
+    net = Network(town.s.config_file)
+    auth = Auth(town.s.data_dir, net)
     app.add_middleware(Gate, auth=auth)
 
     # signing in
@@ -465,7 +476,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def auth_login(body: LoginIn, request: Request, response: Response):
         tok = authed(auth.login, request.scope, body.password, request.headers.get("user-agent", ""))
         https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
-        response.set_cookie(COOKIE, tok, max_age=DAYS * 86400, httponly=True, samesite="lax", secure=https, path="/")
+        response.set_cookie(COOKIE, tok, max_age=auth.days() * 86400, httponly=True, samesite="lax", secure=https, path="/")
         return {"ok": True}
 
     @app.post("/api/auth/logout")
@@ -506,6 +517,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         authed(auth.manage, request.scope)
         authed(auth.revoke_key, key_id)
         return {"keys": auth.keys()}
+
+    # where it listens, who may reach it, how they sign in (network.py); changed from this machine or a
+    # browser signed in with the password, never with an access key
+    def network_view(scope: dict) -> dict:
+        return {**net.view(scope), "can_edit": auth.local(scope) or auth.session(scope)}
+
+    @app.get("/api/network")
+    def network_get(request: Request):
+        return network_view(request.scope)
+
+    @app.put("/api/network")
+    def network_set(body: NetworkIn, request: Request):
+        authed(auth.manage, request.scope)
+        before = net.get()
+        conf = mapped(NetworkError)(net.set, body.model_dump(exclude_none=True), request.scope)
+        if before["password"] and not conf["password"]:
+            auth.end_sessions()  # turned off: nobody stays signed in with it
+        return network_view(request.scope)
 
     @app.get("/api/health")
     def health():

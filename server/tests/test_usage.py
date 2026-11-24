@@ -468,11 +468,14 @@ def test_a_stale_second_login_is_a_note(usage):
     assert codex["error"] == "订阅登录已失效，请重新登录" and codex["notes"] == []
 
 
-def test_environment_price_override():
-    import sys
-    result = subprocess.run([sys.executable, "-c", "from papertown.pricing import token_cost; print(token_cost('custom', dict(input=1000000, cache_write=0, cache_read=0, output=1000000)))"],
-                            capture_output=True, text=True, check=True, env={**os.environ, "PAPERTOWN_PRICES": '{"custom": [3, 7]}'})
-    assert result.stdout.strip() == "(10.0, True)"
+def test_price_overrides_from_the_settings(tmp_path, monkeypatch):
+    from papertown import pricing
+    monkeypatch.setattr(pricing, "PRICES", dict(PRICES))
+    monkeypatch.setenv("PAPERTOWN_PRICES", '{"custom": [3, 7]}')
+    pricing.extend(make_settings(tmp_path).prices)
+    assert token_cost("custom", dict(input=1000000, cache_write=0, cache_read=0, output=1000000)) == (10.0, True)
+    pricing.extend("not json")  # changes nothing
+    assert pricing.PRICES["custom"] == (3, 7)
 
 
 def test_prototype_migration_rebuilds_session_cache_and_preserves_windows(tmp_path):

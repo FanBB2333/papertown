@@ -132,7 +132,7 @@ class Nvidb:
 
     def status(self, fresh: bool = False) -> dict:
         if not self.s.nvidb:
-            return self._off("没有接入（PAPERTOWN_NVIDB=0）")
+            return self._off("没有接入（papertown.toml 里 [services] nvidb = false）")
         if not self.bin or not Path(self.bin).exists():
             return self._off("没找到 nvidb 命令：装好后放进 PATH，或者设 PAPERTOWN_NVIDB_BIN")
         with self._lock:

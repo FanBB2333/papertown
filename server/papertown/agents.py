@@ -245,7 +245,7 @@ class Agents:
         self.s = town.s
         self.pi = _which("pi", self.s.pi_bin)
         self.tmux = _which("tmux", self.s.tmux_bin)
-        self.paseo = Paseo(self.s.paseo_bin, self.s.paseo_url, self.s.paseo_host)
+        self.paseo = Paseo(self.s.paseo_bin, self.s.paseo_url, self.s.paseo_host, self.s.node_bin)
         self._inbox: dict[str, list[dict]] = {}
         self._state: dict[str, dict] = {}  # what each pi's bridge last reported: model, thinking, session
         self._lock = threading.Lock()

@@ -398,7 +398,7 @@ class Papertown(App):
             self.splash.error = f"{self.api.base} 上没有 Papertown 服务"
             return
         last = self.api.base.rsplit(":", 1)[-1]
-        port = int(last) if last.isdigit() else 8000
+        port = int(last) if last.isdigit() else self.local.s.port
         self.splash.status = f"正在启动服务（端口 {port}）…"
         self.server = LocalServer(port, self.local.s.data_dir)
         self.server.start()

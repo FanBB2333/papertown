@@ -483,7 +483,8 @@ def test_hook_auth_independent_of_browser_login(tmp_path):
         'seq': 0, 'seen_seq': 0, 'since': 'now'})
     url = '/api/agents/' + a['id']
     with TestClient(app, client=('198.51.100.1', 1234)) as c:
-        assert c.get(url + '/screen').status_code == 401
+        # an address outside the allowed sources: the API is shut, the agent's own hook is not
+        assert c.get(url + '/screen').status_code == 403
         payload = {'provider': 'codex', 'data': {'type': 'agent-turn-complete', 'thread-id': 'remote-hook'}}
         assert c.post(url + '/hook', json=payload).status_code == 403
         assert c.post(url + '/hook', json=payload, headers={'x-papertown-token': a['token']}).status_code == 200

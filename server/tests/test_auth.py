@@ -13,14 +13,14 @@ def test_this_machine_goes_in_and_other_devices_sign_in(tmp_path):
     (web / "index.html").write_text("<!doctype html><title>Papertown</title>")
     app = create_app(make_settings(tmp_path, web_dist=web))
     with TestClient(app) as c:
-        assert c.get("/api/auth/state").json() == {"local": True, "password": False, "authed": True, "signed_in": False, "key": False, "via": "local", "sessions": 0, "keys": 0}
+        assert c.get("/api/auth/state").json() == {"local": True, "password": False, "authed": True, "signed_in": False, "key": False, "via": "local", "sessions": 0, "keys": 0, "methods": {"password": True, "keys": True}, "days": 30}
         assert c.get("/api/cards").status_code == 200
         assert "Papertown" in c.get("/progress/6").text and "Papertown" in c.get("/console/2/code").text
         assert c.get("/progress/6").headers["cache-control"] == "no-cache"
         assert c.get("/assets/nothing.js").status_code == 404
 
         assert c.get("/api/cards", headers=AWAY).status_code == 401
-        assert c.get("/api/auth/state", headers=AWAY).json() == {"local": False, "password": False, "authed": False, "signed_in": False, "key": False, "via": None}
+        assert c.get("/api/auth/state", headers=AWAY).json() == {"local": False, "password": False, "authed": False, "signed_in": False, "key": False, "via": None, "methods": {"password": True, "keys": True}, "days": 30}
         assert c.post("/api/auth/password", json={"password": "hunter22"}, headers=AWAY).status_code == 403
         assert c.post("/api/auth/login", json={"password": "x"}, headers=AWAY).status_code == 403
         assert c.post("/api/auth/password", json={"password": "abc"}).status_code == 400

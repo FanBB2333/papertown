@@ -303,7 +303,7 @@ def test_sdk_endpoint_environment_and_send_behavior_use_no_real_host(flow, monke
     _, town, _, _ = flow
     paseo = town.agents.paseo
     paseo.bin, paseo.host = 'fake-paseo', 'tcp://example.invalid:1234'
-    monkeypatch.setattr('papertown.paseo._node', lambda: ['fake-node'])
+    monkeypatch.setattr('papertown.paseo._node', lambda explicit='': ['fake-node'])
     monkeypatch.setenv('PASEO_PASSWORD', 'test-password')
     cmd, env = paseo._link_command('watch')
     assert cmd[0] == 'fake-node' and cmd[-1] == 'watch'

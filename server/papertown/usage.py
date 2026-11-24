@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Callable
 
 from .db import read_json, write_json
 from .usage_logs import COUNTS, Ownership, Scanner
-from .pricing import token_cost
+from .pricing import extend as extend_prices, token_cost
 from .usage_readers import LABELS, Readers, UsageError, iso, stamp
 
 if TYPE_CHECKING:
@@ -49,6 +49,7 @@ def budget_state(used: float, budget: float | None) -> str:
 class Usage:
     def __init__(self, town: Town, *, readers: Readers | None = None, clock: Callable[[], float] = time.time):
         self.town, self.db, self.s = town, town.db, town.s
+        extend_prices(self.s.prices)
         self.clock, self.readers = clock, readers or Readers(town)
         self.scanner = Scanner(town)
         self._lock = threading.RLock()

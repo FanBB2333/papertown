@@ -1,12 +1,11 @@
 """USD per million tokens (input, output[, cache read]), used to estimate local session usage. Models
-not listed cost 0 until set, e.g. PAPERTOWN_PRICES='{"deepseek-chat": [0.27, 1.1]}'. A cache read costs a
-tenth of the input price unless the third value says otherwise.
+not listed cost 0 until set in [history] prices (or PAPERTOWN_PRICES), e.g. '{"deepseek-chat": [0.27, 1.1]}'.
+A cache read costs a tenth of the input price unless the third value says otherwise.
 """
 
 from __future__ import annotations
 
 import json
-import os
 import re
 
 
@@ -34,7 +33,7 @@ PRICES: dict[str, tuple[float, ...]] = {
     "gemini-2.5-flash-lite": (0.10, 0.40), "gemini-4-neon": (3, 15, 0.15),
     "gemini-4-hydrogen": (1.5, 7.5, 0.075),
     # Promotional rates: Argon and Carbon until 2026-11-30, then $4 / $20 with $0.20 cache reads,
-    # 3.8 Flash until 2026-12-31, then $1.50 / $7.50 with $0.15. PAPERTOWN_PRICES can override them.
+    # 3.8 Flash until 2026-12-31, then $1.50 / $7.50 with $0.15. [history] prices can override them.
     "gemini-4-carbon": (2, 10, 0.10), "gemini-4-argon": (2, 10, 0.10), "gemini-3.8-flash": (.75, 3.75),
 }
 
@@ -55,8 +54,10 @@ def token_cost(model: str, tokens: dict[str, int]) -> tuple[float, bool]:
              + p_read * tokens["cache_read"] + p_out * tokens["output"]) / 1_000_000, True)
 
 
-try:
-    PRICES.update({k: tuple(v) for k, v in json.loads(os.environ.get("PAPERTOWN_PRICES", "{}")).items()})
-except (ValueError, TypeError):
-    pass
+def extend(raw: str) -> None:
+    """Add or override prices from the settings' JSON (Settings.prices); a malformed value changes nothing."""
+    try:
+        PRICES.update({k: tuple(v) for k, v in json.loads(raw or "{}").items()})
+    except (ValueError, TypeError, AttributeError):
+        pass
 

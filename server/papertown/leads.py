@@ -136,7 +136,7 @@ class Leads:
             return base | ({"state": "blocked", "note": down} if down else {"state": "running"})
         why = self._why.get(line_id)
         if not self.s.lead_resident:
-            why = why or "这个小镇没有开负责人常驻（PAPERTOWN_LEAD_RESIDENT=0），可以在对话里手动启动。"
+            why = why or "这个小镇没有开负责人常驻（papertown.toml 里 [agents] lead_resident = false），可以在对话里手动启动。"
         return base | {"state": "blocked" if why else "starting", "note": why}
 
     def ensure(self, line_id: str, force: bool = False) -> None:

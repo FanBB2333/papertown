@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-import os
+from ..config import Settings
 
 
 def run(server: str | None = None, start: bool = True) -> None:
     from .app import Papertown
     from .client import Api
 
-    Papertown(Api(server or os.environ.get("PAPERTOWN_URL", "http://127.0.0.1:8000")), start_server=start).run()
+    Papertown(Api(server or Settings().url), start_server=start).run()

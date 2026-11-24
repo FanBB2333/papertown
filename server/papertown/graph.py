@@ -4,21 +4,20 @@
 
 from __future__ import annotations
 
-import os
 from collections import deque
 
 import httpx
 
+from .config import Settings
 from .db import DB
 from .library import Library
 
-S2_BATCH = "https://api.semanticscholar.org/graph/v1/paper/batch"
-
 
 class Genealogy:
-    def __init__(self, db: DB, library: Library):
+    def __init__(self, db: DB, library: Library, settings: Settings):
         self.db = db
         self.library = library
+        self.s = settings
 
     def add(self, src: str, dst: str, kind: str, weight: float = 1.0, title: str | None = None) -> None:
         self.db.x("insert or ignore into edges(src, dst, kind, weight, title) values (?,?,?,?,?)", src, dst, kind, weight, title)
@@ -30,12 +29,12 @@ class Genealogy:
                     self.add(f"arxiv:{p['arxiv_id']}", f"arxiv:{other['arxiv_id']}", "similar", w)
 
     def fetch_references(self, arxiv_ids: list[str], timeout: float = 30) -> int:
-        """One batch call per 500 papers. Raises httpx errors (429 without a key is common)."""
-        headers = {"x-api-key": os.environ["S2_API_KEY"]} if os.environ.get("S2_API_KEY") else {}
+        """One batch call per 500 papers to [services] s2_api. Raises httpx errors (429 without a key is common)."""
+        headers = {"x-api-key": self.s.s2_key} if self.s.s2_key else {}
         n = 0
         for i in range(0, len(arxiv_ids), 500):
             chunk = arxiv_ids[i:i + 500]
-            r = httpx.post(S2_BATCH, params={"fields": "references.title,references.externalIds,references.year"},
+            r = httpx.post(self.s.s2_api, params={"fields": "references.title,references.externalIds,references.year"},
                            json={"ids": [f"ARXIV:{a}" for a in chunk]}, headers=headers, timeout=timeout)
             r.raise_for_status()
             for aid, paper in zip(chunk, r.json()):

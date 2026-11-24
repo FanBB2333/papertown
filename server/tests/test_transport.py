@@ -19,7 +19,7 @@ def test_sdk_uses_the_configured_daemon_endpoint(monkeypatch, tmp_path, host, li
 
     (tmp_path / 'node_modules/@getpaseo/client').mkdir(parents=True)
     monkeypatch.setattr(module, 'LINK', tmp_path)
-    monkeypatch.setattr(module, '_node', lambda: ['node'])
+    monkeypatch.setattr(module, '_node', lambda explicit='': ['node'])
     p = Paseo('/bin/echo', host=host)
     monkeypatch.setattr(p, 'status', lambda: {'ok': True, 'listen': listen})
     def run(args, **kwargs):

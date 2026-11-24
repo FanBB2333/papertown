@@ -8,25 +8,29 @@ import time
 
 
 def main() -> None:
+    from .config import Settings
+    s = Settings()
     p = argparse.ArgumentParser(prog="papertown", description="On its own, `papertown` opens the town in this terminal (as `papertown tui`).")
     sub = p.add_subparsers(dest="cmd")
     tu = sub.add_parser("tui", help="the town in this terminal: projects, jobs, GPUs, staff, chat (the default)")
-    tu.add_argument("--server", default=os.environ.get("PAPERTOWN_URL", "http://127.0.0.1:8000"))
+    tu.add_argument("--server", default=s.url)
     tu.add_argument("--no-start", action="store_true", help="don't start a server when none answers")
     sv = sub.add_parser("serve", help="start the API (and the built web app)")
-    sv.add_argument("--host", default="127.0.0.1")
-    sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument("--host", help=f"default: [server] host in {s.config_file} ({s.host})")
+    sv.add_argument("--port", type=int, help=f"default: [server] port in {s.config_file} ({s.port})")
     ig = sub.add_parser("ingest", help="pull papers from arXiv into the library")
     ig.add_argument("query", nargs="+")
     ig.add_argument("--max", type=int, default=50)
     ig.add_argument("--refs", action="store_true", help="also fetch citation edges from Semantic Scholar")
     sub.add_parser("mcp", help="serve Papertown's own tools over MCP (stdio)")
     sub.add_parser("skills", help="list skills")
+    cf = sub.add_parser("config", help="papertown.toml: where it is, the settings in effect, or the example with every default")
+    cf.add_argument("action", choices=["path", "show", "example"], nargs="?", default="path")
     jb = sub.add_parser("job", help="submit or list experiments on a running server's farm")
     jb.add_argument("action", choices=["submit", "list"])
     jb.add_argument("--line", help="project id, e.g. line_1")
     jb.add_argument("--name", default="job")
-    jb.add_argument("--server", default=os.environ.get("PAPERTOWN_URL", "http://127.0.0.1:8000"))
+    jb.add_argument("--server", default=s.url)
     jb.add_argument("command", nargs=argparse.REMAINDER, help="after --: the shell command")
     ky = sub.add_parser("key", help="access keys for the iPhone and Mac apps and other devices")
     ky.add_argument("action", choices=["create", "list", "revoke"])
@@ -40,8 +44,13 @@ def main() -> None:
     elif a.cmd == "serve":
         import uvicorn
         from .api import create_app
-        os.environ.setdefault("PAPERTOWN_URL", f"http://{'127.0.0.1' if a.host in ('0.0.0.0', '::') else a.host}:{a.port}")
-        uvicorn.run(create_app(), host=a.host, port=a.port)
+        from .config import read_config
+        host, port = a.host or s.host, a.port or s.port
+        # how agents reach this server: [server] url or PAPERTOWN_URL when given, else this address
+        if not os.environ.get("PAPERTOWN_URL") and not read_config().get("server", {}).get("url"):
+            os.environ["PAPERTOWN_URL"] = f"http://{'127.0.0.1' if host in ('0.0.0.0', '::') else host}:{port}"
+        os.environ["PAPERTOWN_LISTEN"] = f"{host}:{port}"  # what the settings page shows as listening now
+        uvicorn.run(create_app(), host=host, port=port)
     elif a.cmd == "job":
         import httpx
         if a.action == "list":
@@ -58,13 +67,25 @@ def main() -> None:
         town = Town()
         added = []
         for q in a.query:
-            added += town.ingest(arxiv_api.search(q, a.max), "arxiv")
+            added += town.ingest(arxiv_api.search(q, a.max, api=s.arxiv_api), "arxiv")
             time.sleep(3.1)  # arXiv asks for one request every three seconds
         print(f"入馆 {len(added)} 篇，馆藏 {town.library.count()} 篇")
         if a.refs and added:
             print(f"引用边 {town.genealogy.fetch_references([x['arxiv_id'] for x in added])} 条")
     elif a.cmd == "key":
         key(a)
+    elif a.cmd == "config":
+        from dataclasses import fields
+        from .config import example
+        if a.action == "example":
+            print(example(), end="")
+        elif a.action == "show":
+            for f in fields(s):
+                if f.metadata:
+                    value = getattr(s, f.name)
+                    print(f"[{f.metadata['section']}] {f.name} = {'(set)' if f.name.endswith('_key') and value else value}")
+        else:
+            print(s.config_file, "" if s.config_file.exists() else "(not there yet: papertown config example > it, then edit)")
     elif a.cmd == "mcp":
         from .mcp_server import serve
         serve()
@@ -86,7 +107,8 @@ def key(a: argparse.Namespace) -> None:
             k = auth.create_key(a.name)
             print(f"新的访问密钥「{k['name']}」（id {k['id']}）：\n\n    {k['key']}\n")
             print("它只显示这一次。在 App 里填服务器地址和这个密钥即可连接，地址是设备访问这台电脑用的那个，")
-            print("例如 http://<这台电脑的局域网或 Tailscale 地址>:8000，服务要用 `papertown serve --host 0.0.0.0` 启动。")
+            print(f"例如 http://<这台电脑的局域网或 Tailscale 地址>:{Settings().port}。其他设备要连接，先在网页的")
+            print("「设置 › 网络与安全」里把监听地址改为所有网络并重启服务。")
         elif a.action == "list":
             keys = auth.keys()
             if not keys:

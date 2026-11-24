@@ -24,6 +24,7 @@ from http.cookies import SimpleCookie
 from pathlib import Path
 
 from .db import now, read_json, write_json
+from .network import Network
 
 COOKIE = "pt_session"
 DAYS = 30
@@ -61,10 +62,15 @@ def _sid(token: str) -> str:
 
 
 class Auth:
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, net: Network | None = None):
         self.path = data_dir / "auth.json"
+        self.net = net or Network()
         self._lock = threading.Lock()
         self._fails: dict[str, list[float]] = {}
+
+    def days(self) -> int:
+        """How long a password login lasts (network.json)."""
+        return int(self.net.get()["days"])
 
     def _read(self) -> dict:
         return read_json(self.path, {})
@@ -93,7 +99,9 @@ class Auth:
         tok = self.token(scope)
         if not tok:
             return False
-        sid, cut = _sid(tok), time.time() - DAYS * 86400
+        if not self.net.get()["password"]:
+            return False
+        sid, cut = _sid(tok), time.time() - self.days() * 86400
         with self._lock:
             d = self._read()
             for s in d.get("sessions") or []:
@@ -117,7 +125,7 @@ class Auth:
     def keyed(self, scope: dict) -> bool:
         """The request carries an access key that has not been revoked."""
         tok = self.bearer(scope)
-        if not tok or not tok.startswith(KEY_PREFIX):
+        if not tok or not tok.startswith(KEY_PREFIX) or not self.net.get()["keys"]:
             return False
         h = _sid(tok)
         with self._lock:
@@ -137,8 +145,10 @@ class Auth:
         d = self._read()
         local, signed = self.local(scope), self.session(scope)
         keyed = not local and not signed and self.keyed(scope)
+        conf = self.net.get()
         out = {"local": local, "password": bool(d.get("password")), "authed": local or signed or keyed,
-               "signed_in": signed, "key": keyed, "via": "local" if local else "password" if signed else "key" if keyed else None}
+               "signed_in": signed, "key": keyed, "via": "local" if local else "password" if signed else "key" if keyed else None,
+               "methods": {"password": conf["password"], "keys": conf["keys"]}, "days": conf["days"]}
         if out["authed"]:
             out["sessions"] = len(d.get("sessions") or [])
             out["keys"] = len(d.get("keys") or [])
@@ -211,6 +221,8 @@ class Auth:
         fails = [x for x in self._fails.get(who, []) if t - x < WINDOW]
         if len(fails) >= TRIES and t - fails[-1] < PAUSE:
             raise AuthError(429, f"错得太多了，{int(PAUSE - (t - fails[-1])) + 1} 秒后再试")
+        if not self.net.get()["password"]:
+            raise AuthError(403, "密码登录已关闭，可在运行 Papertown 的电脑上的「网络与安全」中开启")
         d = self._read()
         if not d.get("password"):
             raise AuthError(403, "还没有设置访问密码：先在运行 Papertown 的电脑上设置")
@@ -221,7 +233,7 @@ class Auth:
         tok = secrets.token_urlsafe(32)
         with self._lock:
             d = self._read()
-            cut = t - DAYS * 86400
+            cut = t - self.days() * 86400
             keep = [s for s in d.get("sessions") or [] if s.get("t", 0) > cut][-49:]
             d["sessions"] = [*keep, {"id": _sid(tok), "at": now(), "t": t, "seen": now(), "seen_t": t, "agent": agent[:160]}]
             self._write(d)
@@ -237,6 +249,12 @@ class Auth:
             d["sessions"] = [s for s in d.get("sessions") or [] if s["id"] != sid]
             self._write(d)
 
+    def end_sessions(self) -> None:
+        with self._lock:
+            d = self._read()
+            d["sessions"] = []
+            self._write(d)
+
     def logout_all(self, scope: dict) -> int:
         """Every device signs in again (this one too, when it signed in)."""
         if not self.allowed(scope):
@@ -250,8 +268,9 @@ class Auth:
 
 
 class Gate:
-    """ASGI middleware: the API answers 401 to a request from elsewhere without a login; the page
-    and its assets are served to anyone, so it can show the sign-in."""
+    """ASGI middleware. A device whose address is outside the allowed sources (network.json) gets 403
+    for everything, the page too. Otherwise the API answers 401 to a request from elsewhere without a
+    login; the page and its assets are served to anyone, so it can show the sign-in."""
 
     OPEN = ("/api/auth/", "/api/health", "/api/bridge/")  # the bridge checks its agents' own tokens
 
@@ -259,11 +278,29 @@ class Gate:
         self.app = app
         self.auth = auth
 
+    @staticmethod
+    def agents_own(scope) -> bool:
+        """An agent's hook or the bridge: they check the agent's own token, from wherever the agent runs."""
+        path = scope["path"]
+        return path.startswith("/api/bridge/") or (scope.get("method") == "POST" and path.startswith("/api/agents/")
+                                                    and path.endswith("/hook") and len(path.split("/")) == 5)
+
     async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket") and not self.agents_own(scope) and not self.auth.net.admits(scope):
+            src = self.auth.net.source(scope) or "?"
+            if scope["type"] == "websocket":
+                await send({"type": "websocket.close", "code": 1008})
+                return
+            api = scope["path"].startswith("/api/")
+            msg = f"来源 {src} 不在 Papertown 允许的范围内，可在运行 Papertown 的电脑上的「设置 › 网络与安全」中添加"
+            body = json.dumps({"detail": msg}, ensure_ascii=False).encode() if api else msg.encode()
+            kind = b"application/json" if api else b"text/plain; charset=utf-8"
+            await send({"type": "http.response.start", "status": 403,
+                        "headers": [(b"content-type", kind), (b"content-length", str(len(body)).encode())]})
+            await send({"type": "http.response.body", "body": body})
+            return
         if scope["type"] == "http" and scope["path"].startswith("/api/") and not scope["path"].startswith(self.OPEN) \
-                and not (scope["method"] == "POST" and scope["path"].startswith("/api/agents/")
-                         and scope["path"].endswith("/hook") and len(scope["path"].split("/")) == 5) \
-                and not self.auth.allowed(scope):
+                and not self.agents_own(scope) and not self.auth.allowed(scope):
             body = json.dumps({"detail": "先登录"}, ensure_ascii=False).encode()
             await send({"type": "http.response.start", "status": 401,
                         "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})

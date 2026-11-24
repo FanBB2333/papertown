@@ -26,7 +26,6 @@ BACKENDS = {
 }
 PROGRESS = re.compile(r"^\s*PROGRESS\s+(\d{1,3})\b")
 RESULT = re.compile(r"^\s*RESULT\s+(\{.*\})\s*$")
-TIMEOUT = 3600
 
 
 class FarmError(Exception):
@@ -129,8 +128,10 @@ class Farm:
                     self._set(job_id, status="failed", ended_at=now(), note=str(e))
                     return
                 self._procs[job_id] = p
-                timer = threading.Timer(TIMEOUT, lambda: p.poll() is None and os.killpg(p.pid, signal.SIGTERM))
-                timer.start()
+                limit = self.town.s.local_job_timeout  # 0: no limit
+                timer = threading.Timer(limit, lambda: p.poll() is None and os.killpg(p.pid, signal.SIGTERM)) if limit > 0 else None
+                if timer:
+                    timer.start()
                 last = 0
                 for line in p.stdout:
                     log.write(line)
@@ -146,7 +147,8 @@ class Farm:
                         except ValueError:
                             pass
                 code = p.wait()
-                timer.cancel()
+                if timer:
+                    timer.cancel()
                 self._procs.pop(job_id, None)
             if (jdir / "result.json").exists():
                 try:

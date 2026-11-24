@@ -34,7 +34,7 @@ class Skim:
 
     def _run(self, *args: str) -> str:
         if not self.bin or not Path(self.bin).exists():
-            raise SkimError("没找到 skim：装好后放进 PATH，或者设 PAPERTOWN_SKIM_BIN")
+            raise SkimError("没找到 skim：装好后放进 PATH，或者在 papertown.toml 的 [services] 里设 skim_bin")
         try:
             # from the data directory, so skim does not pick up a project above the server's own
             r = subprocess.run([self.bin, *args], capture_output=True, text=True, timeout=30, cwd=self.s.data_dir)

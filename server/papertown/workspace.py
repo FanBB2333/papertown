@@ -8,7 +8,6 @@ from __future__ import annotations
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -190,7 +189,7 @@ class Workspace:
         return r
 
     def info(self, line_id: str) -> dict:
-        out: dict = {"line_id": line_id, "linked": bool(self.town.linked.of(line_id)), "latexmk": bool(shutil.which("latexmk"))}
+        out: dict = {"line_id": line_id, "linked": bool(self.town.linked.of(line_id)), "latexmk": bool(self.town.press.latexmk)}
         for which in ROOTS:
             r = self.root(line_id, which)
             if not r:
@@ -242,7 +241,8 @@ class Workspace:
         main = self._main(line_id, root)
         if not main:
             raise WsError(400, "找不到主 .tex 文件（带 \\documentclass 的那个）")
-        if not shutil.which("latexmk"):
+        latexmk = self.town.press.latexmk
+        if not latexmk:
             return {"ok": False, "log": "这台机器没装 latexmk：装好 TeX（如 MacTeX / TeX Live）后再编译。", "seconds": 0}
         t0 = time.time()
         if not self.town.linked.of(line_id):
@@ -251,7 +251,7 @@ class Workspace:
         out = self._build(line_id)
         out.mkdir(parents=True, exist_ok=True)
         try:
-            r = subprocess.run(["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error", f"-outdir={out}", main.name],
+            r = subprocess.run([latexmk, "-pdf", "-interaction=nonstopmode", "-halt-on-error", f"-outdir={out}", main.name],
                                cwd=main.parent, capture_output=True, text=True, timeout=240)
         except subprocess.TimeoutExpired:
             return {"ok": False, "log": "latexmk 超时（4 分钟）", "seconds": round(time.time() - t0, 1)}

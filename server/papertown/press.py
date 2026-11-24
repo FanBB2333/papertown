@@ -69,10 +69,11 @@ def results_table(table: dict | None) -> str:
 
 
 class Press:
-    def __init__(self, root: Path, library: Library, compile_tex: bool = True):
+    def __init__(self, root: Path, library: Library, compile_tex: bool = True, latexmk: str = ""):
         self.root = root
         self.library = library
-        self.compile_tex = compile_tex and shutil.which("latexmk") is not None
+        self.latexmk = shutil.which(latexmk or "latexmk")  # [services] latexmk_bin, else on PATH
+        self.compile_tex = compile_tex and self.latexmk is not None
 
     def dir(self, line_id: str) -> Path:
         d = self.root / line_id
@@ -113,7 +114,7 @@ class Press:
 
     def compile(self, d: Path) -> dict:
         try:
-            r = subprocess.run(["latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error", "main.tex"],
+            r = subprocess.run([self.latexmk or "latexmk", "-pdf", "-interaction=nonstopmode", "-halt-on-error", "main.tex"],
                                cwd=d, capture_output=True, text=True, timeout=120)
         except subprocess.TimeoutExpired:
             return {"compiled": False, "log": "latexmk 超时"}

@@ -36,9 +36,9 @@ def _find(explicit: str) -> str | None:
     return None
 
 
-def _node() -> list[str] | None:
+def _node(explicit: str = "") -> list[str] | None:
     from .agents import _which
-    node = _which("node")
+    node = _which("node", explicit)
     if node:
         return [node]
     return [APP_NODE] if Path(APP_NODE).exists() else None
@@ -49,10 +49,11 @@ def _pairs(flag: str, d: dict[str, str]) -> list[str]:
 
 
 class Paseo:
-    def __init__(self, bin_path: str = "", web: str = "", host: str = ""):
+    def __init__(self, bin_path: str = "", web: str = "", host: str = "", node: str = ""):
         self.bin = _find(bin_path)
-        self.web = (web or "http://127.0.0.1:6767").rstrip("/")
+        self.web = web.rstrip("/")  # [paseo] paseo_url
         self.host = host
+        self.node = node
         self._cache: dict[str, tuple[float, Any]] = {}
         self._lock = threading.Lock()
 
@@ -85,7 +86,7 @@ class Paseo:
 
     def _link_command(self, *args: str) -> tuple[list[str], dict[str, str]]:
         """Use the same SDK runtime, endpoint and credentials for reads and the feed."""
-        node = _node()
+        node = _node(self.node)
         if not self.bin or not node:
             raise PaseoError("本机没有找到 Paseo 或 node")
         if not (LINK / "node_modules" / "@getpaseo" / "client").exists():
@@ -96,10 +97,10 @@ class Paseo:
         env = {**os.environ, "ELECTRON_RUN_AS_NODE": "1"}
         endpoint = self.host or st.get("listen")
         if not endpoint:
-            raise PaseoError("Paseo 没有公布 TCP 端点，请设置 PAPERTOWN_PASEO_HOST=主机:端口")
+            raise PaseoError("Paseo 没有公布 TCP 端点，请在 papertown.toml 的 [paseo] 里设 paseo_host = \"主机:端口\"")
         address = urlsplit(endpoint if "://" in endpoint else f"ws://{endpoint}")
         if address.scheme not in ("ws", "wss", "tcp") or not address.hostname or address.path not in ("", "/ws"):
-            raise PaseoError("Paseo SDK 需要 TCP/WebSocket 端点，请把 PAPERTOWN_PASEO_HOST 设为主机:端口")
+            raise PaseoError("Paseo SDK 需要 TCP/WebSocket 端点，请在 papertown.toml 的 [paseo] 里把 paseo_host 设为主机:端口")
         env["PASEO_WS"] = urlunsplit(("ws" if address.scheme == "tcp" else address.scheme, address.netloc, "/ws", "", ""))
         return [*node, str(LINK / "link.mjs"), *args], env
 
@@ -172,6 +173,8 @@ class Paseo:
         return self._cached("status", 15, probe, fresh)
 
     def _web_up(self) -> bool:
+        if not self.web:
+            return False
         try:
             with urllib.request.urlopen(self.web + "/", timeout=2) as r:
                 return r.status == 200 and "text/html" in r.headers.get("content-type", "")

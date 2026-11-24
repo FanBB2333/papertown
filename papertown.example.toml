@@ -1,0 +1,132 @@
+# Papertown's settings. Copy this file to papertown.toml at the root of the checkout (or point
+# PAPERTOWN_CONFIG at another), then uncomment and change what you need; the rest keeps its default.
+# An environment variable PAPERTOWN_<NAME> overrides a line here. Relative paths are relative to this file.
+# Settings › Network & security in the web app writes [server] host and port and the [network] table here.
+
+[server]
+# where `papertown serve` listens: 127.0.0.1 (this machine only) or 0.0.0.0 (all networks) (PAPERTOWN_HOST)
+# host = "127.0.0.1"
+# its port (PAPERTOWN_PORT)
+# port = 31640
+# how agents on this machine reach the server; empty: http://127.0.0.1:<port> (PAPERTOWN_URL)
+# url = ""
+# projects, the library, logins and keys (PAPERTOWN_DATA_DIR)
+# data_dir = "server/var"
+# the skills agents are given (PAPERTOWN_SKILLS_DIR)
+# skills_dir = "server/skills"
+# your own projects, linked in from local repos (linked.py); empty: projects.json in the data directory (PAPERTOWN_PROJECTS)
+# projects = ""
+# put the sample projects in the first time the town starts empty (PAPERTOWN_SAMPLES)
+# samples = true
+# local job runner: how many commands run at once (PAPERTOWN_LOCAL_JOBS)
+# local_jobs = 2
+# seconds a local job may run before it is stopped; 0: no limit (PAPERTOWN_LOCAL_JOB_TIMEOUT)
+# local_job_timeout = 3600.0
+
+[agents]
+# where new agents and leads run until chosen in settings: paseo, herdr, tmux or headless (PAPERTOWN_AGENT_RUNTIME)
+# agent_runtime = "paseo"
+# what the assistant starts with on Paseo until chosen in settings: provider/model@thinking (PAPERTOWN_ASSISTANT_MODEL)
+# assistant_model = "codex/gpt-6.1-terra@xhigh"
+# what project leads start with (PAPERTOWN_LEAD_MODEL)
+# lead_model = "codex/gpt-6.1-terra@high"
+# what a coder or a writer starts on when its lead hires it; empty: the lead's (PAPERTOWN_WORKER_MODEL)
+# worker_model = ""
+# each project in progress keeps its lead running (false: leads start only by hand) (PAPERTOWN_LEAD_RESIDENT)
+# lead_resident = true
+# seconds between the leads' looks at their projects (PAPERTOWN_LEAD_TICK)
+# lead_tick = 20.0
+# and at least between two check-ins (PAPERTOWN_LEAD_GAP)
+# lead_gap = 180.0
+# seconds between looks at what each project's hard checks read (PAPERTOWN_CHECK_TICK)
+# check_tick = 120.0
+# the claude CLI; empty: found on PATH (PAPERTOWN_CLAUDE_BIN)
+# claude_bin = ""
+# the codex CLI; empty: found on PATH (PAPERTOWN_CODEX_BIN)
+# codex_bin = ""
+# pi; pi agents use pi's own model settings and login (PAPERTOWN_PI_BIN)
+# pi_bin = ""
+# the model pi agents start on (PAPERTOWN_PI_MODEL)
+# pi_model = ""
+# the Antigravity CLI (PAPERTOWN_AGY_BIN)
+# agy_bin = ""
+
+[paseo]
+# Paseo's CLI; empty: found on PATH (PAPERTOWN_PASEO_BIN)
+# paseo_bin = ""
+# the web app Paseo serves (PAPERTOWN_PASEO_URL)
+# paseo_url = "http://127.0.0.1:6767"
+# an explicit daemon endpoint (PAPERTOWN_PASEO_HOST)
+# paseo_host = ""
+# seconds between readings of Paseo's model list for new models; 0 turns them off (PAPERTOWN_PASEO_WATCH)
+# paseo_watch = 1800.0
+# node, which reads the conversations through Paseo's SDK; empty: found on PATH, else the one in Paseo.app (PAPERTOWN_NODE_BIN)
+# node_bin = ""
+
+[terminal]
+# tmux; empty: found on PATH (PAPERTOWN_TMUX_BIN)
+# tmux_bin = ""
+# the tmux socket agents run on (PAPERTOWN_TMUX_SOCKET)
+# tmux_socket = "papertown"
+# read existing herdr terminals over its socket (never starts the host) (PAPERTOWN_HERDR)
+# herdr = true
+# herdr's socket (PAPERTOWN_HERDR_SOCKET)
+# herdr_socket = "~/.config/herdr/herdr.sock"
+# seconds of a still screen after which a working terminal agent counts as waiting on a dialog (PAPERTOWN_TERMINAL_STILL)
+# terminal_still = 15.0
+# how long herdr gets to start a CLI in a new tab, and the window for finding a new Codex session's log (PAPERTOWN_TERMINAL_STARTUP)
+# terminal_startup = 20.0
+# seconds of a still screen after which a start counts as held by a dialog (PAPERTOWN_TERMINAL_READY)
+# terminal_ready = 5.0
+# after Papertown sends Esc, a screen still this long means the agent has stopped (PAPERTOWN_TERMINAL_SETTLE)
+# terminal_settle = 2.0
+
+[history]
+# where Claude Code keeps its conversations, for importing (history.py) (PAPERTOWN_CLAUDE_HOME)
+# claude_home = "~/.claude"
+# where Codex keeps them (PAPERTOWN_CODEX_HOME)
+# codex_home = "~/.codex"
+# where Antigravity keeps them (PAPERTOWN_ANTIGRAVITY_HOME)
+# antigravity_home = "~/.gemini/antigravity-cli"
+# read the agents' transcripts (PAPERTOWN_TRANSCRIPTS)
+# transcripts = true
+# read the CLIs' usage logs (PAPERTOWN_USAGE_LOGS)
+# usage_logs = true
+# seconds between readings of usage (PAPERTOWN_USAGE_POLL)
+# usage_poll = 300.0
+# model prices for the usage figures, added to pricing.py's: a table such as { "deepseek-chat" = [0.27, 1.1] } (or the same as JSON), USD per million tokens (input, output[, cache read]) (PAPERTOWN_PRICES)
+# prices = ""
+
+[services]
+# the arXiv dock (false: no network, as in tests) (PAPERTOWN_ARXIV)
+# arxiv_port = true
+# the arXiv API the dock and `papertown ingest` search (PAPERTOWN_ARXIV_API)
+# arxiv_api = "https://export.arxiv.org/api/query"
+# Semantic Scholar's paper batch endpoint, for the citation edges of `papertown ingest --refs` (PAPERTOWN_S2_API)
+# s2_api = "https://api.semanticscholar.org/graph/v1/paper/batch"
+# a Semantic Scholar API key, optional (without one, requests are often turned away); the environment is the better place for it (S2_API_KEY)
+# s2_key = ""
+# compile the papers' LaTeX (PAPERTOWN_COMPILE_TEX)
+# compile_tex = true
+# latexmk, which compiles them; empty: found on PATH (PAPERTOWN_LATEXMK_BIN)
+# latexmk_bin = ""
+# extra MCP servers: a JSON file in the Claude Desktop format {"mcpServers": {...}} (PAPERTOWN_MCP_CONFIG)
+# mcp_config = ""
+# nvidb's GPU queue, read only: the cards on your machines and their jobs (PAPERTOWN_NVIDB)
+# nvidb = true
+# nvidb; empty: found on PATH (PAPERTOWN_NVIDB_BIN)
+# nvidb_bin = ""
+# seconds between background readings of nvidb (PAPERTOWN_NVIDB_POLL)
+# nvidb_poll = 10.0
+# skim, the skill manager (skim.py) (PAPERTOWN_SKIM_BIN)
+# skim_bin = ""
+
+[network]
+# where other devices may come from: "lan", "tailscale", "any", or an address or network such as "203.0.113.0/24"
+# sources = ["lan", "tailscale"]
+# other devices' browsers may sign in with the access password
+# password = true
+# the apps and scripts may connect with access keys
+# keys = true
+# how long a password sign-in lasts: 1, 7, 30 or 90
+# days = 30
