@@ -161,12 +161,18 @@ uv run papertown job list
 
 ### Open it from another device
 
-The server listens on `127.0.0.1` only. Make the port reachable (for example `tailscale serve 8000`) and set an access password under Settings › Access & sign-in.
+The server listens on `127.0.0.1` only. Make the port reachable (for example `tailscale serve 8000`, or `papertown serve --host 0.0.0.0` on a network you trust), then:
+
+- **Browser**: set an access password under Settings › Access & sign-in and sign in with it.
+- **iPhone and Mac apps, scripts**: make an access key for each device, with `uv run papertown key create --name iPhone` in `server/` or under Settings › Access & sign-in, and enter the server address and the key in the app. A key is shown once, sent as `Authorization: Bearer <key>`, stored only as a hash, and revoked on its own (`papertown key list`, `papertown key revoke <id>`). Keys are made and revoked on the server's own machine or from a browser signed in with the password, never with another key.
+
+`GET /api/health` answers before signing in, with `"app": "papertown"`, so a client can tell it has found a Papertown server.
 
 ### Other ways in
 
 - **Terminal UI**: `uv run papertown` in `server/` opens the same projects in the terminal and starts a server if none is running.
-- **macOS app**: `macos/build.sh` builds `macos/build/Papertown.app`, and `macos/build.sh --install` copies it to `~/Applications`.
+- **iPhone and Mac apps**: native SwiftUI apps from one code base in `ios/` (see [ios/README.md](ios/README.md)). The Mac app also starts this Mac's server. `ios/scripts/build-mac.sh` builds `ios/build/Papertown.app`.
+- **Web page in a Mac window**: `macos/build.sh` builds `macos/build/Papertown.app`, and `macos/build.sh --install` copies it to `~/Applications`.
 - **MCP server**: other MCP clients can read the library and the project stages:
 
   ```json

@@ -120,6 +120,8 @@ pnpm dev                          # http://127.0.0.1:5173
 
 密码只存 scrypt 哈希，登录用一个 HttpOnly 的 cookie（`pt_session`，经 https 打开时加 `Secure`），都在数据目录的 `auth.json` 里，不进 git。没登录时 `/api/*` 一律回 401（`/api/auth/`、`/api/health` 和员工用的 `/api/bridge/` 除外），前端会回到首页登录，登录后回到原来的地址。接口：`GET /api/auth/state`、`POST /api/auth/login`、`POST /api/auth/logout`、`POST /api/auth/logout-all`、`POST /api/auth/password`（设置或修改）、`DELETE /api/auth/password`。
 
+iPhone 和 Mac App、脚本用**访问密钥**连接：每个设备一个，在服务器上运行 `uv run papertown key create --name iPhone`（`server/` 里），或在「设置 › 访问与登录」里新建。密钥只在新建时显示一次，`auth.json` 里只存它的哈希。App 里填服务器地址和密钥，之后每个请求（包括实时通道 `/api/events`）都带 `Authorization: Bearer <密钥>`。`papertown key list` 列出密钥和最近使用时间，`papertown key revoke <id>` 撤销其中一个，只影响用它的那台设备。新建和撤销只能在本机或用密码登录的浏览器里做，密钥本身没有这个权限。取消访问密码时密钥保留。`GET /api/health` 不需要登录，回复里的 `"app": "papertown"` 让 App 先确认地址上是 Papertown。接口：`GET /api/auth/keys`、`POST /api/auth/keys`、`DELETE /api/auth/keys/<id>`。
+
 ### 终端界面（TUI）
 
 不带子命令运行 `papertown`（或 `papertown tui`）就是终端里的小镇：
@@ -154,7 +156,17 @@ uv run papertown tui --server http://127.0.0.1:8001 --no-start   # 只连已有�
 - 技能：小镇自己的（`papertown skills` 列出的那些）和 skim 里的（`skim skill list`）。
 - 项目的文件（代码仓库、论文工程在本机时）：文件列表和 git 状态、文件内容、`git diff`。保存文件仍走服务。
 
-### macOS App
+### iPhone 和 Mac App
+
+`ios/` 是原生 SwiftUI App，iPhone 和 Mac 共用一套代码（`ios/PapertownApp/Papertown.xcodeproj` 的 **Papertown** 目标）：收件箱、项目、员工、小镇、服务器五个部分，内置一个只读的离线演示。在 iPhone 上是底部标签栏。在 Mac 上是带侧边栏的窗口，⌘1 到 ⌘5 切换，⌘⇧K 连接服务器，⌘R 刷新，⌘, 打开设置，Dock 图标上的数字是收件箱里等你处理的事。Mac App 也管本机的服务：端口上没有服务时在构建它的代码目录里运行 `uv run --frozen papertown serve`，退出时停掉自己启动的那个，日志在 `~/Library/Logs/Papertown/server.log`。
+
+```bash
+ios/scripts/build-mac.sh   # 生成 ios/build/Papertown.app
+```
+
+连接别处的服务器见上面的「访问与登录」：服务器地址加访问密钥。更多见 [ios/README.md](../ios/README.md)。
+
+### macOS 网页外壳
 
 `macos/` 是一个 SwiftUI + WKWebView 的外壳，窗口里就是同一个网页，不另写一套界面（构建依赖 Command Line Tools）：
 
