@@ -5,6 +5,9 @@ import SwiftUI
 // for one (iPhone Duo open, Plus and Max models in landscape); tabs along the bottom on an iPhone or a narrow window
 // (iPad Split View, iPhone Duo folded). The pages are the same in both. Switching frames keeps the section and what is
 // open in it, because both live in TownStore.
+//
+// On iPad and iPhone the sidebar is Papertown's own (Sidebar.swift): beside the page where there is room, sliding over
+// it from the left where there is not. The Mac keeps the system's list in SidebarShell.
 
 struct AppSection: Identifiable {
     let tab: TownStore.Tab
@@ -43,13 +46,14 @@ struct AppShell: View {
         SidebarShell(store: store)
         #else
         if width == .regular {
-            SidebarShell(store: store)
+            SplitShell(store: store)
         } else {
-            TabShell(store: store)
+            DrawerShell(store: store)
         }
         #endif
     }
 }
+
 
 /// The sidebar and the page beside it.
 struct SidebarShell: View {
@@ -93,21 +97,4 @@ struct SidebarShell: View {
         NSApp.dockTile.badgeLabel = n > 0 ? String(n) : nil
     }
     #endif
-}
-
-/// Tabs along the bottom.
-struct TabShell: View {
-    @ObservedObject var store: TownStore
-
-    var body: some View {
-        let lang = store.language
-        TabView(selection: $store.selectedTab) {
-            ForEach(AppSection.all) { section in
-                AppSection.page(section.tab)
-                    .tabItem { Label(lang.string(section.title), systemImage: section.symbol + (section.tab == .server ? "" : ".fill")) }
-                    .badge(section.tab == .inbox ? store.inboxItems.count : 0)
-                    .tag(section.tab)
-            }
-        }
-    }
 }

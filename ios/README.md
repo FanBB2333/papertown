@@ -8,10 +8,13 @@ Native SwiftUI client for iOS 16+ and macOS 14+, composed of two local Swift Pac
 
 ## Layout
 
-One set of pages for every size. Where the width is regular (Mac, iPad full screen or a wide Split View, a foldable
-iPhone opened, Plus and Max iPhones in landscape) the sections sit in a sidebar beside the page; where it is compact
-(iPhone, a narrow iPad window, a foldable folded) they are tabs along the bottom. Switching between the two keeps the
-section and the page open in it (`Views/AppShell.swift`).
+One set of pages for every size. On iPad and iPhone the sidebar is Papertown's own, in quiet warm colours: the
+four sections, New Idea, the projects opened lately, and the server with its connection along the bottom
+(`Views/Sidebar.swift`). Where the width is regular (iPad full screen or a wide Split View, a foldable iPhone opened,
+Plus and Max iPhones in landscape) it sits beside the page and folds away with the button at its head; where it is
+compact (iPhone, a narrow iPad window, a foldable folded) it slides over the page from the button at the top left.
+Switching between the two keeps the section and the page open in it. The Mac keeps the system's sidebar
+(`Views/AppShell.swift`).
 
 ## On the Mac
 

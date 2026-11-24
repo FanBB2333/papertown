@@ -143,14 +143,7 @@ struct ConnectionPillButton: View {
         }
     }
 
-    private var color: Color {
-        switch store.connectionStatus {
-        case .connected: return .green
-        case .connecting, .reconnecting: return .orange
-        case .authRequired: return .orange
-        case .disconnected: return .red
-        }
-    }
+    private var color: Color { store.connectionColor }
 
     private func label(language: AppLanguage) -> String {
         switch store.connectionStatus {
@@ -164,6 +157,18 @@ struct ConnectionPillButton: View {
             return language.string("conn.sign_in_needed")
         case .disconnected:
             return language.string("conn.disconnected")
+        }
+    }
+}
+
+extension TownStore {
+    /// Green when connected, orange on the way or waiting for a sign-in, red when there is no server.
+    var connectionColor: Color {
+        switch connectionStatus {
+        case .connected: return .green
+        case .connecting, .reconnecting: return .orange
+        case .authRequired: return .orange
+        case .disconnected: return .red
         }
     }
 }

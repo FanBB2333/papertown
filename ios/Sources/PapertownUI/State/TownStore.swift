@@ -41,8 +41,18 @@ public final class TownStore: ObservableObject {
     /// only the pages that listen.
     public let events = PassthroughSubject<(name: String, payload: [String: JSONValue]), Never>()
     /// What is open in Projects and in the Inbox: kept here so a change of frame (tabs, sidebar) keeps it.
-    @Published var projectsPath: [ProjectRoute] = []
-    @Published var inboxPath: [InboxRoute] = []
+    /// Type-erased on purpose: the pages also push views of their own (NavigationLink with a destination), and in a
+    /// split view's detail column SwiftUI compares the stack with the bound path; a typed array there ends in
+    /// AnyNavigationPath.Error.comparisonTypeMismatch, a crash.
+    @Published var projectsPath = NavigationPath()
+    @Published var inboxPath = NavigationPath()
+    /// Set by the sidebar's 新建 Idea: Projects opens its sheet when it sees it.
+    @Published var newProjectRequested = false
+    /// The project whose page is open in Projects, for the sidebar to mark among the recent ones.
+    @Published var currentProjectID: String?
+    /// Projects opened lately, per server, newest first (Sidebar.swift).
+    @Published var recentByServer: [String: [String]] = UserDefaults.standard.dictionary(forKey: TownStore.recentKey) as? [String: [String]] ?? [:]
+    static let recentKey = "PTRecentProjects"
     @Published public var language: AppLanguage
     @Published public var appearance: AppAppearance
 

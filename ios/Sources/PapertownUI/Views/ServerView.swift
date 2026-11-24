@@ -180,6 +180,7 @@ struct ServerView: View {
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)
             .navigationTitle(lang.string("tab.server"))
+            .papertownSidebarButton()
             .papertownLargeTitle()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {

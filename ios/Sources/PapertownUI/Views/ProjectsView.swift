@@ -39,6 +39,12 @@ struct ProjectsView: View {
         }
     }
 
+    private func takeNewIdeaRequest() {
+        guard store.newProjectRequested else { return }
+        store.newProjectRequested = false
+        showNewIdea = true
+    }
+
     var body: some View {
         let lang = store.language
         NavigationStack(path: $store.projectsPath) {
@@ -85,7 +91,9 @@ struct ProjectsView: View {
             }
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)
+            .onAppear { store.currentProjectID = nil }  // back on the list: no project open
             .navigationTitle(lang.string("tab.projects"))
+            .papertownSidebarButton()
             .navigationDestination(for: ProjectRoute.self) { route in route.view }
             #if DEBUG
             // -PTProject line_1 [-PTPage checks|overlap|method|exp|paper|reports|files|usage|outline] opens that page
@@ -93,7 +101,9 @@ struct ProjectsView: View {
             .task {
                 guard !Self.linked, let id = UserDefaults.standard.string(forKey: "PTProject") else { return }
                 Self.linked = true
-                store.projectsPath = [.project(id)] + (UserDefaults.standard.string(forKey: "PTPage").map { [.page(id, $0)] } ?? [])
+                var path = NavigationPath([ProjectRoute.project(id)])
+                if let page = UserDefaults.standard.string(forKey: "PTPage") { path.append(ProjectRoute.page(id, page)) }
+                store.projectsPath = path
             }
             #endif
             .papertownLargeTitle()
@@ -115,6 +125,9 @@ struct ProjectsView: View {
             .refreshable {
                 await store.refreshAll()
             }
+            // the sidebar's 新建 Idea
+            .onAppear { takeNewIdeaRequest() }
+            .onChange(of: store.newProjectRequested) { _ in takeNewIdeaRequest() }
             .sheet(isPresented: $showNewIdea) {
                 NewIdeaSheet()
                     .papertownSheetFrame(height: 420)

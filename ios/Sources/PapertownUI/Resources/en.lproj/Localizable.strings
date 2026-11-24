@@ -828,3 +828,11 @@
 "rag.candidates" = "Candidates: %d";
 "rag.footer" = "How many papers a search returns, and how many it weighs first.";
 "rag.saved" = "Search settings saved.";
+
+/* Sidebar (iPad and iPhone) */
+"sidebar.recent" = "Recent";
+"sidebar.open" = "Show Sidebar";
+"sidebar.hide" = "Hide Sidebar";
+"sidebar.close" = "Close Sidebar";
+"sidebar.demo" = "Read-only samples";
+"sidebar.connect" = "Connect to a Server";

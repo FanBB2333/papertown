@@ -92,6 +92,7 @@ struct ProjectDetailView: View {
                 .refreshable {
                     await store.refreshProject(id: projectID)
                 }
+                .onAppear { store.noteOpened(projectID) }
             } else {
                 EmptyStateView(
                     title: lang.string("error.not_found"),

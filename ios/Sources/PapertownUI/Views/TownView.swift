@@ -51,6 +51,7 @@ struct TownView: View {
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)
             .navigationTitle(lang.string("tab.town"))
+            .papertownSidebarButton()
             .papertownLargeTitle()
             .toolbar { ToolbarItem(placement: .primaryAction) { ConnectionPillButton() } }
             .refreshable { await store.refreshAll() }

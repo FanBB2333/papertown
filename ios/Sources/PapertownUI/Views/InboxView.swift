@@ -81,6 +81,7 @@ struct InboxView: View {
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)
             .navigationTitle(lang.string("tab.inbox"))
+            .papertownSidebarButton()
             .papertownLargeTitle()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -256,7 +257,7 @@ struct InboxView: View {
                 .controlSize(.small)
             if let projectID = item.projectID {
                 Button(lang.string("action.open_project")) {
-                    store.inboxPath.append(.project(projectID))
+                    store.inboxPath.append(InboxRoute.project(projectID))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -275,7 +276,7 @@ struct InboxView: View {
             .controlSize(.small)
 
             Button(lang.string("action.view_chat")) {
-                store.inboxPath.append(.chat(ChatRoute(
+                store.inboxPath.append(InboxRoute.chat(ChatRoute(
                     agentID: agentID,
                     role: role,
                     subtitle: item.projectSeq.map { "#\($0)" } ?? item.projectTitle
@@ -291,7 +292,7 @@ struct InboxView: View {
             .controlSize(.small)
 
             Button(lang.string("action.open_project")) {
-                store.inboxPath.append(.project(project.id))
+                store.inboxPath.append(InboxRoute.project(project.id))
             }
             .buttonStyle(.bordered)
             .controlSize(.small)

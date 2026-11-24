@@ -104,6 +104,7 @@ struct StaffView: View {
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)
             .navigationTitle(lang.string("tab.staff"))
+            .papertownSidebarButton()
             .papertownLargeTitle()
             .searchable(text: $searchText, prompt: lang.string("staff.search"))
             .toolbar {

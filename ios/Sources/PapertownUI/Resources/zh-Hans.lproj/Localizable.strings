@@ -828,3 +828,11 @@
 "rag.candidates" = "候选数量：%d";
 "rag.footer" = "检索返回的论文数量，以及先行比较的候选数量。";
 "rag.saved" = "检索设置已保存。";
+
+/* Sidebar (iPad and iPhone) */
+"sidebar.recent" = "最近";
+"sidebar.open" = "打开侧栏";
+"sidebar.hide" = "收起侧栏";
+"sidebar.close" = "关闭侧栏";
+"sidebar.demo" = "只读样例";
+"sidebar.connect" = "连接服务器";

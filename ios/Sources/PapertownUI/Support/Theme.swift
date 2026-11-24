@@ -1,4 +1,20 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+
+/// Warm neutrals for iOS, after the Claude app: the page, and the sidebar a shade under it, each with a dark twin.
+enum WarmPalette {
+    static let page = dynamic(light: (0.965, 0.961, 0.941), dark: (0.071, 0.067, 0.063))
+    static let side = dynamic(light: (0.933, 0.925, 0.894), dark: (0.114, 0.110, 0.106))
+
+    private static func dynamic(light: (CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat)) -> Color {
+        Color(UIColor { traits in
+            let c = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
+    }
+}
+#endif
 
 public enum AppAppearance: String, CaseIterable, Identifiable, Sendable {
     case system
@@ -30,8 +46,22 @@ public enum AppAppearance: String, CaseIterable, Identifiable, Sendable {
         case .paper:
             return Color(red: 0.96, green: 0.945, blue: 0.91)
         default:
+            #if os(iOS)
+            return WarmPalette.page
+            #else
             return nil
+            #endif
         }
+    }
+
+    /// The sidebar on iPad and iPhone: a shade under the page.
+    public var sidebarBackground: Color {
+        #if os(iOS)
+        if self == .paper { return Color(red: 0.925, green: 0.905, blue: 0.86) }
+        return WarmPalette.side
+        #else
+        return Color.clear
+        #endif
     }
 
     public var rowBackground: Color? {
