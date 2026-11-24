@@ -98,13 +98,6 @@ struct AgentChatView: View {
                     }
                 }
             }
-            #if os(iOS)
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button { typing = false } label: { Image(systemName: "keyboard.chevron.compact.down") }
-                    .accessibilityLabel(lang.string("chat.hide_keyboard"))
-            }
-            #endif
         }
         .onAppear {
             #if DEBUG
@@ -523,6 +516,17 @@ struct AgentChatView: View {
                         .focused($typing)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 18))
+                    #if os(iOS)
+                    if typing {
+                        Button { typing = false } label: {
+                            Image(systemName: "keyboard.chevron.compact.down")
+                                .font(.system(size: 20))
+                                .frame(width: 30, height: 30)
+                        }
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(lang.string("chat.hide_keyboard"))
+                    }
+                    #endif
                     Button(action: send) {
                         Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
                     }
