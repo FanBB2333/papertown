@@ -281,7 +281,7 @@
 "check.ran" = "Checked";
 "check.findings" = "Findings";
 "check.history" = "History";
-"outline.nav" = "Research Loop";
+"outline.nav" = "Loop Outline";
 "overlap.nav" = "Overlap Report";
 "overlap.verdict" = "Verdict";
 "overlap.gap" = "Gap";

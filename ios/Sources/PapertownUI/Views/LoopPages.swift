@@ -21,6 +21,13 @@ struct LoopPage: View {
                 gates(v, lang)
                 tasks(v, lang)
                 restore(v, act, lang)
+                // the same loop as text, the way the lead reads it
+                Section {
+                    NavigationLink { OutlinePage(projectID: projectID) } label: {
+                        Label(lang.string("outline.nav"), systemImage: "text.alignleft")
+                    }
+                    .papertownRowBackground(store.appearance)
+                }
             }
             .papertownInsetGroupedList()
             .papertownListAppearance(store.appearance)

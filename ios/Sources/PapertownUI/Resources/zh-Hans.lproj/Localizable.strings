@@ -281,7 +281,7 @@
 "check.ran" = "检查时间";
 "check.findings" = "发现的问题";
 "check.history" = "历史记录";
-"outline.nav" = "研究回路";
+"outline.nav" = "回路大纲";
 "overlap.nav" = "撞车报告";
 "overlap.verdict" = "结论";
 "overlap.gap" = "空白点";

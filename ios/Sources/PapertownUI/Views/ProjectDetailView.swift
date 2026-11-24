@@ -147,7 +147,6 @@ struct ProjectDetailView: View {
             link(lang.string("memory.nav"), "brain", detail: store.cards[projectID]?.memory.map { m in
                 m.sessions + m.notes > 0 ? lang.format("memory.counts", m.sessions, m.notes) : lang.string("memory.none")
             }) { MemoryPage(projectID: projectID) }
-            link(lang.string("outline.nav"), "point.3.connected.trianglepath.dotted", detail: nil) { OutlinePage(projectID: projectID) }
             if reached("hatch") {
                 link(lang.string("overlap.nav"), "doc.text.magnifyingglass", detail: project.verdict.map(lang.server)) { OverlapPage(projectID: projectID) }
             }
