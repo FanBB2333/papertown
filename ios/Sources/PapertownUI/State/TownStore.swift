@@ -212,13 +212,19 @@ public final class TownStore: ObservableObject {
             await openDemo(persist: false)
             return
         }
-        // -PTConnect <address> [-PTKey <access key>]: connects for a test run, saving neither the server nor the key
+        // -PTConnect <address> [-PTKey <access key>]: connects for a test run, saving neither the server nor the key.
+        // With -PTSave YES (and -PTName <name>) it is saved like a server added by hand, the key in the Keychain:
+        // for setting up a device from the Mac.
         if let address = args.string(forKey: "PTConnect") {
             let key = args.string(forKey: "PTKey")
-            let profile = ServerProfile(name: address, addressString: address, usesAccessKey: key != nil)
-            profiles.append(profile)
+            let profile = ServerProfile(name: args.string(forKey: "PTName") ?? address, addressString: address, usesAccessKey: key != nil)
             showConnectSheet = false
-            await connect(to: profile, accessKey: key)
+            if args.bool(forKey: "PTSave") {
+                await upsertProfile(profile, password: nil, accessKey: key)
+            } else {
+                profiles.append(profile)
+                await connect(to: profile, accessKey: key)
+            }
             return
         }
         #endif
