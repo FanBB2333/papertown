@@ -504,3 +504,26 @@ def test_prototype_migration_rebuilds_session_cache_and_preserves_windows(tmp_pa
     db.update("lines", {"id": "old"}, usage_budget=123.5)
     assert db.val("select typeof(usage_budget) from lines") == "real"
     db.conn.close()
+
+
+def test_logins_paseo_stops_listing_are_dropped(usage):
+    service, clock, readers = usage
+    renamed = entry("claude", clock, used=40) | {"id": "claude-old-id"}
+    signed_out = entry("claude", clock) | {"id": "claude-signed-out", "report": {"status": "unavailable"}}
+    readers.paseo = lambda force: paseo_reports([renamed, entry("codex", clock)])
+    service.poll(force=True)
+    readers.paseo = lambda force: paseo_reports([entry("claude", clock, used=41), signed_out, entry("codex", clock)])
+    clock.at += 60
+    snapshot = service.poll(force=True)
+    claude = snapshot["providers"][0]
+    # the same login under a new id shows once, and a listed login that cannot be read adds a note only
+    assert {w["account"] for w in claude["windows"]} == {"claude-account"}
+    assert [w["used"] for w in claude["windows"] if w["id"] == "weekly"] == [41]
+    assert claude["status"] == "available" and claude["notes"]
+    # Paseo listing nothing, or failing outright, keeps the last readings
+    readers.paseo = lambda force: paseo_reports([])
+    clock.at += 60
+    assert service.poll(force=True)["providers"][0]["windows"]
+    readers.paseo = lambda force: (_ for _ in ()).throw(UsageError("Paseo 用量读取超时"))
+    clock.at += 60
+    assert service.poll(force=True)["providers"][0]["windows"]

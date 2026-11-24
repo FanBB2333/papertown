@@ -157,6 +157,11 @@ class Usage:
                     before = accounts.get(account)
                     if not before or sampled > (stamp(before.get("fetched_at")) or 0):
                         accounts[account] = current
+                # A login Paseo no longer lists (signed out, or listed under a new id) goes, so one
+                # account is not shown twice. One it lists but cannot read keeps its last reading.
+                if entries:
+                    listed = {e["account"] for e in entries}
+                    accounts = {a: r for a, r in accounts.items() if a in listed}
                 providers[p] = {"accounts": accounts, "error": " · ".join(dict.fromkeys(reasons)) or None,
                                 "notes": list(dict.fromkeys(notes)),
                                 "attempted_at": iso(at)}
