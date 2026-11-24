@@ -5,7 +5,7 @@ import { Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Table
 import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, type DefaultRuntime, type AuthState, type Hud, type HerdrInfo, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
+import { api, type AccessKey, type DefaultRuntime, type AuthState, type Hud, type HerdrInfo, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { Logo } from '../art';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
@@ -37,7 +37,7 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
     ['agents', tr('员工 Agent'), tr('Paseo、herdr 和本机 pi'), RobotIcon, '#a2845e'],
   ]],
   [tr('系统'), [
-    ['access', tr('访问与登录'), tr('手机和其他设备的访问密码'), LockKeyIcon, '#8e8e93'],
+    ['access', tr('访问与登录'), tr('其他设备的访问密码与 App 访问密钥'), LockKeyIcon, '#8e8e93'],
     ['demo', tr('展示模式'), tr('样例项目和调研文章'), FlaskIcon, '#e6a700'],
     ['keys', tr('快捷键'), tr('所有按键一览'), KeyboardIcon, '#636366'],
   ]],
@@ -436,7 +436,7 @@ function Access() {
         <Row label={tr('这台设备')} desc={a.local ? tr('运行 Papertown 的电脑：直接进入') : tr('用访问密码登录的设备')}>
           {!a.local && <Button onClick={() => run(api.logout).then(() => go('/'))}>{tr('退出登录')}</Button>}
         </Row>
-        <Row label={tr('访问密码')} desc={a.password ? tr('手机及其他设备在首页用此密码登录') : tr('尚未设置：除本机外其他设备无法访问')}>
+        <Row label={tr('访问密码')} desc={a.password ? tr('手机及其他设备在首页用此密码登录') : tr('尚未设置：其他设备的浏览器无法登录')}>
           {!form && <Button onClick={() => setForm(true)}>{a.password ? tr('修改密码') : tr('设置密码')}</Button>}
         </Row>
         {form && (
@@ -472,8 +472,55 @@ function Access() {
         )}
         {msg && <Note>{msg}</Note>}
       </Card>
-      <Note>{tr('Papertown 默认仅监听本机。如需在手机上打开，请先开启网络访问（如 tailscale serve 8000），再在手机上用此密码登录。')}</Note>
+      {(a.local || a.signed_in) && <AccessKeys />}
+      <Note>{tr('Papertown 默认仅监听本机。如需在其他设备上打开，请先开启网络访问（如 tailscale serve 8000 或 papertown serve --host 0.0.0.0），再在浏览器用访问密码登录，或在 App 中填写服务器地址和访问密钥。')}</Note>
     </>
+  );
+}
+
+// keys for the iPhone and Mac apps (and scripts): one per device, shown once, revoked one by one
+function AccessKeys() {
+  const [keys, setKeys] = useState<AccessKey[] | null>(null);
+  const [name, setName] = useState('');
+  const [made, setMade] = useState<AccessKey | null>(null);
+  const [msg, setMsg] = useState('');
+  const load = () => api.accessKeys().then(r => setKeys(r.keys), e => setMsg((e as Error).message));
+  useEffect(() => { load(); }, []);
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg('');
+    try { setMade(await api.createKey(name.trim())); setName(''); await load(); } catch (err) { setMsg((err as Error).message); }
+  }
+  async function revoke(k: AccessKey) {
+    setMsg('');
+    try { setKeys((await api.revokeKey(k.id)).keys); if (made?.id === k.id) setMade(null); setMsg(tr('已撤销「{0}」。', k.name)); } catch (err) { setMsg((err as Error).message); }
+  }
+  const when = (s: string | null) => s ? new Date(s).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : tr('从未使用');
+  return (
+    <Card>
+      <Row label={tr('访问密钥')} desc={tr('iPhone 与 Mac App 用服务器地址加访问密钥连接。每个设备一个密钥，可单独撤销。')} />
+      <form className="st-form st-key-new" onSubmit={create}>
+        <Input label={tr('设备名称')} placeholder={tr('例如 iPhone')} value={name} maxLength={60} onChange={e => setName(e.target.value)} />
+        <div className="st-btns"><Button variant="primary" type="submit">{tr('新建密钥')}</Button></div>
+      </form>
+      {made?.key && (
+        <div className="st-key-made">
+          <Text>{tr('「{0}」的访问密钥只显示这一次，请现在复制到 App 中：', made.name)}</Text>
+          <div className="st-key-text">
+            <code>{made.key}</code>
+            <Button onClick={() => { navigator.clipboard?.writeText(made.key!); setMsg(tr('已复制。')); }}>{tr('复制')}</Button>
+            <Button variant="ghost" onClick={() => setMade(null)}>{tr('完成')}</Button>
+          </div>
+        </div>
+      )}
+      {keys?.map(k => (
+        <Row key={k.id} label={k.name} desc={tr('{0}… · 创建于 {1} · 最近使用 {2}', k.hint, when(k.at), when(k.seen))}>
+          <Button variant="secondary-destructive" onClick={() => revoke(k)}>{tr('撤销密钥')}</Button>
+        </Row>
+      ))}
+      {keys && !keys.length && <Note>{tr('还没有访问密钥。')}</Note>}
+      {msg && <Note>{msg}</Note>}
+    </Card>
   );
 }
 

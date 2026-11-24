@@ -258,7 +258,9 @@ export interface MemoryFull extends MemoryItem { messages?: { role: 'user' | 'as
 
 export type PageKind = 'report' | 'explain' | 'answer';
 export interface Page { id: string; n: number; title: string; kind: PageKind; by: string; agent: string; question: string | null; at: string; size: number }
-export interface AuthState { local: boolean; password: boolean; authed: boolean; signed_in: boolean; sessions?: number }
+export interface AuthState { local: boolean; password: boolean; authed: boolean; signed_in: boolean; key?: boolean; via?: 'local' | 'password' | 'key' | null; sessions?: number; keys?: number }
+// an access key for the apps: its text comes back once, when it is made
+export interface AccessKey { id: string; name: string; hint: string; at: string; seen: string | null; key?: string }
 export interface LeadView { agent: Agent | null; resident: Resident; settings: { on: boolean; supervise: boolean; every: number }; reports: Report[]; asks: Report[] }
 
 export type BoundKind = 'must' | 'never' | 'ask';
@@ -537,6 +539,9 @@ export const api = {
   logoutAll: () => call<{ ok: boolean; ended: number }>('POST', '/api/auth/logout-all'),
   setPassword: (password: string, old?: string) => call<AuthState>('POST', '/api/auth/password', { password, ...(old ? { old } : {}) }),
   clearPassword: () => call<AuthState>('DELETE', '/api/auth/password'),
+  accessKeys: () => call<{ keys: AccessKey[] }>('GET', '/api/auth/keys'),
+  createKey: (name: string) => call<AccessKey & { key: string }>('POST', '/api/auth/keys', { name }),
+  revokeKey: (id: string) => call<{ keys: AccessKey[] }>('DELETE', `/api/auth/keys/${encodeURIComponent(id)}`),
   updateCard: (lineId: string, note = '') => call<ProjectCard>('POST', `/api/lines/${lineId}/card`, { note }, carded).then(residentCard),
   cancelCard: (lineId: string) => call<ProjectCard>('POST', `/api/lines/${lineId}/card/cancel`, {}, carded).then(residentCard),
   updateCards: () => call<{ sent: string[]; skipped: { line_id: string; why: string }[] }>('POST', '/api/cards/update', {}),

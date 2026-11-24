@@ -32,6 +32,12 @@
 .st-form { display: flex; flex-direction: column; gap: 12px; max-width: 420px; padding: 8px 0; }
 .st-form [role=combobox] { width: 100%; }
 .st-btns { display: flex; gap: 8px; }
+.st-key-new { flex-direction: row; align-items: flex-end; max-width: 520px; }
+.st-key-new > :first-child { flex: 1; }
+.st-key-made { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; margin: 4px 0 8px; border-radius: 10px;
+  background: color-mix(in srgb, var(--ok, #2a9d5c) 10%, transparent); }
+.st-key-text { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.st-key-text code { flex: 1; min-width: 0; font: 13px/1.5 var(--mono, ui-monospace, monospace); overflow-wrap: anywhere; user-select: all; }
 .st-models, .st-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: flex-end; }
 .st-dlg { display: flex; flex-direction: column; gap: 10px; padding: 22px 24px 18px; }
 .st-dlg h2 { font-size: 16px; font-weight: 600; }
