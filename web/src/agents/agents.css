@@ -111,7 +111,8 @@
 .aw .chat-who { flex: 1 1 200px; align-items: center; min-width: 0; }
 .aw .chat-who > div { min-width: 0; }
 .aw .chat-who b { overflow-wrap: anywhere; font-size: 14.5px; }
-.aw .chat-head > .btns { flex-wrap: wrap; align-items: center; gap: 6px; }
+.aw .chat-head > .btns { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.aw .chat-head > .btns > .ib { width: 30px; height: 30px; }
 .aw .chat-head .btn { font-size: 12px; padding: 4px 9px; }
 /* the conversation reads as one centred column however wide the window is */
 .aw .transcript { gap: 12px; padding: 24px max(20px, calc(50% - var(--aw-col) / 2)) 28px; mask-image: linear-gradient(to bottom, transparent, #000 14px, #000 calc(100% - 22px), transparent); }
