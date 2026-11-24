@@ -18,6 +18,9 @@ from uuid import uuid4
 from .herdr import Herdr, HerdrError
 
 
+# lines of scrollback a terminal's screen is read with
+HISTORY = 1500
+
 class BackendError(Exception):
     pass
 
@@ -103,11 +106,14 @@ class TmuxBackend(TerminalBackend):
     def screen(self, handle):
         if self.identity(handle) is None:
             raise BackendError('终端会话已退出')
-        return self.call('capture-pane', '-p', '-J', '-t', handle['pane']).stdout
+        # with the lines that scrolled off it: the conversation as the CLI drew it
+        return self.call('capture-pane', '-p', '-J', '-S', f'-{HISTORY}', '-t', handle['pane']).stdout
 
     def glance(self, handle):
         """The visible screen, for telling whether it still changes."""
-        return self.screen(handle)
+        if self.identity(handle) is None:
+            raise BackendError('终端会话已退出')
+        return self.call('capture-pane', '-p', '-J', '-t', handle['pane']).stdout
 
     def submit(self, handle, text):
         if not self.alive(handle):
@@ -123,7 +129,8 @@ class TmuxBackend(TerminalBackend):
     def keys(self, handle, keys):
         if not self.alive(handle):
             raise BackendError('终端会话已退出')
-        mapping = {'enter': 'Enter', 'esc': 'Escape', 'up': 'Up', 'down': 'Down', 'ctrl+c': 'C-c'}
+        mapping = {'enter': 'Enter', 'esc': 'Escape', 'tab': 'Tab', 'space': 'Space', 'backspace': 'BSpace',
+                   'up': 'Up', 'down': 'Down', 'left': 'Left', 'right': 'Right', 'ctrl+c': 'C-c'}
         self.call('send-keys', '-t', handle['pane'], *[mapping.get(k, k) for k in keys])
 
     def state(self, handle):
@@ -329,13 +336,16 @@ class HeadlessBackend(TerminalBackend):
         return self.state(handle)['status'] != 'exited'
 
     def screen(self, handle):
-        try:
-            return self._call('screen', id=handle['id'])['text']
-        except Stopped as e:
-            raise BackendError('终端会话已退出') from e
+        return self._screen(handle, True)
 
     def glance(self, handle):
-        return self.screen(handle)
+        return self._screen(handle, False)
+
+    def _screen(self, handle, history):
+        try:
+            return self._call('screen', id=handle['id'], history=history)['text']
+        except Stopped as e:
+            raise BackendError('终端会话已退出') from e
 
     def submit(self, handle, text):
         try:

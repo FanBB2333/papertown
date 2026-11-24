@@ -731,6 +731,31 @@ class Agents:
                 return self._start_paseo(self.get(agent_id), provider, model, thinking, intro)
         return self._start_held(agent_id, runtime, provider, model, thinking)
 
+    def models(self, agent_id: str) -> dict:
+        """What the conversation open now can switch to: a terminal CLI resumes its session on another model of the
+        same CLI, from Paseo's list or, without Paseo, the one it gave before."""
+        a = self._chat(agent_id)
+        t = a.get("term") or {}
+        if a.get("runtime") not in RUNTIMES or not t.get("provider"):
+            return {"how": "none", "current": None, "models": []}
+        catalog = []
+        if self.paseo.status().get("ok"):
+            try:
+                catalog = self.paseo.providers(False)
+            except PaseoError:
+                catalog = []
+        catalog = catalog or self.town.paseo_models.known()
+        models = next((p["models"] for p in catalog if p["id"] == t["provider"]), [])
+        return {"how": "resume", "current": {"provider": t["provider"], "model": t.get("model") or "", "thinking": t.get("thinking") or ""},
+                "models": models}
+
+    @_session_change
+    def switch_model(self, agent_id: str, model: str | None, thinking: str | None) -> dict:
+        a = self._chat(agent_id)
+        if a.get("runtime") not in RUNTIMES:
+            raise AgentError("只有终端员工可以在对话中换模型")
+        return self.hosted.switch_model(agent_id, model, thinking)
+
     @_session_change
     def _start_held(self, agent_id: str, runtime: str | None = None, provider: str | None = None,
                     model: str | None = None, thinking: str | None = None) -> dict:

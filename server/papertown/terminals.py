@@ -16,7 +16,7 @@ from .project_dirs import owner, project_roots
 if TYPE_CHECKING:
     from .town import Town
 
-KEYS = {"enter", "esc", "up", "down", "1", "2", "3", "y", "n", "ctrl+c"}
+KEYS = {"enter", "esc", "tab", "space", "backspace", "up", "down", "left", "right", "1", "2", "3", "y", "n", "ctrl+c"}
 INTERRUPT_TIMEOUT = 10
 
 
@@ -239,7 +239,7 @@ class Terminals:
 
     def keys(self, id: str, keys: list[str]) -> dict:
         if not keys or any(k not in KEYS for k in keys):
-            raise HerdrError("仅支持 Enter、Esc、↑、↓、1、2、3、y、n 和 Ctrl+C")
+            raise HerdrError("不支持这个按键")
         with self._delivery:
             a = self._current(id)
             result = self.client.keys(a["pane_id"], keys)

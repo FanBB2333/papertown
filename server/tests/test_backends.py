@@ -152,6 +152,9 @@ def test_tmux_still_dialog_stop_and_queue_actions(tmux):
     eventually(lambda: status(h, aid) == 'blocked')
     watch = t.agents.public(t.agents.get(aid))['watch']
     assert (watch['bucket'], watch['why']) == ('needs', 'terminal')
+    # typed text and Enter would answer the dialog: a message waits for it to be dealt with
+    with pytest.raises(AgentError):
+        t.agents.say(aid, 'typed into the dialog')
     q = t.agents.say(aid, 'drop', 'queue')
     t.agents.queue_drop(aid, q['id'])
     assert not t.agents.public(t.agents.get(aid))['watch']['queued']
@@ -168,6 +171,7 @@ def test_tmux_still_dialog_stop_and_queue_actions(tmux):
     eventually(lambda: '⏺ reply now' in h.screen(aid)['text'])
     with pytest.raises(AgentError):
         h.keys(aid, ['C-z'])
+    h.keys(aid, ['tab', 'left', 'right', 'space', 'backspace'])
 
 
 def test_tmux_interrupt_timeout_does_not_send(tmux):
@@ -354,6 +358,10 @@ def test_codex_ready_notify_and_metadata_fallback(tmp_path):
         'payload': {'id': 'from-log', 'cwd': t.agents.get(aid)['cwd']}}) + '\n' + 'SECRET CONVERSATION')
     h._session_scan.clear(); h.refresh(aid)
     assert t.db.one('select * from agent_sessions where session_id = ?', 'from-log')['provider'] == 'codex'
+    # a message waits until the screen moves on from what held the start
+    with pytest.raises(AgentError):
+        t.agents.say(aid, 'test')
+    b.text = 'codex ready'; h.refresh(aid)
     t.agents.say(aid, 'test')
     h.hook(aid, 'codex', {'type': 'agent-turn-complete', 'thread-id': 'from-notify'})
     assert t.agents.get(aid)['term']['seq'] == 1
@@ -501,6 +509,26 @@ def test_hook_auth_independent_of_browser_login(tmp_path):
         assert c.post(url + '/hook', json=payload).status_code == 403
         assert c.post(url + '/hook', json=payload, headers={'x-papertown-token': a['token']}).status_code == 200
         assert t.agents.get(a['id'])['term']['status'] == 'done'
+
+
+def test_switching_model_resumes_the_same_session(tmp_path, monkeypatch):
+    t, h, b, aid = memory_employee(tmp_path, 'codex')
+    opened = []
+    b.open = lambda spec: opened.append(spec) or {'test': True}
+    monkeypatch.setattr(h, 'clis', lambda: {'codex': '/bin/echo', 'claude': None, 'antigravity': None})
+    t.agents._set(aid, session_id='sess-1')
+    term = t.agents.get(aid)['term'] | {'status': 'working', 'model': 'm1', 'thinking': 'high'}
+    t.db.update('agents', {'id': aid}, term=term)
+    with pytest.raises(AgentError):  # not in the middle of a turn
+        t.agents.switch_model(aid, 'm2', 'low')
+    t.db.update('agents', {'id': aid}, term=term | {'status': 'idle'})
+    t.agents.switch_model(aid, 'm2', 'low')
+    argv = opened[-1]['argv']
+    assert argv[argv.index('resume') + 1] == 'sess-1'
+    assert argv[argv.index('-m') + 1] == 'm2' and 'model_reasoning_effort="low"' in argv
+    assert 'm2 / low' in argv[-1]
+    assert b.closed
+    assert t.agents.models(aid)['current'] == {'provider': 'codex', 'model': 'm2', 'thinking': 'low'}
 
 
 def test_paseo_chat_off_runs_agents_in_a_terminal(tmp_path, monkeypatch):

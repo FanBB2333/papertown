@@ -2472,6 +2472,7 @@
  "herdr 没有运行": "herdr is not running",
  "它在等你处理终端里的对话框": "The agent is waiting for you to respond to a dialog in the terminal",
  "没有这个终端会话": "Terminal session not found",
+ "终端会话已退出": "The terminal session has exited",
  "终端里的 agent 尚未就绪": "The terminal agent is not ready yet",
  "herdr 响应超时，请查看终端状态": "herdr timed out. Check the terminal status",
  "herdr 连接已断开": "The herdr connection was closed",

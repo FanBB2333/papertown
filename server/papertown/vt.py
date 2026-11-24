@@ -389,8 +389,24 @@ class Screen:
 
     # output
 
-    def text(self) -> str:
-        """The visible screen, rows joined where they only wrapped, trailing spaces dropped."""
+    def text(self, history: bool = False) -> str:
+        """The visible screen (after the lines that scrolled off it, with `history`), rows joined where they only
+        wrapped, trailing spaces dropped."""
+        shown = self._shown()
+        if not history or not self.history:
+            return shown
+        out, cur = [], ''
+        for row, wrapped in self.history:
+            if wrapped:
+                cur += row
+            else:
+                out.append((cur + row).rstrip())
+                cur = ''
+        if cur:
+            out.append(cur.rstrip())
+        return '\n'.join(out) + '\n' + shown
+
+    def _shown(self) -> str:
         if self.frozen and time.monotonic() - self.frozen[1] < 1:
             return self.frozen[0]
         out, cur = [], ''

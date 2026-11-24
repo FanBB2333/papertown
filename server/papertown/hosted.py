@@ -90,9 +90,9 @@ class Hosted:
                 term['seq'] += 1
             term.update(status=status, since=now(), reason=reason)
 
-    def argv(self, a, provider, executable, model, thinking, resume):
+    def argv(self, a, provider, executable, model, thinking, resume, note=None):
         home, pt = self.a.home(a), self.a.pt(a)
-        prompt = (f'Papertown 重新接上了这个会话。工作说明和项目简报在 {home}/.papertown/intro.md，如有更新请重新阅读，然后继续之前的工作。'
+        prompt = note or (f'Papertown 重新接上了这个会话。工作说明和项目简报在 {home}/.papertown/intro.md，如有更新请重新阅读，然后继续之前的工作。'
                   if resume else f'请先完整阅读 {home}/.papertown/intro.md，其中是你在 Papertown 的工作说明和项目简报。读完后说说你打算怎么开始。')
         argv = [executable]
         sid = resume
@@ -126,7 +126,8 @@ class Hosted:
                 'type': 'command', 'command': shlex.join([str(pt), 'hook', 'agy']), 'stack_with_default': True}}), '-i', prompt]
         return argv, sid
 
-    def start(self, a, runtime, provider=None, model=None, thinking=None):
+    def start(self, a, runtime, provider=None, model=None, thinking=None, note=None):
+        """`note`: the first message of a resumed launch, instead of asking it to carry on with its work."""
         old = a.get('term') or {}
         if a.get('runtime') in RUNTIMES and old.get('status') != 'exited' and old.get('handle'):
             try:
@@ -151,7 +152,7 @@ class Hosted:
         (home / '.papertown/hook-agy.json').unlink(missing_ok=True)
         (home / '.papertown/intro.md').write_text(intro, encoding='utf-8')
         resume = a.get('session_id') if provider == old.get('provider') else None
-        argv, sid = self.argv(a, provider, executable, model, thinking, resume)
+        argv, sid = self.argv(a, provider, executable, model, thinking, resume, note if resume else None)
         line = self.db.one('select seq, title from lines where id = ?', a['line_id']) if a['line_id'] else None
         seq = str(line['seq']) if line else 'assistant'
         name = re.sub('[^a-z0-9_-]', '-', f"pt{seq}-{a.get('node_id') or a['role']}".lower())
@@ -381,7 +382,7 @@ class Hosted:
 
     def keys(self, id, keys):
         if not keys or any(k not in KEYS for k in keys):
-            raise self.error('仅支持 Enter、Esc、↑、↓、1、2、3、y、n 和 Ctrl+C')
+            raise self.error('不支持这个按键')
         with self.lock:
             a = self.require(id)
             if a['term']['status'] == 'exited':
@@ -450,6 +451,9 @@ class Hosted:
     def _say(self, id, text, mode, origin, interrupted):
         a = self.require(id)
         held = mode == 'queue'
+        # A dialog holds the screen (a hook review, a menu): typed text and Enter would answer it, not reach the agent.
+        if not held and not interrupted and a['term']['status'] == 'blocked':
+            raise self.error('终端停在一个需要你处理的界面上，消息没有发送。请先在终端中处理')
         if not held:
             self.submit(a, text)
         event = self.a.record(id, 'user', {'text': text, 'origin': origin, 'held': held, 'queued': held,
@@ -496,6 +500,23 @@ class Hosted:
             event = self.a.amend(event_id, row['data'] | {'held': False, 'dropped': True})
             self.a._publish(id)
             return event
+
+    def switch_model(self, id, model, thinking):
+        """The same conversation on another model: the CLI is closed and resumed on its session with the new one. An
+        empty model or thinking leaves the choice to the CLI."""
+        a = self.require(id)
+        t = a['term']
+        if t['status'] in ('working', 'starting'):
+            raise self.error('正在工作，先停下再换模型')
+        if not a.get('session_id'):
+            raise self.error('还没认出这个终端的会话，现在换模型会丢掉上下文，请稍后再试')
+        if (t.get('model') or '', t.get('thinking') or '') == (model or '', thinking or ''):
+            return self.a.public(a)
+        if t['status'] != 'exited':
+            self.close(id)
+        name = ' / '.join(x for x in (model, thinking) if x) or 'CLI 默认模型'
+        note = f'Papertown 把这个会话换到了 {name}，之前的对话都在。请用一句话确认，然后等待下一条消息。'
+        return self.start(self.a.get(id), a['runtime'], t.get('provider'), model or '', thinking or '', note)
 
     def close(self, id):
         with self.lock:

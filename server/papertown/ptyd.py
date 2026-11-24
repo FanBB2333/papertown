@@ -28,7 +28,7 @@ from uuid import uuid4
 
 from .vt import Screen
 
-KEYS = {'enter': '\r', 'esc': '\x1b', 'ctrl+c': '\x03', 'tab': '\t', 'backspace': '\x7f'}
+KEYS = {'enter': '\r', 'esc': '\x1b', 'ctrl+c': '\x03', 'tab': '\t', 'backspace': '\x7f', 'space': ' '}
 ARROWS = {'up': 'A', 'down': 'B', 'right': 'C', 'left': 'D'}
 PASTE_GAP = .1   # between a paste and its Enter, as a person would leave
 KEY_GAP = .03    # between keys, so a CLI reads them one at a time
@@ -274,7 +274,7 @@ class Daemon:
         if op == 'state':
             return t.state()
         if op == 'screen':
-            return t.state() | {'text': t.screen.text()}
+            return t.state() | {'text': t.screen.text(history=bool(req.get('history')))}
         if op == 'paste':
             t.paste(str(req.get('text') or ''), bool(req.get('enter')))
             return {}

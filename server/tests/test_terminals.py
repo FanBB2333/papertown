@@ -254,7 +254,7 @@ def test_blocked_and_key_whitelist(setup):
     for key in sorted(KEYS):
         assert client.post(url + '/keys', json={'keys': [key]}).status_code == 200
     before = sum(m == 'agent.send_keys' for m, _ in host.calls)
-    for keys in (['enter', 'rm -rf'], ['tab'], ['CTRL+C'], ['\x03'], []):
+    for keys in (['enter', 'rm -rf'], ['f1'], ['CTRL+C'], ['\x03'], []):
         assert client.post(url + '/keys', json={'keys': keys}).status_code in (400, 422)
     assert sum(m == 'agent.send_keys' for m, _ in host.calls) == before
 

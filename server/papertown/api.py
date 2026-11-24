@@ -298,6 +298,11 @@ class PermitIn(BaseModel):
     allow: bool
 
 
+class ModelIn(BaseModel):
+    model: str | None = Field(default=None, max_length=120)
+    thinking: str | None = Field(default=None, max_length=40)
+
+
 class StartIn(BaseModel):
     runtime: str | None = None
     provider: str | None = None
@@ -947,6 +952,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/agents/{agent_id}/brief")
     def agent_brief(agent_id: str):
         return agents(town.agents.say, agent_id, agents(town.agents.brief, agent_id), None, "papertown")
+
+    @app.get("/api/agents/{agent_id}/models")
+    def agent_models(agent_id: str):
+        return agents(town.agents.models, found(agent_id))
+
+    @app.post("/api/agents/{agent_id}/model")
+    def agent_model(agent_id: str, body: ModelIn):
+        return agents(town.agents.switch_model, found(agent_id), body.model, body.thinking)
 
     @app.post("/api/agents/{agent_id}/abort")
     def agent_abort(agent_id: str):

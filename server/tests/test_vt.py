@@ -84,3 +84,9 @@ def test_synchronized_output_reads_the_last_whole_frame():
     assert rows(s)[0] == 'frame one'
     s.feed(b' done\x1b[?2026l')
     assert rows(s)[0] == 'half done'
+
+
+def test_history_reads_back_the_lines_that_scrolled_off():
+    s, _ = screen('\r\n'.join(f'line {i}' for i in range(8)), cols=10, rows=3)
+    assert s.text() == 'line 5\nline 6\nline 7'
+    assert s.text(history=True).split('\n') == [f'line {i}' for i in range(8)]
