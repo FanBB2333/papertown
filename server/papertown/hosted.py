@@ -116,6 +116,9 @@ class Hosted:
                 argv += ['-m', model]
             if thinking and thinking != 'off':
                 argv += ['-c', 'model_reasoning_effort=' + json.dumps(thinking)]
+            if self.s.codex_bypass_hook_trust:
+                # no one is at the keyboard to answer Codex's review of new hooks, so it would wait there
+                argv += ['--dangerously-bypass-hook-trust']
             argv += ['-c', 'notify=' + json.dumps([str(pt), 'hook', 'codex']), prompt]
         else:
             if resume:

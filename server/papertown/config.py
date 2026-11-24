@@ -147,6 +147,7 @@ class Settings:
     check_tick: float = opt("agents", "check_tick", 120.0, "seconds between looks at what each project's hard checks read")
     claude_bin: str = opt("agents", "claude_bin", "", "the claude CLI; empty: found on PATH")
     codex_bin: str = opt("agents", "codex_bin", "", "the codex CLI; empty: found on PATH")
+    codex_bypass_hook_trust: bool = opt("agents", "codex_bypass_hook_trust", True, "start Codex with --dangerously-bypass-hook-trust, as cmux does: hooks in ~/.codex/hooks.json run without Codex first stopping to have new or changed ones reviewed, which no one is at the keyboard to answer")
     pi_bin: str = opt("agents", "pi_bin", "", "pi; pi agents use pi's own model settings and login")
     pi_model: str = opt("agents", "pi_model", "", "the model pi agents start on")
     agy_bin: str = opt("agents", "agy_bin", "", "the Antigravity CLI")

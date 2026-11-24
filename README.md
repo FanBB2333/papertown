@@ -200,7 +200,7 @@ A command-line flag (`papertown serve --host`, `--port`) wins over an environmen
 | Table | What it holds |
 | --- | --- |
 | `[server]` | `host` and `port` where `papertown serve` listens (`127.0.0.1`, `31640`), the `url` agents on this machine use to reach it, `data_dir` (default `server/var`), `skills_dir`, `projects` (your own projects), `samples`, and `local_jobs` |
-| `[agents]` | the default runtime (`agent_runtime`: `herdr`, `tmux` or `headless`, or `paseo` with `paseo_chat` on), the default models of the assistant, the leads and the workers as `provider/model@thinking`, resident leads (`lead_resident`), how often leads are checked on, and the paths of the agent CLIs |
+| `[agents]` | the default runtime (`agent_runtime`: `herdr`, `tmux` or `headless`, or `paseo` with `paseo_chat` on), the default models of the assistant, the leads and the workers as `provider/model@thinking`, resident leads (`lead_resident`), how often leads are checked on, the paths of the agent CLIs, and whether Codex starts with `--dangerously-bypass-hook-trust` (`codex_bypass_hook_trust`, on by default, as cmux does), so it runs new or changed hooks from `~/.codex/hooks.json` instead of stopping at start to have them reviewed. Approvals and the sandbox stay as configured |
 | `[paseo]` | whether agents' conversations may run in Paseo (`paseo_chat`, off while being debugged), Paseo's CLI, web app and daemon endpoint, and how often its model list is read |
 | `[terminal]` | tmux and herdr with their sockets, and the timings that tell a terminal agent is waiting, held or stopped |
 | `[history]` | where Claude Code, Codex and Antigravity keep their conversations, and reading transcripts and usage logs |

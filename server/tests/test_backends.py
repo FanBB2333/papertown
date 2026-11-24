@@ -239,11 +239,15 @@ def test_cli_args_hook_whitelist_and_defaults(tmp_path):
     for provider in ('claude', 'codex', 'antigravity'):
         argv, sid = h.argv(a, provider, '/fake/' + provider, 'model', 'high', 'session-123')
         assert 'session-123' in argv and all('\n' not in x for x in argv)
-        assert not any('bypass' in x or 'trust' in x for x in argv)
+        # the only thing let past is Codex's review of hooks: approvals and the sandbox stay as configured
+        assert not any(('bypass' in x or 'trust' in x) and x != '--dangerously-bypass-hook-trust' for x in argv)
+        assert ('--dangerously-bypass-hook-trust' in argv) == (provider == 'codex')
         if provider == 'codex':
             assert json.loads(next(x.removeprefix('notify=') for x in argv if x.startswith('notify='))) == [str(t.agents.pt(a)), 'hook', 'codex']
         if provider == 'antigravity':
             assert json.loads(argv[argv.index('--settings') + 1])['statusLine']['stack_with_default']
+    t.s.codex_bypass_hook_trust = False
+    assert '--dangerously-bypass-hook-trust' not in h.argv(a, 'codex', '/fake/codex', 'model', 'high', None)[0]
     spec = importlib.util.spec_from_file_location('pt_hook_test', PT); pt = importlib.util.module_from_spec(spec); spec.loader.exec_module(pt)
     payload = {'type': 'agent-turn-complete', 'thread-id': 'id', 'prompt': 'secret', 'last-assistant-message': 'secret',
                'tool_input': {'x': 'secret'}, 'tool_name': {'nested': 'secret'}}

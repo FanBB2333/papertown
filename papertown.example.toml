@@ -44,6 +44,8 @@
 # claude_bin = ""
 # the codex CLI; empty: found on PATH (PAPERTOWN_CODEX_BIN)
 # codex_bin = ""
+# start Codex with --dangerously-bypass-hook-trust, as cmux does: hooks in ~/.codex/hooks.json run without Codex first stopping to have new or changed ones reviewed, which no one is at the keyboard to answer (PAPERTOWN_CODEX_BYPASS_HOOK_TRUST)
+# codex_bypass_hook_trust = true
 # pi; pi agents use pi's own model settings and login (PAPERTOWN_PI_BIN)
 # pi_bin = ""
 # the model pi agents start on (PAPERTOWN_PI_MODEL)
