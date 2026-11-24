@@ -389,6 +389,10 @@ public struct PaseoInfo: Decodable, Sendable {
     public var defaults: [String: RoleDefault]? = nil
     public var news: [ModelNews]? = nil
     public var runtime: String? = nil
+    /// Agents' conversations may run in Paseo; off while that is being debugged ([paseo] paseo_chat).
+    public var chat: Bool? = nil
+
+    public var chatOn: Bool { chat != false }
 }
 
 public struct StartOptions: Encodable, Sendable {

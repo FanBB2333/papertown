@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, type Agent, type CanvasNode } from '../api';
 import { fold, ImportCard, PaseoLog, RuntimePick, usePaseoTalk } from '../components/AgentRoom';
 import { AGENT_STATUS } from '../components/MillRoom';
@@ -10,6 +10,9 @@ import type { Act } from './Checks';
 export function NodeConversation({ node, lineId, busy, act }: { node: CanvasNode; lineId: string; busy: boolean; act: Act }) {
   const [error, setError] = useState('');
   const [configure, setConfigure] = useState(false);
+  // importing a Paseo conversation waits until Paseo chat is debugged
+  const [paseoOn, setPaseoOn] = useState(false);
+  useEffect(() => { api.defaultRuntime().then(d => setPaseoOn(d.paseo_chat !== false)).catch(() => {}); }, []);
   const agent = node.agent;
   const canBind = !node.agent_id && node.status === 'draft';
   return <div className="node-conversation">
@@ -21,7 +24,7 @@ export function NodeConversation({ node, lineId, busy, act }: { node: CanvasNode
       <div className="hire-card">
         <RuntimePick busy={busy} onStart={options => act(() => api.bindNode(lineId, node.id, options))} role={node.to} />
       </div>
-      <ImportCard busy={busy} onPick={ext_id => act(() => api.bindNode(lineId, node.id, { ext_id }))} />
+      {paseoOn && <ImportCard busy={busy} onPick={ext_id => act(() => api.bindNode(lineId, node.id, { ext_id }))} />}
     </> : agent?.term ? <><HostedRoom agent={agent} toast={setError} /><HostedContext agent={agent} toast={setError} /></> : agent?.runtime === 'paseo' && agent.ext_id ? <Talk key={agent.ext_id} initial={agent} />
       : <p className="muted small">{tr('暂无可打开的会话。')}</p>}
   </div>;

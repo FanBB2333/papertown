@@ -200,7 +200,10 @@ struct AgentSettingsPage: View {
                     Picker(lang.string("agents.runtime"), selection: Binding(get: { v.runtime }, set: { r in
                         act.run { try await $0.setDefaultRuntime(r) }
                     })) {
-                        ForEach(["paseo", "herdr", "tmux", "headless"], id: \.self) { Text(lang.string("runtime.\($0)")).tag($0) }
+                        // Paseo is offered once its chat is debugged ([paseo] paseo_chat)
+                        ForEach(["herdr", "tmux", "headless"] + (v.paseo?.chatOn == true ? ["paseo"] : []), id: \.self) {
+                            Text(lang.string("runtime.\($0)")).tag($0)
+                        }
                     }
                     .disabled(act.busy)
                 } footer: {

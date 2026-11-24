@@ -296,7 +296,9 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
 function Agents() {
   const [runtime, setRuntime] = useState<DefaultRuntime>('paseo'), [runtimeError, setRuntimeError] = useState('');
   const [savingRuntime, setSavingRuntime] = useState(false);
-  useEffect(() => { api.defaultRuntime().then(d => setRuntime(d.runtime)).catch(e => setRuntimeError((e as Error).message)); }, []);
+  // Paseo is offered once its chat is debugged ([paseo] paseo_chat)
+  const [paseoChat, setPaseoChat] = useState(false);
+  useEffect(() => { api.defaultRuntime().then(d => { setRuntime(d.runtime); setPaseoChat(d.paseo_chat !== false); }).catch(e => setRuntimeError((e as Error).message)); }, []);
   async function saveRuntime(value: DefaultRuntime) {
     setSavingRuntime(true);
     try { const d = await api.setDefaultRuntime(value); setRuntime(d.runtime); setRuntimeError(''); }
@@ -326,7 +328,7 @@ function Agents() {
     <>
       <Card title={tr('默认运行方式')}>
         <Row label={tr('默认运行方式')} desc={tr('自动启动的项目负责人、pt hire 招募的员工及新建 Agent 默认预选此运行方式，手动启动时仍可自由切换。')}>
-          <Select aria-label={tr('默认运行方式')} disabled={savingRuntime} value={runtime} items={{ paseo: 'Paseo', herdr: 'herdr', tmux: 'tmux', headless: 'headless' }} onValueChange={v => saveRuntime(v as DefaultRuntime)} />
+          <Select aria-label={tr('默认运行方式')} disabled={savingRuntime} value={runtime} items={{ herdr: 'herdr', tmux: 'tmux', headless: 'headless', ...(paseoChat ? { paseo: 'Paseo' } : {}) }} onValueChange={v => saveRuntime(v as DefaultRuntime)} />
         </Row>
         {runtimeError && <Warn bad>{runtimeError}</Warn>}
       </Card>

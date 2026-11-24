@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 from .db import now, read_json, write_json
 from .paseo import Feed, Paseo, PaseoError
 from .hosted import Hosted, RUNTIMES
+from .paseo_models import PASEO_OFF
 
 if TYPE_CHECKING:
     from .town import Town
@@ -286,6 +287,8 @@ class Agents:
         or when the agent is not in Paseo."""
         if not a or a.get("runtime") != "paseo":
             return ""
+        if not self.s.paseo_chat:
+            return PASEO_OFF
         if self._paseo_up is False:
             return self._paseo_note or "连不上 Paseo"
         if self._feed and self._feed.live:
@@ -599,6 +602,8 @@ class Agents:
         self._switchable(a)
         if a.get("runtime") in RUNTIMES:
             raise AgentError("终端员工请关闭终端后接着会话启动")
+        if a.get("runtime") == "paseo" and not self.s.paseo_chat:
+            raise AgentError(PASEO_OFF)
         if a.get("runtime") == "paseo":
             conv = next((c for c in self._own(agent_id) if c["id"] == a.get("ext_id")), None)
             self._interrupt(a)
@@ -615,6 +620,8 @@ class Agents:
     @_session_change
     def resume(self, agent_id: str, ext_id: str) -> dict:
         """Go back to one of the agent's earlier conversations; the one open now is set aside as a new one would."""
+        if not self.s.paseo_chat:
+            raise AgentError(PASEO_OFF)
         a = self._chat(agent_id)
         if a.get("ext_id") == ext_id:
             return self.public(a)
@@ -715,6 +722,9 @@ class Agents:
         Paseo creates the session, so canvases elsewhere are not kept waiting on Paseo's CLI. A pi start keeps the
         canvas lock throughout: its bridge reads gates as it comes up."""
         a = self.get(agent_id)
+        # While Paseo chat is off, what would start in Paseo starts in a terminal; one left in Paseo is set aside then.
+        if not self.s.paseo_chat and a and (runtime or a.get("runtime")) == "paseo":
+            runtime = self.town.paseo_models.runtime()
         if a and a["role"] in CHAT_ROLES and (runtime or a.get("runtime")) == "paseo" and not a.get("ext_id") and a.get("runtime") not in RUNTIMES:
             intro = self._paseo_intro(a)
             with self._delivery_lock:
@@ -870,6 +880,8 @@ class Agents:
 
     @_session_change
     def import_session(self, agent_id: str, ext_id: str) -> dict:
+        if not self.s.paseo_chat:
+            raise AgentError(PASEO_OFF)
         a = self._chat(agent_id)
         if a.get("ext_id") == ext_id:
             return self.public(a)
@@ -1226,6 +1238,8 @@ class Agents:
         if a.get("runtime") in RUNTIMES:
             return self.hosted.say(agent_id, text, mode, origin)
         if a.get("runtime") == "paseo":
+            if not self.s.paseo_chat:
+                raise AgentError(PASEO_OFF)
             if not a.get("ext_id"):
                 raise AgentError("先在 Paseo 里启动它")
             if origin == "web" and a["role"] != "assistant":  # the assistant names its own, before the page context goes on

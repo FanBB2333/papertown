@@ -660,7 +660,8 @@
 "hire.model" = "模型";
 "hire.thinking" = "思考强度";
 "hire.cli_default" = "CLI 默认模型";
-"hire.no_paseo_models" = "Paseo 未连接，将使用 CLI 默认模型。";
+"hire.no_paseo_models" = "暂无模型列表，将使用 CLI 默认模型。";
+"hire.paseo_off" = "调试中，暂时停用。请使用终端启动。";
 "hire.paseo_down" = "Paseo 未连接。";
 "hire.pi_lead" = "项目负责人暂不支持 pi。";
 "hire.pi_node" = "节点 Agent 暂不支持 pi。";

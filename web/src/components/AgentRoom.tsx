@@ -145,7 +145,7 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
         ) : <p className="muted">{tr('选择运行方式。工作目录均为该项目在')}{r.place}{tr('的目录，启动时将先发送项目简报。')}</p>}
         <div className="hire-opts">
           <div className="hire-card">
-            <h3>Paseo <span className="chip">{tr('推荐')}</span></h3>
+            <h3>Paseo <span className="chip">{paseo ? tr('推荐') : tr('调试中')}</span></h3>
             <p className="muted small">{tr('支持 Claude Code、Codex、OpenCode、Pi 等，采用 Paseo 自有界面，命令、模型切换与权限审批均保持不变。')}</p>
             <PaseoPick busy={busy} onStart={go} onReady={setPaseo} role={lead ? 'lead' : undefined} />
           </div>
@@ -176,7 +176,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
   useEffect(() => {
     api.paseo().then(i => {
       setInfo(i);
-      onReady?.(i.status.ok);
+      onReady?.(i.status.ok && i.chat !== false);
       const d = role ? i.defaults?.[role] : undefined, own = i.providers.find(x => x.id === d?.provider);
       if (own) pick(i, own.id, d?.model, d?.thinking);
       else pick(i, (i.providers.find(x => x.id === 'claude') ?? i.providers[0])?.id ?? '');
@@ -192,6 +192,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
 
   const pv = info?.providers.find(x => x.id === prov), m = pv?.models.find(x => x.id === model);
   if (!info) return <p className="muted small">{tr('正在连接本机 Paseo…')}</p>;
+  if (info.chat === false) return <p className="warn-box small">{tr('Paseo 接入正在调试，暂时停用。请使用终端启动。')}</p>;
   if (!info.status.ok) return <p className="warn-box small">{info.status.note}</p>;
   const d = role ? info.defaults?.[role] : undefined;
   return (
@@ -223,15 +224,15 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
 export function RuntimePick({ busy, onStart, role, allowPi }: {
   busy: boolean; onStart: (o: StartOpts) => void; role?: AgentRole; allowPi?: boolean;
 }) {
-  const [mode, setMode] = useState<'paseo' | 'terminal' | 'pi'>('paseo');
+  const [mode, setMode] = useState<'paseo' | 'terminal' | 'pi'>('terminal'), [paseoOn, setPaseoOn] = useState(false);
   useEffect(() => {
     let alive = true;
-    api.defaultRuntime().then(d => { if (alive) setMode(d.runtime === 'paseo' ? 'paseo' : 'terminal'); }).catch(() => {});
+    api.defaultRuntime().then(d => { if (alive) { setPaseoOn(d.paseo_chat !== false); setMode(d.runtime === 'paseo' && d.paseo_chat !== false ? 'paseo' : 'terminal'); } }).catch(() => {});
     return () => { alive = false; };
   }, []);
   return <>
     <div className="seg mini" role="radiogroup" aria-label={tr('运行方式')}>
-      <button type="button" role="radio" aria-checked={mode === 'paseo'} className={mode === 'paseo' ? 'on' : ''} disabled={busy} onClick={() => setMode('paseo')}>Paseo</button>
+      <button type="button" role="radio" aria-checked={mode === 'paseo'} className={mode === 'paseo' ? 'on' : ''} disabled={busy || !paseoOn} title={paseoOn ? undefined : tr('调试中，暂时停用')} onClick={() => setMode('paseo')}>Paseo{paseoOn ? '' : ` · ${tr('调试中')}`}</button>
       <button type="button" role="radio" aria-checked={mode === 'terminal'} className={mode === 'terminal' ? 'on' : ''} disabled={busy} onClick={() => setMode('terminal')}>{tr('终端')}</button>
       {allowPi && <button type="button" role="radio" aria-checked={mode === 'pi'} className={mode === 'pi' ? 'on' : ''} disabled={busy} onClick={() => setMode('pi')}>pi</button>}
     </div>

@@ -148,6 +148,8 @@ export interface PaseoInfo {
   status: { ok: boolean; note: string; server_id?: string; web?: string | null; version?: string };
   providers: PaseoProvider[]; runtime?: DefaultRuntime;
   defaults?: PaseoDefaults;
+  // agents' conversations may run in Paseo; off while that is being debugged ([paseo] paseo_chat)
+  chat?: boolean;
   news?: ModelNews[];
 }
 // set: chosen in the settings page rather than from PAPERTOWN_ASSISTANT_MODEL / _LEAD_MODEL
@@ -515,7 +517,7 @@ export const api = {
   agent: (id: string, after = 0) => call<{ agent: Agent; events: AgentEvent[] }>('GET', `/api/agents/${id}?after=${after}`, undefined, said),
   openAgent: (lineId: string, role: AgentRole) => call<Agent>('POST', '/api/agents', { line_id: lineId, role }),
   backends: () => call<Backends>('GET', '/api/backends'),
-  defaultRuntime: () => call<{ runtime: DefaultRuntime }>('GET', '/api/agents/runtime'),
+  defaultRuntime: () => call<{ runtime: DefaultRuntime; paseo_chat?: boolean }>('GET', '/api/agents/runtime'),
   setDefaultRuntime: (runtime: DefaultRuntime) => call<{ runtime: DefaultRuntime }>('POST', '/api/agents/runtime', { runtime }),
   agentScreen: (id: string) => call<{ text: string; term: AgentTerm; prompt?: TermPrompt | null }>('GET', `/api/agents/${id}/screen`, undefined, asIs),
   answerPrompt: (id: string, digest: string, option: number) => call<{ ok: boolean }>('POST', `/api/agents/${id}/prompt`, { digest, option }),

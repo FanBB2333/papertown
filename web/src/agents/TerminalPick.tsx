@@ -17,14 +17,15 @@ export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBacke
       const pref = role === 'lead' || role === 'assistant' ? i.defaults?.[role] : undefined;
       const p = pref?.provider && b.clis[pref.provider] ? pref.provider : Object.keys(b.clis).find(k => b.clis[k]) ?? '';
       setProvider(p);
-      if (i.status.ok && p === pref?.provider) { setModel(pref.model ?? ''); setThinking(pref.thinking ?? ''); }
+      if (p === pref?.provider && i.providers.some(x => x.id === p && x.models.some(m => m.id === pref.model))) { setModel(pref.model ?? ''); setThinking(pref.thinking ?? ''); }
       setBackend(fixedBackend ?? (d.runtime !== 'paseo' ? d.runtime : b.herdr.ok ? 'herdr' : 'tmux'));
     }).catch(e => { if (alive) setError((e as Error).message); });
     return () => { alive = false; };
   }, [role, fixedBackend]);
   if (error) return <p className="warn-box small">{error}</p>;
   if (!backends) return <p className="muted small">{tr('检查中…')}</p>;
-  const models = info?.status.ok ? info.providers.find(p => p.id === provider)?.models ?? [] : [];
+  // Paseo's list, or without Paseo the one it gave before
+  const models = info?.providers.find(p => p.id === provider)?.models ?? [];
   const selected = models.find(m => m.id === model);
   const clis = Object.keys(backends.clis).filter(p => backends.clis[p]);
   const shown = (['herdr', 'tmux', 'headless'] as const).filter(b => !fixedBackend || fixedBackend === b);
@@ -45,7 +46,7 @@ export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBacke
       {!!selected && selected.thinking.length > 1 && <label className="field">{tr('思考强度')}
         <Select value={thinking} options={selected.thinking.map(t => ({ value: t, label: t }))} onChange={setThinking} />
       </label>}
-      {!info?.status.ok && <p className="muted small">{tr('Paseo 未连接，将使用 CLI 默认模型。')}</p>}
+      {!models.length && <p className="muted small">{tr('暂无模型列表，将使用 CLI 默认模型。')}</p>}
     </>}
     <button className="btn pri" disabled={busy || !provider || !backends[backend].ok} onClick={() => onStart({ runtime: backend, provider, model, thinking })}>
       {busy ? tr('启动中…') : backend === 'herdr' ? tr('在 herdr 中启动') : backend === 'tmux' ? tr('在 tmux 中启动') : tr('在后台终端中启动')}

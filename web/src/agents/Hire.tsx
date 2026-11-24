@@ -35,7 +35,7 @@ export function HireDialog({ lineId, initialPost, lockLine, onClose, onStarted, 
       if (!alive) return;
       setRosters({ coder, writer, lead }); setBackends(b); setInfo(i);
       setLine(v => v || coder.roster[0]?.line.id || '');
-      setRuntime(([d.runtime, 'paseo', 'herdr', 'tmux', 'headless'] as Runtime[]).find(r => r === 'paseo' ? i.status.ok : b[r as TermBackend].ok) ?? d.runtime);
+      setRuntime(([d.runtime, 'herdr', 'tmux', 'headless', 'paseo'] as Runtime[]).find(r => r === 'paseo' ? i.chat !== false && i.status.ok : b[r as TermBackend].ok) ?? d.runtime);
     }).catch(e => { if (alive) setError((e as Error).message); });
     return () => { alive = false; };
   }, []);
@@ -45,7 +45,7 @@ export function HireDialog({ lineId, initialPost, lockLine, onClose, onStarted, 
   const existing = row?.agent?.started && row.agent.status !== 'stopped' && row.agent.term?.status !== 'exited' && !row.agent.down ? row.agent : null;
   // why a runtime cannot be chosen now, or '' when it can
   const blocked = (r: Runtime) => !backends || !info || !rosters ? ''
-    : r === 'paseo' ? (info.status.ok ? '' : info.status.note)
+    : r === 'paseo' ? (info.chat === false ? tr('调试中，暂时停用') : info.status.ok ? '' : info.status.note)
       : r === 'pi' ? (post === 'lead' ? tr('项目负责人暂不支持 pi。') : rosters.coder.available.ok ? '' : rosters.coder.available.note)
         : !backends[r].ok ? backends[r].note : Object.values(backends.clis).some(Boolean) ? '' : tr('本机未找到 Claude Code、Codex 或 Antigravity。');
   // the providers a runtime offers: Paseo's own list, or the CLIs found on this machine with Paseo's model catalog
@@ -53,7 +53,7 @@ export function HireDialog({ lineId, initialPost, lockLine, onClose, onStarted, 
     if (!backends || !info) return [];
     if (runtime === 'paseo') return info.providers.map(p => ({ id: p.id, label: p.label, models: p.models }));
     if (!terminal) return [];
-    return Object.keys(backends.clis).filter(k => backends.clis[k]).map(k => ({ id: k, label: kindName(k), models: info.status.ok ? info.providers.find(p => p.id === k)?.models ?? [] : [] }));
+    return Object.keys(backends.clis).filter(k => backends.clis[k]).map(k => ({ id: k, label: kindName(k), models: info.providers.find(p => p.id === k)?.models ?? [] }));
   }, [backends, info, runtime, terminal]);
   const current = providers.find(p => p.id === provider), chosen = current?.models.find(m => m.id === model);
 
@@ -119,7 +119,7 @@ export function HireDialog({ lineId, initialPost, lockLine, onClose, onStarted, 
             {!!chosen && chosen.thinking.length > 1 && <Select label={tr('思考强度')} value={thinking} disabled={busy}
               items={Object.fromEntries(chosen.thinking.map(t => [t, t]))} onValueChange={v => setThinking(String(v))} />}
           </div>}
-          {terminal && !info.status.ok && <p className="aw-hire-note">{tr('Paseo 未连接，将使用 CLI 默认模型。')}</p>}
+          {terminal && !current?.models.length && <p className="aw-hire-note">{tr('暂无模型列表，将使用 CLI 默认模型。')}</p>}
           {error && <Banner variant="error" description={error} />}
           <div className="st-btns">
             <Button type="button" disabled={busy} onClick={onClose}>{tr('取消')}</Button>

@@ -203,7 +203,7 @@ cd server && uv run papertown config show   # 每项设置现在的值
 | --- | --- |
 | `[server]` | `papertown serve` 的监听地址 `host`（默认 `127.0.0.1`）和端口 `port`（默认 31640），本机员工访问服务用的地址 `url`（默认由端口推出），数据目录 `data_dir`（默认 `server/var`），skills 目录 `skills_dir`，本地项目清单 `projects`（默认数据目录下的 `projects.json`），空镇首次启动时放入样例 `samples`，实验农场本地执行器同时跑几个任务 `local_jobs`（默认 2） |
 | `[agents]` | 默认运行方式 `agent_runtime`（`paseo`、`herdr`、`tmux` 或 `headless`）。小助手、项目负责人、代码和写作员工的默认模型 `assistant_model`、`lead_model`、`worker_model`，写成 `供应商/模型@思考强度`，`worker_model` 留空时沿用负责人的，三者只在设置页里没选过时才用，见「默认模型和新模型」。常驻负责人 `lead_resident`（默认开启）。多久看一次各项目有没有动静 `lead_tick`（秒，默认 20），同一个负责人两次巡检至少隔多久 `lead_gap`（秒，默认 180），多久比对一次各项目硬检查要读的东西 `check_tick`（论文、实验、PDF，变了就重跑，秒，默认 120）。各 CLI 的路径 `claude_bin`、`codex_bin`、`agy_bin`、`pi_bin`，不设时自动查找（会跳过终端包装的 shim，也会找 nvm 下的 pi）。pi 员工的模型 `pi_model`，不设时用 pi 自己的默认模型 |
-| `[paseo]` | Paseo 的 CLI、网页地址和守护进程端点。多久重读一次 Paseo 的模型列表找新模型 `paseo_watch`（秒，默认 1800，`0` 关掉，打开模型选择时也会读） |
+| `[paseo]` | 是否允许通过 Paseo 接入对话 `paseo_chat`（调试中，默认 `false`）。Paseo 的 CLI、网页地址和守护进程端点。多久重读一次 Paseo 的模型列表找新模型 `paseo_watch`（秒，默认 1800，`0` 关掉，打开模型选择时也会读） |
 | `[terminal]` | tmux 和 herdr 的路径与 socket，终端员工判断等待对话框、启动受阻和已停下所用的秒数 |
 | `[history]` | Claude Code、Codex、Antigravity 存会话的目录，是否读员工的对话记录和用量日志，多久读一次用量 |
 | `[services]` | arXiv 码头 `arxiv_port`（无网络时关掉），LaTeX 编译 `compile_tex`，额外的 MCP server `mcp_config`（Claude Desktop 格式的 JSON 文件），nvidb 显卡读取 `nvidb`、它的路径 `nvidb_bin`（默认在 PATH 上找）和后台读取间隔 `nvidb_poll`（秒，默认 10），skim 的路径 `skim_bin`（技能学堂用它按项目、按对话配置 skill） |
@@ -317,7 +317,9 @@ cd server && uv run papertown config show   # 每项设置现在的值
 
 Paseo 的 agent 通过一条常驻的 SDK 订阅取得状态和对话的变化，订阅断开时退回每 6 秒一次的轮询。在 Paseo 里手动启动、工作目录落在某个项目目录里的会话，列在该项目的「未接入的会话」下，可以接入成它的员工。设计说明见 [`agent_watch_design.md`](agent_watch_design.md)。
 
-### Paseo（推荐）
+### Paseo（调试中，默认停用）
+
+通过 Paseo 接入对话正在调试，`papertown.toml` 的 `[paseo] paseo_chat` 默认为 `false`：默认运行方式为 tmux，要求在 Paseo 中启动的员工改在终端中启动，留在 Paseo 里的员工显示为不可用，网页和 App 中的 Paseo 选项保留但无法选择。调试完成后把 `paseo_chat` 设为 `true` 即可恢复以下用法。
 
 [Paseo](https://paseo.sh) 在本机跑一个守护进程（默认 `127.0.0.1:6767`，地址在 `papertown.toml` 的 `[paseo]` 里改），托管 Claude Code、Codex、OpenCode、Pi、Copilot 等 agent。Papertown 通过 `paseo` CLI（它是这个端点的客户端）为每个项目创建 agent，供应商、模型和思考强度在启动时从 Paseo 列出的清单里选。对话记录通过 Paseo 的官方 SDK（`@getpaseo/client`）读取。手机上的 Paseo 也能看到同一个 agent。
 

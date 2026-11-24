@@ -34,7 +34,7 @@ struct HireSheet: View {
     private var isAssistant: Bool { role == "assistant" || agentID == "assistant" }
     private var isNode: Bool { nodeID != nil || (agentID?.hasPrefix("node-") ?? false) }
     private var allowsPi: Bool { !isNode && post != "lead" }
-    private var allowsImport: Bool { !isAssistant && agentID == nil && (isNode || post != "lead") && paseo?.status.ok == true }
+    private var allowsImport: Bool { !isAssistant && agentID == nil && (isNode || post != "lead") && paseo?.status.ok == true && paseo?.chatOn == true }
     private var needsProject: Bool { !isAssistant && agentID == nil }
 
     var body: some View {
@@ -138,7 +138,7 @@ struct HireSheet: View {
                     }
                 }
             } footer: {
-                if runtime != "paseo" && paseo?.status.ok != true { Text(lang.string("hire.no_paseo_models")) }
+                if runtime != "paseo" && models.isEmpty { Text(lang.string("hire.no_paseo_models")) }
             }
         }
     }
@@ -170,7 +170,9 @@ struct HireSheet: View {
 
     private func blocked(_ r: String) -> String? {
         switch r {
-        case "paseo": return paseo?.status.ok == true ? nil : (paseo?.status.note ?? store.language.string("hire.paseo_down"))
+        case "paseo":
+            if paseo?.chatOn == false { return store.language.string("hire.paseo_off") }
+            return paseo?.status.ok == true ? nil : (paseo?.status.note ?? store.language.string("hire.paseo_down"))
         case "pi":
             if isNode { return store.language.string("hire.pi_node") }
             if post == "lead" { return store.language.string("hire.pi_lead") }
@@ -192,7 +194,7 @@ struct HireSheet: View {
     }
 
     private var models: [PaseoModel] {
-        guard paseo?.status.ok == true else { return [] }
+        // Paseo's list, or without Paseo the one it gave before
         return paseo?.providers.first { $0.id == provider }?.models ?? []
     }
 
@@ -216,7 +218,7 @@ struct HireSheet: View {
     }
 
     private func pickRuntime(_ preferred: String? = nil) {
-        let order = [preferred ?? paseo?.runtime ?? "paseo", "paseo", "herdr", "tmux", "headless"]
+        let order = [preferred ?? paseo?.runtime ?? "tmux", "herdr", "tmux", "headless", "paseo"]
         if runtime.isEmpty || blocked(runtime) != nil || (runtime == "pi" && !allowsPi) {
             runtime = order.first { blocked($0) == nil } ?? "paseo"
         }

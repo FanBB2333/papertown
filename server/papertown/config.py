@@ -137,7 +137,7 @@ class Settings:
     local_job_timeout: float = opt("server", "local_job_timeout", 3600.0, "seconds a local job may run before it is stopped; 0: no limit")
 
     # [agents]
-    agent_runtime: str = opt("agents", "agent_runtime", "paseo", "where new agents and leads run until chosen in settings: paseo, herdr, tmux or headless")
+    agent_runtime: str = opt("agents", "agent_runtime", "tmux", "where new agents and leads run until chosen in settings: herdr, tmux or headless (paseo needs paseo_chat)")
     assistant_model: str = opt("agents", "assistant_model", "codex/gpt-6.1-terra@xhigh", "what the assistant starts with on Paseo until chosen in settings: provider/model@thinking")
     lead_model: str = opt("agents", "lead_model", "codex/gpt-6.1-terra@high", "what project leads start with")
     worker_model: str = opt("agents", "worker_model", "", "what a coder or a writer starts on when its lead hires it; empty: the lead's")
@@ -152,6 +152,7 @@ class Settings:
     agy_bin: str = opt("agents", "agy_bin", "", "the Antigravity CLI")
 
     # [paseo]
+    paseo_chat: bool = opt("paseo", "paseo_chat", False, "let agents' conversations run in Paseo; off while that is being debugged, so agents run in a terminal (herdr, tmux or headless)")
     paseo_bin: str = opt("paseo", "paseo_bin", "", "Paseo's CLI; empty: found on PATH")
     paseo_url: str = opt("paseo", "paseo_url", "http://127.0.0.1:6767", "the web app Paseo serves")
     paseo_host: str = opt("paseo", "paseo_host", "", "an explicit daemon endpoint")

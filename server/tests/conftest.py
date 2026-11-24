@@ -26,7 +26,9 @@ def make_settings(tmp: Path, **kw) -> Settings:
                 paseo_bin=str(tmp / "no-paseo"), paseo_url="http://127.0.0.1:9",
                 claude_home=str(tmp / "no-claude"), codex_home=str(tmp / "no-codex"),
                 antigravity_home=str(tmp / "no-antigravity"), agy_bin=str(tmp / "no-agy"), usage_poll=0,
-                herdr_socket=str(tmp / "no-herdr.sock"))
+                herdr_socket=str(tmp / "no-herdr.sock"),
+                # the Paseo tests drive a stand-in daemon; a real deployment has Paseo chat off until it is debugged
+                agent_runtime="paseo", paseo_chat=True)
     return Settings(**(base | kw))
 
 

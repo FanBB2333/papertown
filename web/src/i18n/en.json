@@ -2479,7 +2479,6 @@
  "herdr 返回的数据过长": "The herdr response is too large",
  "herdr 未能完成操作，请查看终端状态": "herdr could not complete the operation. Check the terminal status",
  "herdr 接入已关闭": "herdr integration is disabled",
- "仅支持 Enter、Esc、↑、↓、1、2、3、y、n 和 Ctrl+C": "Supported keys: Enter, Esc, Up, Down, 1, 2, 3, y, n and Ctrl+C",
  "请输入消息": "Enter a message",
  "没有这种发送方式": "Unsupported send mode",
  "终端里的 agent 尚未停止，消息未发送": "The terminal agent has not stopped. The message was not sent",
@@ -2575,7 +2574,6 @@
  "接入方式": "Attach",
  "关闭终端": "Close terminal",
  "CLI 默认模型": "CLI default model",
- "Paseo 未连接，将使用 CLI 默认模型。": "Paseo is disconnected. The CLI default model will be used.",
  "在 herdr 中启动": "Start in herdr",
  "在 tmux 中启动": "Start in tmux",
  "默认运行方式": "Default runtime",
@@ -3779,5 +3777,15 @@
  "关闭密码登录要在运行 Papertown 的这台电脑上操作": "Password sign-in is turned off on the computer running Papertown",
  "这样设置会拒绝你当前所在的来源，请保留它": "This would refuse the source you are on. Keep it allowed",
  "密码登录已关闭，可在运行 Papertown 的电脑上的「网络与安全」中开启": "Password sign-in is off. Turn it on under Network & Security on the computer running Papertown",
- "来源 {0} 不在 Papertown 允许的范围内，可在运行 Papertown 的电脑上的「设置 › 网络与安全」中添加": "{0} is not among the sources allowed to reach Papertown. Add it under Settings › Network & Security on the computer running Papertown"
+ "来源 {0} 不在 Papertown 允许的范围内，可在运行 Papertown 的电脑上的「设置 › 网络与安全」中添加": "{0} is not among the sources allowed to reach Papertown. Add it under Settings › Network & Security on the computer running Papertown",
+ "Paseo 接入正在调试，暂时停用。请使用终端启动。": "Paseo conversations are being debugged and are off for now. Start in a terminal.",
+ "调试中，暂时停用": "Being debugged, off for now",
+ "调试中": "Being debugged",
+ "暂无模型列表，将使用 CLI 默认模型。": "No model list yet. The CLI's default model will be used.",
+ "Paseo 接入正在调试，暂时停用，请选择 herdr、tmux 或 headless": "Paseo conversations are being debugged and are off for now. Choose herdr, tmux or headless",
+ "终端停在一个需要你处理的界面上，消息没有发送。请先在终端中处理": "The terminal is waiting on a screen for you, so the message was not sent. Deal with it in the terminal first",
+ "不支持这个按键": "That key is not supported",
+ "正在工作，先停下再换模型": "It is working. Stop it before switching models",
+ "还没认出这个终端的会话，现在换模型会丢掉上下文，请稍后再试": "The terminal's session is not known yet, so switching now would lose the context. Try again shortly",
+ "只有终端员工可以在对话中换模型": "Only agents in a terminal can switch models in a conversation"
 }

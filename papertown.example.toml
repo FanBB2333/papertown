@@ -24,8 +24,8 @@
 # local_job_timeout = 3600.0
 
 [agents]
-# where new agents and leads run until chosen in settings: paseo, herdr, tmux or headless (PAPERTOWN_AGENT_RUNTIME)
-# agent_runtime = "paseo"
+# where new agents and leads run until chosen in settings: herdr, tmux or headless (paseo needs paseo_chat) (PAPERTOWN_AGENT_RUNTIME)
+# agent_runtime = "tmux"
 # what the assistant starts with on Paseo until chosen in settings: provider/model@thinking (PAPERTOWN_ASSISTANT_MODEL)
 # assistant_model = "codex/gpt-6.1-terra@xhigh"
 # what project leads start with (PAPERTOWN_LEAD_MODEL)
@@ -52,6 +52,8 @@
 # agy_bin = ""
 
 [paseo]
+# let agents' conversations run in Paseo; off while that is being debugged, so agents run in a terminal (herdr, tmux or headless) (PAPERTOWN_PASEO_CHAT)
+# paseo_chat = false
 # Paseo's CLI; empty: found on PATH (PAPERTOWN_PASEO_BIN)
 # paseo_bin = ""
 # the web app Paseo serves (PAPERTOWN_PASEO_URL)

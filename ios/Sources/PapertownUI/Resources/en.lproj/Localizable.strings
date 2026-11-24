@@ -660,7 +660,8 @@
 "hire.model" = "Model";
 "hire.thinking" = "Thinking";
 "hire.cli_default" = "CLI default";
-"hire.no_paseo_models" = "Paseo is not connected, so the CLI's default model is used.";
+"hire.no_paseo_models" = "No model list yet, so the CLI's default model is used.";
+"hire.paseo_off" = "Being debugged, off for now. Start in a terminal.";
 "hire.paseo_down" = "Paseo is not connected.";
 "hire.pi_lead" = "Leads do not run in pi yet.";
 "hire.pi_node" = "Task agents cannot run in pi yet.";

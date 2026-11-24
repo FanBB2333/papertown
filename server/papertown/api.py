@@ -782,7 +782,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/agents/runtime")
     def agent_runtime():
-        return {"runtime": town.paseo_models.runtime()}
+        return {"runtime": town.paseo_models.runtime(), "paseo_chat": town.s.paseo_chat}
 
     @app.post("/api/agents/runtime")
     def set_agent_runtime(body: StartIn):
@@ -911,7 +911,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             providers = []
         if providers:
             m.learn(providers)
-        return {"status": st, "providers": providers, "defaults": m.defaults(), "news": m.news(), "runtime": m.runtime()}
+        # Paseo not running: the models it listed before, so a terminal can still be started on one of them
+        return {"status": st, "providers": providers or m.known(), "defaults": m.defaults(), "news": m.news(), "runtime": m.runtime(),
+                "chat": town.s.paseo_chat}
 
     @app.post("/api/paseo/defaults")
     def paseo_default(body: DefaultIn):

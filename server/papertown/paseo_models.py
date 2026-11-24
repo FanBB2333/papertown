@@ -17,6 +17,11 @@ ROLES = ("assistant", "lead", "worker")  # worker: a project's coder or writer
 NEWS_MAX = 30
 
 
+TERMINALS = ("herdr", "tmux", "headless")
+PASEO_OFF = "Paseo 接入正在调试，暂时停用，请选择 herdr、tmux 或 headless"
+# thinking levels each CLI takes on its command line (hosted.py), for models known only by name
+THINKING = {"claude": ["low", "medium", "high", "xhigh", "max"], "codex": ["low", "medium", "high", "xhigh"]}
+
 class ModelError(Exception):
     pass
 
@@ -44,11 +49,16 @@ class PaseoModels:
         self.town.bus.publish("paseo_models", defaults=self.defaults(), news=self.news())
 
     def runtime(self) -> str:
+        """Where new agents and leads run. While Paseo chat is off, a terminal: the setting's, else tmux."""
         value = self._read().get("runtime", self.s.agent_runtime)
-        return value if value in ("paseo", "herdr", "tmux", "headless") else "paseo"
+        if value == "paseo" and not self.s.paseo_chat:
+            value = self.s.agent_runtime if self.s.agent_runtime in TERMINALS else "tmux"
+        return value if value in ("paseo", *TERMINALS) else "tmux"
 
     def set_runtime(self, runtime: str) -> dict:
-        if runtime not in ("paseo", "herdr", "tmux", "headless"):
+        if runtime == "paseo" and not self.s.paseo_chat:
+            raise ModelError(PASEO_OFF)
+        if runtime not in ("paseo", *TERMINALS):
             raise ModelError("默认运行方式只能是 Paseo、herdr、tmux 或 headless")
         with self._lock:
             self._write(self._read() | {"runtime": runtime})
@@ -125,6 +135,18 @@ class PaseoModels:
         if added:
             self._publish()
         return added
+
+    def known(self) -> list[dict]:
+        """The models Paseo has listed before, by provider, for when it is not running: names only, with the thinking
+        levels each CLI takes."""
+        by: dict[str, list[dict]] = {}
+        for key in self._read().get("seen") or []:
+            provider, _, model = key.partition("/")
+            if provider and model:
+                levels = THINKING.get(provider, [])
+                by.setdefault(provider, []).append({"id": model, "name": model, "thinking": levels,
+                                                    "default_thinking": "high" if "high" in levels else None})
+        return [{"id": p, "label": p, "models": ms, "remembered": True} for p, ms in sorted(by.items())]
 
     def dismiss(self, keys: list[str] | None = None) -> list[dict]:
         """Put news away once you have seen it: the ones named, or all of it."""

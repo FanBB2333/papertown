@@ -16,6 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from papertown.agents import AgentError, PT
+from papertown.paseo_models import PASEO_OFF, ModelError
 from papertown.api import create_app
 from papertown.backends import binary
 from papertown.hosted import Hosted
@@ -450,7 +451,7 @@ def test_herdr_blocked_native_session_exit_and_reconcile(herdr):
     assert status(h, aid) == 'exited'
     assert c.get('/api/backends').json()['herdr']['ok']
     assert c.post('/api/agents/runtime', json={'runtime': 'tmux'}).json() == {'runtime': 'tmux'}
-    assert c.get('/api/agents/runtime').json() == {'runtime': 'tmux'}
+    assert c.get('/api/agents/runtime').json() == {'runtime': 'tmux', 'paseo_chat': True}
     assert c.post('/api/agents/runtime', json={'runtime': 'pi'}).status_code == 400
 
 
@@ -500,3 +501,30 @@ def test_hook_auth_independent_of_browser_login(tmp_path):
         assert c.post(url + '/hook', json=payload).status_code == 403
         assert c.post(url + '/hook', json=payload, headers={'x-papertown-token': a['token']}).status_code == 200
         assert t.agents.get(a['id'])['term']['status'] == 'done'
+
+
+def test_paseo_chat_off_runs_agents_in_a_terminal(tmp_path, monkeypatch):
+    t = Town(make_settings(tmp_path, paseo_chat=False, agent_runtime='tmux'))
+    assert t.paseo_models.runtime() == 'tmux'
+    with pytest.raises(ModelError):
+        t.paseo_models.set_runtime('paseo')
+    calls = []
+    def start(a, runtime, provider=None, model=None, thinking=None, note=None):
+        calls.append((a['id'], runtime))
+        t.agents._set(a['id'], runtime=runtime, ext_id=None, status='idle', term={
+            'backend': runtime, 'provider': 'claude', 'status': 'idle', 'seq': 0, 'seen_seq': 0, 'since': 'now'})
+        return t.agents.public(t.agents.get(a['id']))
+    monkeypatch.setattr(t.agents.hosted, 'start', start)
+    a = employee(t)
+    t.agents.start(a['id'], 'paseo', 'claude', 'm', 'high')
+    assert calls[-1] == (a['id'], 'tmux')
+    # one left in Paseo reads as down, takes no messages, and starts again in a terminal
+    w = employee(t, 'writer')
+    t.agents._set(w['id'], runtime='paseo', ext_id='conv', status='idle', term=None)
+    assert t.agents.down(t.agents.get(w['id'])) == PASEO_OFF
+    with pytest.raises(AgentError):
+        t.agents.say(w['id'], 'hello')
+    with pytest.raises(AgentError):
+        t.agents.import_session(w['id'], 'other')
+    t.agents.start(w['id'])
+    assert calls[-1] == (w['id'], 'tmux') and not t.agents.get(w['id'])['ext_id']

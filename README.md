@@ -102,7 +102,7 @@ After `pnpm build`, `papertown serve` serves `web/dist` itself, so the backend a
 
 On the first start of an empty town, five prebuilt sample projects show different stages with their outputs, paper sources, and a placeholder lead conversation. They carry a Sample tag and their lead switches start off. Turning on an unfinished sample's lead hands it to a real agent. `samples = false` under `[server]` in `papertown.toml` turns automatic seeding off, and samples can also be added from Settings.
 
-Pick the default runtime (`paseo`, `herdr`, `tmux`, or `headless`) in Settings or with `agent_runtime` under `[agents]` in `papertown.toml`. Papertown never starts or stops the Paseo or herdr daemon. Start it yourself before using that runtime. If the runtime is unavailable, the lead shows as blocked with the reason. To use Paseo, start its daemon with the web UI enabled and install the SDK once:
+Pick the default runtime (`herdr`, `tmux`, or `headless`; `tmux` unless set) in Settings or with `agent_runtime` under `[agents]` in `papertown.toml`. Conversations in Paseo are turned off while they are being debugged: agents that would start in Paseo start in a terminal, and Paseo shows in the pickers as unavailable. `paseo_chat = true` under `[paseo]` turns them back on. Papertown never starts or stops the Paseo or herdr daemon. Start it yourself before using that runtime. If the runtime is unavailable, the lead shows as blocked with the reason. To use Paseo, start its daemon with the web UI enabled and install the SDK once:
 
 ```bash
 paseo daemon start
@@ -200,8 +200,8 @@ A command-line flag (`papertown serve --host`, `--port`) wins over an environmen
 | Table | What it holds |
 | --- | --- |
 | `[server]` | `host` and `port` where `papertown serve` listens (`127.0.0.1`, `31640`), the `url` agents on this machine use to reach it, `data_dir` (default `server/var`), `skills_dir`, `projects` (your own projects), `samples`, and `local_jobs` |
-| `[agents]` | the default runtime (`agent_runtime`: `paseo`, `herdr`, `tmux` or `headless`), the default models of the assistant, the leads and the workers as `provider/model@thinking`, resident leads (`lead_resident`), how often leads are checked on, and the paths of the agent CLIs |
-| `[paseo]` | Paseo's CLI, web app and daemon endpoint, and how often its model list is read |
+| `[agents]` | the default runtime (`agent_runtime`: `herdr`, `tmux` or `headless`, or `paseo` with `paseo_chat` on), the default models of the assistant, the leads and the workers as `provider/model@thinking`, resident leads (`lead_resident`), how often leads are checked on, and the paths of the agent CLIs |
+| `[paseo]` | whether agents' conversations may run in Paseo (`paseo_chat`, off while being debugged), Paseo's CLI, web app and daemon endpoint, and how often its model list is read |
 | `[terminal]` | tmux and herdr with their sockets, and the timings that tell a terminal agent is waiting, held or stopped |
 | `[history]` | where Claude Code, Codex and Antigravity keep their conversations, and reading transcripts and usage logs |
 | `[services]` | the arXiv dock, LaTeX compiling, extra MCP servers, the nvidb GPU queue, and skim |
