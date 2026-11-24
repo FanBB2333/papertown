@@ -2,8 +2,8 @@
 
 Enough of xterm for the agent CLIs' inline and full-screen interfaces: cursor movement, erasing, insert and delete,
 scroll regions, the alternate screen, wide characters, and answers to the queries a CLI sends while it starts (cursor
-position, device attributes, window size, colours). Colours and text attributes are dropped: Papertown reads the
-screen as text, the way `tmux capture-pane -p -J` prints it.
+position, device attributes, window size, colours). Each cell keeps its colours and text attributes, so the screen
+reads back either as plain text, the way `tmux capture-pane -p -J` prints it, or with them, as `-e` adds.
 """
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import time
 import unicodedata
 from collections import deque
 from typing import Callable
+
+from . import ansi
 
 INTERMEDIATE = ' !"#$%&\'()*+,-./'
 TRACKED = {1, 6, 7, 25, 47, 1047, 1048, 1049, 2004}  # private modes a DECRQM query gets a real answer for
@@ -26,6 +28,7 @@ def width(ch: str) -> int:
 class Buffer:
     def __init__(self, cols: int, rows: int):
         self.lines = [[' '] * cols for _ in range(rows)]
+        self.pens: list[list[tuple | None]] = [[None] * cols for _ in range(rows)]  # each cell's colours and attributes
         self.wrapped = [False] * rows  # the row continues on the next one (an automatic wrap, not a line break)
 
 
@@ -33,7 +36,7 @@ class Screen:
     def __init__(self, cols: int = 160, rows: int = 48, reply: Callable[[str], None] | None = None, history: int = 5000):
         self.cols, self.rows = cols, rows
         self.reply = reply or (lambda s: None)
-        self.history: deque[tuple[str, bool]] = deque(maxlen=history)
+        self.history: deque[tuple[str, str, bool]] = deque(maxlen=history)  # (plain, with colours, wrapped)
         self.decoder = codecs.getincrementaldecoder('utf-8')('replace')
         self.reset()
 
@@ -47,7 +50,8 @@ class Screen:
         self.modes = {7, 25}
         self.title = ''
         self.state, self.seq, self.last = 'ground', '', ''
-        self.frozen: tuple[str, float] | None = None
+        self.frozen: tuple[str, str, float] | None = None
+        self.pen: tuple | None = None  # what printing writes with
 
     # input
 
@@ -169,9 +173,12 @@ class Screen:
             line = self.buf.lines[self.y]
         self.clear_cell(line, self.x)
         line[self.x] = ch
+        pens = self.buf.pens[self.y]
+        pens[self.x] = self.pen
         if w == 2:
             self.clear_cell(line, self.x + 1)
             line[self.x + 1] = ''
+            pens[self.x + 1] = self.pen
         self.last = ch
         self.x += w
         if self.x >= self.cols:
@@ -201,18 +208,21 @@ class Screen:
     def scroll_up(self, n: int, top: int | None = None) -> None:
         t, b, buf = self.top if top is None else top, self.bottom, self.buf
         for _ in range(min(n, b - t + 1)):
-            line, wrapped = buf.lines.pop(t), buf.wrapped.pop(t)
+            line, pens, wrapped = buf.lines.pop(t), buf.pens.pop(t), buf.wrapped.pop(t)
             if t == 0 and buf is self.main:
-                self.history.append((''.join(line) if wrapped else ''.join(line).rstrip(), wrapped))
+                self.history.append((''.join(line) if wrapped else ''.join(line).rstrip(), self.encode(line, pens, not wrapped), wrapped))
             buf.lines.insert(b, [' '] * self.cols)
+            buf.pens.insert(b, [None] * self.cols)
             buf.wrapped.insert(b, False)
 
     def scroll_down(self, n: int, top: int | None = None) -> None:
         t, b, buf = self.top if top is None else top, self.bottom, self.buf
         for _ in range(min(n, b - t + 1)):
             buf.lines.pop(b)
+            buf.pens.pop(b)
             buf.wrapped.pop(b)
             buf.lines.insert(t, [' '] * self.cols)
+            buf.pens.insert(t, [None] * self.cols)
             buf.wrapped.insert(t, False)
 
     def save(self) -> None:
@@ -230,8 +240,13 @@ class Screen:
         if end < self.cols and line[end] == '':
             line[end] = ' '
         line[start:end] = [' '] * (end - start)
+        self.buf.pens[y][start:end] = [self.blank()] * (end - start)
         if end >= self.cols:
             self.buf.wrapped[y] = False
+
+    def blank(self) -> tuple | None:
+        """What erased cells take on: the current background, as xterm erases."""
+        return (None, self.pen[1], 0) if self.pen and self.pen[1] is not None else None
 
     # control sequences
 
@@ -243,6 +258,8 @@ class Screen:
         try:
             params = [int(p) if p else 0 for p in body.replace(':', ';').split(';')] if body else []
         except ValueError:
+            if final == 'm' and not prefix and not inter:
+                self.pen = ansi.apply(self.pen, body)
             return
         arg = params[0] if params else 0
         n = arg or 1
@@ -264,6 +281,9 @@ class Screen:
                 self.reply('\x1bP>|Papertown\x1b\\')
             return
         if prefix:  # '<' and '=': keyboard protocols this terminal does not speak, so they get no answer
+            return
+        if final == 'm' and not inter:
+            self.pen = ansi.apply(self.pen, body)
             return
         if inter:
             if inter == '$' and final == 'p':
@@ -321,6 +341,9 @@ class Screen:
             self.erase(self.y, self.x, self.x + n)
             del line[self.x:self.x + n]
             line.extend([' '] * n)
+            pens = self.buf.pens[self.y]
+            del pens[self.x:self.x + n]
+            pens.extend([self.blank()] * n)
         elif f == '@':
             line = self.buf.lines[self.y]
             n = min(n, cols - self.x)
@@ -328,6 +351,9 @@ class Screen:
                 line[self.x - 1] = ' '
             line[self.x:self.x] = [' '] * n
             del line[cols:]
+            pens = self.buf.pens[self.y]
+            pens[self.x:self.x] = [self.blank()] * n
+            del pens[cols:]
             if width(line[-1][:1] or ' ') == 2:  # its right half was pushed off the row
                 line[-1] = ' '
         elif f == 'L' or f == 'M':
@@ -381,7 +407,7 @@ class Screen:
         elif m == 1048:
             (self.save if on else self.restore)()
         elif m == 2026:  # synchronized output: a read in the middle of a frame sees the frame before it
-            self.frozen = (self.text(), time.monotonic()) if on else None
+            self.frozen = (self._shown(False), self._shown(True), time.monotonic()) if on else None
         if on:
             self.modes.add(m)
         else:
@@ -389,28 +415,35 @@ class Screen:
 
     # output
 
-    def text(self, history: bool = False) -> str:
+    def text(self, history: bool = False, colours: bool = False) -> str:
         """The visible screen (after the lines that scrolled off it, with `history`), rows joined where they only
-        wrapped, trailing spaces dropped."""
-        shown = self._shown()
+        wrapped, trailing spaces dropped. With `colours`, each row carries the SGR sequences that draw it."""
+        shown = self._shown(colours)
         if not history or not self.history:
             return shown
         out, cur = [], ''
-        for row, wrapped in self.history:
+        for plain, coloured, wrapped in self.history:
+            row = coloured if colours else plain
             if wrapped:
                 cur += row
             else:
-                out.append((cur + row).rstrip())
+                out.append(cur + row if colours else (cur + row).rstrip())
                 cur = ''
         if cur:
-            out.append(cur.rstrip())
+            out.append(cur if colours else cur.rstrip())
         return '\n'.join(out) + '\n' + shown
 
-    def _shown(self) -> str:
-        if self.frozen and time.monotonic() - self.frozen[1] < 1:
-            return self.frozen[0]
+    def _shown(self, colours: bool = False) -> str:
+        if self.frozen and time.monotonic() - self.frozen[2] < 1:
+            return self.frozen[1 if colours else 0]
         out, cur = [], ''
-        for cells, wrapped in zip(self.buf.lines, self.buf.wrapped):
+        for cells, pens, wrapped in zip(self.buf.lines, self.buf.pens, self.buf.wrapped):
+            if colours:
+                cur += self.encode(cells, pens, not wrapped)
+                if not wrapped:
+                    out.append(cur)
+                    cur = ''
+                continue
             row = ''.join(cells)
             if wrapped:
                 cur += row
@@ -418,5 +451,24 @@ class Screen:
                 out.append((cur + row).rstrip())
                 cur = ''
         if cur:
-            out.append(cur.rstrip())
+            out.append(cur if colours else cur.rstrip())
         return '\n'.join(out)
+
+    @staticmethod
+    def encode(cells: list[str], pens: list, trim: bool) -> str:
+        """A row with the SGR sequences that draw it; with `trim`, without the trailing spaces that paint nothing."""
+        n = len(cells)
+        if trim:
+            while n and cells[n - 1] == ' ' and not ansi.has_background(pens[n - 1]):
+                n -= 1
+        out, cur = [], None
+        for ch, pen in zip(cells[:n], pens[:n]):
+            if ch == '':
+                continue
+            if pen != cur:
+                out.append(ansi.sgr(pen))
+                cur = pen
+            out.append(ch)
+        if cur is not None:
+            out.append('\x1b[0m')
+        return ''.join(out)

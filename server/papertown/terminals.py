@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .db import now
-from . import prompts, transcripts
+from . import ansi, prompts, transcripts
 from .herdr import Feed, Herdr, HerdrError
 from .project_dirs import owner, project_roots
 
@@ -185,16 +185,16 @@ class Terminals:
             (groups[lid] if lid else others).append(terminal)
         return groups, others
 
-    def detail(self, id: str) -> dict:
+    def detail(self, id: str, styled: bool = False) -> dict:
         with self._delivery:
             a = self._require(id)
             fresh = self._current(id)
-            text = self.client.read(fresh["pane_id"])
+            text = self.client.read(fresh["pane_id"], colours=styled)
             with self._lock:
                 terminal = self._public(fresh)
             queued = self.db.q("select * from terminal_queue where terminal_id = ? and state in ('queued', 'sending', 'failed') order by id", a["terminal_id"])
             prompt = prompts.parse(self._visible(fresh)) if terminal['watch']['bucket'] == 'needs' else None
-            return {"terminal": terminal, "text": text, "queued": queued, "prompt": prompt}
+            return (ansi.render(text) if styled else {"text": text}) | {"terminal": terminal, "queued": queued, "prompt": prompt}
 
     def _visible(self, a):
         data = self.client.call('agent.read', {'target': a['pane_id'], 'source': 'visible'}).get('read')

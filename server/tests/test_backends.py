@@ -280,7 +280,7 @@ class MemoryTerminal:
     def __init__(self):
         self.text, self.live, self.sent, self.closed = 'ready', True, [], False
     def state(self, handle): return {'status': None if self.live else 'exited', 'seq': None, 'since': None}
-    def screen(self, handle): return self.text
+    def screen(self, handle, colours=False): return self.text
     def glance(self, handle): return self.text
     def submit(self, handle, text): self.sent.append(text)
     def keys(self, handle, keys): pass
@@ -561,3 +561,19 @@ def test_paseo_chat_off_runs_agents_in_a_terminal(tmp_path, monkeypatch):
         t.agents.import_session(w['id'], 'other')
     t.agents.start(w['id'])
     assert calls[-1] == (w['id'], 'tmux') and not t.agents.get(w['id'])['ext_id']
+
+
+def test_screen_with_its_colours_comes_styled_and_packed(tmp_path):
+    t, h, b, aid = memory_employee(tmp_path)
+    b.text = '\x1b[1;32mdone\x1b[0m ' + 'x' * 5000
+    with patch('papertown.api.Town', return_value=t):
+        c = TestClient(create_app())
+    url = f'/api/agents/{aid}/screen'
+    plain = c.get(url).json()
+    assert 'lines' not in plain and plain['text'].startswith('\x1b[1;32m')
+    r = c.get(url + '?styled=1', headers={'Accept-Encoding': 'gzip'})
+    assert r.headers.get('content-encoding') == 'gzip'
+    styled = r.json()
+    assert styled['text'] == 'done ' + 'x' * 5000 and styled['theme'] == {'fg': '#cccccc', 'bg': '#1e1e1e'}
+    run, style = styled['lines'][0][0]
+    assert run == 'done' and styled['styles'][style] == {'fg': '#0dbc79', 'b': True}

@@ -41,7 +41,7 @@ def test_split_utf8_across_reads():
 def test_scroll_region_and_history():
     s, _ = screen('\r\n'.join(f'line{i}' for i in range(8)), rows=4)
     assert rows(s) == ['line4', 'line5', 'line6', 'line7']
-    assert [h for h, _ in s.history] == ['line0', 'line1', 'line2', 'line3']
+    assert [h for h, *_ in s.history] == ['line0', 'line1', 'line2', 'line3']
     # A region above an inline viewport, the way Codex inserts history over its composer.
     s.feed(b'\x1b[1;2r\x1b[2;1H\r\nnew\x1b[r')
     assert rows(s) == ['line5', 'new', 'line6', 'line7']
@@ -90,3 +90,20 @@ def test_history_reads_back_the_lines_that_scrolled_off():
     s, _ = screen('\r\n'.join(f'line {i}' for i in range(8)), cols=10, rows=3)
     assert s.text() == 'line 5\nline 6\nline 7'
     assert s.text(history=True).split('\n') == [f'line {i}' for i in range(8)]
+
+
+def test_cells_keep_their_colours_through_edits_and_history():
+    from papertown import ansi
+    s, _ = screen('\x1b[31mred\x1b[0m plain\r\n\x1b[44m\x1b[K\x1b[0mbar\r\n\x1b[1m中\x1b[0mx', cols=10, rows=3)
+    lines = ansi.render(s.text(colours=True))
+    styles = lines["styles"]
+    assert [(t, styles[i]) for t, i in lines["lines"][0]] == [("red", {"fg": "#cd3131"}), (" plain", {})]
+    # erasing with a background paints the row with it, and printing over it keeps the background only where it was not written
+    assert [(t, styles[i]) for t, i in lines["lines"][1]] == [("bar", {}), ("       ", {"bg": "#2472c8"})]
+    assert [(t, styles[i]) for t, i in lines["lines"][2]] == [("中", {"b": True}), ("x", {})]
+    assert s.text() == 'red plain\nbar\n中x'
+    s.feed(b'\r\n\x1b[32mnext\r\n\r\n')
+    coloured = ansi.render(s.text(history=True, colours=True))
+    assert coloured["text"].split('\n')[0] == 'red plain'
+    assert coloured["styles"][coloured["lines"][0][0][1]] == {"fg": "#cd3131"}
+    assert s.text(history=True).split('\n')[0] == 'red plain'

@@ -274,7 +274,7 @@ class Daemon:
         if op == 'state':
             return t.state()
         if op == 'screen':
-            return t.state() | {'text': t.screen.text(history=bool(req.get('history')))}
+            return t.state() | {'text': t.screen.text(history=bool(req.get('history')), colours=bool(req.get('colours')))}
         if op == 'paste':
             t.paste(str(req.get('text') or ''), bool(req.get('enter')))
             return {}

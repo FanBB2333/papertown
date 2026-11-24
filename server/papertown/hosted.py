@@ -16,7 +16,7 @@ from .backends import BackendError, HeadlessBackend, HerdrBackend, TmuxBackend, 
 from .db import now, write_json
 from .herdr import Herdr, HerdrError
 from .terminals import KEYS
-from . import prompts
+from . import ansi, prompts
 
 RUNTIMES = ('herdr', 'tmux', 'headless')
 IN_RUNTIMES = "runtime in ('herdr', 'tmux', 'headless')"
@@ -363,15 +363,17 @@ class Hosted:
             self.release(id)
         return self.a.get(id)
 
-    def screen(self, id):
+    def screen(self, id, styled=False):
+        """The terminal's screen with its scrollback; `styled` adds its colours (see ansi.render)."""
         a = self.refresh(id)
         try:
-            text = self.backends[a['runtime']].screen(a['term']['handle']) if a['term'].get('handle') else ''
+            text = self.backends[a['runtime']].screen(a['term']['handle'], colours=styled) if a['term'].get('handle') else ''
         except (HerdrError, BackendError) as e:
             if a['term']['status'] != 'exited':
                 raise self.error(e) from e
             text = ''
-        return {'text': text, 'term': self.public(a), 'prompt': self._prompts.get(id) if a['term']['status'] in ('blocked', 'starting') else None}
+        prompt = self._prompts.get(id) if a['term']['status'] in ('blocked', 'starting') else None
+        return (ansi.render(text) if styled else {'text': text}) | {'term': self.public(a), 'prompt': prompt}
 
     def prompt(self, id, digest, option):
         with self.lock:

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import json
 import threading
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -422,6 +424,15 @@ def mapped(*errors: type[Exception]):
     return call
 
 
+def packed(request: Request, data):
+    """A large JSON answer gzipped for a client that takes it: a terminal's screen with its colours runs to hundreds of
+    kilobytes, read every two seconds while it shows."""
+    body = json.dumps(jsonable_encoder(data), ensure_ascii=False, separators=(",", ":")).encode()
+    if len(body) < 4096 or "gzip" not in request.headers.get("accept-encoding", ""):
+        return Response(body, media_type="application/json")
+    return Response(gzip.compress(body, 5), media_type="application/json", headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+
+
 class Pages(StaticFiles):
     """The built web app at every address it routes itself: a path that is no file gets index.html.
     Only assets/ is content-hashed, so the rest is no-cache; fonts allow any origin for the agents' sandboxed pages."""
@@ -762,8 +773,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return town.terminals.info()
 
     @app.get("/api/terminals/{id}")
-    def terminal(id: str):
-        return terminals(town.terminals.detail, id)
+    def terminal(id: str, request: Request, styled: bool = False):
+        return packed(request, terminals(town.terminals.detail, id, styled))
 
     @app.post("/api/terminals/{id}/say")
     def terminal_say(id: str, body: SayIn):
@@ -794,8 +805,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return mapped(ModelError)(town.paseo_models.set_runtime, body.runtime)
 
     @app.get("/api/agents/{agent_id}/screen")
-    def agent_screen(agent_id: str):
-        return agents(town.agents.hosted.screen, agent_id)
+    def agent_screen(agent_id: str, request: Request, styled: bool = False):
+        return packed(request, agents(town.agents.hosted.screen, agent_id, styled))
 
     @app.post("/api/agents/{agent_id}/keys")
     def agent_keys(agent_id: str, body: TerminalKeysIn):

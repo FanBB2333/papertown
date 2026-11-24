@@ -119,16 +119,17 @@ class Herdr:
             raise HerdrError("herdr 返回了无效数据")
         return agent
 
-    def read(self, target: str, lines: int = 200) -> str:
+    def read(self, target: str, lines: int = 200, colours: bool = False) -> str:
         # Unwrapping history takes herdr longer than the other calls, more so while several agents work.
         try:
-            read = self.call("agent.read", {"target": target, "source": "recent_unwrapped", "lines": lines}, 5).get("read")
+            fmt = {"format": "ansi"} if colours else {}
+            read = self.call("agent.read", {"target": target, "source": "recent_unwrapped", "lines": lines} | fmt, 5).get("read")
         except HerdrError as e:
             # Full-screen agents keep their history on the alternate screen, which herdr
             # can only scroll back while they are idle. While they work, show the screen.
             if e.code != "agent_not_idle":
                 raise
-            read = self.call("agent.read", {"target": target, "source": "visible"}, 5).get("read")
+            read = self.call("agent.read", {"target": target, "source": "visible"} | fmt, 5).get("read")
         if not isinstance(read, dict) or not isinstance(read.get("text"), str):
             raise HerdrError("herdr 返回了无效数据")
         return read["text"]

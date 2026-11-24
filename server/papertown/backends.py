@@ -45,7 +45,8 @@ class TerminalBackend(ABC):
     @abstractmethod
     def alive(self, handle: dict) -> bool: ...
     @abstractmethod
-    def screen(self, handle: dict) -> str: ...
+    def screen(self, handle: dict, colours: bool = False) -> str:
+        """The screen with the lines that scrolled off it; with `colours`, as ANSI text (see ansi.render)."""
     @abstractmethod
     def glance(self, handle: dict) -> str: ...
     @abstractmethod
@@ -103,11 +104,11 @@ class TmuxBackend(TerminalBackend):
     def alive(self, handle):
         return self.identity(handle) == '0'
 
-    def screen(self, handle):
+    def screen(self, handle, colours=False):
         if self.identity(handle) is None:
             raise BackendError('终端会话已退出')
         # with the lines that scrolled off it: the conversation as the CLI drew it
-        return self.call('capture-pane', '-p', '-J', '-S', f'-{HISTORY}', '-t', handle['pane']).stdout
+        return self.call('capture-pane', '-p', '-J', *(['-e'] if colours else []), '-S', f'-{HISTORY}', '-t', handle['pane']).stdout
 
     def glance(self, handle):
         """The visible screen, for telling whether it still changes."""
@@ -215,8 +216,8 @@ class HerdrBackend(TerminalBackend):
     def alive(self, handle):
         return self.state(handle)['status'] != 'exited'
 
-    def screen(self, handle):
-        return self.client.read(handle['pane'])
+    def screen(self, handle, colours=False):
+        return self.client.read(handle['pane'], colours=colours)
 
     def glance(self, handle):
         # Reading history makes herdr scroll an idle full-screen agent and restore it. The once-a-second
@@ -335,15 +336,15 @@ class HeadlessBackend(TerminalBackend):
     def alive(self, handle):
         return self.state(handle)['status'] != 'exited'
 
-    def screen(self, handle):
-        return self._screen(handle, True)
+    def screen(self, handle, colours=False):
+        return self._screen(handle, True, colours)
 
     def glance(self, handle):
         return self._screen(handle, False)
 
-    def _screen(self, handle, history):
+    def _screen(self, handle, history, colours=False):
         try:
-            return self._call('screen', id=handle['id'], history=history)['text']
+            return self._call('screen', id=handle['id'], history=history, colours=colours)['text']
         except Stopped as e:
             raise BackendError('终端会话已退出') from e
 

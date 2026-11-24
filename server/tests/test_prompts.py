@@ -137,7 +137,7 @@ def test_watch_prompt_is_memory_only_and_visible_screen(tmp_path, monkeypatch):
     hosted.refresh(aid)
     a = town.agents.get(aid)
     hosted.save(a, a['term'] | {'status': 'blocked', 'reason': 'permission'})
-    monkeypatch.setattr(backend, 'screen', lambda _: 'History contains a different dialog')
+    monkeypatch.setattr(backend, 'screen', lambda _, colours=False: 'History contains a different dialog')
     assert hosted.screen(aid)['prompt'] == parse(AGY)
     assert town.agents.public(town.agents.get(aid))['watch']['doing'] == {'kind': 'prompt', 'text': parse(AGY)['title']}
     assert 'Do you trust' not in json.dumps(town.db.q('select * from agents'))
