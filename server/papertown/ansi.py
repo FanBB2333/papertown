@@ -17,9 +17,11 @@ BOLD, DIM, ITALIC, UNDERLINE, REVERSE, HIDDEN, STRIKE = 1, 2, 4, 8, 16, 32, 64
 Pen = tuple
 PLAIN: Pen = (None, None, 0)
 
-THEME = {"fg": "#cccccc", "bg": "#1e1e1e"}
-PALETTE16 = ["#000000", "#cd3131", "#0dbc79", "#e5e510", "#2472c8", "#bc3fbc", "#11a8cd", "#e5e5e5",
-             "#666666", "#f14c4c", "#23d18b", "#f5f543", "#3b8eea", "#d670d6", "#29b8db", "#ffffff"]
+# a light terminal, like the pages around it; vt.py answers a CLI's colour queries with these, so the CLI picks colours
+# for the screen it is really drawn on (the 16 colours are a light terminal's, legible on white)
+THEME = {"fg": "#24292f", "bg": "#ffffff"}
+PALETTE16 = ["#000000", "#cd3131", "#00bc00", "#949800", "#0451a5", "#bc05bc", "#0598bc", "#555555",
+             "#666666", "#cd3131", "#14ce14", "#b5ba00", "#0451a5", "#bc05bc", "#0598bc", "#a5a5a5"]
 _FLAG = {1: BOLD, 2: DIM, 3: ITALIC, 4: UNDERLINE, 7: REVERSE, 8: HIDDEN, 9: STRIKE, 21: UNDERLINE, 53: 0}
 _OFF = {22: BOLD | DIM, 23: ITALIC, 24: UNDERLINE, 27: REVERSE, 28: HIDDEN, 29: STRIKE}
 

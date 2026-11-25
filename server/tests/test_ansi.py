@@ -9,7 +9,7 @@ def runs(text):
 
 def test_basic_and_bright_colours_bold_and_reset():
     lines, r = runs("\x1b[31mred\x1b[0m plain \x1b[1;92mok\x1b[m")
-    assert lines == [[("red", {"fg": "#cd3131"}), (" plain ", {}), ("ok", {"fg": "#23d18b", "b": True})]]
+    assert lines == [[("red", {"fg": "#cd3131"}), (" plain ", {}), ("ok", {"fg": "#14ce14", "b": True})]]
     assert r["text"] == "red plain ok" and r["theme"] == ansi.THEME and r["styles"][0] == {}
 
 
@@ -29,7 +29,7 @@ def test_reverse_dim_and_hidden_resolve_to_colours():
 
 def test_a_pen_carries_over_lines_and_other_escapes_leave_no_trace():
     lines, r = runs("\x1b[32mone\ntwo\x1b]0;title\x07\x1b[?25l\x1b[2K!\x1b[0m\r")
-    assert lines == [[("one", {"fg": "#0dbc79"})], [("two!", {"fg": "#0dbc79"})]]
+    assert lines == [[("one", {"fg": "#00bc00"})], [("two!", {"fg": "#00bc00"})]]
     assert r["text"] == "one\ntwo!"
 
 

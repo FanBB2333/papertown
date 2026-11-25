@@ -15,6 +15,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from papertown import ansi
 from papertown.agents import AgentError, PT
 from papertown.paseo_models import PASEO_OFF, ModelError
 from papertown.api import create_app
@@ -591,9 +592,9 @@ def test_screen_with_its_colours_comes_styled_and_packed(tmp_path):
     r = c.get(url + '?styled=1', headers={'Accept-Encoding': 'gzip'})
     assert r.headers.get('content-encoding') == 'gzip'
     styled = r.json()
-    assert styled['text'] == 'done ' + 'x' * 5000 and styled['theme'] == {'fg': '#cccccc', 'bg': '#1e1e1e'}
+    assert styled['text'] == 'done ' + 'x' * 5000 and styled['theme'] == ansi.THEME
     run, style = styled['lines'][0][0]
-    assert run == 'done' and styled['styles'][style] == {'fg': '#0dbc79', 'b': True}
+    assert run == 'done' and styled['styles'][style] == {'fg': '#00bc00', 'b': True}
 
 
 def test_files_go_with_a_message_by_path(tmp_path, monkeypatch):

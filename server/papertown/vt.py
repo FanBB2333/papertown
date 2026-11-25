@@ -105,7 +105,9 @@ class Screen:
         if code in ('0', '2'):
             self.title = value[:200]
         elif code in ('10', '11', '12') and value == '?':
-            rgb = 'ffff/ffff/ffff' if code == '11' else '0000/0000/0000'
+            # the colours the screen is drawn in (ansi.THEME), as `rgb:rrrr/gggg/bbbb`
+            hexc = ansi.THEME['bg' if code == '11' else 'fg'][1:]
+            rgb = '/'.join(hexc[i:i + 2] * 2 for i in (0, 2, 4))
             self.reply(f'\x1b]{code};rgb:{rgb}\x1b\\')
 
     def control(self, ch: str) -> None:

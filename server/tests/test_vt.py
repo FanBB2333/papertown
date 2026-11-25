@@ -99,7 +99,7 @@ def test_cells_keep_their_colours_through_edits_and_history():
     styles = lines["styles"]
     assert [(t, styles[i]) for t, i in lines["lines"][0]] == [("red", {"fg": "#cd3131"}), (" plain", {})]
     # erasing with a background paints the row with it, and printing over it keeps the background only where it was not written
-    assert [(t, styles[i]) for t, i in lines["lines"][1]] == [("bar", {}), ("       ", {"bg": "#2472c8"})]
+    assert [(t, styles[i]) for t, i in lines["lines"][1]] == [("bar", {}), ("       ", {"bg": "#0451a5"})]
     assert [(t, styles[i]) for t, i in lines["lines"][2]] == [("中", {"b": True}), ("x", {})]
     assert s.text() == 'red plain\nbar\n中x'
     s.feed(b'\r\n\x1b[32mnext\r\n\r\n')
