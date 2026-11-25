@@ -20,7 +20,7 @@ def make_settings(tmp: Path, **kw) -> Settings:
     if not skills.exists():
         shutil.copytree(SERVER_DIR / "skills", skills)
     base = dict(config_file=tmp / "papertown.toml", lead_resident=False, data_dir=tmp / "var", skills_dir=skills, arxiv_port=False,
-                compile_tex=False, samples=False, pi_bin=str(tmp / "no-pi"), nvidb_bin=str(tmp / "no-nvidb"), skim_bin=str(tmp / "no-skim"),
+                compile_tex=False, samples=False, pi_bin=str(tmp / "no-pi"), nvidb_bin=str(tmp / "no-nvidb"), skim_bin=str(tmp / "no-skim"), clippet_bin=str(tmp / "no-clippet"),
                 tmux_bin=str(tmp / "no-tmux"),
                 claude_bin=str(tmp / "no-claude-bin"), codex_bin=str(tmp / "no-codex-bin"),
                 paseo_bin=str(tmp / "no-paseo"), paseo_url="http://127.0.0.1:9",

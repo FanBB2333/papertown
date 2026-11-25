@@ -100,12 +100,15 @@ def test_skills_are_layered_per_project_and_conversation(tmp_path, monkeypatch):
         line = c.post("/api/ideas", json={"text": "a project to configure"}).json()
         a = town.agents.ensure(line["id"], "coder")
         st = c.get("/api/skim").json()
-        assert st["ok"] and {x["name"] for x in st["store"]} == {"note-taking", "plotting"}
+        town_skills = {s.name for s in town.skills.all()}
+        # the town's own skills went into skim's store at start, next to the user's
+        assert st["ok"] and {x["name"] for x in st["store"]} == {"note-taking", "plotting"} | town_skills
+        assert {s["name"]: s["state"] for s in st["town"]} == {n: "synced" for n in town_skills}
 
         def set_(scope, key, value, **kw):
             r = c.post("/api/skim/config", json={"scope": scope, "key": key, "value": value, "line_id": line["id"], **kw})
             assert r.status_code == 200, r.text
-            return {x["name"]: (x["enabled"], x.get("scope")) for x in r.json()["skills"]}
+            return {x["name"]: (x["enabled"], x.get("scope")) for x in r.json()["skills"] if x["name"] not in town_skills}
 
         assert set_("global", "skill.note-taking.enabled", "true")["note-taking"] == (True, "global")
         assert set_("project", "skill.note-taking.enabled", "false")["note-taking"] == (False, "project")
@@ -117,6 +120,17 @@ def test_skills_are_layered_per_project_and_conversation(tmp_path, monkeypatch):
         linked = town.skim.skills_dir(a)
         assert (linked / "plotting").is_symlink() and not (linked / "note-taking").exists()
         assert "## 技能" in town.brief(line["id"], "coder") and str(linked / "plotting" / "SKILL.md") in town.brief(line["id"], "coder")
+
+        # a project starts with the town's skills on in its own scope, and the lead is given them too
+        res = c.get("/api/skim/resolve", params={"line_id": line["id"]}).json()
+        assert {x["name"] for x in res["skills"] if x["enabled"] and x["scope"] == "project"} >= town_skills
+        lead = town.agents.ensure(line["id"], "lead")
+        assert "novelty-check" in town.brief(line["id"], "lead") and (town.skim.skills_dir(lead) / "novelty-check" / "SKILL.md").exists()
+        # switched off there, it stays off: the town does not switch it on again
+        set_("project", "skill.novelty-check.enabled", "false")
+        town.skim.sync_town()
+        res = c.get("/api/skim/resolve", params={"line_id": line["id"]}).json()
+        assert next(x for x in res["skills"] if x["name"] == "novelty-check")["enabled"] is False
 
         assert set_("project", "skill.note-taking.enabled", None)["note-taking"] == (True, "global")
         assert c.post("/api/skim/config", json={"scope": "session", "key": "skill.plotting.enabled", "value": "maybe",

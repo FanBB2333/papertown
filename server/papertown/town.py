@@ -31,6 +31,7 @@ from .mcp_hub import McpHub
 from .nvidb import Nvidb
 from .history import History
 from .paseo_models import PaseoModels
+from .accounts import Accounts
 from .skim import Skim
 from .pipeline import NAMES, Pipeline
 from .relay import Relay
@@ -81,6 +82,7 @@ class Town:
         self.usage = Usage(self)
         self.workspace = Workspace(self)
         self.skim = Skim(self)
+        self.accounts = Accounts(self)
         if not self.library.count():
             self.ingest(seed_papers(), "seed")
 
@@ -91,6 +93,10 @@ class Town:
         self.mcp.start()
         samples.maybe_seed(self)
         self.linked.sync()
+        try:
+            self.skim.sync_town()  # before any lead starts, so its first brief lists the town's skills
+        except Exception:  # noqa: BLE001 - skim is optional; the academy shows what is wrong
+            pass
         self.terminals.start()
         self.nvidb.start()
         self.relay.start()
@@ -144,8 +150,9 @@ class Town:
             self.bus.publish("library", added=len(added), total=self.library.count())
         return added
 
-    def brief(self, line_id: str, role: str = "") -> str:
-        """Everything a pi agent should know about its project, as plain text."""
+    def brief(self, line_id: str, role: str = "", agent: dict | None = None) -> str:
+        """Everything a pi agent should know about its project, as plain text; `agent` (else the project's agent for
+        the role) gets its skills listed."""
         ln = self.pipeline.line(line_id)
         out = [f"项目 #{ln['seq']}：{ln['title']}", f"状态：{ln['status']}，当前工序：{NAMES.get(ln['stage'], ln['stage'])}", "", "## idea", ln["idea"]]
         report = self.pipeline.item(line_id, "hatch") or {}
@@ -176,7 +183,7 @@ class Town:
         elif role == "writer":
             files = [n for n in ("main.tex", "refs.bib", "main.pdf") if (self.press.dir(line_id) / n).exists()]
             out += ["", "## 论文目录", "已有：" + ("、".join(files) if files else "还没有文件")]
-        agent = self.agents.get(f"{role}-{line_id}") if role in ("coder", "writer") else None
+        agent = agent or (self.agents.get(f"{role}-{line_id}") if role in ("coder", "writer", "lead") else None)
         if agent:
             out += self.skim.brief(agent)
         out += self.usage.brief(line_id)

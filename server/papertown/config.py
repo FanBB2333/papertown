@@ -191,6 +191,7 @@ class Settings:
     nvidb_bin: str = opt("services", "nvidb_bin", "", "nvidb; empty: found on PATH")
     nvidb_poll: float = opt("services", "nvidb_poll", 10.0, "seconds between background readings of nvidb")
     skim_bin: str = opt("services", "skim_bin", "", "skim, the skill manager (skim.py)")
+    clippet_bin: str = opt("services", "clippet_bin", "", "CLIppet, which runs an agent's CLI as another account (accounts.py); empty: found on PATH")
 
     # the file the settings above came from; Settings › Network & security writes to it
     config_file: Path = field(default_factory=config_path)

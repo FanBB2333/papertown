@@ -124,6 +124,8 @@
 # nvidb_poll = 10.0
 # skim, the skill manager (skim.py) (PAPERTOWN_SKIM_BIN)
 # skim_bin = ""
+# CLIppet, which runs an agent's CLI as another account (accounts.py); empty: found on PATH (PAPERTOWN_CLIPPET_BIN)
+# clippet_bin = ""
 
 [network]
 # where other devices may come from: "lan", "tailscale", "any", or an address or network such as "203.0.113.0/24"

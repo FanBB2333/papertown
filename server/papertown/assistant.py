@@ -195,7 +195,13 @@ class Assistant:
     def intro(self) -> str:
         """Its first message, marked <start> so the sidebar shows it as a note rather than as yours."""
         return ("<start>\n你是 Papertown 中控屏的小助手，也是用户的代理人。工作目录里的 AGENTS.md 说明了你和各个项目的关系、怎么看用户的页面、"
-                "怎么读数据、怎么问用户、怎么替用户办事，先读一遍。读完用一两句话告诉用户你能帮什么，然后等他提问。\n</start>")
+                "怎么读数据、怎么问用户、怎么替用户办事，先读一遍。读完用一两句话告诉用户你能帮什么，然后等他提问。"
+                + self._skills() + "\n</start>")
+
+    def _skills(self) -> str:
+        """The skills skim gives it (the global scope and this conversation), linked into its .papertown/skills."""
+        a = self.town.agents.get(ID)
+        return "\n".join(self.town.skim.brief(a)) if a else ""
 
     def tools(self, d: Path) -> None:
         """Next to its `pt`: the list of actions and the page."""

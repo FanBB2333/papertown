@@ -710,7 +710,7 @@ class Agents:
         guide = self._guide_text(a, runtime)
         if runtime == "paseo":
             guide = guide.replace(".papertown/pt", str(self._tools(a)))
-        return guide + "\n\n这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"])
+        return guide + "\n\n这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"], a)
 
     def _tools(self, a: dict) -> Path:
         """Write `.papertown/pt` and its link.json (who it speaks for, for a shell without PAPERTOWN_* env); returns pt."""
@@ -877,7 +877,7 @@ class Agents:
         if self.town.linked.of(a["line_id"]):
             return title, self._linked_intro(a, "paseo")
         return title, ("这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n"
-                       + self.town.brief(a["line_id"], a["role"]))
+                       + self.town.brief(a["line_id"], a["role"], a))
 
     def _start_paseo(self, a: dict, provider: str | None, model: str | None, thinking: str | None,
                      intro: tuple[str, str] | None = None) -> dict:
@@ -962,7 +962,9 @@ class Agents:
         if a and a.get("runtime") in RUNTIMES:
             from .transcripts import read
             a = self.hosted.refresh(agent_id)
-            result = read(self.s, a['term']['provider'], a.get('session_id'), limit, a['term'].get('started'))
+            provider = a['term']['provider']
+            home = self.town.accounts.home(getattr(self.s, provider + '_home'), a['term'].get('account')) if provider in ('claude', 'codex', 'antigravity') else None
+            result = read(self.s, provider, a.get('session_id'), limit, a['term'].get('started'), home=home)
             queued = self.db.q("select * from agent_events where agent_id = ? and kind = 'user' and json_extract(data, '$.held') = 1 order by id", agent_id)
             provider = a['term']['provider']
             return {"agent": self.public(a), "paseo": {}, "queued": queued, **result,
@@ -1373,10 +1375,10 @@ class Agents:
                     f"再读下面项目现在的样子和简报，然后从当前工序做起（`{self._tools(a)} stage` 看每道工序的状态和要交的产出）："
                     "该你做的现在就做，要员工动手的先 `pt hire` 启动它、再用 `pt tell` 派下去。"
                     "这一轮做完用 `pt report` 写一条汇报：项目到哪了、接下来怎么推进、有什么要用户定的。然后结束这一轮，等巡检消息。\n\n"
-                    + self.town.leads.status(a["line_id"]) + "\n\n## 项目简报\n\n" + self.town.brief(a["line_id"], "lead"))
+                    + self.town.leads.status(a["line_id"]) + "\n\n## 项目简报\n\n" + self.town.brief(a["line_id"], "lead", a))
         if self.town.linked.of(a["line_id"]):
             return self._linked_intro(a, "paseo" if a.get("runtime") in ("paseo", *RUNTIMES) else "pi")
-        text = self.town.brief(a["line_id"], a["role"])
+        text = self.town.brief(a["line_id"], a["role"], a)
         if a.get("runtime") not in ("paseo", *RUNTIMES):
             return "这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + text
         pt = self._tools(a)

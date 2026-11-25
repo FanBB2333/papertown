@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+from .accounts import AccountError
 from .backends import BackendError, HeadlessBackend, HerdrBackend, TmuxBackend, binary
 from .db import now, write_json
 from .herdr import Herdr, HerdrError
@@ -26,7 +27,7 @@ def native(a) -> bool:
     """Whether herdr's own status and turn count drive this employee. Without herdr's integration installed, herdr
     sees Antigravity work and stop but never counts a finished turn, so Antigravity follows its status line there too."""
     return a['runtime'] == 'herdr' and (a.get('term') or {}).get('provider') != 'antigravity'
-PUBLIC = ('backend', 'provider', 'status', 'seq', 'seen_seq', 'since', 'tool', 'model', 'thinking', 'note')
+PUBLIC = ('backend', 'provider', 'status', 'seq', 'seen_seq', 'since', 'tool', 'model', 'thinking', 'note', 'account')
 # Papertown's own terminals take what you type as it is. herdr's live in your herdr workspace, where you may be typing
 # at the Mac, so they keep to messages and keys.
 TYPED = ('tmux', 'headless')
@@ -156,6 +157,10 @@ class Hosted:
         executable = self.clis().get(provider)
         if not executable:
             raise self.error('请选择本机已安装的 Claude Code、Codex 或 Antigravity')
+        try:
+            account = self.town.accounts.launch(a, provider)  # a CLIppet env, or None for this machine's own login
+        except AccountError as e:
+            raise self.error(e) from e
         # Old processes must not report a late Stop into the next launch.
         a = a | {'token': secrets.token_urlsafe(18)}
         self.db.update('agents', {'id': a['id']}, token=a['token'])
@@ -163,9 +168,12 @@ class Hosted:
         home = self.a.home(a)
         (home / '.papertown/hook-agy.json').unlink(missing_ok=True)
         (home / '.papertown/intro.md').write_text(intro, encoding='utf-8')
-        resume = a.get('session_id') if provider == old.get('provider') else None
+        # a session lives in the account's own folder, so another account starts a new one
+        same = provider == old.get('provider') and (old.get('account') or {}).get('env') == (account or {}).get('env')
+        resume = a.get('session_id') if same else None
         quiet = bool(quiet and resume)
         argv, sid = self.argv(a, provider, executable, model, thinking, resume, quiet)
+        argv = self.town.accounts.wrap(argv, provider, account)
         line = self.db.one('select seq, title from lines where id = ?', a['line_id']) if a['line_id'] else None
         seq = str(line['seq']) if line else 'assistant'
         name = re.sub('[^a-z0-9_-]', '-', f"pt{seq}-{a.get('node_id') or a['role']}".lower())
@@ -181,7 +189,7 @@ class Hosted:
             link.symlink_to(executable)
         env = {'PAPERTOWN_URL': self.s.url, 'PAPERTOWN_AGENT': a['id'], 'PAPERTOWN_AGENT_TOKEN': a['token'],
                'PAPERTOWN_AGENT_ROLE': a['role'], 'PATH': str(bindir) + os.pathsep + os.environ.get('PATH', '')}
-        term = {'backend': runtime, 'provider': provider, 'model': model, 'thinking': thinking, 'status': 'starting',
+        term = {'backend': runtime, 'provider': provider, 'model': model, 'thinking': thinking, 'status': 'starting', 'account': account,
                 'seq': old.get('seq', 0), 'seen_seq': old.get('seen_seq', 0), 'since': now(), 'started': time.time(),
                 'screen_at': time.time(), 'generation': uuid4().hex, 'handle': None, 'quiet': quiet}
         self.a._set(a['id'], runtime=runtime, ext_id=None, term=term, session_id=sid, status='starting',
@@ -259,7 +267,7 @@ class Hosted:
         from .usage_readers import stamp
         from datetime import datetime
         from .usage_logs import metadata
-        root = Path(self.s.codex_home).expanduser() / 'sessions'
+        root = self.town.accounts.home(self.s.codex_home, a['term'].get('account')) / 'sessions'
         # Rollouts are filed by local start date: look at the launch day and the day before, not the whole history.
         days = {datetime.fromtimestamp(a['term']['started'] - d).strftime('%Y/%m/%d') for d in (0, 86400)}
         for path in (p for day in sorted(days) for p in (root / day).glob('rollout-*.jsonl')):

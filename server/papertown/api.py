@@ -40,6 +40,7 @@ from .history import HistoryError
 from .pages import KINDS as PAGE_KINDS, MAX as PAGE_MAX, PageError, csp as page_csp, render as render_page
 from .mcp_hub import McpError
 from .pipeline import NAMES as STAGE_NAMES, OWNER, LineError
+from .accounts import AccountError
 from .skim import SkimError
 from .town import Town
 from .workspace import WsError
@@ -58,6 +59,13 @@ class SkimIn(BaseModel):
     scope: str
     key: str = Field(min_length=3, max_length=200)
     value: str | None = None  # None unsets the key
+    line_id: str | None = None
+    agent_id: str | None = None
+
+
+class AccountIn(BaseModel):
+    scope: str
+    env: str | None = Field(default=None, max_length=200)  # an env's name, "" for this machine's own login, None to clear
     line_id: str | None = None
     agent_id: str | None = None
 
@@ -310,6 +318,7 @@ class StartIn(BaseModel):
     provider: str | None = None
     model: str | None = None
     thinking: str | None = None
+    account: str | None = Field(default=None, max_length=200)  # the agent's own account layer: an env, "" or "__inherit"
 
 
 class NodeAgentIn(BaseModel):
@@ -485,7 +494,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     checks = mapped(CheckError, AgentError, LeadError)
     canvas = mapped(CanvasError, CheckError, AgentError, LeadError)
     known = mapped(HistoryError, AskError, AgentError, CardError, PageError)
-    skim, mcp = mapped(SkimError), mapped(McpError)
+    skim, mcp, accounts = mapped(SkimError), mapped(McpError), mapped(AccountError)
 
     async def watch_skills():
         while True:
@@ -888,6 +897,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/agents/{agent_id}/start")
     def agent_start(agent_id: str, body: StartIn | None = None):
         b = body or StartIn()
+        if b.account is not None:
+            a = town.agents.get(agent_id)
+            if not a:
+                raise HTTPException(404, "没有这个员工")
+            accounts(town.accounts.set, "agent", None if b.account == "__inherit" else b.account, a["line_id"], agent_id)
         return agents(town.agents.start, agent_id, b.runtime, b.provider, b.model, b.thinking)
 
     @app.post("/api/agents/import")
@@ -1546,11 +1560,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/skim")
     def skim_status(fresh: bool = False):
         st = town.skim.status(fresh)
-        agents = {a["id"]: a | {"status": town.agents.shown(a)} for a in town.db.q("select id, line_id, role, status, runtime, model from agents where role in ('coder', 'writer')")}
+        agents = {a["id"]: a | {"status": town.agents.shown(a)} for a in town.db.q("select id, line_id, role, status, runtime, model from agents where role in ('lead', 'coder', 'writer')")}
         lines = [{"id": ln["id"], "seq": ln["seq"], "title": ln["title"], "status": ln["status"],
-                  "agents": [agents[f"{r}-{ln['id']}"] for r in ("coder", "writer") if f"{r}-{ln['id']}" in agents]}
+                  "agents": [agents[f"{r}-{ln['id']}"] for r in ("lead", "coder", "writer") if f"{r}-{ln['id']}" in agents]}
                  for ln in town.db.q("select id, seq, title, status from lines where status != 'dropped' order by seq desc")]
-        return st | {"lines": lines}
+        return st | {"lines": lines, "town": town.skim.town_skills() if st["ok"] else []}
+
+    @app.post("/api/skim/sync")
+    def skim_sync():
+        out = skim(town.skim.sync_town)
+        skim(town.skim.apply_all, None)
+        return {"skills": out}
 
     @app.get("/api/skim/resolve")
     def skim_resolve(line_id: str | None = None, agent_id: str | None = None):
@@ -1561,6 +1581,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         skim(town.skim.set, body.scope, body.key, body.value, body.line_id, body.agent_id)
         skim(town.skim.apply_all, None if body.scope == "global" else body.line_id)
         return skim(town.skim.resolve, body.line_id, body.agent_id)
+
+    # accounts: which CLIppet env each agent's CLI runs in, layered global -> project -> agent
+    @app.get("/api/accounts")
+    def accounts_view(line_id: str | None = None, agent_id: str | None = None, fresh: bool = False):
+        if fresh:
+            town.accounts.envs(fresh=True)
+        return town.accounts.view(line_id, agent_id)
+
+    @app.post("/api/accounts")
+    def accounts_set(body: AccountIn):
+        accounts(town.accounts.set, body.scope, body.env, body.line_id, body.agent_id)
+        return town.accounts.view(body.line_id, body.agent_id)
 
     # the MCP exchange
     @app.get("/api/mcp")

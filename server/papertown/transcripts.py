@@ -288,7 +288,8 @@ def limits(lines, provider):
     return None
 
 
-def read(settings, provider, session_id, limit=200, started=None, missing_session=UNESTABLISHED):
+def read(settings, provider, session_id, limit=200, started=None, missing_session=UNESTABLISHED, home=None):
+    """`home`: where the CLI keeps its sessions, when it is not the configured place (a CLIppet env)."""
     def empty(note):
         return {'items': [], 'transcript': {'ok': False, 'note': note}}
     if not settings.transcripts:
@@ -298,7 +299,7 @@ def read(settings, provider, session_id, limit=200, started=None, missing_sessio
     if not isinstance(session_id, str) or not SESSION.fullmatch(session_id) or provider not in ('claude', 'codex', 'antigravity'):
         return empty(MISSING)
     try:
-        home = Path(getattr(settings, provider + '_home')).expanduser().resolve()
+        home = Path(home or Path(getattr(settings, provider + '_home')).expanduser()).resolve()
         path = locate(home, provider, session_id, started)
         if not path or not safe(path, home):
             return empty(MISSING)

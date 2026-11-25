@@ -57,6 +57,8 @@ Papertown manages research projects. An idea goes through eight stages: novelty 
 - **Set work bounds.** Define what agents must do, must never do, and must ask you about first, globally, per project, and per agent. Bounds tied to actions (starting a worker, moving a stage, submitting or canceling a job, and more) are enforced by the server.
 - **Read pages the agents publish.** HTML reports are shown in a sandbox and can be presented full screen.
 - **Bring in your own projects and GPUs.** Link existing code and paper repositories, and read the GPU queue of [nvidb](https://github.com/FanBB2333/nvidb).
+- **Manage every skill with skim.** Your skills and the town's own live in the store of [skim](https://github.com/FanBB2333/skim) and are switched on globally, per project, or per conversation. Every agent Papertown starts gets the skills it ends up with, linked into its folder.
+- **Run agents as several accounts.** With [CLIppet](https://github.com/FanBB2333/CLIppet), each agent's CLI can run as the account of a CLIppet env, chosen globally, per project, or per agent. The CLI still runs its own interface in a real terminal.
 - **Keep an eye on your quotas.** The Staff page shows each subscription's 5-hour and weekly windows as a status line: the share used, colored by level, and the time left until each resets. Each project page shows its agents' token usage against the project's budget.
 - **Import memory.** Bring in earlier Claude Code and Codex conversations about a project's repositories, with secrets redacted, searchable by its agents.
 - **Switch looks and languages.** Choose from three looks (Cloudflare, macOS, paper) and three languages (English, Simplified Chinese, Traditional Chinese).
@@ -159,6 +161,21 @@ uv run papertown job submit --line line_1 --name main -- python run.py --seed 0
 uv run papertown job list
 ```
 
+### Skills and accounts
+
+Papertown hands out skills through [skim](https://github.com/FanBB2333/skim). At start it copies the town's own skills (`server/skills/`) into skim's store, next to yours, and a new project has them switched on in its project layer. The Academy sets any skill on or off globally, per project, or per conversation, the narrower layer winning, and each agent's choice is linked into its `.papertown/skills` and listed in its brief.
+
+```bash
+go install github.com/FanBB2333/skim/cmd/skim@latest && skim init
+```
+
+To run agents as other accounts, install [CLIppet](https://github.com/FanBB2333/CLIppet) and make an env per account. Settings › Agents chooses the global default, and the terminal picker chooses one for a project or an agent. Papertown then starts the CLI with `clippet -e <env> <cli>`, still keystrokes into a real terminal.
+
+```bash
+pip install "clippet @ git+https://github.com/FanBB2333/CLIppet.git"
+clippet env create work --from-current && clippet -e work codex login
+```
+
 ### Open it from another device
 
 By default the server listens on `127.0.0.1:31640`, this machine only. Make it reachable from other devices in one of two ways:
@@ -204,7 +221,7 @@ A command-line flag (`papertown serve --host`, `--port`) wins over an environmen
 | `[paseo]` | whether agents' conversations may run in Paseo (`paseo_chat`, off while being debugged), Paseo's CLI, web app and daemon endpoint, and how often its model list is read |
 | `[terminal]` | tmux and herdr with their sockets, and the timings that tell a terminal agent is waiting, held or stopped |
 | `[history]` | where Claude Code, Codex and Antigravity keep their conversations, and reading transcripts and usage logs |
-| `[services]` | the arXiv dock, LaTeX compiling, extra MCP servers, the nvidb GPU queue, and skim |
+| `[services]` | the arXiv dock, LaTeX compiling, extra MCP servers, the nvidb GPU queue, skim, and CLIppet |
 | `[network]` | where other devices may come from (`sources`), password sign-in, access keys, and how many days a sign-in lasts |
 
 Settings › Network & Security in the web app edits `host` and `port` under `[server]` and the `[network]` table, and writes them back into `papertown.toml` with the rest of the file kept as it is. `host` and `port` take effect when the server restarts, the rest at once. The runtime and models chosen under Settings › Agents are kept in the data directory and take precedence over the defaults in the file.
