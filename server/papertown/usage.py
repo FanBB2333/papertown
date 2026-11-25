@@ -93,11 +93,14 @@ class Usage:
             return self.line(line_id)
 
     def poll(self, force: bool = False) -> dict:
+        """The background round reads the CLIs' session logs only. The subscriptions' quotas are read when someone asks
+        (`force`: a page opening, the refresh button), each at most once a minute: reading them runs the CLIs, and one
+        that cannot renew its sign-in (Antigravity's, with the network down while the Mac naps) opens a browser."""
         with self._lock:
             at = self.clock()
             state = copy.deepcopy(self._state)
             forced = state.setdefault("forced", {})
-            eligible = {p for p in LABELS if not force or at - forced.get(p, -1e20) >= 60}
+            eligible = {p for p in LABELS if force and at - forced.get(p, -1e20) >= 60}
             if force and not eligible:
                 return self.snapshot()
             # Reserve before I/O, including failed attempts and process restarts.
@@ -110,7 +113,7 @@ class Usage:
             errors = {}
             if {"claude", "codex"} & eligible:
                 # The SDK refreshes both accounts in one connection, so throttle them together.
-                if not force or {"claude", "codex"} <= eligible:
+                if {"claude", "codex"} <= eligible:
                     try:
                         result.update(self.readers.paseo(force))
                     except Exception as e:
@@ -166,7 +169,9 @@ class Usage:
                 providers[p] = {"accounts": accounts, "error": " · ".join(dict.fromkeys(reasons)) or None,
                                 "notes": list(dict.fromkeys(notes)),
                                 "attempted_at": iso(at)}
-            state.update(polled_at=at, scan_error=scan_error)
+            state.update(scanned_at=at, scan_error=scan_error)
+            if eligible:
+                state["polled_at"] = at
             # Samples and freshness commit together, including recovery after a crash.
             with self.db.lock:
                 conn = self.db.conn
@@ -201,14 +206,14 @@ class Usage:
             error = saved.get("error")
             local = [r for r in rows if r["provider"] == p]
             providers.append({"id": p, "label": label, "plan": " / ".join(dict.fromkeys(a["plan"] for a in accounts if a.get("plan"))) or None,
-                              "status": "stale" if accounts and (error or at - fetched > max(600, settings["poll"] * 2)) else "available" if accounts else "unavailable",
+                              "status": "stale" if accounts and error else "available" if accounts else "unavailable",
                               "error": error, "notes": saved.get("notes") or [],
                               "fetched_at": iso(fetched) if fetched else None, "windows": self._windows(p),
                               "balances": [b for a in accounts for b in a.get("balances", [])],
                               "week": totals(local) | {"projects": totals([r for r in local if r["line_id"]])["cost"],
                                                        "unpriced": unpriced(local)}})
         polled = state.get("polled_at")
-        return {"polled_at": iso(polled), "next_at": iso(polled + settings["poll"]) if polled is not None and settings["poll"] else None,
+        return {"polled_at": iso(polled), "next_at": None,
                 "providers": providers, "logs": settings["logs"], "log_error": state.get("scan_error")}
 
     def tokens(self, provider: str, since: float, until: float, line_id: str | None = None) -> dict:
@@ -330,8 +335,10 @@ class Usage:
         return out
 
     def due(self) -> bool:
+        """Time for the session logs again."""
         poll = self.settings()["poll"]
-        return bool(poll and self.clock() >= self._state.get("polled_at", -1e20) + poll)
+        last = self._state.get("scanned_at", self._state.get("polled_at", -1e20))
+        return bool(poll and self.settings()["logs"] and self.clock() >= last + poll)
 
     def tick(self) -> None:
         if self.due():

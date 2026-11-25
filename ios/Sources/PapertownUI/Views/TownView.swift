@@ -376,6 +376,11 @@ struct QuotaPage: View {
         }, reloadKey: "\(reload)")
         .navigationTitle(lang.string("town.usage"))
         .papertownInlineTitle()
+        // The server reads the subscriptions' quotas only when asked: here as the page opens, and on the button.
+        .task {
+            _ = try? await store.fetch { try await $0.refreshUsage() }
+            reload += 1
+        }
     }
 }
 

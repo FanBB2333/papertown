@@ -122,7 +122,7 @@ export function UsageStrip({ active }: { active: boolean }) {
       <p>{view?.logs ? tr('按 API 价格折算。本周从周一零点起算。') : tr('本机会话日志读取已关闭，项目用量统计已暂停。')}</p>
       {view?.log_error && <p className="usage-error">{tr(view.log_error)}</p>}
       <div className="usage-between usage-foot">
-        {view?.next_at ? <small>{tr('下次轮询：{0}', date(view.next_at))}</small> : <span />}
+        {view?.polled_at ? <small>{tr('上次读取额度：{0}', date(view.polled_at))}</small> : <span />}
         <button className="btn" disabled={busy} onClick={refresh} title={tr('每个订阅每分钟至多强制刷新一次')}>{busy ? tr('读取中…') : tr('刷新')}</button>
       </div>
     </div>

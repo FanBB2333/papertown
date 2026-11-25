@@ -134,6 +134,9 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     api.world().then(setWorld).catch(e => push(tr('无法连接服务器：{0}', e.message)));
     api.lines().then(ls => { setLines(ls); setLinesIn(true); }).catch(() => {});
   }, [push]);
+  // The subscriptions' quotas are read when the page opens and on the refresh button only. Their CLIs may ask to sign
+  // in again, so the server never reads them on its own.
+  useEffect(() => { api.refreshUsage().catch(() => {}); }, []);
 
   useEffect(() => subscribe(e => {
     if (e.type === 'line') {

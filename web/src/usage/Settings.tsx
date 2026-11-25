@@ -24,7 +24,7 @@ export function UsageSettings() {
     {value ? <form onSubmit={save}>
       <Row label={tr('默认 Agent 用量预算（美元）')} desc={tr('按 API 价格折算，开启项目时预填。留空表示不设预算。')} />
       <BudgetFields value={value.default_budget} onChange={default_budget => change({ ...value, default_budget })} disabled={busy} />
-      <Row label={tr('轮询间隔（秒）')} desc={tr('每隔此时间读取订阅余量，最短 60 秒。')}>
+      <Row label={tr('轮询间隔（秒）')} desc={tr('每隔此时间读取本机会话日志，最短 60 秒。订阅余量只在打开页面和点刷新时读取。')}>
         <Input aria-label={tr('轮询间隔（秒）')} type="number" min={60} max={86400} required value={value.poll} disabled={busy} onChange={e => change({ ...value, poll: Number(e.target.value) })} />
       </Row>
       <Row label={tr('读取本机会话日志')} desc={tr('仅统计 token、模型、时间、会话 ID 和目录。关闭后保留已有统计并停止读取新用量。')}>

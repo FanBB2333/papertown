@@ -96,7 +96,7 @@
 # transcripts = true
 # read the CLIs' usage logs (PAPERTOWN_USAGE_LOGS)
 # usage_logs = true
-# seconds between readings of usage (PAPERTOWN_USAGE_POLL)
+# seconds between readings of the CLIs' session logs (quotas are read only when asked) (PAPERTOWN_USAGE_POLL)
 # usage_poll = 300.0
 # model prices for the usage figures, added to pricing.py's: a table such as { "deepseek-chat" = [0.27, 1.1] } (or the same as JSON), USD per million tokens (input, output[, cache read]) (PAPERTOWN_PRICES)
 # prices = ""

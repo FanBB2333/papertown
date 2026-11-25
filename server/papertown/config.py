@@ -176,7 +176,7 @@ class Settings:
     antigravity_home: str = opt("history", "antigravity_home", "~/.gemini/antigravity-cli", "where Antigravity keeps them")
     transcripts: bool = opt("history", "transcripts", True, "read the agents' transcripts")
     usage_logs: bool = opt("history", "usage_logs", True, "read the CLIs' usage logs")
-    usage_poll: float = opt("history", "usage_poll", 300.0, "seconds between readings of usage")
+    usage_poll: float = opt("history", "usage_poll", 300.0, "seconds between readings of the CLIs' session logs (quotas are read only when asked)")
     prices: str = opt("history", "prices", "", 'model prices for the usage figures, added to pricing.py\'s: a table such as { "deepseek-chat" = [0.27, 1.1] } (or the same as JSON), USD per million tokens (input, output[, cache read])')
 
     # [services]

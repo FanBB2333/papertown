@@ -191,33 +191,35 @@ def test_shared_directory_ownership(usage, tmp_path):
     assert len(groups["b"]) == 1 and not other
 
 
-def test_failures_preserve_values_and_force_limit_uses_fake_clock(usage):
+def test_quotas_are_read_only_when_asked_at_most_once_a_minute(usage):
     service, clock, readers = usage
     service.set_settings({"poll": 300})
-    service.tick()
-    service.tick()
-    assert len(readers.calls) == 2
+    for _ in range(3):
+        service.tick()
+        clock.at += 300
+    # the background rounds read the session logs, never the subscriptions (their CLIs may open a sign-in page)
+    assert readers.calls == []
+    first = clock()
     service.poll(force=True)
-    assert len(readers.calls) == 4
+    assert len(readers.calls) == 2
     clock.at += 59
     service.poll(force=True)
-    assert len(readers.calls) == 4
+    assert len(readers.calls) == 2
     restarted = Usage(service.town, readers=readers, clock=clock)
     restarted.poll(force=True)
-    assert len(readers.calls) == 4
-    clock.at += 1
+    assert len(readers.calls) == 2
+    clock.at += 3600
+    service.tick()
+    snapshot = service.snapshot()
+    assert len(readers.calls) == 2 and snapshot["polled_at"] == iso(first) and snapshot["next_at"] is None
+    # an hour-old reading is the last one asked for, not a failed one
+    assert snapshot["providers"][0]["status"] == "available"
     readers.fail = True
     snapshot = service.poll(force=True)
-    assert len(readers.calls) == 6
+    assert len(readers.calls) == 4
     assert snapshot["providers"][0]["status"] == "stale" and snapshot["providers"][0]["windows"][0]["used"] == 10
-    assert snapshot["providers"][0]["fetched_at"] == iso(START)
+    assert snapshot["providers"][0]["fetched_at"] == iso(first)
     assert snapshot["providers"][2]["error"] is None
-    clock.at += 299
-    service.tick()
-    assert len(readers.calls) == 6
-    clock.at += 1
-    service.tick()
-    assert len(readers.calls) == 8
 
 
 def test_log_switch_persistence_and_sample_retention(usage, monkeypatch):
@@ -232,7 +234,7 @@ def test_log_switch_persistence_and_sample_retention(usage, monkeypatch):
     service.poll()
     clock.at += 60
     readers.used = 30
-    service.poll()
+    service.poll(force=True)
     assert service.line("a")["spent"] == spent
     assert not service.line("a")["logs"]
     assert service.db.val("select min(ts) from usage_samples") >= START
@@ -459,12 +461,12 @@ def test_a_stale_second_login_is_a_note(usage):
     fresh = readers.paseo
     stale = {"id": "codex:old", "sourceId": "codex", "fetchedAt": iso(clock()), "report": {"status": "failed", "problem": {"kind": "expired"}}}
     readers.paseo = lambda force: {**fresh(force), "codex": fresh(force)["codex"] + paseo_reports([stale])["codex"]}
-    codex = next(p for p in service.poll()["providers"] if p["id"] == "codex")
+    codex = next(p for p in service.poll(force=True)["providers"] if p["id"] == "codex")
     assert codex["status"] == "available" and codex["error"] is None
     assert codex["notes"] == ["订阅登录已失效，请重新登录"]
     readers.paseo = lambda force: paseo_reports([stale])
     clock.at += 600
-    codex = next(p for p in service.poll()["providers"] if p["id"] == "codex")
+    codex = next(p for p in service.poll(force=True)["providers"] if p["id"] == "codex")
     assert codex["error"] == "订阅登录已失效，请重新登录" and codex["notes"] == []
 
 
