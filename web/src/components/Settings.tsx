@@ -5,7 +5,7 @@ import { Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Table
 import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, ShieldCheckIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, type AccessKey, type DefaultRuntime, type AuthState, type NetworkSettings, type NetworkView, type SourceKind, type Hud, type HerdrInfo, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
+import { api, type AccessKey, type AccountView, type DefaultRuntime, type AuthState, type NetworkSettings, type NetworkView, type SourceKind, type Hud, type HerdrInfo, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { Logo } from '../art';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
@@ -18,6 +18,7 @@ import '../settings.css';
 import { LANG, LANGS, setLang, tr } from '../i18n';
 import { go } from '../route';
 import { UsageSettings } from '../usage/Settings';
+import { envLabel } from '../agents/AccountPick';
 
 // each section: its address, name, what is in it, icon, and the colour of its tile in the macOS look
 type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'agents' | 'network' | 'access' | 'demo' | 'keys';
@@ -34,7 +35,7 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
     ['walk', tr('3D 漫游'), tr('鼠标、视野、手、画质'), CubeIcon, '#30b0c7'],
   ]],
   [tr('模型与员工'), [
-    ['agents', tr('员工 Agent'), tr('Paseo、herdr 和本机 pi'), RobotIcon, '#a2845e'],
+    ['agents', tr('员工 Agent'), tr('Paseo、herdr、本机 pi 和 CLIppet 账号'), RobotIcon, '#a2845e'],
   ]],
   [tr('系统'), [
     ['network', tr('网络与安全'), tr('监听地址、端口、允许的来源和登录方式'), ShieldCheckIcon, '#0a84ff'],
@@ -293,6 +294,31 @@ function DefaultModel({ role, name, info, onSaved }: { role: 'assistant' | 'lead
   );
 }
 
+// the account each CLI runs as when neither the project nor the agent chooses one: a CLIppet env, or this machine's login
+function Accounts() {
+  const [v, setV] = useState<AccountView | null>(null), [err, setErr] = useState(''), [busy, setBusy] = useState(false);
+  useEffect(() => { api.accounts(null, null, true).then(setV).catch(e => setErr((e as Error).message)); }, []);
+  async function save(env: string | null) {
+    setBusy(true); setErr('');
+    try { setV(await api.setAccount('global', env)); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+  return (
+    <Card title={tr('账号（CLIppet）')}>
+      <Row label={tr('连接')} desc={tr('CLIppet 为每个 env 保存独立的登录与会话，Claude Code、Codex、Antigravity 可同时以多个账号运行')}>
+        <Badge variant={v?.ok ? 'success' : v ? 'warning' : 'neutral'}>{!v ? tr('检查中…') : v.ok ? tr('{0} 个 env', v.envs.length) : tr('未连接')}</Badge>
+      </Row>
+      {v && !v.ok && <Warn>{v.note}</Warn>}
+      {v?.ok && <Row label={tr('全局默认账号')} desc={tr('项目和员工未单独选择时使用。与 skill 一样分层：全局 → 项目 → 员工，较窄层级优先，启动终端时可为项目和员工单独选择。')}>
+        <Select aria-label={tr('全局默认账号')} disabled={busy} value={v.layers.global || '__local'}
+          items={{ __local: tr('本机当前登录'), ...Object.fromEntries(v.envs.map(e => [e.name, envLabel(v, e.name)])) }}
+          onValueChange={x => save(x === '__local' ? null : String(x))} />
+      </Row>}
+      {v?.ok && !v.envs.length && <Note>{tr('暂无 env。运行 clippet env create <名称> --from-current，再在其中登录一次。')}</Note>}
+      {err && <Warn bad>{err}</Warn>}
+    </Card>
+  );
+}
+
 function Agents() {
   const [runtime, setRuntime] = useState<DefaultRuntime>('paseo'), [runtimeError, setRuntimeError] = useState('');
   const [savingRuntime, setSavingRuntime] = useState(false);
@@ -332,6 +358,7 @@ function Agents() {
         </Row>
         {runtimeError && <Warn bad>{runtimeError}</Warn>}
       </Card>
+      <Accounts />
       <Card title={tr('对话')}>
         <Row label={tr('默认发送方式')} desc={tr('员工工作时使用此方式发送消息，⌘/Ctrl+Enter 始终排队。')}>
           <Pick label={tr('默认发送方式')} value={s.agentSend} options={[['steer', tr('插话')], ['queue', tr('排队')], ['interrupt', tr('中断并发送')]]} onChange={set('agentSend')} />

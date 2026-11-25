@@ -3,12 +3,16 @@ import { api, type AgentRole, type Backends, type PaseoInfo, type StartOpts, typ
 import { Select } from '../components/Select';
 import { tr } from '../i18n';
 import { kindName } from './watch';
+import { AccountPick } from './AccountPick';
 
 // hiring a CLI that runs in a herdr tab, a tmux window or a background terminal, drawn like the Paseo card beside it
-export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBackend?: TermBackend; busy: boolean; onStart: (o: StartOpts) => void; role?: AgentRole }) {
+export function TerminalPick({ busy, onStart, role, fixedBackend, lineId, agentId }: {
+  fixedBackend?: TermBackend; busy: boolean; onStart: (o: StartOpts) => void; role?: AgentRole; lineId?: string | null; agentId?: string | null;
+}) {
   const [backends, setBackends] = useState<Backends | null>(null), [info, setInfo] = useState<PaseoInfo | null>(null);
   const [backend, setBackend] = useState<TermBackend>('tmux'), [provider, setProvider] = useState('');
   const [model, setModel] = useState(''), [thinking, setThinking] = useState(''), [error, setError] = useState('');
+  const [account, setAccount] = useState<string | undefined>(undefined);
   useEffect(() => {
     let alive = true;
     void Promise.all([api.backends(), api.paseo(), api.defaultRuntime()]).then(([b, i, d]) => {
@@ -47,8 +51,9 @@ export function TerminalPick({ busy, onStart, role, fixedBackend }: { fixedBacke
         <Select value={thinking} options={selected.thinking.map(t => ({ value: t, label: t }))} onChange={setThinking} />
       </label>}
       {!models.length && <p className="muted small">{tr('暂无模型列表，将使用 CLI 默认模型。')}</p>}
+      <AccountPick lineId={lineId} agentId={agentId} onChange={setAccount} />
     </>}
-    <button className="btn pri" disabled={busy || !provider || !backends[backend].ok} onClick={() => onStart({ runtime: backend, provider, model, thinking })}>
+    <button className="btn pri" disabled={busy || !provider || !backends[backend].ok} onClick={() => onStart({ runtime: backend, provider, model, thinking, ...(account !== undefined ? { account } : {}) })}>
       {busy ? tr('启动中…') : backend === 'herdr' ? tr('在 herdr 中启动') : backend === 'tmux' ? tr('在 tmux 中启动') : tr('在后台终端中启动')}
     </button>
   </>;

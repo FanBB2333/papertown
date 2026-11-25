@@ -197,7 +197,7 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
         </div>
       </div>
       {switching && source.switchRuntime && <div className="term-switch">
-        <RuntimePick busy={busy} role={source.role} allowPi={source.allowPi} onStart={o => { void act(async () => { await source.switchRuntime!(o); setSwitching(false); }); }} />
+        <RuntimePick busy={busy} role={source.role} allowPi={source.allowPi} lineId={(source.first as { line_id?: string | null }).line_id} agentId={source.first.id} onStart={o => { void act(async () => { await source.switchRuntime!(o); setSwitching(false); }); }} />
       </div>}
     </div> : blocked ? <div className="term-wait" role="status">
       <i className="aw-dot" aria-hidden="true" />
@@ -304,6 +304,7 @@ export function HostedContext({ agent, toast }: { agent: Agent; toast: (s: strin
       <dt>{tr('CLI')}</dt><dd>{kindName(agent.term?.provider)}</dd>
       <dt>{tr('模型')}</dt><dd>{agent.term?.model || tr('CLI 默认模型')}</dd>
       <dt>{tr('思考强度')}</dt><dd>{agent.term?.thinking || tr('未指定')}</dd>
+      <dt>{tr('账号')}</dt><dd>{agent.term?.account ? `CLIppet · ${agent.term.account.env}` : tr('本机当前登录')}</dd>
       <dt>{tr('会话 ID')}</dt><dd className="aw-path">{agent.session_id || tr('未指定')}</dd>
       <dt>{tr('接入方式')}</dt><dd className="aw-path">{agent.attach || (agent.runtime === 'headless' ? tr('Papertown 后台终端，在此页面查看与操作') : tr('未指定'))}</dd>
     </dl>

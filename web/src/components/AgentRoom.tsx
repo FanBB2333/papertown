@@ -152,7 +152,7 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
             <p className="muted small">{tr('支持 Claude Code、Codex、OpenCode、Pi 等，采用 Paseo 自有界面，命令、模型切换与权限审批均保持不变。')}</p>
             <PaseoPick busy={busy} onStart={go} onReady={setPaseo} role={lead ? 'lead' : undefined} />
           </div>
-          <div className="hire-card"><h3>{tr('终端')}</h3><TerminalPick busy={busy} onStart={go} role={role} /></div>
+          <div className="hire-card"><h3>{tr('终端')}</h3><TerminalPick busy={busy} onStart={go} role={role} lineId={line.id} agentId={agent?.id} /></div>
           {!lead && <div className="hire-card">
             <h3>{tr('pi · 后台终端')}</h3>
             <p className="muted small">{tr('本机 pi 运行于 tmux 中，终端与此处对话实时同步。支持在此切换模型与思考强度，输入 / 可调用 pi 命令，沿用 pi 自身的模型设置与登录。')}</p>
@@ -224,8 +224,8 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
 }
 
 // Choosing Paseo or a hosted terminal backend (herdr, tmux, headless), preselected from the town's default runtime.
-export function RuntimePick({ busy, onStart, role, allowPi }: {
-  busy: boolean; onStart: (o: StartOpts) => void; role?: AgentRole; allowPi?: boolean;
+export function RuntimePick({ busy, onStart, role, allowPi, lineId, agentId }: {
+  busy: boolean; onStart: (o: StartOpts) => void; role?: AgentRole; allowPi?: boolean; lineId?: string | null; agentId?: string | null;
 }) {
   const [mode, setMode] = useState<'paseo' | 'terminal' | 'pi'>('terminal'), [paseoOn, setPaseoOn] = useState(false);
   useEffect(() => {
@@ -240,7 +240,7 @@ export function RuntimePick({ busy, onStart, role, allowPi }: {
       {allowPi && <button type="button" role="radio" aria-checked={mode === 'pi'} className={mode === 'pi' ? 'on' : ''} disabled={busy} onClick={() => setMode('pi')}>pi</button>}
     </div>
     {mode === 'paseo' ? <PaseoPick busy={busy} onStart={onStart} role={role === 'lead' || role === 'assistant' ? role : undefined} />
-      : mode === 'terminal' ? <TerminalPick busy={busy} onStart={onStart} role={role} />
+      : mode === 'terminal' ? <TerminalPick busy={busy} onStart={onStart} role={role} lineId={lineId} agentId={agentId} />
         : <button type="button" className="btn pri" disabled={busy} onClick={() => onStart({ runtime: 'pi' })}>{busy ? tr('启动中…') : tr('启动 pi')}</button>}
   </>;
 }

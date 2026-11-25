@@ -259,7 +259,7 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea 
               <h3>Paseo</h3>
               <PaseoPick busy={busy} onStart={start} role="assistant" />
             </div>
-            <div className="hire-card"><h3>{tr('终端')}</h3><TerminalPick busy={busy} onStart={start} role="assistant" /></div>
+            <div className="hire-card"><h3>{tr('终端')}</h3><TerminalPick busy={busy} onStart={start} role="assistant" agentId="assistant" /></div>
             <div className="hire-card">
               <h3>{tr('pi · 后台终端')}</h3>
               <button className="btn" disabled={busy} onClick={() => start({ runtime: 'pi' })}>{busy ? tr('启动中…') : tr('启动 pi')}</button>

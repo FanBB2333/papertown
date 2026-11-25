@@ -13,7 +13,7 @@ interface Props extends RoomActions { focus: string | null; tick: number }
 type Sel = { scope: 'global' } | { scope: 'project'; lineId: string } | { scope: 'session'; lineId: string; agentId: string };
 
 const SCOPE_NAME: Record<string, string> = { global: tr('全局'), project: tr('项目'), session: tr('对话'), env: tr('环境'), active: tr('激活的环境') };
-const ROLE_NAME: Record<string, string> = { coder: tr('代码员工'), writer: tr('写作员工') };
+const ROLE_NAME: Record<string, string> = { lead: tr('项目负责人'), coder: tr('代码员工'), writer: tr('写作员工') };
 const SCOPE_HINT: Record<SkimScope, string> = {
   global: tr('本机所有项目和对话'), project: tr('该项目中的每段对话'), session: tr('仅作用在此处对话'),
 };
@@ -202,9 +202,17 @@ export function SkillRoom(p: Props) {
         </div>
         {own.length > 0 && (
           <div className="pnl-s">
-            <h4>{tr('小镇员工内置 skill')}</h4>
-            <p className="muted small">{tr('供孵化员、审稿人等小镇内置员工使用，位于')} <code>server/skills/</code>{tr('，热插拔，非 skim 管理。')}</p>
-            {own.map(s => <div key={s.name} className="own-sk"><b>{s.name}</b><span className="muted small">{s.roles.join(tr('、')) || '—'}</span></div>)}
+            <h4>{tr('小镇自带 skill')}</h4>
+            <p className="muted small">{tr('源文件位于')} <code>server/skills/</code>{tr('，Papertown 启动时同步进 skim 仓库，与你的 skill 一样按层配置。新项目在项目层默认开启它们，之后的改动保持不变。')}</p>
+            {own.map(s => {
+              const state = st.town?.find(t => t.name === s.name)?.state ?? 'missing';
+              return <div key={s.name} className="own-sk"><b>{s.name}</b><span className={`small ${state === 'synced' ? 'muted' : 'warn'}`}>
+                {state === 'synced' ? tr('已在 skim 仓库') : state === 'conflict' ? tr('仓库中已有你的同名 skill，未覆盖') : tr('尚未同步')}</span></div>;
+            })}
+            <button className="btn" disabled={busy === '__sync'} onClick={async () => {
+              setBusy('__sync');
+              try { await api.skimSync(); setSt(await api.skim(true)); } catch (e) { p.toast((e as Error).message); } finally { setBusy(null); }
+            }}>{busy === '__sync' ? tr('同步中…') : tr('同步到 skim')}</button>
           </div>
         )}
       </aside>

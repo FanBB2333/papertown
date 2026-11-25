@@ -139,6 +139,7 @@ export interface AgentTerm {
   backend: TermBackend; provider: string; status: 'starting' | 'idle' | 'working' | 'blocked' | 'done' | 'exited';
   seq: number; seen_seq: number; since: string; tool?: string | null; model?: string | null; thinking?: string | null; note?: string | null;
   typing?: boolean; // what you type goes straight in: Papertown's own tmux and headless terminals, not herdr's
+  account?: { env: string; path: string } | null; // the CLIppet env it runs in; none: this machine's own login
 }
 // where a CLI's real terminal interface runs: a herdr tab, a tmux window, or Papertown's own background terminal
 export type TermBackend = 'herdr' | 'tmux' | 'headless';
@@ -304,7 +305,7 @@ export interface PaseoConversation {
 }
 export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
 export interface PaseoPermission { id: string; name: string; title: string | null; arg: string; kind?: string }
-export interface StartOpts { runtime?: 'pi' | 'paseo' | TermBackend; provider?: string; model?: string; thinking?: string }
+export interface StartOpts { runtime?: 'pi' | 'paseo' | TermBackend; provider?: string; model?: string; thinking?: string; account?: string }
 
 export interface AssistantView { agent: Agent; asks: AgentEvent[]; acts: AgentEvent[]; actions: Record<string, { what: string; args: string }> }
 export interface Focus { ref?: string; label: string; where?: string; text?: string }
@@ -419,6 +420,18 @@ export interface SkimStatus {
   envs: { name: string; skills: string[]; active: boolean }[];
   global: SkimScopeInfo | null;
   lines: { id: string; seq: number; title: string; status: string; agents: { id: string; role: AgentRole; status: AgentStatus; runtime: string | null; model: string | null }[] }[];
+  // the town's own skills, which Papertown keeps in skim's store: missing until synced, conflict when one of yours has the name
+  town?: { name: string; description: string; roles: string[]; state: 'synced' | 'conflict' | 'missing' }[];
+}
+
+// accounts: which CLIppet env an agent's CLI runs in, layered global → project → agent
+export type AccountScope = 'global' | 'project' | 'agent';
+export interface ClippetEnv { name: string; path: string; exists: boolean; type?: string; codex: string | null; agy: string | null; description: string }
+export interface AccountView {
+  ok: boolean; note: string; bin: string | null; envs: ClippetEnv[];
+  // per layer: an env's name, '' for this machine's own login, null when the layer is not set
+  layers: Record<AccountScope, string | null>;
+  resolved: { env: string; scope: AccountScope | 'default' };
 }
 export interface TownSkill { name: string; description: string; roles: string[]; allowed_tools: string[]; references: string[]; scripts: string[] }
 
@@ -494,6 +507,11 @@ export const api = {
     call<SkimResolution>('GET', `/api/skim/resolve?${new URLSearchParams({ ...(lineId ? { line_id: lineId } : {}), ...(agentId ? { agent_id: agentId } : {}) })}`),
   skimSet: (scope: SkimScope, key: string, value: string | null, lineId?: string | null, agentId?: string | null) =>
     call<SkimResolution>('POST', '/api/skim/config', { scope, key, value, line_id: lineId ?? null, agent_id: agentId ?? null }),
+  skimSync: () => call<{ skills: { name: string; state: string }[] }>('POST', '/api/skim/sync'),
+  accounts: (lineId?: string | null, agentId?: string | null, fresh = false) =>
+    call<AccountView>('GET', `/api/accounts?${new URLSearchParams({ ...(lineId ? { line_id: lineId } : {}), ...(agentId ? { agent_id: agentId } : {}), ...(fresh ? { fresh: '1' } : {}) })}`),
+  setAccount: (scope: AccountScope, env: string | null, lineId?: string | null, agentId?: string | null) =>
+    call<AccountView>('POST', '/api/accounts', { scope, env, line_id: lineId ?? null, agent_id: agentId ?? null }),
   mcp: () => call<McpView>('GET', '/api/mcp'),
   mcpAdd: (o: { name: string; command: string; args: string[]; env: Record<string, string> }) => call<McpView>('POST', '/api/mcp/servers', o),
   mcpToggle: (name: string, enabled: boolean) => call<McpView>('POST', `/api/mcp/servers/${name}/toggle`, { enabled }),

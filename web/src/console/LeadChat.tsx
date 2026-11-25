@@ -80,7 +80,7 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
               {a && <Earlier agent={a.id} at={a.ext_id} limit={3} title={tr('继续此前对话')} onPick={resume} />}
               {['off', 'blocked'].includes(v.resident.state) && <details className="hire-card">
                 <summary>{tr('选择方式启动')}</summary>
-                <RuntimePick busy={busy} onStart={start} role="lead" />
+                <RuntimePick busy={busy} onStart={start} role="lead" lineId={lineId} agentId={a?.id} />
               </details>}
             </div>
           </>
