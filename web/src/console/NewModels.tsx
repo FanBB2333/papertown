@@ -13,7 +13,7 @@ const spec = (d: PaseoDefault) => [d.provider, d.model, d.thinking].filter(Boole
 // the thinking a role keeps on the new model: its own when the model has it, else the model's
 const think = (d: PaseoDefault, m: ModelNews) => (d.thinking && m.thinking.includes(d.thinking) ? d.thinking : m.default_thinking);
 
-export function NewModels({ toast }: { toast: (t: string) => void }) {
+export function NewModels({ toast }: { toast: (t: string, error?: boolean) => void }) {
   const [news, setNews] = useState<ModelNews[]>([]);
   const [defs, setDefs] = useState<PaseoDefaults | null>(null);
   const [key, setKey] = useState('');
@@ -36,7 +36,7 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
   const all = news.map(n => n.key);
   async function done(fn: () => Promise<unknown>) {
     setBusy(true);
-    try { await fn(); await api.dismissModels(all); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    try { await fn(); await api.dismissModels(all); } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   const change = () => done(async () => {
     for (const r of roles) await api.setPaseoDefault(r, { provider: m.provider, model: m.model, thinking: think(defs[r], m) });
@@ -47,7 +47,7 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
   return (
     <aside className="mnews" role="dialog" aria-label={tr('Paseo 有新模型')}>
       <button className="ib mn-x" onClick={() => setHidden(true)} title={tr('暂时收起，下次打开时提醒')}><Icon n="close" size={14} /></button>
-      <span className="mn-k"><Icon n="spark" size={15} />{news.length > 1 ? tr('Paseo 新增 {0} 个新模型', news.length) : tr('Paseo 已上线新模型')}</span>
+      <span className="mn-k em-mark"><Icon n="spark" size={15} />{news.length > 1 ? tr('Paseo 新增 {0} 个新模型', news.length) : tr('Paseo 已上线新模型')}</span>
       <div className="mn-list" role="radiogroup">
         {newest.map(n => (
           <button key={n.key} role="radio" aria-checked={n.key === m.key} className={`mn-m${n.key === m.key ? ' on' : ''}`} onClick={() => setKey(n.key)}>
@@ -57,7 +57,7 @@ export function NewModels({ toast }: { toast: (t: string) => void }) {
         ))}
         {news.length > SHOWN && <span className="muted small">{tr('另有 {0} 个，可在设置的「员工 Agent」中选择', news.length - SHOWN)}</span>}
       </div>
-      <p className="mn-q">{tr('谁后续默认使用 {0}？', m.name)}</p>
+      <p className="mn-q em-bar" data-tone="warn">{tr('谁后续默认使用 {0}？', m.name)}</p>
       <div className="mn-roles">
         {ROLES.map(([r, name]) => (
           <label key={r} className="mn-role">

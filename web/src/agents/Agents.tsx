@@ -1,3 +1,4 @@
+import { modelText } from '../emphasis';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type Agent, type AgentRole, type Bucket, type Line, type Loose, type Overview, type ProjectCard, type Report, type Terminal } from '../api';
 import { Conversation, Text } from '../components/AgentRoom';
@@ -25,8 +26,11 @@ const urgent = (a: Row, b: Row) => priority(a) - priority(b) || (Date.parse(b.wa
 const ROLE_ICON: Record<AgentRole, IconName> = { coder: 'code', writer: 'doc', monitor: 'eye', lead: 'compass', assistant: 'spark' };
 const SIDE = 'papertown.agents.context';
 const stored = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
-// one line of a reply for a row: its Markdown marks would only be noise there
-const plain = (text?: string | null) => (text ?? '').replace(/\*\*|__|`/g, '').replace(/^#+\s+/, '');
+function activity(d?: { kind: string; text: string } | null) {
+  if (!d?.text) return null;
+  if (d.kind === 'user') return <span className="user-words em-bar">{d.text}</span>;
+  return modelText(d.text.replace(/^#+\s+/, ''));
+}
 
 function useNarrow(query: string) {
   const [hit, setHit] = useState(() => matchMedia(query).matches);
@@ -38,7 +42,7 @@ function useNarrow(query: string) {
   return hit;
 }
 
-export function Agents({ id, active, lines, toast }: { id?: string; active: boolean; lines: Line[]; toast: (s: string) => void }) {
+export function Agents({ id, active, lines, toast }: { id?: string; active: boolean; lines: Line[]; toast: (s: string, error?: boolean) => void }) {
   usePath();
   const { data, error } = useOverview();
   const settings = useSettings();
@@ -157,14 +161,14 @@ export function Agents({ id, active, lines, toast }: { id?: string; active: bool
         {sort === 'project' ? groups.map(g => <section key={g.line?.id ?? (g.other ? 'terminals' : 'assistant')} className="aw-group">
           <h2>{groupHead(g)}</h2>{[...g.agents, ...g.terminals].map(a => row(a, g))}{loose(g)}
         </section>) : <>{rows.map(({ agent, group }) => row(agent, group))}{groups.filter(g => g.loose.length).map(g => <section key={g.line?.id} className="aw-group"><h2>{groupHead(g)}</h2>{loose(g)}</section>)}</>}
-        {herdrInstalled && data && !data.herdr.ok && <p className="aw-herdr-note">{tr(data.herdr.note)}</p>}
+        {herdrInstalled && data && !data.herdr.ok && <p className="aw-herdr-note em-state" data-tone="warn">{tr(data.herdr.note)}</p>}
       </div>
       <UsageStrip active={active} />
     </aside>
     <main className="aw-main" aria-label={tr('员工对话')}>
       <a className="aw-back" href={href(agentsPath(undefined, filter))} onClick={e => follow(e, agentsPath(undefined, filter))}><Icon n="left" size={15} />{tr('返回员工列表')}</a>
       {selectedTerminal ? <div className="aw-pane" key={selectedTerminal.id}><TerminalRoom terminal={selectedTerminal} toast={toast} tools={sideButton} /></div> : selected ? <div className="aw-pane" key={selected.id}>
-        {!!selected.watch?.asks.length && <div className="aw-asks">{selected.watch.asks.map(q => <AskCard key={q.id} q={q} toast={toast} onDone={() => { void refreshOverview(); }} />)}</div>}
+        {!!selected.watch?.asks.length && <div className="aw-asks">{selected.watch.asks.map(q => <AskCard key={q.id} q={q} seq={selectedGroup?.line?.seq} toast={toast} onDone={() => { void refreshOverview(); }} />)}</div>}
         <Conversation key={selected.id} agent={selected} toast={toast} tools={sideButton} />
       </div> : <div className="aw-blank">
         <div className="aw-blank-art" aria-hidden="true"><span><Icon n="code" size={20} /></span><span><Icon n="chat" size={22} /></span><span><Icon n="doc" size={20} /></span></div>
@@ -196,11 +200,11 @@ function Avatar({ icon, bucket }: { icon: IconName; bucket: Bucket }) {
   return <span className={`aw-avatar aw-${bucket}`} aria-hidden="true"><Icon n={icon} size={16} /><i className="aw-dot" /></span>;
 }
 
-function AgentRow({ agent: a, selected, filter, project, toast, nth }: { agent: Agent; selected: boolean; filter: string; project?: Group['line']; toast: (s: string) => void; nth: number }) {
+function AgentRow({ agent: a, selected, filter, project, toast, nth }: { agent: Agent; selected: boolean; filter: string; project?: Group['line']; toast: (s: string, error?: boolean) => void; nth: number }) {
   const [busy, setBusy] = useState(false);
   async function permit(id: string, allow: boolean) {
     setBusy(true);
-    try { await api.permit(a.id, id, allow); await refreshOverview(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    try { await api.permit(a.id, id, allow); await refreshOverview(); } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   const to = agentsPath(a.id, filter), bucket = bucketOf(a);
   return <article className={`aw-row${selected ? ' on' : ''}`} style={{ ['--i' as string]: Math.min(nth, 14) }}>
@@ -211,11 +215,11 @@ function AgentRow({ agent: a, selected, filter, project, toast, nth }: { agent: 
         <div className="aw-row-meta"><WatchStatus agent={a} /><span className="aw-model">{a.term?.model || a.model || tr('模型未指定')}</span>{a.term && <span className="aw-tag">{a.runtime}</span>}{!!a.watch?.queued && <span className="aw-tag">{tr('排队 {0}', a.watch.queued)}</span>}</div>
         {project && <small>#{project.seq} {project.title}</small>}
         {/* a waiting question is the row's line: the activity line would repeat it */}
-        {a.watch?.asks.length ? a.watch.asks.map(q => <p className="aw-question" key={q.id}>{q.data.question}</p>)
-          : <p className={`aw-doing${a.watch?.why === 'terminal' ? ' aw-question' : ''}`}>{plain(a.watch?.doing?.text) || a.down || tr('暂无动态')}</p>}
+        {a.watch?.asks.length ? a.watch.asks.map(q => <p className="aw-question em-bar" data-tone="warn" key={q.id}>{modelText(q.data.question)}</p>)
+          : <p className={`aw-doing${a.watch?.why === 'terminal' ? ' aw-question em-bar' : ''}`} data-tone="warn">{activity(a.watch?.doing) || a.down || tr('暂无动态')}</p>}
       </div>
     </a>
-    {a.watch?.permissions.map(q => <div className="aw-permit" key={q.id}>
+    {a.watch?.permissions.map(q => <div className="aw-permit em-bar" data-tone="warn" key={q.id}>
       {a.watch!.permissions.length > 1 && <p>{[q.title || q.name, q.arg].filter(Boolean).join(' ')}</p>}
       <div className="btns"><button className="btn pri" disabled={busy} onClick={() => permit(q.id, true)}>{tr('允许')}</button><button className="btn" disabled={busy} onClick={() => permit(q.id, false)}>{tr('拒绝')}</button></div>
     </div>)}
@@ -231,18 +235,18 @@ function TerminalRow({ terminal: t, selected, filter, project, nth }: { terminal
         <div className="aw-row-top"><b>{t.name || kindName(t.kind) || tr('终端')}</b><time>{ago(t.watch.since)}</time></div>
         <div className="aw-row-meta"><WatchStatus agent={t} /><span className="aw-model">{kindName(t.kind) || tr('未指定')}</span><span className="aw-tag">herdr</span>{!!t.watch.queued && <span className="aw-tag">{tr('排队 {0}', t.watch.queued)}</span>}</div>
         {project && <small>#{project.seq} {project.title}</small>}
-        <p className={`aw-doing${t.watch.bucket === 'needs' ? ' aw-question' : ''}`}>{plain(t.watch.doing?.text) || t.title || tr('暂无动态')}</p>
+        <p className={`aw-doing${t.watch.bucket === 'needs' ? ' aw-question em-bar' : ''}`} data-tone="warn">{activity(t.watch.doing) || t.title || tr('暂无动态')}</p>
       </div>
     </a>
   </article>;
 }
 
-function LooseRow({ session: s, line, toast, onJoined }: { session: Loose; line: NonNullable<Group['line']>; toast: (s: string) => void; onJoined: (a: Agent) => void }) {
+function LooseRow({ session: s, line, toast, onJoined }: { session: Loose; line: NonNullable<Group['line']>; toast: (s: string, error?: boolean) => void; onJoined: (a: Agent) => void }) {
   const [role, setRole] = useState<AgentRole>('coder'), [busy, setBusy] = useState(false);
   async function join() {
     setBusy(true);
     try { const a = await api.importAgent(line.id, role, s.id); await refreshOverview(); onJoined(a); }
-    catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   return <div className="aw-loose-row">
     <b>{s.title || tr('（无标题）')}</b><span>{s.provider} · {s.model} · {AGENT_STATUS[s.status] ?? s.status}</span>
@@ -253,7 +257,7 @@ function LooseRow({ session: s, line, toast, onJoined }: { session: Loose; line:
   </div>;
 }
 
-function Context({ agent, group, line, toast }: { agent: Agent; group: Group; line?: Line; toast: (s: string) => void }) {
+function Context({ agent, group, line, toast }: { agent: Agent; group: Group; line?: Line; toast: (s: string, error?: boolean) => void }) {
   const [reports, setReports] = useState<Report[]>([]), [error, setError] = useState('');
   useEffect(() => {
     let alive = true, timer = 0;
@@ -287,16 +291,16 @@ function Context({ agent, group, line, toast }: { agent: Agent; group: Group; li
           <dt>{tr('运行方式')}</dt><dd>{agent.runtime === 'paseo' ? 'Paseo' : agent.runtime}</dd>
           <dt>{tr('模型')}</dt><dd>{agent.model || tr('模型未指定')}</dd>
         </dl>
-        {agent.runtime === 'paseo' && <button className="btn" onClick={() => api.openInPaseo(agent.id).catch(e => toast((e as Error).message))}><Icon n="ext" size={14} />{tr('在 Paseo 中打开')}</button>}
+        {agent.runtime === 'paseo' && <button className="btn" onClick={() => api.openInPaseo(agent.id).catch(e => toast((e as Error).message, true))}><Icon n="ext" size={14} />{tr('在 Paseo 中打开')}</button>}
       </>}
     </section>
     <section className="aw-card">
       <h3>{tr('最近的汇报与提问')}</h3>
-      {error && <p role="alert" className="ac-error">{error}</p>}
+      {error && <p role="alert" className="ac-error em-state" data-tone="bad">{error}</p>}
       {!reports.length && !error && <p className="muted small">{tr('暂无汇报或提问。')}</p>}
       {reports.map(r => <details key={r.id} className="aw-report">
-        <summary><span>{r.data.question || r.data.text}</span><small>{r.kind === 'ask' ? tr('提问') : tr('汇报')} · {ago(r.ts)}</small></summary>
-        <Text text={r.data.question || r.data.text || ''} />{r.data.answer && <p>{tr('你的回答')} · {r.data.answer}</p>}
+        <summary><span className={r.data.key || r.kind === 'ask' && r.data.open ? 'em-bar' : undefined} data-tone={r.kind === 'ask' ? 'warn' : 'info'}>{modelText(r.data.question || r.data.text)}</span><small>{r.kind === 'ask' ? tr('提问') : tr('汇报')} · {ago(r.ts)}</small></summary>
+        <Text text={r.data.question || r.data.text || ''} />{r.data.answer && <p className={r.data.by && r.data.by !== 'you' ? undefined : 'user-words em-bar'}>{tr('你的回答')} · {r.data.by && r.data.by !== 'you' ? modelText(r.data.answer) : r.data.answer}</p>}
       </details>)}
     </section>
   </>;

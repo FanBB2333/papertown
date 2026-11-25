@@ -1,6 +1,7 @@
 // Building detail (layout C): the building's own production line on a belt, with panels
 // underneath. A mill shows its paper's stages and live outputs.
 
+import { modelText, StateWord } from '../emphasis';
 import { useEffect, useState } from 'react';
 import { BUILDINGS, DISTRICTS } from '@design/sprites.js';
 import { api, fileUrl, type Line, type Placement, type Sheet as SheetData, type Stage } from '../api';
@@ -33,9 +34,9 @@ const STAGE_TOOLS: Record<string, string[]> = {
 
 const STAGE_WORD: Record<Stage['status'], string> = { done: tr('完成'), run: tr('进行中'), todo: tr('排队') };
 
-const chip = (st: string, pct?: number) => st === 'done' ? <span className="chip ok">{STAGE_WORD.done}</span>
-  : st === 'run' ? <span className="chip pri">{STAGE_WORD.run}{pct ? ` ${pct}%` : ''}</span>
-    : <span className="chip">{STAGE_WORD.todo}</span>;
+const chip = (st: string, pct?: number) => st === 'done' ? <span className="muted">{STAGE_WORD.done}</span>
+  : st === 'run' ? <span className="muted">{STAGE_WORD.run}{pct ? <> <span className="em-num">{pct}%</span></> : ''}</span>
+    : <span className="muted">{STAGE_WORD.todo}</span>;
 
 const chips = (xs: string[]) => xs.length ? xs.map(x => <span key={x} className="chip">{x}</span>) : <span className="muted">—</span>;
 
@@ -68,32 +69,32 @@ function Belt({ stations }: { stations: { key: string; name: string; st: string;
 
 function Output({ stage, body, lineId }: { stage: string; body: any; lineId: string }) {
   if (!body) return <p className="muted">{tr('暂无产出。')}</p>;
-  if (stage === 'idea') return <p>{body.text}</p>;
+  if (stage === 'idea') return <p className="user-words em-bar">{body.text}</p>;
   if (stage === 'hatch') return (
     <>
-      <p className="verdict"><span className="chip">{body.verdict}</span>{body.gap}</p>
+      <p className="verdict"><span className="em-key">{body.verdict}</span>{modelText(body.gap)}</p>
       <ul className="sim">{(body.similar ?? []).map((x: any) => (
-        <li key={x.paper_id}><a href={x.url} target="_blank" rel="noreferrer">{x.title}</a><i style={{ ['--v' as any]: x.similarity }} /><b>{Number(x.similarity).toFixed(2)}</b></li>
+        <li key={x.paper_id}><a href={x.url} target="_blank" rel="noreferrer">{x.title}</a><i style={{ ['--v' as any]: x.similarity }} /><b className="em-num">{Number(x.similarity).toFixed(2)}</b></li>
       ))}</ul>
     </>
   );
-  if (stage === 'team') return <p>{body.reason}</p>;
+  if (stage === 'team') return <p>{modelText(body.reason)}</p>;
   if (stage === 'method') return (
     <div className="doc">
       <h6>{body.title}</h6>
-      <div className="sec">{tr('问题')}</div><p>{body.problem}</p>
-      <div className="sec">{tr('机制')}</div><ul>{(body.mechanism ?? []).map((m: string) => <li key={m}>{m}</li>)}</ul>
+      <div className="sec">{tr('问题')}</div><p>{modelText(body.problem)}</p>
+      <div className="sec">{tr('机制')}</div><ul>{(body.mechanism ?? []).map((m: string) => <li key={m}>{modelText(m)}</li>)}</ul>
       <div className="sec">Baseline</div><ul>{(body.baselines ?? []).map((b: any) => <li key={b.name}>{b.name} <span className="muted">· {b.source}</span></li>)}</ul>
       <div className="sec">{tr('指标')}</div><p>{(body.metrics ?? []).join(tr('、'))}</p>
     </div>
   );
   if (stage === 'exp') return (
     <>
-      {body.simulated && <p><span className="chip warn">{tr('样例结果（占位内容）')}</span></p>}
+      {body.simulated && <p><span className="em-state" data-tone="warn">{tr('样例结果（占位内容）')}</span></p>}
       <table className="rtab"><thead><tr><th>{tr('方法')}</th>{body.metrics?.map((m: string) => <th key={m}>{m}</th>)}</tr></thead>
-        <tbody>{body.rows?.map((r: any) => <tr key={r.method} className={r.ours ? 'ours' : ''}><td>{r.method}</td>{r.values.map((v: number, i: number) => <td key={i}>{v}</td>)}</tr>)}</tbody>
+        <tbody>{body.rows?.map((r: any) => <tr key={r.method}><td>{r.method}</td>{r.values.map((v: number, i: number) => <td key={i}><span className={r.ours || v === Math.max(...body.rows.filter((row: { ours?: boolean }) => !row.ours).map((row: { values: number[] }) => row.values[i])) ? 'em-num' : undefined}>{v}</span></td>)}</tr>)}</tbody>
       </table>
-      <p className="muted small">{body.analysis}</p>
+      <p className="muted small">{modelText(body.analysis)}</p>
     </>
   );
   if (stage === 'write') {
@@ -101,7 +102,7 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
     return (
       <>
         <h6 className="doc-t">{body.title}</h6>
-        <p className="muted small">{t.summary} {tr('· 引用')} {tr('{0} 篇 · 约', t.cited ?? 0)} {t.words ?? 0} {tr('词')}</p>
+        <p className="muted small">{modelText(t.summary)} {tr('· 引用')} {tr('{0} 篇 · 约', t.cited ?? 0)} {t.words ?? 0} {tr('词')}</p>
         {t.log && <pre className="log">{t.log}</pre>}
         <div className="btns">{(t.files ?? ['main.tex']).map((f: string) => <a key={f} className="btn" href={fileUrl(lineId, f)} target="_blank" rel="noreferrer">{f}</a>)}</div>
       </>
@@ -109,10 +110,10 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   }
   if (stage === 'review') return (
     <>
-      <p><span className="chip">{body.verdict}</span> {tr('平均')} {body.mean} {tr('分 ·')} {body.format?.summary}</p>
+      <p><span className="em-key">{body.verdict}</span> {tr('平均')} <span className="em-num">{body.mean}</span> {tr('分 ·')} {modelText(body.format?.summary)}</p>
       {(body.reviews ?? []).map((r: any) => (
-        <div key={r.worker} className="rv"><b>{r.persona} {r.worker}</b>{tr('：总分')} {r.overall}{tr('（新颖')} {r.scores?.novelty} {tr('· 可靠')} {r.scores?.soundness} {tr('· 清晰')} {r.scores?.clarity}{tr('）')}
-          {r.weaknesses?.[0] && <div className="muted small">{r.weaknesses[0]}</div>}</div>
+        <div key={r.worker} className="rv"><b>{r.persona} {r.worker}</b>{tr('：总分')} <span className="em-num">{r.overall}</span>{tr('（新颖')} {r.scores?.novelty} {tr('· 可靠')} {r.scores?.soundness} {tr('· 清晰')} {r.scores?.clarity}{tr('）')}
+          {r.weaknesses?.[0] && <div className="muted small">{modelText(r.weaknesses[0])}</div>}</div>
       ))}
     </>
   );
@@ -139,12 +140,12 @@ export function MillDetail({ line, typeOf, onOpen, onAsk, real, tick }: {
       }))} />
       <section className="detail">
         <div className="pnl">
-          <h4>{line.stages.findIndex(s => s.key === cur.key) + 1}. {cur.name} · {STAGE_WORD[cur.status]}</h4>
+          <h4>{line.stages.findIndex(s => s.key === cur.key) + 1}. {cur.name} · <StateWord state={cur.status}>{STAGE_WORD[cur.status]}</StateWord></h4>
           <dl className="kv">
             <dt>{tr('员工')}</dt><dd><AgentPost stage={cur} /></dd>
             <dt>Skills</dt><dd>{chips(STAGE_SKILLS[cur.key] ?? [])}</dd>
             <dt>{tr('工具')}</dt><dd>{(STAGE_TOOLS[cur.key] ?? []).map(s => <span key={s} className="chip">{s}</span>)}</dd>
-            <dt>{tr('状态')}</dt><dd>{line.note ?? cur.note ?? ({ done: tr('已出厂') } as Record<string, string>)[line.status] ?? line.status}</dd>
+            <dt>{tr('状态')}</dt><dd>{modelText(line.note ?? cur.note) ?? ({ done: tr('已出厂') } as Record<string, string>)[line.status] ?? line.status}</dd>
           </dl>
           <div className="btns" style={{ marginTop: 12 }}>
             <button className="btn" onClick={onAsk}>{tr('向此处员工提问')}</button>
@@ -190,7 +191,7 @@ export function Sheet(p: Props) {
 
   const typeOf = (id: string) => p.placements.find(x => x.id === id)?.type ?? id;
   const nameOf = (id: string) => p.placements.find(x => x.id === id)?.name ?? BUILDINGS[id]?.name ?? id;
-  if (err) return <div className="p-sheet pnl lc"><div className="sh-head"><p>{err}</p><button className="sh-x" onClick={p.onClose}>×</button></div></div>;
+  if (err) return <div className="p-sheet pnl lc"><div className="sh-head"><p className="em-state" data-tone="bad">{err}</p><button className="sh-x" onClick={p.onClose}>×</button></div></div>;
   if (!s || s.id !== p.id && s.type !== p.id) return <div className="p-sheet pnl lc"><div className="sh-head"><p className="muted">{tr('加载中…')}</p></div></div>;
 
   const cur = s.stations?.find(x => x.st === 'run');
@@ -207,10 +208,10 @@ export function Sheet(p: Props) {
         <div className="sh-t">
           <div className="crumbs">{tr('世界 /')} {s.district || DISTRICTS[BUILDINGS[s.type]?.district]?.name} / <b>{s.name}</b></div>
           <h2>{line ? tr('{0}「{1}」', s.name, line.title) : `${s.name} · ${s.job}`}</h2>
-          <p>{line ? line.idea : s.rep}</p>
+          <p className={line ? 'em-bar user-words' : undefined}>{line ? line.idea : s.rep}</p>
           <div className="sh-chips">
             <span className="chip">{s.tech}</span>
-            {!s.live && <span className="chip warn">{s.later ? tr('后续推出') : tr('未接入')}</span>}
+            {!s.live && <span className={s.later ? 'muted small' : 'em-state small'} data-tone="warn">{s.later ? tr('后续推出') : tr('未接入')}</span>}
             {line && <span className="chip pri">{line.current?.name ?? (line.status === 'done' ? tr('已出厂') : line.status)} · {line.pct}%</span>}
             {cur && <span className="chip pri">{cur.name}</span>}
           </div>

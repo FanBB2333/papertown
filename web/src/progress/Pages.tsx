@@ -45,12 +45,12 @@ export function PageFrame({ src, title, fit, onOpen, onKey }: {
 }
 
 // a project's pages, kept current
-function usePages(lineId: string, toast: (t: string) => void) {
+function usePages(lineId: string, toast: (t: string, error?: boolean) => void) {
   const [pages, setPages] = useState<Page[] | null>(null);
   useEffect(() => {
     let alive = true;
     setPages(null);
-    api.pages(lineId).then(r => alive && setPages(r.pages)).catch(e => toast((e as Error).message));
+    api.pages(lineId).then(r => alive && setPages(r.pages)).catch(e => toast((e as Error).message, true));
     const off = listen(e => {
       if (e.type !== 'page' || e.line_id !== lineId) return;
       setPages(ps => ps && (e.page.removed ? ps.filter(p => p.id !== e.page.id) : [...ps.filter(p => p.id !== e.page.id), e.page].sort((a, b) => a.n - b.n)));
@@ -60,7 +60,7 @@ function usePages(lineId: string, toast: (t: string) => void) {
   return [pages, setPages] as const;
 }
 
-export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: string; toast: (t: string) => void; onOpen: (o: PageOpen) => void }) {
+export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: string; toast: (t: string, error?: boolean) => void; onOpen: (o: PageOpen) => void }) {
   const { line } = r;
   const [pages, setPages] = usePages(line.id, toast);
   const [kind, setKind] = useState<PageKind | 'all'>('all');
@@ -98,7 +98,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
       await api.dropPage(line.id, p.id);
       setPages(ps => ps && ps.filter(x => x.id !== p.id));
       if (cur?.id === p.id) go(pagesPath(line.seq), true);
-    } catch (e) { toast((e as Error).message); }
+    } catch (e) { toast((e as Error).message, true); }
   }
   const present = () => stage.current?.requestFullscreen?.().catch(() => {});
 
@@ -127,7 +127,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
               return (
                 <li key={p.id} className={cur?.id === p.id ? 'on' : ''}>
                   <a href={href(to)} onClick={e => follow(e, to)} aria-current={cur?.id === p.id ? 'page' : undefined}>
-                    <b>{p.title}</b>
+                    <b className="em-key">{p.title}</b>
                     <span><i className={`pv-k k-${p.kind}`}>{KIND[p.kind]}</i>{ago(p.at)}{p.by ? ` · ${p.by}` : ''}</span>
                   </a>
                   <button className="ib ak-del" onClick={() => remove(p)} title={tr('删除此页')} aria-label={tr('删除此页')}><Icon n="close" size={12} /></button>
@@ -144,7 +144,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
           <button className="ib ak-menu" onClick={() => setNav(true)} title={tr('页面')} aria-label={tr('页面')}><Icon n="sidebar" size={18} /></button>
           {cur ? (
             <div className="pv-title">
-              <b title={cur.title}>{cur.title}</b>
+              <b className="em-key" title={cur.title}>{cur.title}</b>
               <span><i className={`pv-k k-${cur.kind}`}>{KIND[cur.kind]}</i><span className="pc-seq">#{line.seq}</span>{cur.by ? ` · ${cur.by}` : ''} · {ago(cur.at)}
               </span>
             </div>
@@ -184,7 +184,7 @@ export function PagesView({ r, pid, toast, onOpen }: { r: ProjectCard; pid?: str
 }
 
 // asks the lead for a page, in its conversation
-function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: string) => void; big?: boolean; onDone?: () => void }) {
+function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: string, error?: boolean) => void; big?: boolean; onDone?: () => void }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   async function send() {
@@ -196,7 +196,7 @@ function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: st
       setText('');
       toast(tr('已提交给负责人，生成的页面将显示在此处。'));
       onDone?.();
-    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   return (
     <form className={`ak-comp${big ? '' : ' mini pv-req'}`} onSubmit={e => { e.preventDefault(); send(); }}>
@@ -212,7 +212,7 @@ function Request({ lineId, toast, big, onDone }: { lineId: string; toast: (t: st
 }
 
 // on the project's page: its latest pages, each opening on the page above
-export function PagesBox({ r, toast }: { r: ProjectCard; toast: (t: string) => void }) {
+export function PagesBox({ r, toast }: { r: ProjectCard; toast: (t: string, error?: boolean) => void }) {
   const { line } = r;
   const [pages] = usePages(line.id, toast);
   const all = pagesPath(line.seq);
@@ -229,7 +229,7 @@ export function PagesBox({ r, toast }: { r: ProjectCard; toast: (t: string) => v
             const to = pagesPath(line.seq, p.id);
             return (
               <li key={p.id}><a href={href(to)} onClick={e => follow(e, to)}>
-                <span>{p.title}</span><span className="small muted"><i className={`pv-k k-${p.kind}`}>{KIND[p.kind]}</i>{ago(p.at)}{p.by ? ` · ${p.by}` : ''}</span>
+                <span className="em-key">{p.title}</span><span className="small muted"><i className={`pv-k k-${p.kind}`}>{KIND[p.kind]}</i>{ago(p.at)}{p.by ? ` · ${p.by}` : ''}</span>
               </a></li>
             );
           })}

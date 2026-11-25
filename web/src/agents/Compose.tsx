@@ -21,7 +21,7 @@ export interface ComposeAdapter {
 }
 
 export function Compose({ agent, queued = [], permission = false, toast, onSent, onChanged, value, onChange, onKeyDown, children, placeholder, prepare, inputRef, adapter }: {
-  agent: Watched & Pick<Agent, 'id'>; queued?: AgentEvent[]; permission?: boolean; toast: (s: string) => void;
+  agent: Watched & Pick<Agent, 'id'>; queued?: AgentEvent[]; permission?: boolean; toast: (s: string, error?: boolean) => void;
   onSent?: (event: AgentEvent, text: string) => void; onChanged?: () => void;
   value?: string; onChange?: (s: string) => void; onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   children?: React.ReactNode; placeholder?: string;
@@ -58,7 +58,7 @@ export function Compose({ agent, queued = [], permission = false, toast, onSent,
   async function run(fn: () => Promise<void>) {
     if (pending.current) return;
     pending.current = true; setBusy(true);
-    try { await fn(); onChanged?.(); } catch (e) { toast((e as Error).message); }
+    try { await fn(); onChanged?.(); } catch (e) { toast((e as Error).message, true); }
     finally { pending.current = false; setBusy(false); }
   }
   function send(how: SayMode | undefined = working ? mode : undefined) {
@@ -85,7 +85,7 @@ export function Compose({ agent, queued = [], permission = false, toast, onSent,
   return <div className="agent-compose">
     {!!queued.length && <ul className="ac-queue" aria-label={tr('排队中的消息')}>
       {queued.map(event => <li key={event.id}>
-        <div><span className="small muted">{tr('排队')}</span><p>{String(event.data.text ?? '')}</p>{event.data.error && <p className="ac-error">{String(event.data.error)}</p>}</div>
+        <div><span className="small muted">{tr('排队')}</span><p className="user-words em-bar">{String(event.data.user_text ?? event.data.text ?? '')}</p>{event.data.error && <p className="ac-error em-state" data-tone="bad">{String(event.data.error)}</p>}</div>
         <button className="btn" disabled={busy || off} onClick={() => queue(event, 'now')}>{tr('立即发送')}</button>
         <button className="btn" disabled={busy} onClick={() => queue(event, 'drop')}>{tr('撤回')}</button>
       </li>)}

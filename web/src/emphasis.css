@@ -1,0 +1,41 @@
+/* Resolve tokens on the themed surface, including dialogs outside the app root. */
+:where(html[data-mode=dark]) .theme-sketch :where(:not(pre)) > code { background-color: color-mix(in srgb, var(--ink) 7%, transparent); }
+:is(.theme-sketch, .pd-back, .kumo-layer, .st-page) {
+  --em-ink: var(--ink, var(--text-color-kumo-default));
+  --em-brand: var(--brand, var(--color-kumo-brand));
+  --em-green: color-mix(in srgb, var(--ok, var(--color-kumo-success)) 60%, var(--em-ink));
+  --em-orange: color-mix(in srgb, var(--warn, var(--color-kumo-warning)) 58%, var(--em-ink));
+  --em-red: color-mix(in srgb, var(--bad, var(--color-kumo-danger)) 72%, var(--em-ink));
+  --em-wash: 14%;
+}
+html.ui-cf :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-wash: 10%; }
+html.ui-mac :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-brand: var(--mac-accent, var(--brand, var(--color-kumo-brand))); --em-wash: 12%; }
+html[data-mode=dark] :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-wash: 22%; }
+
+:is(.em-state, .em-num, .em-bar, .em-mark) { --em-color: var(--em-brand); }
+[data-tone=good] { --em-color: var(--em-green); }
+[data-tone=warn] { --em-color: var(--em-orange); }
+[data-tone=bad] { --em-color: var(--em-red); }
+html body .em-key { color: var(--em-ink); font-weight: 600; }
+html body .em-num { color: color-mix(in srgb, var(--em-color) 79%, var(--em-ink)); font-variant-numeric: tabular-nums; font-weight: 600; font-style: normal; }
+html body .em-state { color: var(--em-color); font-style: normal; font-weight: 500; }
+.em-state::before {
+  content: ''; display: inline-block; inline-size: .8em; block-size: .8em; margin-inline-end: .26em;
+  vertical-align: -.01em; background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='black' stroke-width='1.7' stroke-linejoin='round' d='M8 1.5 15 14H1zM8 5.5v4m0 1v1.5'/%3E%3C/svg%3E") center/contain no-repeat;
+}
+.em-state[data-icon=clock]::before {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='black' stroke-width='1.6' d='M14.5 8A6.5 6.5 0 1 1 1.5 8a6.5 6.5 0 1 1 13 0ZM8 4v4l3 2'/%3E%3C/svg%3E");
+}
+html body .em-bar { border-inline-start: 3px solid var(--em-color); padding-inline-start: .55rem; }
+html body .em-mark {
+  color: var(--em-ink); background: color-mix(in srgb, var(--em-color) var(--em-wash), transparent);
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+}
+strong.em-mark { font-weight: 600; }
+
+.user-words { white-space: pre-wrap; overflow-wrap: anywhere; }
+.user-words::first-line, .rec-original.em-bar::first-line { font-weight: 600; }
+
+.research-tip { display: block; max-width: min(34ch, 85vw); overflow-wrap: anywhere; }
+.research-tip.user-words { max-height: 12em; overflow: auto; }

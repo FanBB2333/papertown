@@ -24,6 +24,7 @@
 // that shows all of it keeps showing all of it as the window (or the inspector beside it) changes its size. Loaded
 // on demand, with the graph library.
 
+import { hitText } from '../emphasis';
 import { query } from '../route';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -397,7 +398,7 @@ function Find({ v, q, setQ, onPick }: { v: CanvasView | null; q: string; setQ: (
           {list.map((n, i) => (
             <li key={n.id}>
               <button tabIndex={-1} role="option" aria-selected={i === at} className={i === at ? 'on' : ''} onMouseDown={e => e.preventDefault()} onMouseEnter={() => setAt(i)} onClick={() => choose(n)}>
-                <Mark n={n} /><span>{label(n)}</span>{needs(n) && <i className="cv-need" title={tr('待处理')} />}<small>{kindOf(n)}</small>
+                <Mark n={n} /><span>{hitText(label(n), q)}</span>{needs(n) && <i className="cv-need" title={tr('待处理')} />}<small>{kindOf(n)}</small>
               </button>
             </li>
           ))}
@@ -428,11 +429,11 @@ const Row = ({ it, close }: { it: Item; close: () => void }) => (it
 
 // ---------- the page ----------
 
-export default function CanvasPage(p: { r: ProjectCard; toast: (t: string) => void; onConsole: (lineId: string, t?: ConsoleTarget) => void }) {
+export default function CanvasPage(p: { r: ProjectCard; toast: (t: string, error?: boolean) => void; onConsole: (lineId: string, t?: ConsoleTarget) => void }) {
   return <ReactFlowProvider><Board {...p} /></ReactFlowProvider>;
 }
 
-function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => void; onConsole: (lineId: string, t?: ConsoleTarget) => void }) {
+function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string, error?: boolean) => void; onConsole: (lineId: string, t?: ConsoleTarget) => void }) {
   const { line } = r;
   const [v, setV, reload, loadError] = useCanvas(line.id);
   const more = useMore(line.id, `${line.stages.map(x => x.status).join()}:${r.jobs.done ?? 0}:${r.jobs.failed ?? 0}`);
@@ -581,7 +582,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       if (x && typeof x === 'object' && 'nodes' in x) setV(x as CanvasView); else reload();
       const said = typeof done === 'function' ? done(x) : done;
       if (said) toast(said);
-    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   };
   // ---------- what the keyboard and the menus share ----------
   // what can be taken back, newest last: each is how to put things as they were
@@ -611,14 +612,14 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
     const ids = Object.keys(mods);
     if (say && ids.length) toast(tr('已归入「{0}」分块', PART[mods[ids[0]]].name));
   };
-  const store = (at: Spots) => api.moveNodes(line.id, at).then(x => settle(x)).catch(e => toast((e as Error).message)).finally(() => settled(at));
+  const store = (at: Spots) => api.moveNodes(line.id, at).then(x => settle(x)).catch(e => toast((e as Error).message, true)).finally(() => settled(at));
   const place = (at: Spots) => { put(at); return store(at); };
   // The whole layout put back as it was: every node and every block's slot. This is how a move is taken back, since
   // moving one node can move the rows under it.
   const placeAll = (at: Spots, slots: Record<string, number[]>) => {
     put(at);
     setV(x => x && { ...x, blocks: x.blocks.map(b => { const t = slots[b.key]; return t ? { ...b, x: t[0], y: t[1], w: t[2], h: t[3] } : b; }) });
-    return api.moveNodes(line.id, at, slots).then(x => settle(x, false)).catch(e => toast((e as Error).message)).finally(() => settled(at));
+    return api.moveNodes(line.id, at, slots).then(x => settle(x, false)).catch(e => toast((e as Error).message, true)).finally(() => settled(at));
   };
   const keep = () => {
     const was = spots(v?.nodes ?? []), slots = Object.fromEntries((v?.blocks ?? []).map(b => [b.key, [b.x, b.y, b.w, b.h]]));
@@ -658,7 +659,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       remember(what, async () => { let y: CanvasView | undefined; for (const id of ids) y = await api.dropNode(line.id, id); return y; });
       setTimeout(() => select(ids), 60);
       toast(done);
-    } catch (e) { toast((e as Error).message); reload(); } finally { setBusy(false); }
+    } catch (e) { toast((e as Error).message, true); reload(); } finally { setBusy(false); }
   };
   const held = useRef<Held | null>(null), pointer = useRef<{ x: number; y: number } | null>(null), landed = useRef({ x: 0, y: 0, n: 0 });
   const copy = (ns: CanvasNode[], quiet = false) => {
@@ -822,7 +823,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
       if (id && !b.send) remember(tr('新建节点'), () => api.dropNode(line.id, id));
       const made = x.nodes.find(n => n.id === id);
       toast(b.kind === 'task' && b.send ? (made?.status === 'queued' ? tr('已添加并排队，轮到时自动派发') : tr('已添加并派发')) : tr('加上了'));
-    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   // one node of your own to delete asks first; what Papertown put on the loop is only taken off, and can come back
   const remove = (ns: CanvasNode[], ask = true, done?: string) => {
@@ -1190,7 +1191,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string) => 
             </ReactFlow>
           </FrameCtx.Provider></BoxCtx.Provider></OpsCtx.Provider>
           {v && report && <LoopReport v={v} onPick={pick} onClose={() => setReport(false)} toast={toast} />}
-          {loadError && <p className="cv-err" role="alert"><span>{loadError}</span><button className="lnk" onClick={reload}>{tr('重试')}</button></p>}
+          {loadError && <p className="cv-err" role="alert"><span className="em-state" data-tone="bad">{loadError}</span><button className="lnk" onClick={reload}>{tr('重试')}</button></p>}
           {!v && !loadError && <p className="cv-wait muted">{tr('加载中…')}</p>}
         </div>
 

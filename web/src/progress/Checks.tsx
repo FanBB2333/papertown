@@ -2,6 +2,7 @@
 // pass; ● soft checks are questions the lead answers by reading the project, asked again every so often. Here is
 // what a check's node opens beside the canvas: what it checks, its result and history, where it fails, its settings.
 
+import { figures, hitText, modelText, StateWord, stateTone } from '../emphasis';
 import { useState } from 'react';
 import { api, type CanvasView, type Check, type CheckStatus } from '../api';
 import { Select } from '../components/Select';
@@ -50,20 +51,20 @@ export function CheckResult({ c, lead, busy, act, lineId, onConsole, onFix }: {
       <p className="cg-what">{trx(c.text)}</p>
       {c.kind === 'hard' && (
         <p className="small muted">{c.gate === 'block' ? tr('阻断级：未通过时锁住下一道工序，并退回修补单') : tr('告警级：未通过仅提醒，不锁工序')}
-          {c.first?.value != null && last?.value != null && ` · ${tr('R1 {0} → 当前 {1}', c.first.value, last.value)}`}</p>
+          {c.first?.value != null && last?.value != null && <> · <span className={c.first.value !== last.value ? 'em-mark' : undefined}>{tr('R1 {0} → 当前 {1}', c.first.value, last.value)}</span></>}</p>
       )}
       {c.kind === 'hard' ? (
         last && last.value != null ? (
           <div className={`cg-meter s-${c.on ? k : 'none'}`}>
-            <p><b>{last.value}</b><span>{tr('最多允许 {0}', most)}{last.note && ` · ${trx(last.note)}`}</span><small>{tr('{0}检查', ago(last.seen))}</small></p>
+            <p><b className="em-num" data-tone={stateTone(c.on ? k : undefined) ?? 'info'}>{last.value}</b><span>{figures(tr('最多允许 {0}', most))}{last.note && <> · {modelText(trx(last.note))}</>}</span><small>{tr('{0}检查', ago(last.seen))}</small></p>
             <div className="cg-bar" role="img" aria-label={tr('检出 {0}，最多允许 {1}', count(c.unit, last.value), most)}>
               <i style={{ width: `${(last.value / scale) * 100}%` }} /><u style={{ left: `${(most / scale) * 100}%` }} />
             </div>
           </div>
-        ) : <p className="cg-now muted">{last ? trx(last.note) || ST.none : tr('尚未检查')}</p>
+        ) : <p className="cg-now muted">{last ? modelText(trx(last.note)) || ST.none : tr('尚未检查')}</p>
       ) : last ? (
         <blockquote className={`cg-verdict s-${last.status}`}>
-          <p>{last.note}</p>
+          <p>{modelText(last.note)}</p>
           <footer className="small muted">{last.by} · {ago(last.ts)}</footer>
         </blockquote>
       ) : (
@@ -91,7 +92,7 @@ export function CheckResult({ c, lead, busy, act, lineId, onConsole, onFix }: {
                   {(f.file || c.id === 'results') && (
                     <button className="lnk cg-at" onClick={() => open(f)} title={tr('在中控屏中打开')}>{f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : f.hit}</button>
                   )}
-                  {f.text && <p><Marked text={f.text} hit={f.hit} /></p>}
+                  {f.text && <p>{hitText(f.text, f.hit)}</p>}
                   {f.hint && <p className="cg-hint">{trx(f.hint)}</p>}
                 </div>
               </li>
@@ -114,8 +115,8 @@ export function CheckHistory({ c }: { c: Check }) {
           {rows.map((p, i) => (
             <li key={i}>
               <i className={`cg-shape k-${c.kind} s-${p.status}`} />
-              <b>{c.kind === 'hard' ? p.value ?? '—' : ST[p.status]}</b>
-              <span className="muted">{c.kind === 'hard' ? ST[p.status] : ''}</span>
+              {c.kind === 'hard' ? <b className="em-num" data-tone={stateTone(p.status) ?? 'info'}>{p.value ?? '—'}</b> : <StateWord state={p.status}>{ST[p.status]}</StateWord>}
+              <span>{c.kind === 'hard' && <StateWord state={p.status}>{ST[p.status]}</StateWord>}</span>
               <small className="muted">{ago(p.ts)}</small>
             </li>
           ))}
@@ -123,12 +124,6 @@ export function CheckHistory({ c }: { c: Check }) {
       )}
     </>
   );
-}
-
-function Marked({ text, hit }: { text: string; hit: string }) {
-  const i = hit ? text.toLowerCase().indexOf(hit.toLowerCase()) : -1;
-  if (i < 0) return <span>{text}</span>;
-  return <span>{text.slice(0, i)}<mark>{text.slice(i, i + hit.length)}</mark>{text.slice(i + hit.length)}</span>;
 }
 
 // a hard check's count over its rounds, with the line it must stay under; a soft check's verdicts in a row

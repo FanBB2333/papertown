@@ -2,8 +2,9 @@
 // opening the full-window canvas), its card, experiments, outputs, repositories and memory, each linking to the console panel with the
 // detail; beside them its conversation and the pages its agents wrote.
 
+import { Deadline, figures, modelText } from '../emphasis';
 import { useEffect, useState } from 'react';
-import { type PaseoDefaults, type ProjectCard } from '../api';
+import { api, type PaseoDefaults, type ProjectCard } from '../api';
 import { agentsPath } from '../agents/Agents';
 import { HireDialog } from '../agents/Hire';
 import { ResidentControl, useResidentLine } from '../components/Resident';
@@ -12,9 +13,10 @@ import { Icon } from '../console/icons';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
 import { ProjectUsage } from '../usage/Usage';
-import { follow, go, href, PATHS } from '../route';
+import { decidedPath, follow, go, href, PATHS, provPath, query } from '../route';
 import { askPath, ChatBox } from './Ask';
-import { DecideList } from './Decide';
+import { DecideList, openDecisions } from './Decide';
+import { DecisionNumbers, ProvNumbers, RecordLink } from './Records';
 import { LoopCard } from './LoopCard';
 import { PagesBox } from './Pages';
 import { MemorySection, MemoryViewer } from './Memory';
@@ -27,16 +29,18 @@ type Open = (lineId: string, t?: ConsoleTarget) => void;
 const LISTS = [['blockers', tr('卡点和风险')], ['next', tr('接下来')], ['done', tr('最近完成')]] as const;
 
 export function Project({ r, defs, toast, onChange, onConsole }: {
-  r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void; onConsole: Open;
+  r: ProjectCard; defs: PaseoDefaults | null; toast: (t: string, error?: boolean) => void; onChange: (r: ProjectCard) => void; onConsole: Open;
 }) {
   const acts = useCardActs(r, toast, onChange);
   const [note, setNote] = useState('');
   const [viewer, setViewer] = useState<{ id: string; msg?: number } | null>(null);
   const [hiring, setHiring] = useState<'coder' | 'writer' | 'lead' | null>(null);
   const { line, card } = r;
+  const pending = openDecisions(r);
+  const writing = pending.some(d => d.kind === 'matter' || d.kind === 'need');
   const ask = askPath(line.seq);
   const [liveLine, reloadLead] = useResidentLine(line.id);
-  useEffect(() => { document.querySelector('.p-prog')?.scrollTo({ top: 0 }); }, [line.id]);
+  useEffect(() => { if (!query().has('matter') && !query().has('need')) document.querySelector('.p-prog')?.scrollTo({ top: 0 }); }, [line.id]);
   const more = (mod: string) => (
     <button className="lnk pj-more small" onClick={() => onConsole(line.id, { mod })} title={tr('在中控屏查看详情')}>{tr('详细')}<Icon n="right" size={12} /></button>
   );
@@ -49,22 +53,25 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
       <header className="pj-head">
         <div className="pj-title">
           <span className="pc-seq">#{line.seq}</span>
-          <h1>{line.title}</h1>
-          <StatusTag status={line.status} sample={line.sample} />
+          <h1 className="em-key">{line.title}</h1>
+          <span className="pj-status"><StatusTag status={line.status} sample={line.sample} /></span>
+          {card?.summary && <p className="pj-sum">{modelText(card.summary)}</p>}
         </div>
         <div className="pj-acts">
-          <a className="btn pri" href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={14} />{tr('对话')}</a>
+          <a className={writing ? 'btn' : 'btn pri'} href={href(ask)} onClick={e => follow(e, ask)}><Icon n="chat" size={14} />{tr('对话')}</a>
           <button className="btn" onClick={() => setHiring('coder')}><Icon n="plus" size={14} />{tr('新建员工')}</button>
           <button className="btn" onClick={() => onConsole(line.id)} title={tr('在中控屏查看该项目详情')}><Icon n="board" size={14} />{tr('中控屏')}</button>
         </div>
       </header>
       <ResidentControl lineId={line.id} resident={liveLine?.lead ?? line.lead} sample={liveLine?.sample ?? line.sample} model={liveLine?.team.find(a => a.role === 'lead')?.model ?? r.lead?.model} talk={ask} onStartWith={() => setHiring('lead')} toast={toast} onChanged={reloadLead} />
-      {(r.decisions?.length ?? 0) > 0 && (
-        <section className="psec pj-decide" id="decide">
-          <header className="psec-h"><h3><Icon n="bell" size={16} />{tr('待你决定')}<span className="pj-n">{r.decisions!.length}</span></h3></header>
-          <DecideList r={r} />
-        </section>
-      )}
+      <nav className="pj-records" aria-label={tr('项目记录')}>
+        <RecordLink id="decided" to={decidedPath(line.seq)}><Icon n="compose" size={15} /><DecisionNumbers stats={r.decided} project /><Icon n="right" size={14} /></RecordLink>
+        <RecordLink id="prov" to={provPath(line.seq)}><Icon n="branch" size={15} /><ProvNumbers stats={r.prov} project /><Icon n="right" size={14} /></RecordLink>
+      </nav>
+      {!!pending.length && <section className="psec pj-decide" id="decide">
+        <header className="psec-h"><h3><Icon n="bell" size={16} />{tr('待你决定')}<span className="pj-n em-num" data-tone="warn">{pending.length}</span></h3></header>
+        <DecideList r={r} onGone={() => api.card(line.id).then(onChange, e => toast((e as Error).message, true))} />
+      </section>}
       <LoopCard r={r} toast={toast} />
 
       <div className="pj-grid">
@@ -79,18 +86,17 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
             {card ? (
               <>
                 <Meter r={r} />
-                <p className="pj-sum">{card.summary}</p>
-                {card.milestone && <p className="pc-ms"><Icon n="target" size={14} /><span><span className="muted">{tr('下一个里程碑')}</span> {card.milestone}</span></p>}
+                {card.milestone && <p className="pc-ms"><span><span className="muted">{tr('下一个里程碑')}</span> <span className="em-state" data-icon="clock" data-tone="warn">{modelText(card.milestone)}</span></span></p>}
                 {card.metrics.length > 0 && (
                   <dl className="pc-metrics full">
-                    {card.metrics.map(m => <div key={m.name}><dt>{m.name}</dt><dd>{m.value}</dd>{m.note && <span className="muted small">{m.note}</span>}</div>)}
+                    {card.metrics.map(m => <div key={m.name}><dt>{m.name}</dt><dd>{figures(m.value)}</dd>{m.note && <span className="muted small">{modelText(m.note)}</span>}</div>)}
                   </dl>
                 )}
                 <div className="pj-lists">
                   {(r.decisions ? LISTS : [['need_you', tr('待你决定')] as const, ...LISTS]).filter(([k]) => card[k].length).map(([k, name]) => (
                     <section key={k} className={`pc-list l-${k}`}>
                       <h4>{name}</h4>
-                      <ul>{card[k].map((t, j) => <li key={j}>{t}</li>)}</ul>
+                      <ul>{card[k].map((t, j) => <li key={j} className={k === 'need_you' ? 'em-bar' : undefined} data-tone={k === 'need_you' ? 'warn' : undefined}>{k === 'blockers' ? <span className="em-state" data-tone="warn">{modelText(t)}</span> : modelText(t)}</li>)}</ul>
                     </section>
                   ))}
                 </div>
@@ -101,10 +107,10 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
             )}
             <div className="pj-upd">
               {r.lead?.started && !r.pending && (
-                <input value={note} maxLength={300} placeholder={tr('向负责人附言（可选），例如「重点关注实验」')} onChange={e => setNote(e.target.value)}
+                <input className={note ? 'em-bar' : undefined} value={note} maxLength={300} placeholder={tr('向负责人附言（可选），例如「重点关注实验」')} onChange={e => setNote(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) acts.update(note).then(ok => ok && setNote('')); }} />
               )}
-              <UpdateButton r={r} acts={acts} defs={defs} note={note} />
+              <UpdateButton r={r} acts={acts} defs={defs} note={note} secondary />
             </div>
           </section>
 
@@ -140,7 +146,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
                 <h4 className="pj-sub">{tr('规划中')}</h4>
                 {card?.plans.length ? (
                   <ul className="pj-plans">
-                    {card.plans.map((p, i) => <li key={i}><b>{p.name}</b>{(p.goal || p.when) && <span className="small muted">{[p.goal, p.when].filter(Boolean).join(' · ')}</span>}</li>)}
+                    {card.plans.map((p, i) => <li key={i}><b>{p.name}</b>{(p.goal || p.when) && <span className="small muted">{modelText(p.goal)}{p.goal && p.when && ' · '}{p.when && <Deadline text={p.when} />}</span>}</li>)}
                   </ul>
                 ) : <p className="muted small">{card ? tr('负责人未填写规划中的实验') : tr('由负责人在卡片上填写')}</p>}
               </div>
@@ -150,14 +156,14 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
           <section className="psec" id="outputs">
             <header className="psec-h">
               <h3><Icon n="doc" size={16} />{tr('预期产出')}</h3>
-              {card?.outputs.length ? <span className="muted small">{tr('{0}/{1} 完成', card.outputs.filter(o => o.state === 'done').length, card.outputs.length)}</span> : null}
+              {card?.outputs.length ? <span className="muted small">{figures(tr('{0}/{1} 完成', card.outputs.filter(o => o.state === 'done').length, card.outputs.length))}</span> : null}
             </header>
             {card?.outputs.length ? (
               <ul className="pj-outs">
                 {card.outputs.map((o, i) => (
                   <li key={i} className={`st-${o.state}`}>
                     <i className={`pp-st st-${o.state}`} /><b>{o.name}</b>
-                    {o.due && <span className="pj-due small"><Icon n="clock" size={12} />{o.due}</span>}
+                    {o.due && <span className="pj-due small"><Deadline text={o.due} done={o.state === 'done'} /></span>}
                     <span className="pj-state small">{OUT_STATE[o.state]}</span>
                   </li>
                 ))}

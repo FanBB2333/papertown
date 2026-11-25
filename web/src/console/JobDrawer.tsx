@@ -1,6 +1,7 @@
 // One job in full, as a sheet over the right of the console: what its state makes most worth
 // reading first, then where and how long it ran, its result, command and events. Read only.
 
+import { figures, modelText, StateWord } from '../emphasis';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type Job, type NvJobFull } from '../api';
@@ -84,7 +85,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
         <header className="jd-h">
           <div className="jd-t">
             <span className="jd-id">
-              <span className={`jd-pill${ST[st].hollow ? ' hollow' : ''}`}><i>{ST[st].sign}</i>{ST[st].label}</span>
+              <StateWord state={st}>{ST[st].label}</StateWord>
               <span className="muted small">{[nvId != null ? `nvidb #${nvId}` : id, nv?.submitter, ended && ago(ended)].filter(Boolean).join(' · ')}</span>
             </span>
             <h3 title={name}>{name}</h3>
@@ -96,27 +97,27 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
           </div>
         </header>
         <div className="jd-body" key={id}>
-          {err && <p className="warn-box small">{err}</p>}
+          {err && <p className="small em-state" data-tone="bad">{err}</p>}
           {!loaded && !err && <p className="muted">{tr('读取中…')}</p>}
 
           {loaded && st === 'failed' && (
             <section className="jd-call bad">
-              <h4>{tr('失败原因')}</h4>
+              <h4><span className="em-state" data-tone="bad">{tr('失败原因')}</span></h4>
               {error ? <><p className="jd-why mono">{lastLine(error)}</p>{error.trim().includes('\n') && <Tail text={error} />}</>
                 : <p className="jd-why">{exit != null ? tr('退出码 {0}，未记录错误信息', exit) : tr('未记录错误信息')}</p>}
             </section>
           )}
           {loaded && st === 'running' && (
             <section className="jd-call run">
-              <h4>{tr('进度')}{pct != null && <b>{Math.round(pct)}%</b>}</h4>
+              <h4>{tr('进度')}{pct != null && <b className="em-num">{Math.round(pct)}%</b>}</h4>
               {pct != null && <span className="jd-bar"><i style={{ width: `${Math.min(100, pct)}%` }} /></span>}
-              {nv?.progress && <p className="mono jd-line">{nv.progress}{nv.progress_at ? <em> · {ago(nv.progress_at)}</em> : null}</p>}
+              {nv?.progress && <p className="mono jd-line">{figures(nv.progress)}{nv.progress_at ? <em> · {ago(nv.progress_at)}</em> : null}</p>}
               {limitBar && <p className="small jd-lim">{limitBar}{tr('运行 {0} / 上限 {1}', dur(took), dur(limit))}</p>}
             </section>
           )}
           {nv && st === 'queued' && (
             <section className={`jd-call ${nv.held ? 'warn' : 'wait'}`}>
-              <h4>{nv.held ? tr('挂起：依赖失败，待人工决定') : tr('等待条件')}</h4>
+              <h4 className={nv.held ? 'em-bar' : undefined} data-tone="warn">{nv.held ? tr('挂起：依赖失败，待人工决定') : tr('等待条件')}</h4>
               <p className="jd-line">
                 {deps ? tr('等待以下任务完成：') : nv.lane ? tr('正在队列 {0} 中排队', nv.lane) : tr('等待有余量的显卡')}
               </p>
@@ -126,7 +127,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
           )}
           {top.length > 0 && (
             <section className="jd-top">
-              {top.map(([k, v], i) => <span key={k} title={k}><strong>{fmtNum(v)}</strong><em>{topNames[i]}</em></span>)}
+              {top.map(([k, v], i) => <span key={k} title={k}><strong className="em-num">{fmtNum(v)}</strong><em>{topNames[i]}</em></span>)}
             </section>
           )}
 
@@ -139,7 +140,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
               {st === 'queued' && <span><em>{tr('提交')}</em><b>{nv?.created_at ? `${when(Date.parse(nv.created_at))} · ${ago(nv.created_at)}` : '—'}</b></span>}
               <span><em>{st === 'queued' ? tr('上限') : tr('用时')}</em><b>{st === 'queued' ? (limit ? dur(limit) : '—') : <>{dur(took)}{limit ? <i className="muted"> / {dur(limit)}</i> : null}</>}</b>
                 {limitBar}</span>
-              {nv && st !== 'queued' && <span><em>{tr('退出码')}</em><b className={exit ? 'bad-t' : ''}>{exit ?? '—'}{nv.attempt && nv.attempt > 1 ? ` · ${tr('第 {0} 次尝试', nv.attempt)}` : ''}</b></span>}
+              {nv && st !== 'queued' && <span><em>{tr('退出码')}</em><b data-tone="bad" className={exit ? 'em-state' : ''}>{exit ?? '—'}{nv.attempt && nv.attempt > 1 ? ` · ${tr('第 {0} 次尝试', nv.attempt)}` : ''}</b></span>}
               {nv?.progress && st !== 'running' && <span className="wide"><em>{tr('状态行')}</em><b className="mono">{nv.progress}</b></span>}
               {procs.length > 0 && (
                 <span className="wide"><em>{tr('卡上的进程（实时）')}</em>
@@ -149,7 +150,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
             </section>
           )}
 
-          {(nv?.notes || farm?.note) && <section className="jd-s note"><h4><i />{tr('说明')}</h4><p className="jd-note">{nv?.notes || farm?.note}</p></section>}
+          {(nv?.notes || farm?.note) && <section className="jd-s note"><h4><i />{tr('说明')}</h4><p className={farm?.submitted_by === 'you' ? 'jd-note user-words em-bar' : 'jd-note'}>{farm?.submitted_by === 'you' ? (nv?.notes || farm.note) : modelText(nv?.notes || farm?.note)}</p></section>}
 
           {rows.length > 0 && (
             <section className="jd-s res">
@@ -213,8 +214,8 @@ function ResultTable({ rows, keys }: { rows: [string, unknown][]; keys: Set<stri
             <tr key={k} className={`${keys.has(k) ? 'key' : ''}${typeof v === 'number' ? '' : ' txt'}`}>
               <td className="mono">{g ? k.slice(g.length + 1) : k}</td>
               <td>{typeof v === 'number'
-                ? <><span className="rbar"><i style={{ ['--v' as string]: Math.abs(v) / top }} /></span><b>{fmtNum(v)}</b></>
-                : <span className="jd-str">{typeof v === 'string' ? v : JSON.stringify(v)}</span>}</td>
+                ? <><span className="rbar"><i style={{ ['--v' as string]: Math.abs(v) / top }} /></span><b className={keys.has(k) ? 'em-num' : undefined}>{fmtNum(v)}</b></>
+                : <span className="jd-str">{typeof v === 'string' ? (/summary|analysis|note|reason|conclusion|说明|结论/i.test(k) ? modelText(v) : v) : JSON.stringify(v)}</span>}</td>
             </tr>
           ))}
         </Fragment>

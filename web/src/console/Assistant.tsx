@@ -2,6 +2,7 @@
 // are looking at, which can ask you back, open and light up things, and ask leave to act in the town. Its
 // message box also takes a new idea straight to the hatchery, or a rewrite of an idea waiting on you.
 
+import { modelText } from '../emphasis';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, listen, type Agent, type AgentEvent, type AssistantConv, type AssistantView, type Focus, type PaseoItem, type PaseoPermission, type ShowTarget, type StartOpts } from '../api';
@@ -130,7 +131,7 @@ interface Side {
   view: AssistantView;
   head: (a: Agent) => React.ReactNode;
   send: (text: string) => Promise<boolean>;
-  toast: (text: string) => void;
+  toast: (text: string, error?: boolean) => void;
   focus: Focus | null;
   setFocus: (f: Focus | null) => void;
   sel: Selected | null;
@@ -146,7 +147,7 @@ interface Side {
 }
 
 export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea }: {
-  toast: (t: string) => void; onClose: () => void; target: Target; setTarget: (t: Target) => void; focusKey: number;
+  toast: (t: string, error?: boolean) => void; onClose: () => void; target: Target; setTarget: (t: Target) => void; focusKey: number;
   onIdea: (text: string) => Promise<boolean>;
 }) {
   const [view, setView] = useState<AssistantView | null>(null);
@@ -206,21 +207,21 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea 
       }
       return true;
     } catch (e) {
-      toast((e as Error).message);
+      toast((e as Error).message, true);
       return false;
     }
   }
   async function start(o: StartOpts) {
     setBusy(true);
-    try { await api.startAgent(ID, o); reload(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    try { await api.startAgent(ID, o); reload(); } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   async function resume(c: AssistantConv) {
     setHistory(false);
-    try { await api.resumeConv(ID, c.id); reload(); } catch (e) { toast((e as Error).message); }
+    try { await api.resumeConv(ID, c.id); reload(); } catch (e) { toast((e as Error).message, true); }
   }
   function fresh() {
     setHistory(false);
-    api.newConv(ID).then(reload, e => toast((e as Error).message));
+    api.newConv(ID).then(reload, e => toast((e as Error).message, true));
   }
   const point = (then: (f: Focus) => void) => setPointing(() => (f: Focus) => { setPointing(null); then(f); });
 
@@ -234,7 +235,7 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea 
       <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('历史对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>
       {a?.started && <button className="ib" title={tr('新对话：可切换模型重新开始')} onClick={fresh}><Icon n="compose" size={16} /></button>}
       {a?.started && a.runtime === 'paseo' && (
-        <button className="ib" title={tr('在 Paseo 桌面端打开这段对话')} onClick={() => api.openInPaseo(ID).catch(e => toast((e as Error).message))}><Icon n="ext" size={16} /></button>
+        <button className="ib" title={tr('在 Paseo 桌面端打开这段对话')} onClick={() => api.openInPaseo(ID).catch(e => toast((e as Error).message, true))}><Icon n="ext" size={16} /></button>
       )}
       <button className="ib" title={tr('收起（Esc）')} onClick={onClose}><Icon n="down" size={16} /></button>
     </header>
@@ -284,7 +285,7 @@ function PaseoSide({ agent, side }: { agent: Agent; side: Side }) {
   useEffect(() => { setDown(why); return () => setDown(''); }, [why, setDown]);
   return (
     <Talk side={side} agent={why ? { ...t.agent, status: 'offline' } : t.agent} rows={rows} loading={t.items === null && !why} err={why} perms={t.asks} onSent={t.wrote}
-      onPermit={(id, allow) => { api.permit(ID, id, allow).then(() => t.answered(id)).catch(e => side.toast((e as Error).message)); }} />
+      onPermit={(id, allow) => { api.permit(ID, id, allow).then(() => t.answered(id)).catch(e => side.toast((e as Error).message, true)); }} />
   );
 }
 
@@ -332,7 +333,7 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
     <>
       {side.head(agent)}
       {agent.runtime === 'pi' && agent.state && (
-        <div className="as-sub"><PiSwitch s={agent.state} send={t => api.say(ID, t).catch(e => side.toast((e as Error).message))} /></div>
+        <div className="as-sub"><PiSwitch s={agent.state} send={t => api.say(ID, t).catch(e => side.toast((e as Error).message, true))} /></div>
       )}
       <div className="as-mid">
         <div className="as-log" ref={scroll} onScroll={e => {
@@ -357,7 +358,7 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
           {!loading && !err && asked < 0 && <Hello mod={place.mod} onAsk={submit} />}
           {perms.map(q => (
             <div key={q.id} className="as-card as-perm">
-              <span className="as-k">{tr('请求')}{q.name === 'Bash' ? tr('运行命令') : tr('使用 {0}', q.name)}</span>
+              <span className="as-k em-bar" data-tone="warn">{tr('请求')}{q.name === 'Bash' ? tr('运行命令') : tr('使用 {0}', q.name)}</span>
               {q.title && q.title !== q.name && <p>{q.title}</p>}
               {q.arg && <pre className="code">{q.arg}</pre>}
               <div className="as-choices">
@@ -391,7 +392,7 @@ function YouMsg({ r }: { r: YouRow }) {
           {!!projects?.length && <span title={tr('Papertown 已将刚读取的项目进展附在消息中')}><Icon n="compass" size={11} /><i>{tr('已附上 {0} 的进展', projects.map(n => `#${n}`).join(' '))}</i></span>}
         </div>
       )}
-      <UserMsg text={r.text} />
+      <UserMsg text={r.text} origin="web" />
       {r.sending && <span className="as-meta">{tr('发送中')}</span>}
     </div>
   );
@@ -513,7 +514,7 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea }: {
             </button>
           )}
           {working && !typed
-            ? <button className="as-send stop" title={tr('中断当前任务')} onClick={() => api.abort(ID).catch(e => side.toast((e as Error).message))}><Icon n="stop" size={14} /></button>
+            ? <button className="as-send stop" title={tr('中断当前任务')} onClick={() => api.abort(ID).catch(e => side.toast((e as Error).message, true))}><Icon n="stop" size={14} /></button>
             : <button className="as-send" disabled={!typed || sending || (asking && (!started || off))} title={tr('发送（Enter）')} onClick={() => go(text)}><Icon n="send" size={16} /></button>}
         </div>
       </div>
@@ -523,7 +524,7 @@ function Composer({ agent, side, target, setTarget, focusKey, onIdea }: {
 
 // its question for you and what it asks to do, each answered here
 function Cards({ view, send, toast, onPoint }: {
-  view: AssistantView; send: (t: string) => void; toast: (t: string) => void; onPoint: (then: () => void) => void;
+  view: AssistantView; send: (t: string) => void; toast: (t: string, error?: boolean) => void; onPoint: (then: () => void) => void;
 }) {
   const [done, setDone] = useState<Record<number, AgentEvent>>({});
   const shown = useRef(new Set<Element>());
@@ -539,7 +540,7 @@ function Cards({ view, send, toast, onPoint }: {
       const r = await api.decide(e.id, allow);
       setDone(d => ({ ...d, [e.id]: r }));
       setTimeout(() => setDone(d => { const { [e.id]: _, ...rest } = d; return rest; }), 8000);
-    } catch (x) { toast((x as Error).message); }
+    } catch (x) { toast((x as Error).message, true); }
   }
   if (!ask && !acts.length) return null;
   return (
@@ -547,7 +548,7 @@ function Cards({ view, send, toast, onPoint }: {
       {ask && (
         <div className="as-card as-ask" ref={seen}>
           <span className="as-k">{tr('它问你')}</span>
-          <p>{ask.data.question}</p>
+          <p className="em-bar" data-tone="warn">{modelText(ask.data.question)}</p>
           {(ask.data.choices?.length > 0 || ask.data.point) && <div className="as-choices">
             {(ask.data.choices as string[]).map(c => <button key={c} className="btn" onClick={() => send(c)}>{c}</button>)}
             {ask.data.point && <button className="btn pri" onClick={() => onPoint(() => send(tr('此处。')))}><Icon n="target" size={14} />{tr('点击页面位置')}</button>}
@@ -558,11 +559,11 @@ function Cards({ view, send, toast, onPoint }: {
         const d = (done[e.id] ?? e).data;
         return (
           <div key={e.id} className={`as-card as-act st-${d.status}`} ref={seen}>
-            <span className="as-k">{d.status === 'pending' ? tr('请求代为执行') : d.status === 'done' ? (d.auto ? tr('已代为执行') : tr('已经做了')) : d.status === 'denied' ? tr('你未同意执行') : tr('失败')}</span>
-            <p><b>{d.title}</b></p>
-            {d.why && d.status === 'pending' && <p className="muted small">{d.why}</p>}
+            <span className={d.status === 'failed' ? 'as-k em-state' : 'as-k'} data-tone="bad">{d.status === 'pending' ? tr('请求代为执行') : d.status === 'done' ? (d.auto ? tr('已代为执行') : tr('已经做了')) : d.status === 'denied' ? tr('你未同意执行') : tr('失败')}</span>
+            <p className={d.status === 'pending' ? 'em-bar' : undefined} data-tone="warn"><b>{d.title}</b></p>
+            {d.why && d.status === 'pending' && <p className="muted small">{modelText(d.why)}</p>}
             {d.rule && d.status === 'pending' && <p className="muted small">{tr('按工作边界需先向你确认：{0}', d.rule)}</p>}
-            {d.result && <p className="small">{d.result}</p>}
+            {d.result && <p className="small">{modelText(d.result)}</p>}
             {d.status === 'pending' && <div className="as-choices">
               <button className="btn pri" onClick={() => decide(e, true)}>{tr('允许')}</button>
               <button className="btn" onClick={() => decide(e, false)}>{tr('不要')}</button>

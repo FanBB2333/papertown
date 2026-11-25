@@ -1,7 +1,8 @@
 // The settings page at /settings/<section>, drawn with Kumo whichever look the app has: browser
 // settings (settings.ts) and the server's model, agents, access and demo samples.
 
-import { Badge, Banner, Button, Dialog, Input, LayerCard, Select, Sidebar, Table, Text } from '@cloudflare/kumo';
+import { StateWord } from '../emphasis';
+import { Badge, Button, Dialog, Input, LayerCard, Select, Sidebar, Table, Text } from '@cloudflare/kumo';
 import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, ShieldCheckIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -46,7 +47,7 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
 ];
 const SECTIONS = GROUPS.flatMap(g => g[1]);
 
-const Warn = ({ children, bad }: { children: React.ReactNode; bad?: boolean }) => <Banner size="sm" variant={bad ? 'error' : 'alert'} description={children} />;
+const Warn = ({ children, bad }: { children: React.ReactNode; bad?: boolean }) => <p role={bad ? 'alert' : undefined} className="small em-state" data-tone={bad ? 'bad' : 'warn'}>{children}</p>;
 function Look({ s }: { s: S }) {
   const mac = s.ui === 'macos', flat = s.ui !== 'paper';
   return (
@@ -305,7 +306,7 @@ function Accounts() {
   return (
     <Card title={tr('账号（CLIppet）')}>
       <Row label={tr('连接')} desc={tr('CLIppet 为每个 env 保存独立的登录与会话，Claude Code、Codex、Antigravity 可同时以多个账号运行')}>
-        <Badge variant={v?.ok ? 'success' : v ? 'warning' : 'neutral'}>{!v ? tr('检查中…') : v.ok ? tr('{0} 个 env', v.envs.length) : tr('未连接')}</Badge>
+        <StateWord state={v && !v.ok ? 'warn' : undefined}>{!v ? tr('检查中…') : v.ok ? tr('{0} 个 env', v.envs.length) : tr('未连接')}</StateWord>
       </Row>
       {v && !v.ok && <Warn>{v.note}</Warn>}
       {v?.ok && <Row label={tr('全局默认账号')} desc={tr('项目和员工未单独选择时使用。与 skill 一样分层：全局 → 项目 → 员工，较窄层级优先，启动终端时可为项目和员工单独选择。')}>
@@ -367,7 +368,7 @@ function Agents() {
       <UsageSettings />
       <Card title="Paseo">
         <Row label={tr('连接')} desc={tr('托管 Claude Code、Codex、OpenCode 等 agent 的本机守护进程')}>
-          <Badge variant={st?.ok ? 'success' : paseo === null ? 'neutral' : 'warning'}>{paseo === null ? tr('检查中…') : st?.ok ? tr('已连接{0}', st.version ? ` · ${st.version}` : '') : tr('未连接')}</Badge>
+          <StateWord state={paseo !== null && !st?.ok ? 'warn' : undefined}>{paseo === null ? tr('检查中…') : st?.ok ? tr('已连接{0}', st.version ? ` · ${st.version}` : '') : tr('未连接')}</StateWord>
         </Row>
         {st && !st.ok && <Warn>{st.note}</Warn>}
         {info?.status.ok && (
@@ -391,7 +392,7 @@ function Agents() {
       </Card>
       <Card title={tr('herdr')}>
         <Row label={tr('状态')} desc={tr('读取和操作已有的终端 agent 会话')}>
-          <Badge variant={herdr?.ok ? 'success' : 'neutral'}>{herdr?.ok ? tr('运行中') : herdr ? tr(herdr.note) : herdrError ? tr('未连接') : tr('检查中…')}</Badge>
+          <StateWord state={herdrError || (herdr && !herdr.ok) ? 'warn' : undefined}>{herdr?.ok ? tr('运行中') : herdr ? tr(herdr.note) : herdrError ? tr('未连接') : tr('检查中…')}</StateWord>
         </Row>
         {herdrError && <Warn>{herdrError}</Warn>}
         {herdr && <>
@@ -401,7 +402,7 @@ function Agents() {
       </Card>
       <Card title={tr('本机 pi')}>
         <Row label={tr('状态')} desc={tr('运行于 tmux 的后台终端 agent')}>
-          <Badge variant={pi?.ok ? 'success' : pi === null ? 'neutral' : 'warning'}>{pi === null ? tr('检查中…') : pi.ok ? tr('可用') : tr('不可用')}</Badge>
+          <StateWord state={pi && !pi.ok ? 'warn' : undefined}>{pi === null ? tr('检查中…') : pi.ok ? tr('可用') : tr('不可用')}</StateWord>
         </Row>
         {pi && !pi.ok && <Warn>{pi.note}</Warn>}
       </Card>
@@ -412,7 +413,7 @@ function Agents() {
 
 function Demo({ hud }: { hud: Hud | null }) {
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState<string | Error>('');
   async function seed() {
     setBusy(true);
     setMsg('');
@@ -420,7 +421,7 @@ function Demo({ hud }: { hud: Hud | null }) {
       const r = await api.samples();
       setMsg(r.note);
     } catch (e) {
-      setMsg((e as Error).message);
+      setMsg(e as Error);
     } finally {
       setBusy(false);
     }
@@ -430,7 +431,7 @@ function Demo({ hud }: { hud: Hud | null }) {
       <Row label={tr('样例项目')} desc={tr('样例项目是预制的状态，放入后负责人默认关闭。')}>
         <Button variant="primary" loading={busy} onClick={seed}>{busy ? tr('放入中…') : tr('放入样例项目')}</Button>
       </Row>
-      {msg && <Note>{msg}</Note>}
+      {msg instanceof Error ? <Warn bad>{msg.message}</Warn> : msg && <Note>{msg}</Note>}
       <Row label={tr('调研文章')} desc={tr('图书馆馆藏，样例项目查重及方法设计时从中检索相近工作')}>
         <Note>{tr('馆藏')} {tr('{0} 篇 · 进入小镇图书馆浏览', hud?.library ?? '…')}</Note>
       </Row>
@@ -446,16 +447,16 @@ function Access() {
   const [old, setOld] = useState('');
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState<string | Error>('');
   const load = () => api.authState().then(setA, e => setErr((e as Error).message));
   useEffect(() => { load(); }, []);
   async function run(fn: () => Promise<unknown>, done?: string) {
     setMsg('');
-    try { await fn(); await load(); if (done) setMsg(done); return true; } catch (e) { setMsg((e as Error).message); return false; }
+    try { await fn(); await load(); if (done) setMsg(done); return true; } catch (e) { setMsg(e as Error); return false; }
   }
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (pw !== pw2) { setMsg(tr('两次输入不一致')); return; }
+    if (pw !== pw2) { setMsg(new Error(tr('两次输入不一致'))); return; }
     if (await run(() => api.setPassword(pw, a?.local ? undefined : old), tr('访问密码已保存。'))) { setForm(false); setOld(''); setPw(''); setPw2(''); }
   }
   if (err) return <Warn bad>{err}</Warn>;
@@ -500,7 +501,7 @@ function Access() {
             </Dialog.Root>
           </Row>
         )}
-        {msg && <Note>{msg}</Note>}
+        {msg instanceof Error ? <Warn bad>{msg.message}</Warn> : msg && <Note>{msg}</Note>}
       </Card>
       {(a.local || a.signed_in) && <AccessKeys off={a.methods?.keys === false} />}
       <Note>{tr('其他设备要打开 Papertown，先在「网络与安全」中把监听地址改为所有网络并重启服务，或用 tailscale serve 转发。之后在浏览器用访问密码登录，或在 App 中填写服务器地址和访问密钥。')}</Note>
@@ -524,7 +525,7 @@ function Network() {
   const [d, setD] = useState<NetworkSettings | null>(null);
   const [add, setAdd] = useState('');
   const [err, setErr] = useState('');
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState<string | Error>('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { api.network().then(r => { setV(r); setD(PICK(r)); }, e => setErr((e as Error).message)); }, []);
   if (err) return <Warn bad>{err}</Warn>;
@@ -544,7 +545,7 @@ function Network() {
       const moved = r.host !== v!.host || r.port !== v!.port;
       setV(r); setD(PICK(r));
       setMsg(moved ? tr('已保存。监听地址和端口在重启服务后生效。') : tr('已保存。'));
-    } catch (e) { setMsg((e as Error).message); }
+    } catch (e) { setMsg(e as Error); }
     setBusy(false);
   }
   function addSource(e: React.FormEvent) {
@@ -608,7 +609,7 @@ function Network() {
           <Button disabled={!dirty || busy} onClick={() => { setD(PICK(v)); setMsg(''); }}>{tr('还原')}</Button>
         </div>
       )}
-      {msg && <Note>{msg}</Note>}
+      {msg instanceof Error ? <Warn bad>{msg.message}</Warn> : msg && <Note>{msg}</Note>}
     </>
   );
 }
@@ -618,17 +619,17 @@ function AccessKeys({ off }: { off?: boolean }) {
   const [keys, setKeys] = useState<AccessKey[] | null>(null);
   const [name, setName] = useState('');
   const [made, setMade] = useState<AccessKey | null>(null);
-  const [msg, setMsg] = useState('');
-  const load = () => api.accessKeys().then(r => setKeys(r.keys), e => setMsg((e as Error).message));
+  const [msg, setMsg] = useState<string | Error>('');
+  const load = () => api.accessKeys().then(r => setKeys(r.keys), e => setMsg(e as Error));
   useEffect(() => { load(); }, []);
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setMsg('');
-    try { setMade(await api.createKey(name.trim())); setName(''); await load(); } catch (err) { setMsg((err as Error).message); }
+    try { setMade(await api.createKey(name.trim())); setName(''); await load(); } catch (err) { setMsg(err as Error); }
   }
   async function revoke(k: AccessKey) {
     setMsg('');
-    try { setKeys((await api.revokeKey(k.id)).keys); if (made?.id === k.id) setMade(null); setMsg(tr('已撤销「{0}」。', k.name)); } catch (err) { setMsg((err as Error).message); }
+    try { setKeys((await api.revokeKey(k.id)).keys); if (made?.id === k.id) setMade(null); setMsg(tr('已撤销「{0}」。', k.name)); } catch (err) { setMsg(err as Error); }
   }
   const when = (s: string | null) => s ? new Date(s).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : tr('从未使用');
   return (
@@ -641,7 +642,7 @@ function AccessKeys({ off }: { off?: boolean }) {
       </form>
       {made?.key && (
         <div className="st-key-made">
-          <Text>{tr('「{0}」的访问密钥只显示这一次，请现在复制到 App 中：', made.name)}</Text>
+          <span className="em-bar" data-tone="warn">{tr('「{0}」的访问密钥只显示这一次，请现在复制到 App 中：', made.name)}</span>
           <div className="st-key-text">
             <code>{made.key}</code>
             <Button onClick={() => { navigator.clipboard?.writeText(made.key!); setMsg(tr('已复制。')); }}>{tr('复制')}</Button>
@@ -655,7 +656,7 @@ function AccessKeys({ off }: { off?: boolean }) {
         </Row>
       ))}
       {keys && !keys.length && <Note>{tr('还没有访问密钥。')}</Note>}
-      {msg && <Note>{msg}</Note>}
+      {msg instanceof Error ? <Warn bad>{msg.message}</Warn> : msg && <Note>{msg}</Note>}
     </Card>
   );
 }

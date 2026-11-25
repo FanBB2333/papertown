@@ -20,7 +20,7 @@ export interface RoomActions {
   onOpen: (id: string, lineId?: string) => void;
   onIdea: () => void;
   onAsk: (id: string, name: string) => void;
-  toast: (text: string) => void;
+  toast: (text: string, error?: boolean) => void;
 }
 
 interface Props extends RoomActions {

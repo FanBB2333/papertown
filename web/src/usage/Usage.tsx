@@ -1,5 +1,6 @@
 // Global subscription windows and project session billing statistics.
-import { Banner, Button, Dialog, Input } from '@cloudflare/kumo';
+import { StateWord, stateTone } from '../emphasis';
+import { Button, Dialog, Input } from '@cloudflare/kumo';
 import { Fragment, useEffect, useState } from 'react';
 import { api, listen, type LineUsage, type UsageBudget, type UsageProviderId, type UsageState, type UsageView, type UsageWindow, type UsageTokens } from '../api';
 import { tr } from '../i18n';
@@ -20,7 +21,7 @@ function rich(s: string, ...parts: React.ReactNode[]) {
 }
 // A figure in a rounded tile: a small label above, the value large, an optional line below.
 function Stat({ label, value, note, tone, empty }: { label: string; value: React.ReactNode; note?: React.ReactNode; tone?: UsageState; empty?: boolean }) {
-  return <div className={`usage-stat${tone ? ` usage-${tone}` : ''}${empty ? ' empty' : ''}`}><small>{label}</small><b>{value}</b>{note && <span>{note}</span>}</div>;
+  return <div className={`usage-stat${tone ? ` usage-${tone}` : ''}${empty ? ' empty' : ''}`}><small>{label}</small><b className={empty ? undefined : 'em-num'} data-tone={stateTone(tone)}>{value}</b>{note && <span>{note}</span>}</div>;
 }
 const shortDate = (s: string | null) => s ? new Date(s).toLocaleDateString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric' }) : tr('尚未开始');
 
@@ -31,7 +32,7 @@ function Bar({ value, state = 'ok', label }: { value: number; state?: UsageState
 }
 
 export function UsageMark({ state }: { state?: UsageState }) {
-  return state === 'near' || state === 'over' ? <span className={`usage-mark usage-${state}`}>{STATES[state]}</span> : null;
+  return state === 'near' || state === 'over' ? <StateWord state={state}>{STATES[state]}</StateWord> : null;
 }
 
 // A quota window the way a terminal status line shows it: 5h or 7d, ten segments, the percent coloured by how
@@ -54,6 +55,7 @@ function until(at: string | null): string {
   const d = Math.floor(m / 1440), h = Math.floor(m % 1440 / 60);
   return d ? `${d}d${h}h` : h ? `${h}h${m % 60}m` : `${m}m`;
 }
+const quotaTone = (used: number) => used >= 100 ? 'bad' : used >= 80 ? 'warn' : 'info';
 const order = (w: UsageWindow) => (scope(w) ? 10 : 0) + (isFive(w) ? 0 : isWeek(w) ? 1 : 2);
 
 // ten cells like the Claude Code status bar: ▰ for each tenth used (rounded half up, so 3% draws none), ▱ for the rest
@@ -69,9 +71,9 @@ function Window({ w }: { w: UsageWindow }) {
   const name = windowName(w), s = scope(w);
   return <div className={`usage-window usage-q-${level(w.used)}`}>
     <div className="usage-between"><span className="usage-wname">{isFive(w) ? tr('5 小时额度') : isWeek(w) ? tr('每周额度') : tr(w.label)}{s && <span className="usage-chip">{s}</span>}</span>
-      <span className="usage-q-num"><b>{pct(w.used)}</b><small>{until(w.resets_at)}</small></span></div>
+      <span className="usage-q-num"><b className="em-num" data-tone={quotaTone(w.used)}>{pct(w.used)}</b><small className={w.resets_at ? 'em-state' : undefined} data-tone="warn" data-icon="clock">{until(w.resets_at)}</small></span></div>
     <Segments value={w.used} label={name} wide />
-    <small>{w.resets_at ? rich(tr('剩余 {0} · {1} 重置'), <b>{pct(w.left)}</b>, <b>{resetDate(w.resets_at)}</b>) : rich(tr('剩余 {0} · 尚未开始计时'), <b>{pct(w.left)}</b>)}</small>
+    <small>{w.resets_at ? rich(tr('剩余 {0} · {1} 重置'), <b className="em-num" data-tone={quotaTone(w.used)}>{pct(w.left)}</b>, <b className="em-state" data-tone="warn" data-icon="clock">{resetDate(w.resets_at)}</b>) : rich(tr('剩余 {0} · 尚未开始计时'), <b className="em-num" data-tone={quotaTone(w.used)}>{pct(w.left)}</b>)}</small>
   </div>;
 }
 
@@ -109,18 +111,18 @@ export function UsageStrip({ active }: { active: boolean }) {
         <small>{tr('读取于 {0}', p.fetched_at ? date(p.fetched_at) : tr('尚未读取'))}</small>
         {[...p.windows].sort((a, b) => order(a) - order(b)).map(w => <Window w={w} key={w.key} />)}
         {!p.windows.length && <small>{tr('尚无用量读数')}</small>}
-        {p.status === 'stale' && <p className="usage-warn">{tr('显示最近成功读数')}</p>}
-        {p.error && <p className="usage-warn">{tr(p.error)}</p>}
-        {p.balances.map(b => <p className="usage-balance" key={b.id}><span className="usage-chip">{tr(b.label)}</span>{rich(tr('额外余额：{0} {1}'), <b>{b.remaining ?? '—'}</b>, b.unit)}</p>)}
+        {p.status === 'stale' && <p className="small em-state" data-tone="warn">{tr('显示最近成功读数')}</p>}
+        {p.error && <p className="small em-state" data-tone="warn">{tr(p.error)}</p>}
+        {p.balances.map(b => <p className="usage-balance" key={b.id}><span className="usage-chip">{tr(b.label)}</span>{rich(tr('额外余额：{0} {1}'), <b className="em-num">{b.remaining ?? '—'}</b>, b.unit)}</p>)}
         {view.logs && <div className="usage-stats">
           <Stat label={tr('本周本机折合')} value={money(p.week.cost)} />
           <Stat label={tr('其中项目')} value={money(p.week.projects)} />
         </div>}
         {view.logs && !!p.week.unpriced.length && <small>{tr('以下模型缺价格，未计入金额：{0}', p.week.unpriced.join('、'))}</small>}
-        {p.notes.map(n => <p className="usage-warn" key={n}>{tr('另有一个登录读取失败：{0}', tr(n))}</p>)}
+        {p.notes.map(n => <p className="small em-state" data-tone="warn" key={n}>{tr('另有一个登录读取失败：{0}', tr(n))}</p>)}
       </div>)}
       <p>{view?.logs ? tr('按 API 价格折算。本周从周一零点起算。') : tr('本机会话日志读取已关闭，项目用量统计已暂停。')}</p>
-      {view?.log_error && <p className="usage-error">{tr(view.log_error)}</p>}
+      {view?.log_error && <p className="usage-error em-state" data-tone="bad">{tr(view.log_error)}</p>}
       <div className="usage-between usage-foot">
         {view?.polled_at ? <small>{tr('上次读取额度：{0}', date(view.polled_at))}</small> : <span />}
         <button className="btn" disabled={busy} onClick={refresh} title={tr('每个订阅每分钟至多强制刷新一次')}>{busy ? tr('读取中…') : tr('刷新')}</button>
@@ -129,7 +131,7 @@ export function UsageStrip({ active }: { active: boolean }) {
     <button className="usage-toggle" aria-expanded={open} aria-controls="usage-details" onClick={() => setOpen(!open)}>
       <span>{tr('订阅用量')}</span><i className="usage-chevron" aria-hidden="true" />
     </button>
-    {error && <p role="alert" className="usage-error">{tr(error)}</p>}
+    {error && <p role="alert" className="usage-error em-state" data-tone="bad">{tr(error)}</p>}
     {!view && !error && <p className="usage-wait">{tr('加载中…')}</p>}
     {!open && <ul className="usage-mini">
       {rows.map(({ p, w, full, name, sub }) => <li key={w.key} className={`usage-q usage-q-${level(w.used)}`}
@@ -137,10 +139,10 @@ export function UsageStrip({ active }: { active: boolean }) {
         <span className={`usage-q-name${sub ? ' sub' : ''}`}>{name}</span>
         <span className="usage-q-span">{span(w) || tr(w.label)}</span>
         <Segments value={w.used} label={tr('{0} · {1}', full, windowName(w))} />
-        <b>{Math.round(w.used)}%</b>
-        <small>{until(w.resets_at)}</small>
+        <b className="em-num" data-tone={quotaTone(w.used)}>{Math.round(w.used)}%</b>
+        <small className={w.resets_at ? 'em-state' : undefined} data-tone="warn" data-icon="clock">{until(w.resets_at)}</small>
       </li>)}
-      {view?.providers.filter(p => !p.windows.length || p.error).map(p => <li key={p.id} className="usage-mini-note"><span>{p.label}</span><small>{p.error ? tr(p.error) : tr('尚无用量读数')}</small></li>)}
+      {view?.providers.filter(p => !p.windows.length || p.error).map(p => <li key={p.id} className="usage-mini-note"><span>{p.label}</span><small><StateWord state={p.error ? 'error' : undefined}>{p.error ? tr(p.error) : tr('尚无用量读数')}</StateWord></small></li>)}
     </ul>}
   </section>;
 }
@@ -164,7 +166,7 @@ export function BudgetDialog({ title, initial, confirm, onSave, onClose }: {
       <Dialog.Description>{tr('留空表示不设预算。金额按 API 价格折算，用于衡量 Agent 用量。')}</Dialog.Description>
       <form onSubmit={save}>
         <BudgetFields value={value} onChange={setValue} disabled={busy} />
-        {error && <Banner variant="error" description={tr(error)} />}
+        {error && <p role="alert" className="em-state" data-tone="bad">{tr(error)}</p>}
         <div className="usage-actions"><Button type="button" disabled={busy} onClick={onClose}>{tr('取消')}</Button><Button type="submit" variant="primary" loading={busy}>{confirm}</Button></div>
       </form>
     </Dialog>
@@ -182,7 +184,7 @@ export function ProjectUsage({ lineId }: { lineId: string }) {
   }, [lineId]);
   return <section className="pj-box usage-project">
     <header className="usage-between"><h2>{tr('用量与预算')}</h2><button className="btn" disabled={!value} onClick={() => setEditing(true)}>{tr('修改预算')}</button></header>
-    {error && <p role="alert" className="usage-error">{tr(error)}</p>}
+    {error && <p role="alert" className="usage-error em-state" data-tone="bad">{tr(error)}</p>}
     {!value && !error && <p>{tr('加载中…')}</p>}
     {value && <>
       <div className="usage-stats">
@@ -196,10 +198,10 @@ export function ProjectUsage({ lineId }: { lineId: string }) {
       {!value.logs && <p>{tr('本机会话日志读取已关闭，项目用量统计已暂停。')}</p>}
       <h3>{tr('订阅与模型')}</h3>
       {value.providers.map(p => <div className="usage-provider" key={p.id}>
-        <div className="usage-between usage-head"><b className="usage-name">{providerName(p.id)}</b><span className="usage-cost">{money(p.cost)}</span></div>
+        <div className="usage-between usage-head"><b className="usage-name">{providerName(p.id)}</b><span className="em-num usage-cost">{money(p.cost)}</span></div>
         <Tokens tokens={p.tokens} />
         {value.models.filter(m => m.provider === p.id).map(m => <div className="usage-model" key={m.model}>
-          <div className="usage-between usage-head"><code className="usage-code">{m.model}</code>{m.priced ? <span className="usage-cost sm">{money(m.cost)}</span> : <span className="usage-chip warn">{tr('缺价格')}</span>}</div>
+          <div className="usage-between usage-head"><code className="usage-code">{m.model}</code>{m.priced ? <span className="em-num usage-cost sm">{money(m.cost)}</span> : <span className="em-state" data-tone="warn">{tr('缺价格')}</span>}</div>
           <Tokens tokens={m.tokens} />
         </div>)}
       </div>)}
@@ -207,7 +209,7 @@ export function ProjectUsage({ lineId }: { lineId: string }) {
       {value.models.some(m => !m.priced) && <small>{tr('缺价格的模型仅计入 token，金额暂未计入合计。')}</small>}
       <h3>{tr('会话明细')}</h3>
       {value.sessions.map(s => <div className="usage-provider" key={`${s.provider}/${s.session}`}>
-        <div className="usage-between usage-head"><b className="usage-name">{s.owner.kind === 'dir' ? tr('目录会话') : tr(s.owner.name)}</b><span className="usage-cost">{money(s.cost)}</span></div>
+        <div className="usage-between usage-head"><b className="usage-name">{s.owner.kind === 'dir' ? tr('目录会话') : tr(s.owner.name)}</b><span className="em-num usage-cost">{money(s.cost)}</span></div>
         <div className="usage-meta"><span className="usage-chip">{providerName(s.provider)}</span><code className="usage-code dim" title={s.session}>{s.session}</code></div>
         <code className="usage-path">{s.cwd}</code>
         <Tokens tokens={s.tokens} />

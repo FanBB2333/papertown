@@ -7,7 +7,7 @@ import { StatusTag } from '../components/MillRoom';
 import { Icon } from '../console/icons';
 import { tr } from '../i18n';
 import { UsageMark } from '../usage/Usage';
-import { follow, go, href } from '../route';
+import { follow, go, href, type Route } from '../route';
 import { setSettings, useSettings, type PgGroup, type PgSort, type Settings as S } from '../settings';
 import { AskPage } from './Ask';
 import { DisplayMenu, rowCols } from './Display';
@@ -17,6 +17,8 @@ import { Project, type ConsoleTarget } from './Project';
 import { ProjectRows, type Group } from './Rows';
 
 const CanvasPage = lazy(() => import('./Canvas'));
+const DecidedPage = lazy(() => import('./Decided'));
+const ProvPage = lazy(() => import('./Prov'));
 import './progress.css';
 
 type Filter = 'all' | 'you' | 'run' | 'done';
@@ -58,7 +60,7 @@ const pageLook = (s: S) => ({ ['--pg-min' as string]: SIZES.pgCard[s.pgCard], ['
 type Open = (lineId: string, t?: ConsoleTarget) => void;
 
 export function Progress({ active, seq, sub, page, toast, onOpen }: {
-  active: boolean; seq?: number; sub?: 'ask' | 'pages' | 'canvas'; page?: string; toast: (t: string) => void; onOpen: Open;
+  active: boolean; seq?: number; sub?: Route['sub']; page?: string; toast: (t: string, error?: boolean) => void; onOpen: Open;
 }) {
   const [rows, setRows] = useState<ProjectCard[] | null>(null);
   const [layout, setLayout] = useState<CardLayout | null>(null);
@@ -85,7 +87,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
     const off = listen(e => {
       if (e.type === 'card' && e.card) setRows(rs => rs && rs.map(r => (r.line.id === e.card.line.id ? { ...e.card, line: { ...e.card.line, lead: r.line.lead, sample: r.line.sample } } : r)));
       else if (e.type === 'card_layout' && e.layout) setLayout(e.layout);
-      else if (['line', 'job', 'report', 'memory', 'usage'].includes(e.type) || (e.type === 'agent' && asking(e.agent))) {
+      else if (['line', 'job', 'report', 'memory', 'usage', 'decided', 'prov'].includes(e.type) || (e.type === 'agent' && asking(e.agent))) {
         clearTimeout(again.current);
         again.current = window.setTimeout(load, 1500);
       }
@@ -116,12 +118,12 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
       const r = await api.updateCards();
       toast(r.sent.length ? tr('已请 {0} 个项目的负责人更新卡片，完成后将自动刷新。', r.sent.length) : tr('暂无可更新项：请先开启项目负责人。'));
       setRows((await api.cards()).cards);
-    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   async function choose(next: Pane[] | null) {
     const before = layout;
     if (layout && next) setLayout({ ...layout, panes: next });
-    try { setLayout(await api.setLayout(next)); } catch (e) { setLayout(before); toast((e as Error).message); }
+    try { setLayout(await api.setLayout(next)); } catch (e) { setLayout(before); toast((e as Error).message, true); }
   }
 
   return (
@@ -137,7 +139,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
               <div className="pg-title">
                 <h1>{tr('项目进展')}</h1>
                 <p className="muted small">
-                  {rows ? tr('{0} 个项目', rows.length) : '…'}{waiting > 0 && <> · <b className="pg-wait">{tr('{0} 项待处理', waiting)}</b></>}
+                  {rows ? tr('{0} 个项目', rows.length) : '…'}{waiting > 0 && <> · <b className="em-bar" data-tone="warn">{tr('{0} 项待处理', waiting)}</b></>}
                   {' · '}{tr('卡片由各项目负责人填写，点击「更新」后刷新')}
                 </p>
               </div>
@@ -157,7 +159,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
                 </button>
               </div>
             </header>
-            {err && <p className="warn-box small">{err}</p>}
+            {err && <p className="small em-state" data-tone="bad">{err}</p>}
             {!rows && !err && <p className="muted">{tr('加载中…')}</p>}
             {rows && !rows.length && <p className="muted pg-none">{tr('暂无项目。在中控屏中放入 idea，或在 projects.json 中接入自有项目。')}</p>}
             {rows && rows.length > 0 && !shown.length && <p className="muted pg-none">{tr('暂无匹配项目。')}</p>}
@@ -179,6 +181,8 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
       )}
       {active && project && sub === 'canvas' && <Suspense fallback={null}><CanvasPage r={project} toast={toast} onConsole={onOpen} /></Suspense>}
       {active && project && sub === 'pages' && <PagesView r={project} pid={page} toast={toast} onOpen={opener(project)} />}
+      {active && project && sub === 'decided' && <Suspense fallback={null}><DecidedPage r={project} /></Suspense>}
+      {active && project && sub === 'prov' && <Suspense fallback={null}><ProvPage r={project} /></Suspense>}
     </main>
   );
 }
@@ -205,7 +209,7 @@ function Fresh() {
 
 // a project's card in the grid: the panes chosen for every card; the rest is on its page
 function ProjectBox({ r, i, panes, defs, toast, onChange }: {
-  r: ProjectCard; i: number; panes: Pane[]; defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void;
+  r: ProjectCard; i: number; panes: Pane[]; defs: PaseoDefaults | null; toast: (t: string, error?: boolean) => void; onChange: (r: ProjectCard) => void;
 }) {
   const acts = useCardActs(r, toast, onChange);
   const { line, card } = r;

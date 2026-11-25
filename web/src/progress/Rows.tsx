@@ -28,7 +28,7 @@ const ACT_GHOSTS = [
   <span className="pc-pend"><span className="pc-pending"><i />{tr('更新中')}</span><span className="ib" /></span>,
 ];
 
-type Props = { defs: PaseoDefaults | null; toast: (t: string) => void; onChange: (r: ProjectCard) => void };
+type Props = { defs: PaseoDefaults | null; toast: (t: string, error?: boolean) => void; onChange: (r: ProjectCard) => void };
 
 export function ProjectRows({ groups, cols, ...rest }: { groups: Group[]; cols: Pane[] } & Props) {
   const box = useRef<HTMLDivElement>(null);

@@ -25,7 +25,7 @@ const isWorker = (lv: Lv): lv is 'coder' | 'writer' => lv === 'coder' || lv === 
 const bare = (d: Draft) => ({ rules: d.rules.filter(r => r.text.trim()).map(({ id, kind, text, inherit, action }) => ({ id: id || undefined, kind, text: text.trim(), inherit, action })), off: [...d.off].sort() });
 let made = 0;
 
-export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) => void }) {
+export function Bounds({ line, toast }: { line: Line | null; toast: (t: string, error?: boolean) => void }) {
   const lid = line?.id;
   const [got, setGot] = useState<{ lid?: string; v: BoundsView } | null>(null);
   const [err, setErr] = useState('');
@@ -71,7 +71,7 @@ export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) 
       drop(l);
       toast(tr('已保存。规则变更的 agent 将收到新版规则。'));
     } catch (e) {
-      toast((e as Error).message);
+      toast((e as Error).message, true);
     } finally {
       setBusy(null);
     }
@@ -93,7 +93,7 @@ export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) 
               return (
                 <li key={r.id} className={`bd-in k-${r.kind}${off ? ' off' : ''}`}>
                   <span className="bd-kc">{KIND[r.kind]}</span>
-                  <span className="bd-t">{r.text}{r.action && <Act r={r} actions={v.actions} />}</span>
+                  <span className="bd-t em-bar">{r.text}{r.action && <Act r={r} actions={v.actions} />}</span>
                   <span className="bd-from">{tr('来自{0}', FROM[from])}</span>
                   {locked
                     ? <span className="bd-lock" title={tr('上层已设为必须继承，此处无法关闭')}><Icon n="lock" size={13} />{tr('必须继承')}</span>
@@ -113,7 +113,7 @@ export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) 
               <li key={r.k} className={`bd-row k-${r.kind}`}>
                 <Select className="bd-kind" value={r.kind} label={tr('类别')} options={KINDS.map(k => ({ value: k, label: KIND[k] }))}
                   onChange={k => set({ kind: k, action: k === 'must' ? null : r.action })} />
-                <input className="bd-text" value={r.text} maxLength={300} placeholder={HINT[r.kind]} autoFocus={!r.id && !r.text}
+                <input className={r.text ? 'bd-text em-bar' : 'bd-text'} value={r.text} maxLength={300} placeholder={HINT[r.kind]} autoFocus={!r.id && !r.text}
                   onChange={e => set({ text: e.target.value })} aria-label={tr('条目内容')} />
                 {!isWorker(l) && <Select className="bd-inh" value={r.inherit} label={tr('继承方式')} title={tr('下级是否遵循此规则')}
                   options={(['yes', 'no', 'force'] as BoundInherit[]).map(k => ({ value: k, label: INHERIT[k] }))} onChange={k => set({ inherit: k })} />}
@@ -176,7 +176,7 @@ export function Bounds({ line, toast }: { line: Line | null; toast: (t: string) 
             return rs.length > 0 && (
               <div key={k} className={`bd-eg k-${k}`}>
                 <h4>{KIND[k]}</h4>
-                <ul>{rs.map(r => <li key={r.id}>{r.text}<span className="bd-from">{FROM[r.from ?? 'global']}{r.locked ? ` · ${tr('必须继承')}` : ''}</span>{r.action && <Act r={r} actions={v.actions} />}</li>)}</ul>
+                <ul>{rs.map(r => <li key={r.id}><span className="em-bar">{r.text}</span><span className="bd-from">{FROM[r.from ?? 'global']}{r.locked ? ` · ${tr('必须继承')}` : ''}</span>{r.action && <Act r={r} actions={v.actions} />}</li>)}</ul>
               </div>
             );
           })}

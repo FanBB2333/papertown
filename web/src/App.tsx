@@ -33,10 +33,10 @@ const PHASE = { '2d': 'off', to3d: 'enter', '3d': 'live', to2d: 'leave' } as con
 const TICK_EVENTS = new Set(['line', 'world', 'building', 'agent', 'library', 'skills']);
 
 function useToasts() {
-  const [toasts, setToasts] = useState<{ id: number; text: string }[]>([]);
-  const push = useCallback((text: string) => {
+  const [toasts, setToasts] = useState<{ id: number; text: string; error?: boolean }[]>([]);
+  const push = useCallback((text: string, error?: boolean) => {
     const id = Date.now() + Math.random();
-    setToasts(t => [...t, { id, text }]);
+    setToasts(t => [...t, { id, text, error }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200);
   }, []);
   return { toasts, push };
@@ -131,7 +131,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   }, []);
 
   useEffect(() => {
-    api.world().then(setWorld).catch(e => push(tr('无法连接服务器：{0}', e.message)));
+    api.world().then(setWorld).catch(e => push(tr('无法连接服务器：{0}', e.message), true));
     api.lines().then(ls => { setLines(ls); setLinesIn(true); }).catch(() => {});
   }, [push]);
   // The subscriptions' quotas are read when the page opens and on the refresh button only. Their CLIs may ask to sign
@@ -180,7 +180,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
       setChatOpen(false);
       go(`/progress/${line.seq}`);
       return true;
-    } catch (e) { push((e as Error).message); return false; }
+    } catch (e) { push((e as Error).message, true); return false; }
   };
   const newIdea = () => openDock({ kind: 'idea' });
   const askAt = async (id: string, name: string) => {
@@ -280,8 +280,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
     if (t.file || t.job) setTimeout(() => dispatchEvent(new CustomEvent('pt-show', { detail: { line: lineId, file: t.file, job: t.job } })), wasUp ? 80 : 400);
   }, [lines, consoleUp]);
   const onPlace = useCallback((seq: number, mod: string) => {
-    if (route.view === 'console') go(`/console/${seq}/${mod}`, true);
-  }, [route.view]);
+    if (route.view === 'console' && (route.seq !== seq || route.mod !== mod)) go(`/console/${seq}/${mod}`, true);
+  }, [route.view, route.seq, route.mod]);
 
   // what the assistant opens is in the console: from 进展 or the map, go there first, then show it
   const here = useRef({ view, lines, up: consoleUp });
@@ -309,9 +309,10 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   useEffect(() => {
     if (view === 'console') return;
     const l = route.view === 'cards' && route.seq ? lines.find(x => x.seq === route.seq) : undefined;
-    const canvas = route.view === 'cards' && route.sub === 'canvas' && !!l;
-    setPlace(l ? { id: l.id, seq: l.seq, title: l.title } : null, canvas ? 'canvas' : view === 'cards' ? 'progress' : view === 'agents' ? 'agents' : 'town',
-      canvas ? tr('研究回路') : view === 'cards' ? tr('进展') : view === 'agents' ? tr('员工') : tr('小镇地图'));
+    const pages = { canvas: tr('研究回路'), decided: tr('你的决定'), prov: tr('溯源'), ask: tr('对话'), pages: tr('汇报与讲解') };
+    const sub = l && route.sub;
+    setPlace(l ? { id: l.id, seq: l.seq, title: l.title } : null, sub || (view === 'cards' ? 'progress' : view === 'agents' ? 'agents' : 'town'),
+      sub ? pages[sub] : view === 'cards' ? tr('进展') : view === 'agents' ? tr('员工') : tr('小镇地图'));
   }, [view, route, lines]);
 
   // commands from the macOS app's menus (macos/)
@@ -403,11 +404,11 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
         {hud && leads && <div className="hud-quiet">
           <span className={hud.lines.running ? 'hq-live' : undefined}><b>{hud.lines.running}</b> {tr('个项目进行中')}</span>
           <span className={`hq-leads hq-${leads.tone}`} title={leads.tip}>
-            <i className="hq-dot" aria-hidden="true" /><b>{hud.leads.running}/{hud.leads.on}</b> {tr('位负责人在岗')}</span>
+            <i className="hq-dot" aria-hidden="true" /><b className={hud.leads.on ? 'em-num' : undefined} data-tone={hud.leads.running < hud.leads.on ? 'warn' : 'info'}>{hud.leads.running}/{hud.leads.on}</b> {tr('位负责人在岗')}</span>
         </div>}
         <div className="hud-r">
-          {!!overview?.counts.needs && <a className="chip warn aw-count" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('待处理 {0}', overview.counts.needs)}</a>}
-          {hud && <span className={`chip ${!online ? 'bad' : 'ok'}`}>
+          {!!overview?.counts.needs && <a className="aw-count em-bar" data-tone="warn" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('待处理 {0}', overview.counts.needs)}</a>}
+          {hud && <span className={!online ? 'hq-connection em-state small' : 'hq-connection muted small'} data-tone="bad">
             {!online ? tr('连接已断开') : DEMO ? tr('静态演示') : tr('已连接')}</span>}
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>
@@ -422,7 +423,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
             <div key={r.id} className="rn" style={{ ['--i' as string]: i }} data-open={r.mill_id ?? r.building} data-line={r.id}>
               <div>
                 <b>#{r.seq} {r.title}</b>
-                <div className="rn-row">{r.stage}<div className="bar"><i style={{ width: `${r.pct}%` }} /></div></div>
+                <div className="rn-row">{r.stage} <span className="em-num">{r.pct}%</span><div className="bar"><i style={{ width: `${r.pct}%` }} /></div></div>
               </div>
             </div>
           ))}
@@ -440,7 +441,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           onOpen={room} onIdea={newIdea} onAsk={askAt} toast={push} />
       )}
       {settingsOpen && <Guard key={`settings:${at.mod ?? ''}`} onClose={closeSettings}><SettingsPage section={at.mod} hud={hud ?? null} onClose={closeSettings} /></Guard>}
-      <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.text}</div>)}</div>
+      <div className="toasts">{toasts.map(t => <div key={t.id} className="toast"><span role={t.error ? 'alert' : 'status'} className={t.error ? 'em-state' : undefined} data-tone="bad">{t.text}</span></div>)}</div>
       {DEMO && <DemoWelcome />}
     </div>
   );

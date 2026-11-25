@@ -4,6 +4,8 @@
 // watch, its stages and gates, and the loops back that are under way; below, the hard checks before → after and the
 // sentinels' verdicts, which is the report. Anything on it opens the full loop (Canvas.tsx) at that node or block.
 
+import { Tooltip } from '@cloudflare/kumo';
+import { modelText, StateWord, stateTone } from '../emphasis';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type CanvasNode, type CanvasView, type Check, type ProjectCard } from '../api';
 import { Icon } from '../console/icons';
@@ -21,7 +23,7 @@ export function useCanvas(lineId: string) {
   const [bump, setBump] = useState(0);
   useEffect(() => listen(e => {
     const x = e as { type: string; line_id?: string; line?: { id: string }; agent?: { line_id?: string | null } };
-    if (((x.type === 'canvas' || x.type === 'checks') && x.line_id === lineId) || (x.type === 'line' && x.line?.id === lineId)
+    if ((['canvas', 'checks', 'decided'].includes(x.type) && x.line_id === lineId) || (x.type === 'report' && e.report?.line_id === lineId) || (x.type === 'line' && x.line?.id === lineId)
       || (x.type === 'agent' && x.agent?.line_id === lineId)) setBump(b => b + 1);
   }), [lineId]);
   useEffect(() => {
@@ -55,9 +57,9 @@ export function LoopSummary({ v, short }: { v: CanvasView; short?: boolean }) {
   const f = v.found;
   return (
     <span className="cg-sum">
-      <span><i className="cv-dia" />{tr('硬卡口')} <b>{h.pass}/{h.total - h.none}</b>{blocking > 0 && <em className="bad-t">{tr('{0} 阻断', blocking)}</em>}
-        {!short && f.first != null && f.now != null && f.first > f.now && <em className="muted">{tr('违规 {0}→{1} 处 ↓{2}%', f.first, f.now, drop(f.first, f.now))}</em>}</span>
-      <span><i className="cv-ring2" />{tr('软巡检')} <b>{s.pass}/{s.total}</b>{s.warn + s.fail > 0 && <em className="warn-t">{tr('{0} 预警', s.warn + s.fail)}</em>}</span>
+      <span><i className="cv-dia" />{tr('硬卡口')} <b className="em-num">{h.pass}/{h.total - h.none}</b>{blocking > 0 && <em className="em-state" data-tone="bad">{tr('{0} 阻断', blocking)}</em>}
+        {!short && f.first != null && f.now != null && f.first > f.now && <em className="em-mark">{tr('违规 {0}→{1} 处 ↓{2}%', f.first, f.now, drop(f.first, f.now))}</em>}</span>
+      <span><i className="cv-ring2" />{tr('软巡检')} <b className="em-num">{s.pass}/{s.total}</b>{s.warn + s.fail > 0 && <em className="em-state" data-tone="warn">{tr('{0} 预警', s.warn + s.fail)}</em>}</span>
     </span>
   );
 }
@@ -215,16 +217,16 @@ function Track({ v, r }: { v: CanvasView; r: ProjectCard }) {
           <section key={part.id} className={`lp-blk b-${part.id}`}>
             <header>
               <button className="lp-blk-h" onClick={() => openAt(v.seq, undefined, part.id)} title={tr('在完整回路中查看「{0}」', part.name)}><Icon n={part.icon} size={13} />{part.name}</button>
-              {blockPills(part.id, ns).filter(p => p.tone !== 'pass' && p.tone !== 'none').map(p => <em key={p.text} className={`lp-say t-${p.tone}`}>{p.text}</em>)}
+              {blockPills(part.id, ns).filter(p => p.tone !== 'pass' && p.tone !== 'none').map(p => <em key={p.text} className="lp-say em-state" data-tone={p.tone === 'bad' ? 'bad' : 'warn'}>{p.text}</em>)}
             </header>
             <div className="lp-row lp-soft">
               {sens.map(s => {
                 const c = s.check!, k = status(c);
                 return (
-                  <button key={s.id} className={`lp-sen v-${k}`} data-box={s.id} onClick={() => openAt(v.seq, s.id)} title={c.last?.note || trx(c.text)}
-                    onMouseEnter={() => setHot(s.id)} onMouseLeave={() => setHot(null)} onFocus={() => setHot(s.id)} onBlur={() => setHot(null)}>
-                    <i className="cv-ring2" />{trx(c.title)}<em>{VERDICT[k]}{k === 'pass' ? ' ✓' : k === 'warn' || k === 'fail' ? ' !' : ''}</em>
-                  </button>
+                  <Tooltip key={s.id} className="research-tip" content={modelText(c.last?.note || trx(c.text))} render={<button className={`lp-sen v-${k}`} data-box={s.id} onClick={() => openAt(v.seq, s.id)}
+                    onMouseEnter={() => setHot(s.id)} onMouseLeave={() => setHot(null)} onFocus={() => setHot(s.id)} onBlur={() => setHot(null)} />}>
+                    <i className="cv-ring2" />{trx(c.title)}<em><StateWord state={k}>{VERDICT[k]}</StateWord></em>
+                  </Tooltip>
                 );
               })}
             </div>
@@ -275,14 +277,14 @@ function HardReport({ v }: { v: CanvasView }) {
           return (
             <li key={c.id}>
               <code>[{c.prio}]</code><span>{trx(c.rule)} {trx(c.title)}</span>
-              <b>{first != null && first !== now ? tr('{0} 处 → {1} 处', first, now ?? 0) : tr('{0} 处', now ?? 0)}</b>
-              <em className={`lp-pill ${pill[0]}`}>{pill[1]}</em>
+              <b className={first != null && first !== now ? 'em-mark' : 'em-num'} data-tone={stateTone(lv)}>{first != null && first !== now ? tr('{0} 处 → {1} 处', first, now ?? 0) : tr('{0} 处', now ?? 0)}</b>
+              <em className={stateTone(lv) ? 'em-state' : 'muted'} data-tone={stateTone(lv)}>{pill[1]}</em>
             </li>
           );
         })}
         {rest.length > 0 && (
           <li className="rest"><code>[{[...new Set(rest.map(c => c.prio))].sort().join('/')}]</code><span>{rest.slice(0, 3).map(c => trx(c.title)).join('、')}{rest.length > 3 ? tr(' 等 {0} 项', rest.length) : ''}</span>
-            <b>{tr('全部达标')}</b><em className="lp-pill ok">{tr('已放行 ✓')}</em></li>
+            <b>{tr('全部达标')}</b><em className="muted">{tr('已放行 ✓')}</em></li>
         )}
         {!hard.length && <li className="muted small">{tr('暂无可查结果：论文与实验产出后将自动检查')}</li>}
       </ul>
@@ -290,7 +292,7 @@ function HardReport({ v }: { v: CanvasView }) {
   );
 }
 
-function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast: (t: string) => void }) {
+function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast: (t: string, error?: boolean) => void }) {
   const soft = v.checks.filter(c => c.kind === 'soft' && c.on);
   const order = (c: Check) => ({ fail: 0, warn: 1, wait: 2, none: 2, pass: 3 })[status(c)];
   const [busy, setBusy] = useState(false);
@@ -298,7 +300,7 @@ function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast
     <section className="lp-rep-s">
       <header><h4><i className="cv-ring2" />{tr('软检测航向汇报')}<span>{tr('负责人语义巡检结论')}</span></h4>
         <button className="lnk" disabled={busy || !v.lead} title={v.lead ? '' : tr('先配一位项目负责人')}
-          onClick={() => { setBusy(true); api.askAll(lineId).then(x => toast(tr('已请负责人复审 {0} 项', x.n))).catch(e => toast((e as Error).message)).finally(() => setBusy(false)); }}>
+          onClick={() => { setBusy(true); api.askAll(lineId).then(x => toast(tr('已请负责人复审 {0} 项', x.n))).catch(e => toast((e as Error).message, true)).finally(() => setBusy(false)); }}>
           {tr('立即请负责人复审')}<Icon n="refresh" size={12} />
         </button>
       </header>
@@ -307,8 +309,8 @@ function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast
           const k = status(c);
           return (
             <li key={c.id}>
-              <em className={`lp-pill v-${k}`}>{VERDICT[k]}{k === 'pass' ? ' ✓' : k === 'warn' || k === 'fail' ? ' !' : ''}</em>
-              <div><b>{trx(c.title)}</b><p>{c.last?.note || (c.asked ? tr('{0}询问负责人，尚未回复', ago(c.asked)) : trx(c.text))}</p></div>
+              <em><StateWord state={k}>{VERDICT[k]}</StateWord></em>
+              <div><b>{trx(c.title)}</b><p>{modelText(c.last?.note) || (c.asked ? tr('{0}询问负责人，尚未回复', ago(c.asked)) : trx(c.text))}</p></div>
             </li>
           );
         })}
@@ -318,10 +320,10 @@ function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast
   );
 }
 
-export function LoopCard({ r, toast }: { r: ProjectCard; toast: (t: string) => void }) {
+export function LoopCard({ r, toast }: { r: ProjectCard; toast: (t: string, error?: boolean) => void }) {
   const [v, , reload, error] = useCanvas(r.line.id);
   const to = loopPath(r.line.seq);
-  if (error) return <p role="alert" className="warn-box">{error} <button className="lnk" onClick={reload}>{tr('重试')}</button></p>;
+  if (error) return <p role="alert" className="em-state" data-tone="bad">{error} <button className="lnk" onClick={reload}>{tr('重试')}</button></p>;
   if (!v) return null;
   return (
     <section className="psec lp-card" id="loop" aria-label={tr('研究回路')}>
@@ -330,7 +332,7 @@ export function LoopCard({ r, toast }: { r: ProjectCard; toast: (t: string) => v
         <span className="lp-round">{tr('第 {0} 轮', v.rounds)} · {phase(v)}</span>
         <LoopSummary v={v} />
         <Spark v={v} />
-        <a className="btn pri cv-open" href={href(to)} onClick={e => { wanted.node = null; follow(e, to); }}>{tr('打开完整回路')}<Icon n="ext" size={13} /></a>
+        <a className="btn cv-open" href={href(to)} onClick={e => { wanted.node = null; follow(e, to); }}>{tr('打开完整回路')}<Icon n="ext" size={13} /></a>
       </header>
       <Track v={v} r={r} />
       <div className="lp-rep">

@@ -1,6 +1,7 @@
 // A project's files as an editor sees them, shared by the code and the paper panels: the tree
 // with git's marks, the open files as tabs, and each file's text as read, as edited, as saved.
 
+import { hitText } from '../emphasis';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type WsEntry, type WsRoot } from '../api';
 import { DEMO } from '../demo';
@@ -19,7 +20,7 @@ export interface Open {
 }
 const isDirty = (o: Open) => o.text != null && o.saved != null && o.text !== o.saved;
 
-export function useFiles(lineId: string, root: WsRoot, tick: number, toast: (t: string) => void) {
+export function useFiles(lineId: string, root: WsRoot, tick: number, toast: (t: string, error?: boolean) => void) {
   const tree = useFetch(() => api.wsTree(lineId, root), `${lineId}:${root}`, tick);
   const [open, setOpen] = useState<Open[]>([]);
   const [cur, setCur] = useState<string | null>(null);
@@ -58,7 +59,7 @@ export function useFiles(lineId: string, root: WsRoot, tick: number, toast: (t: 
       tree.reload();
       return true;
     } catch (e) {
-      toast((e as Error).message);
+      toast((e as Error).message, true);
       return false;
     } finally {
       setSaving(false);
@@ -149,9 +150,9 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', root }: {
       out.push(
         <button key={f.path} className={`tr-row tr-file${f.path === cur ? ' on' : ''}${f.status ? ` st-${f.status}` : ''}`} style={{ ['--d' as string]: depth }}
           onClick={() => onOpen(f.path)} title={`${f.path} · ${bytes(f.size)}`} data-ref={`file:${root}:${f.path}`} data-ref-label={f.path}>
-          <FileIcon path={f.path} theme={icons} /><span className="tr-name">{base(f.path)}</span>
+          <FileIcon path={f.path} theme={icons} /><span className="tr-name">{hitText(base(f.path), filter)}</span>
           {dirty.has(f.path) && <i className="tr-dirty" title={tr('尚未保存')} />}
-          {m && <em className="tr-mark" title={m[1]}>{m[0]}</em>}
+          {m && <em className="tr-mark em-mark" data-tone="warn" title={m[1]}>{m[0]}</em>}
         </button>,
       );
     }
@@ -194,7 +195,7 @@ export function FileView({ f, onRun, onCursor, goto, empty }: {
   const doc: Doc | null = o && o.text != null ? { id: o.path, path: o.path, text: o.text, rev: o.rev } : null;
   const note = !o ? empty
     : o.loading ? <p className="muted">{tr('读取中…')}</p>
-      : o.err ? <p className="warn-box small">{o.err}</p>
+      : o.err ? <p className="small em-state" data-tone="bad">{o.err}</p>
         : o.binary ? <div className="fv-note"><Icon n="file" size={30} /><b>{base(o.path)}</b><p className="muted small">{tr('二进制文件（{0}），此处无法打开。', bytes(o.size))}</p></div>
           : o.tooBig ? <div className="fv-note"><Icon n="file" size={30} /><b>{base(o.path)}</b><p className="muted small">{tr('文件过大（{0}），请在本地打开。', bytes(o.size))}</p></div>
             : null;

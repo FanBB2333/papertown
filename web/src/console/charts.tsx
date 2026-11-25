@@ -1,6 +1,7 @@
 // The console's charts: a pointer tooltip, job-state marks, a GPU timeline of jobs, bars for one
 // measure across rows, a thin meter, and a card's last hour as a sparkline.
 
+import { StateWord } from '../emphasis';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { tr } from '../i18n';
@@ -56,7 +57,7 @@ export const stOf = (s: string | null | undefined): St =>
     : s === 'cancelled' ? 'cancelled' : 'failed';
 
 export function StateTag({ s }: { s: St }) {
-  return <span className={`stag s-${s}`}><i style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>;
+  return <StateWord state={s}>{ST[s].label}</StateWord>;
 }
 
 export function Legend({ states }: { states: St[] }) {
@@ -205,7 +206,7 @@ function rowLabel(row: string) {
   return <><tspan className="g-node">{clip(row.slice(0, i), 14)} </tspan><tspan className="g-gpu">{row.slice(i + 3)}</tspan></>;
 }
 
-export interface Bar { id: string; label: string; v: number; hi?: boolean; sub?: string }
+export interface Bar { id: string; label: string; v: number; hi?: boolean; benchmark?: boolean; sub?: string }
 
 // Bars from zero; values close together far from zero become dots on an axis that does not start at zero.
 export function Bars({ bars, onPick }: { bars: Bar[]; onPick?: (id: string) => void }) {
@@ -223,7 +224,7 @@ export function Bars({ bars, onPick }: { bars: Bar[]; onPick?: (id: string) => v
           onClick={() => onPick?.(b.id)} onPointerMove={e => show(e, { title: b.label, rows: [{ v: fmtNum(b.v), k: b.sub ?? '' }] })} onPointerLeave={hide}>
           <span className="hb-l" title={b.label}>{b.label}</span>
           <span className="hb-track">{dots ? <i className="hb-dot" style={{ ['--x' as string]: (b.v - a) / (z - a) }} /> : <i style={{ ['--v' as string]: Math.max(0, Math.abs(b.v) / top) }} />}</span>
-          <span className="hb-v">{fmtNum(b.v)}</span>
+          <span className={b.hi || b.benchmark ? 'hb-v em-num' : 'hb-v'}>{fmtNum(b.v)}</span>
         </button>
       ))}
       <Tip tip={tip} />

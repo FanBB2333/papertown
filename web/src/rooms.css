@@ -155,7 +155,7 @@
 .chat-who > div { display: flex; flex-direction: column; }
 .transcript { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
 .msg-u, .msg-a { max-width: min(760px, 86%); padding: 10px 14px; border-radius: 14px; line-height: 1.6; font-size: 14px; animation: rise-in .35s var(--out) both; }
-.msg-u { align-self: flex-end; background: color-mix(in srgb, var(--brand) 13%, var(--panel)); border-bottom-right-radius: 4px; }
+.msg-u { align-self: flex-end; background: transparent; border-bottom-right-radius: 4px; }
 .msg-a { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .msg-a.err { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); }
 .msg-u p, .msg-a p { margin: 0 0 6px; white-space: pre-wrap; word-break: break-word; }
@@ -250,7 +250,7 @@
 .paseo-veil { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #1b1b1b; color: #cfcfcf; font-size: 13px; transition: opacity .6s var(--out), visibility .6s; }
 .paseo-veil.gone { opacity: 0; visibility: hidden; }
 .paseo-veil p { margin: 0; }
-.ask { align-self: flex-start; width: min(620px, 86%); padding: 12px 14px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--line)); background: color-mix(in srgb, var(--warn) 7%, var(--panel)); animation: rise-in .3s var(--out) both; }
+.ask { align-self: flex-start; width: min(620px, 86%); padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: transparent; animation: rise-in .3s var(--out) both; }
 .ask p { margin: 0 0 6px; font-size: 13.5px; }
 .ask .code { margin: 0 0 8px; max-height: 120px; }
 
@@ -275,7 +275,6 @@
   animation: rise-in .45s var(--out) both; animation-delay: calc(var(--i, 0) * 28ms);
 }
 .pcard:hover { transform: translateY(-2px) rotate(-.2deg); border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); box-shadow: 0 8px 22px -14px rgba(46, 31, 18, .45); }
-.pcard.close { border-color: color-mix(in srgb, var(--brand) 40%, var(--line)); background: color-mix(in srgb, var(--brand) 5%, var(--panel)); }
 .pcard b { font-size: 13.5px; line-height: 1.4; }
 .pc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .pc-topic { font-size: 11px; padding: 1px 8px; border-radius: 999px; color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

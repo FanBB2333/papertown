@@ -6,7 +6,7 @@ import type { FlowPart } from '../flow';
 import { tr, trx } from '../i18n';
 import { status } from './Checks';
 
-export const loopPath = (seq: number) => `/progress/${seq}/loop`;
+export const loopPath = (seq: number, node?: string) => `/progress/${seq}/loop${node ? `?node=${encodeURIComponent(node)}` : ''}`;
 export const GATE_ST: Record<GateState, string> = { pass: tr('放行'), warn: tr('告警'), block: tr('阻断'), none: tr('尚未检查'), off: tr('已关闭') };
 export const LEVEL: Record<string, string> = { block: tr('阻断'), warn: tr('告警') };
 export const VERDICT: Record<string, string> = { pass: tr('契合'), warn: tr('预警'), fail: tr('偏离'), wait: tr('待判断'), none: tr('待判断') };

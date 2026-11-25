@@ -154,7 +154,12 @@ export function localize<T>(data: T, keep?: (v: object) => boolean): T {
     if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) v[i] = walk(v[i]); return v; }
     if (v && typeof v === 'object') {
       if (keep?.(v)) return v;
-      for (const k of Object.keys(v)) (v as Record<string, unknown>)[k] = walk((v as Record<string, unknown>)[k]);
+      const row = v as Record<string, unknown>;
+      for (const [key, value] of Object.entries(row)) {
+        if (key === 'idea' || key === 'user_text' || key === 'answer' || (key === 'pending' && 'card' in row)) continue;
+        if (key === 'path' || key === 'file' || key === 'diff' || (key === 'files' && Array.isArray(value) && value.every(f => typeof f === 'string'))) continue;
+        row[key] = walk(value);
+      }
       return v;
     }
     return v;

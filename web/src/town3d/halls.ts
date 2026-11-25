@@ -24,6 +24,8 @@ export interface Thing {
   title: string;
   sub: string;
   note?: string;
+  noteAuthor?: 'user' | 'model';
+  alert?: string;
   verb?: string; // what F does, when it is more than opening the room
   act: { kind: 'open'; building: string; line?: string | null } | { kind: 'exit' };
   at: THREE.Vector3; // its middle, for the room to open from
@@ -444,7 +446,7 @@ function millHall(k: Kit, pl: Placement, data: HallData) {
       k.thing(x - 0.36, 0, z - 0.32, 0.72, 0.72, 0.64, {
         title: `#${ln.seq} ${cut(ln.title, 30)}`,
         sub: `${s.name} · ${statusName(s.status)}${s.status === 'run' ? ` · ${s.pct}%` : ''}`,
-        note: s.note || s.out || undefined,
+        note: s.note || s.out || undefined, noteAuthor: s.note ? 'model' : undefined,
         act: { kind: 'open', building: s.building, line: ln.id },
       });
       return { s, shape, x };
@@ -632,7 +634,8 @@ function farmHall(k: Kit, pl: Placement, data: HallData) {
     k.sign([cut(job.name, 22), state], { at: [x + 0.42, 0.36, z + BD + 0.06], w: 0.66, size: 0.055 });
     k.thing(x, 0, z, BW, 0.55, BD, {
       title: job.name,
-      sub: `${job.backend} · ${state}`,
+      sub: `${job.backend} · ${state}`, alert: job.status === 'failed' ? statusName(job.status) : undefined,
+      noteAuthor: job.note ? (job.submitted_by === 'you' ? 'user' : 'model') : undefined,
       note: job.note ?? (job.nvidb ? `${job.nvidb.node ?? ''} ${job.nvidb.lane ?? ''}`.trim() : undefined),
       act: { kind: 'open', building: pl.id, line: job.line_id },
     }, false);
@@ -861,6 +864,7 @@ function gpuHall(k: Kit, pl: Placement, data: HallData) {
       card: dark ? undefined : {
         title: node.name,
         sub: `${gpus.length} GPU · ${node.state} · ${util}% · ${gb(used)}/${gb(total)} GB`,
+        alert: node.state === 'up' ? undefined : node.state,
         note: [jobs, more(waiting())].filter(Boolean).join(' · ') || node.last_error || undefined,
         verb: real ? tr('查看此机器') : undefined,
         act: { kind: 'open', building: pl.id, line: real ? `node:${node.name}` : null },
@@ -1069,7 +1073,7 @@ function plainHall(k: Kit, pl: Placement, data: HallData) {
     for (let j = 0; j < 4; j++) p.block(x + 0.15 + j * 0.01, 0.4 + j * 0.018, z + 0.15, 0.28, 0.016, 0.34, 'white', false);
     k.beacon(x + 0.8, z + 0.5, 0.5, LAMP[s.status] ?? LAMP.todo);
     k.sign([`#${ln.seq} ${cut(ln.title, 18)}`, `${s.name} · ${statusName(s.status)}`], { at: [x - 0.02, 0.62, z + 0.3], w: 0.6, size: 0.05, rot: -Math.PI / 2 });
-    k.thing(x, 0, z, 0.9, 0.5, 0.6, { title: `#${ln.seq} ${cut(ln.title, 30)}`, sub: `${s.name} · ${statusName(s.status)}`, note: s.note ?? undefined, act: { kind: 'open', building: pl.id, line: ln.id } });
+    k.thing(x, 0, z, 0.9, 0.5, 0.6, { title: `#${ln.seq} ${cut(ln.title, 30)}`, sub: `${s.name} · ${statusName(s.status)}`, note: s.note ?? undefined, noteAuthor: s.note ? 'model' : undefined, act: { kind: 'open', building: pl.id, line: ln.id } });
   });
   const fx = W - 2.2, fz = D - 1.7;
   p.block(fx, 0, fz, 1.1, 0.4, 0.42, 'acc');

@@ -1,9 +1,11 @@
 // The experiment farm: one board for every job, a monitor per project noting what its jobs do, the
 // backends and the GPUs nvidb sees. A linked project's jobs in nvidb's queue are shown read only.
 
+import { modelText, StateWord } from '../emphasis';
 import { useEffect, useMemo, useState } from 'react';
 import { api, listen, type Job, type JobBoard, type Line, type RosterRow } from '../api';
 import { GpuBoard, gb } from './Gpus';
+import { eventPreview } from './AgentRoom';
 import type { RoomActions } from './Interior';
 import { tr } from '../i18n';
 
@@ -25,7 +27,7 @@ function ago(ts: string | null) {
   return s < 60 ? tr('刚刚') : s < 3600 ? tr('{0} 分钟前', Math.floor(s / 60)) : s < 86400 ? tr('{0} 小时前', Math.floor(s / 3600)) : tr('{0} 天前', Math.floor(s / 86400));
 }
 
-function JobDetail({ id, onClose, toast }: { id: string; onClose: () => void; toast: (t: string) => void }) {
+function JobDetail({ id, onClose, toast }: { id: string; onClose: () => void; toast: (t: string, error?: boolean) => void }) {
   const [j, setJ] = useState<Job | null>(null);
   const [bump, setBump] = useState(0);
   useEffect(() => listen(e => { if (e.type === 'job' && e.job.id === id) setBump(b => b + 1); }), [id]);
@@ -45,7 +47,7 @@ function JobDetail({ id, onClose, toast }: { id: string; onClose: () => void; to
         </div>
       </div>
       <div className="bar big"><i style={{ width: `${j.progress}%` }} /></div>
-      <p className="small">{JOB_STATUS[j.status]} · {j.progress}%{j.note && !j.nvidb ? ` · ${j.note}` : ''}</p>
+      <p className="small"><StateWord state={j.status}>{JOB_STATUS[j.status]}</StateWord> · <span className="em-num">{j.progress}%</span>{j.note && !j.nvidb && <> · {j.submitted_by === 'you' ? <span className="user-words em-bar">{j.note}</span> : modelText(j.note)}</>}</p>
       {j.nvidb && <NvidbJob n={j.nvidb} />}
       {j.command && <><h4>{tr('命令')}</h4><pre className="code">{j.command}</pre></>}
       {j.result && <><h4>{tr('结果')}{j.result.simulated ? tr('样例结果（占位内容）') : ''}</h4><Result r={j.result} /></>}
@@ -70,11 +72,11 @@ function NvidbJob({ n }: { n: NonNullable<Job['nvidb']> }) {
         <dt>{tr('预留显存')}</dt><dd>{n.vram_mb ? gb(n.vram_mb) : tr('不占显存')}</dd>
         {n.progress && <><dt>{tr('状态行')}</dt><dd>{n.progress}</dd></>}
         <dt>{tr('用时')}</dt><dd>{dur(n.elapsed_s)}{n.exit_code != null ? tr(' · 退出码 {0}', n.exit_code) : ''}</dd>
-        {n.held && <><dt>{tr('受阻')}</dt><dd className="warn">{tr('依赖任务未成功结束，待决定')}</dd></>}
+        {n.held && <><dt>{tr('受阻')}</dt><dd className="em-bar" data-tone="warn">{tr('依赖任务未成功结束，待决定')}</dd></>}
         {n.workdir && <><dt>{tr('目录')}</dt><dd className="brk">{n.workdir}</dd></>}
       </dl>
-      {n.notes && <><h4>{tr('说明')}</h4><p className="small nv-notes">{n.notes}</p></>}
-      {n.last_error && <><h4>{tr('出错')}</h4><pre className="code">{n.last_error}</pre></>}
+      {n.notes && <><h4>{tr('说明')}</h4><p className="small nv-notes">{modelText(n.notes)}</p></>}
+      {n.last_error && <><h4 className="em-state" data-tone="bad">{tr('出错')}</h4><pre className="code">{n.last_error}</pre></>}
     </>
   );
 }
@@ -130,7 +132,7 @@ export function FarmRoom(p: Props) {
           <button key={line.id} className={`mon${only === line.id ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={() => setOnly(line.id)}>
             <div className="proj-top"><b>#{line.seq} {line.title}</b>
               <span className={`pulse${all.some(j => j.line_id === line.id && j.status === 'running') ? ' on' : ''}`} /></div>
-            <p className="mon-note">{agent?.last?.data?.text ?? linkedNote(p.lines.find(l => l.id === line.id)) ?? tr('暂无实验。代码员工提交任务后，此处将记录进度。')}</p>
+            <div className="mon-note">{eventPreview(agent?.last) ?? modelText(linkedNote(p.lines.find(l => l.id === line.id))) ?? tr('暂无实验。代码员工提交任务后，此处将记录进度。')}</div>
             {agent?.last && <span className="muted small">{ago(agent.last.ts)}</span>}
           </button>
         ))}
@@ -139,8 +141,8 @@ export function FarmRoom(p: Props) {
         <div className="backends">
           {(board?.backends ?? []).map(b => (
             <div key={b.id} className={`backend${b.ready ? '' : ' off'}`}>
-              <div className="proj-top"><b>{b.name}</b><span className={`pst ${b.ready ? 'pst-running' : 'pst-paused'}`}>{b.ready ? tr('{0} 个运行中', b.id === 'nvidb' ? b.active : active(b.id)) : tr('未接入')}</span></div>
-              <p className="muted small">{b.note}</p>
+              <div className="proj-top"><b>{b.name}</b><span className={b.ready ? 'muted small' : 'small em-state'} data-tone="warn">{b.ready ? tr('{0} 个运行中', b.id === 'nvidb' ? b.active : active(b.id)) : tr('未接入')}</span></div>
+              <p className="muted small">{modelText(b.note)}</p>
             </div>
           ))}
         </div>
@@ -155,7 +157,7 @@ export function FarmRoom(p: Props) {
                   <span className="job-name"><b>{j.name}</b><small>#{j.line_id ? seq[j.line_id] ?? '?' : '-'} · {WHO(j.submitted_by)}</small></span>
                   <span className="chip">{j.backend}</span>
                   <span className="bar"><i style={{ width: `${j.progress}%` }} /></span>
-                  <span className="job-st">{JOB_STATUS[j.status]}</span>
+                  <span className="job-st"><StateWord state={j.status}>{JOB_STATUS[j.status]}</StateWord></span>
                   <span className="muted small">{ago(j.ended_at ?? j.started_at ?? j.created_at)}</span>
                 </button>
               ))}

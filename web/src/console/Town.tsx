@@ -2,6 +2,7 @@
 // and the town's latest model and tool calls.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { modelText, StateWord } from '../emphasis';
 import { api, listen, type Department, type DeptAgent, type TraceRow } from '../api';
 import { AGENT_STATUS, STATUS } from '../components/MillRoom';
 import { tr } from '../i18n';
@@ -45,7 +46,6 @@ function brief(d: Department): string {
 }
 
 const agentName = (a: Pick<DeptAgent, 'name' | 'seq'>) => (a.seq ? `${a.name} · #${a.seq}` : a.name);
-const agentSub = (a: DeptAgent) => `${AGENT_STATUS[a.status] ?? a.status} · ${a.runtime === 'paseo' ? 'Paseo' : a.runtime || 'pi'}`;
 
 function DeptCard({ d, onRoom, onAgent }: {
   d: Department; onRoom: (id: string, lineId?: string | null) => void; onAgent: (a: DeptAgent) => void;
@@ -65,16 +65,18 @@ function DeptCard({ d, onRoom, onAgent }: {
             <div key={l.id} className="dp-row">
               <i className={`dp-ld d-${l.status}`} />
               <button className="dp-rt" onClick={() => onRoom(d.id, l.id)} title={l.title}><b>#{l.seq}</b>{l.title}</button>
-              <span className="dp-rs">{l.stage} · {STATUS[l.status] ?? l.status}</span>
+              <span className="dp-rs">{l.stage} · <StateWord state={l.status}>{STATUS[l.status] ?? l.status}</StateWord></span>
             </div>
           ))}
           {d.agents.map(a => (
             <div key={a.id} className="dp-row">
               <span className={`dot s-${a.status}`} />
               <button className="dp-rt" onClick={() => onAgent(a)} title={a.last?.text ?? ''}>
-                <b>{agentName(a)}</b>{a.last?.text && <em>{a.last.kind === 'user' ? tr('你：') : ''}{a.last.text}</em>}
+                <b>{agentName(a)}</b>{a.last?.text && (a.last.kind === 'user'
+                  ? <em className="user-words em-bar">{tr('你：')}{a.last.text}</em>
+                  : <em>{modelText(a.last.text)}</em>)}
               </button>
-              <span className="dp-rs">{agentSub(a)}</span>
+              <span className="dp-rs"><StateWord state={a.status}>{AGENT_STATUS[a.status] ?? a.status}</StateWord> · {a.runtime === 'paseo' ? 'Paseo' : a.runtime || 'pi'}</span>
               <span className="dp-ra"><button className="btn" onClick={() => onAgent(a)}>{tr('发起对话')}</button></span>
             </div>
           ))}
@@ -82,7 +84,7 @@ function DeptCard({ d, onRoom, onAgent }: {
             <div key={j.id} className="dp-row">
               <i className={`dp-ld j-${j.status}`} />
               <button className="dp-rt" onClick={() => onRoom(d.id, j.line_id)} title={j.name}><b>{j.name}</b></button>
-              <span className="dp-rs">{j.status === 'running' ? `${j.progress}%` : tr('排队中')} · {j.backend}</span>
+              <span className="dp-rs">{j.status === 'running' ? <span className="em-num">{j.progress}%</span> : tr('排队中')} · {j.backend}</span>
             </div>
           ))}
           {d.jobs.length > 5 && <p className="dp-more">{tr('还有 {0} 个', d.jobs.length - 5)}</p>}
@@ -115,7 +117,7 @@ export function Trace() {
       <div className="trace-rows">
         {rows == null ? <p className="muted">{tr('加载中…')}</p> : rows.length ? [...rows].reverse().map(t => (
           <div className="tr" key={t.id} title={t.ts}>
-            <span className={`k k-${t.kind.toLowerCase()}`}>{t.kind}</span><code>{t.label}</code><em>{t.detail}</em>
+            <StateWord state={t.kind.toLowerCase()}>{t.kind}</StateWord><code>{t.label}</code><em>{t.detail}</em>
           </div>
         )) : <p className="muted">{tr('暂无调用。')}</p>}
       </div>

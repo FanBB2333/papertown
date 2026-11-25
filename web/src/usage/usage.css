@@ -3,11 +3,9 @@
 .usage-between > :first-child { min-width: 0; overflow-wrap: anywhere; }
 .usage-between > :last-child { flex-shrink: 0; }
 .usage-provider { padding: 10px 0; border-bottom: 1px solid var(--line); }
-/* The plan in the theme's accent, kept apart from the green, amber and red that mark how much is used. */
+/* Keep long plan names on the same line as the provider. */
 .usage-between > .usage-plan { flex: 0 1 auto; min-width: 0; }
-.usage-plan { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 1px 9px; border-radius: 999px;
-  font-size: 12px; font-weight: 600; line-height: 1.6; color: color-mix(in srgb, var(--brand) 72%, var(--ink)); background: color-mix(in srgb, var(--brand) 11%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 30%, transparent); }
+.usage-plan { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
 .usage-plan-none { font-size: 12px; color: var(--muted); }
 .usage-provider:last-child { border-bottom: 0; }
 .usage-provider p { margin: 6px 0; }
@@ -17,7 +15,6 @@
 .usage-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--usage-color, var(--brand)); }
 .usage-near { --usage-color: var(--warn); }
 .usage-over { --usage-color: var(--bad); }
-.usage-mark { display: inline-block; flex-shrink: 0; font-size: 12px; color: var(--usage-color); border: 1px solid currentColor; border-radius: var(--radius); padding: 1px 5px; white-space: nowrap; }
 .usage-error, .usage-provider > small.usage-error { color: var(--warn); overflow-wrap: anywhere; }
 .usage-project { padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .usage-project h2 { margin: 0; font-size: 16px; }
@@ -29,14 +26,12 @@
 .usage-dialog { max-height: 90dvh; overflow-y: auto; }
 .usage-model { padding: 8px 0 0 14px; border-left: 2px solid var(--line); margin-top: 8px; }
 .usage-path { overflow-wrap: anywhere; }
-.usage-project h3 { margin: 24px 0 4px; font-size: 14px; font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px;
-  text-decoration-color: color-mix(in srgb, var(--brand) 55%, transparent); text-underline-offset: 6px; }
+.usage-project h3 { margin: 24px 0 4px; font-size: 14px; font-weight: 700;  }
 
 /* Reading order: a name in bold, figures in tiles or bold, identifiers as code chips, the rest small and muted. */
 .usage-head { align-items: center; }
 .usage-name { font-size: 15px; font-weight: 700; color: var(--ink); }
-.usage-cost { padding: 1px 9px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.usage-cost { padding: 1px 9px; border-radius: 999px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ink); background: transparent; }
 .usage-cost.sm { padding: 0; font-size: 13px; font-weight: 600; background: transparent; }
 .usage-chip { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: 11.5px; font-weight: 600; line-height: 1.75;
   color: var(--muted); background: color-mix(in srgb, var(--ink) 6%, transparent); box-shadow: inset 0 0 0 1px var(--line); vertical-align: 1px; white-space: nowrap; }

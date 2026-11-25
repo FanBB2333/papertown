@@ -12,14 +12,11 @@
 .gpus-sum div { display: flex; flex-direction: column; align-items: center; min-width: 58px; padding: 7px 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); }
 .gpus-sum b { font: 700 17px var(--head); }
 .gpus-sum span { font-size: 11px; color: var(--muted); }
-.gpus-sum .k-idle b { color: var(--ok); }
-.gpus-sum .k-room b { color: var(--warn); }
 .lnk { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
 .lnk:hover { text-decoration: underline; }
 
 .nodes { display: flex; flex-direction: column; gap: 10px; }
 .node { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel); }
-.node.down { opacity: .7; border-style: dashed; }
 .gpu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 8px; margin-top: 10px; }
 
 .gpu {
@@ -28,14 +25,9 @@
   animation: rise-in .45s var(--out) both; animation-delay: calc(var(--i, 0) * 35ms);
   transition: border-color .35s var(--out), background-color .35s var(--out);
 }
-.gpu::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--bad); }
-.gpu.gpu-idle::before { background: var(--ok); }
-.gpu.gpu-room::before { background: var(--warn); }
 .g-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .g-top b { font-size: 13px; }
-.g-st { font-size: 11px; padding: 0 7px; border-radius: 99px; color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
-.gpu-idle .g-st { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
-.gpu-room .g-st { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.g-st { font-size: 11px; color: var(--muted); }
 .g-name { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .g-nums { display: flex; justify-content: space-between; gap: 6px; font-size: 11.5px; color: var(--muted); }
 .g-nums b { color: var(--ink); font-weight: 600; }
@@ -61,8 +53,6 @@
 }
 .gstrip.off { border-style: dashed; background: transparent; }
 .gstrip > b { font: 14px var(--head); }
-.gstrip em { font-style: normal; }
-.gstrip .k-idle { color: var(--ok); }
 .gs-cells { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
 .gs-node { display: flex; gap: 3px; padding: 3px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .gs-node i { width: 12px; height: 16px; border-radius: 3px; background: var(--bad); transition: background-color .4s var(--out); }
@@ -101,30 +91,21 @@
   color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent);
 }
 
-.gpus-sum :is(.s-running, .s-queued, .s-failed) {
-  border-color: color-mix(in srgb, var(--sc) 32%, var(--line)); background: color-mix(in srgb, var(--sc) 7%, var(--panel)); box-shadow: inset 0 3px 0 var(--sc);
-}
-.gpus-sum :is(.s-running, .s-failed) b { color: color-mix(in srgb, var(--sc) 85%, var(--ink)); }
-
 .nd-lanes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
 .nd-lane {
-  --lc: color-mix(in srgb, var(--ink) 22%, transparent);
   display: flex; flex-wrap: wrap; align-items: center; gap: 5px 8px; min-width: 0; padding: 9px 12px 9px 15px; border-radius: 10px;
-  border: 1px solid var(--line); background: var(--panel); box-shadow: inset 3px 0 0 var(--lc);
+  border: 1px solid var(--line); background: var(--panel);
 }
-.nd-lane.l-running { --lc: var(--brand); }
-.nd-lane:is(.l-waiting, .l-paused) { --lc: var(--warn); }
-.nd-lane.l-failed { --lc: var(--bad); }
 .nd-lane > b { font-size: 13.5px; }
 .nd-lnum { flex-basis: 100%; font-size: 12px; color: var(--muted); }
 .nd-lnum b { color: var(--ink); }
 .nd-next { flex-basis: 100%; display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; }
-.nd-next em { flex: none; font-style: normal; color: color-mix(in srgb, var(--lc) 80%, var(--ink)); }
+.nd-next em { flex: none; font-style: normal; color: var(--muted); }
 .nd-next em::after { content: ' →'; }
 .nd-next i { flex: none; font: 11px ui-monospace, Menlo, monospace; color: var(--muted); }
 .nd-next span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .nd-lane .nd-why { flex-basis: 100%; }
-.nd-why { color: var(--warn); line-height: 1.45; }
+.nd-why { color: var(--ink); line-height: 1.45; }
 
 .nd-gpus { display: flex; flex-direction: column; gap: 12px; }
 .nd-gpu {
@@ -143,14 +124,9 @@
 
 .nd-job {
   margin-bottom: 6px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel2);
-  box-shadow: inset 3px 0 0 var(--sc); transition: border-color .2s, background-color .2s;
+  transition: border-color .2s, background-color .2s;
 }
-.nd-job.fits { --sc: var(--ok); }
-.nd-job.short { --sc: var(--warn); }
-.nd-job.s-running { border-color: color-mix(in srgb, var(--sc) 30%, var(--line)); background: color-mix(in srgb, var(--sc) 8%, var(--panel)); }
-.nd-job.s-failed { background: color-mix(in srgb, var(--sc) 6%, var(--panel2)); }
-.nd-job.next { border-color: color-mix(in srgb, var(--ink) 26%, transparent); background: var(--panel); }
-.nd-job:hover, .nd-job[open] { border-color: color-mix(in srgb, var(--sc) 55%, var(--line)); }
+.nd-job:hover, .nd-job[open] { border-color: color-mix(in srgb, var(--ink) 28%, var(--line)); }
 .nd-job[open] { background: var(--panel); }
 .nd-job summary { display: block; padding: 7px 10px 8px 13px; cursor: pointer; list-style: none; }
 .nd-job summary::-webkit-details-marker { display: none; }
@@ -165,15 +141,10 @@
   flex: none; display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; font-size: 11px; font-weight: 600; color: var(--muted);
   box-shadow: inset 0 0 0 1.2px color-mix(in srgb, var(--ink) 24%, transparent);
 }
-.nd-job.next .nd-pos { color: var(--panel); background: var(--ink); box-shadow: none; }
 .nd-l2 { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; margin-top: 5px; font-size: 11.5px; }
-.nd-l2 .stag { font-size: 11.5px; }
-.nd-vram { padding: 0 6px; border-radius: 6px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
 .nd-when { color: var(--ink); }
 .nd-meta { color: var(--muted); }
 .nd-who { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nd-fit { padding: 0 7px; border-radius: 7px 9px 6px 9px; font-weight: 600; color: color-mix(in srgb, var(--warn) 85%, var(--ink)); background: color-mix(in srgb, var(--warn) 15%, transparent); }
-.nd-fit.ok { color: color-mix(in srgb, var(--ok) 85%, var(--ink)); background: color-mix(in srgb, var(--ok) 15%, transparent); }
 .nd-prog { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 7px; font-size: 11.5px; }
 .nd-pbar { flex: none; width: 70px; height: 5px; border-radius: 99px; overflow: hidden; background: color-mix(in srgb, var(--sc) 20%, transparent); }
 .nd-pbar i { display: block; height: 100%; border-radius: inherit; background: var(--sc); transition: width .8s var(--out); }
@@ -183,7 +154,7 @@
 .nd-job .kv { font-size: 12px; }
 .nd-job .kv dd { color: var(--ink); }
 .nd-dep { padding: 0 6px; border-radius: 6px; font: 11.5px ui-monospace, Menlo, monospace; background: color-mix(in srgb, var(--ink) 7%, transparent); }
-.nd-job .nv-notes { padding-left: 10px; border-left: 2px solid color-mix(in srgb, var(--sc) 45%, transparent); color: var(--ink); }
+.nd-job .nv-notes { color: var(--ink); }
 .nd-cmd {
   padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 6%, transparent);
   font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 180px; overflow: auto;

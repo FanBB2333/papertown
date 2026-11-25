@@ -45,11 +45,11 @@ export function AccountPick({ lineId, agentId, onChange }: {
         ...v.envs.map(e => ({ value: e.name, label: envLabel(v, e.name) })),
       ]} />
     </label>
-    {!v.ok && <p className="warn-box small">{v.note}</p>}
+    {!v.ok && <p className="small em-state" data-tone="bad">{v.note}</p>}
     <p className="muted small">
       {tr('选择 CLIppet 的 env 时，以 clippet -e <env> 启动 CLI 的真实界面。全局默认在「设置 › 员工 Agent」。')}
       {lineId && value !== INHERIT && value !== wider && <> <button type="button" className="linkish" disabled={busy} onClick={forProject}>{tr('设为本项目默认')}</button></>}
     </p>
-    {err && <p className="warn-box small">{err}</p>}
+    {err && <p className="small em-state" data-tone="bad">{err}</p>}
   </>;
 }

@@ -4,6 +4,7 @@
 // it), the datasets, the paper. On the canvas a card is brief and as big as the server says (canvas.py INFO_SIZE);
 // opened in the inspector (CanvasSide.tsx) it says everything, with the way to the console panel behind it.
 
+import { Deadline, figures, modelText, StateWord } from '../emphasis';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api, type CanvasNode, type CanvasView, type CardRepo, type Health, type Line, type LineData, type PaperCard, type ProjectCard, type TaskTo } from '../api';
 import { AGENT_STATUS } from '../components/MillRoom';
@@ -37,8 +38,6 @@ export function useMore(lineId: string, key: string): More {
   }, [lineId, key]);
   return m.id === lineId ? m : NO_MORE;
 }
-// the verdict arrives in the page's language
-const verdictTone = (verdict: string) => ({ [tr('可孵化')]: 'pass', [tr('需调整')]: 'warn', [tr('已被做过')]: 'fail' } as Record<string, string>)[verdict] ?? 'warn';
 const uniq = (xs: string[]) => [...new Set(xs)];
 const fmt = (x: number) => (Number.isInteger(x) ? String(x) : Math.abs(x) >= 100 ? x.toFixed(1) : x.toFixed(Math.abs(x) < 1 ? 3 : 2));
 export const infoKind = (n: CanvasNode) => (n.ref ?? '').split(':')[0];
@@ -48,33 +47,33 @@ const tasksOf = (v: CanvasView, role: TaskTo) => v.nodes.filter(x => x.kind === 
 // the few words in a card's header: how the thing stands
 export function InfoState({ n, r, v }: { n: CanvasNode; r: ProjectCard; v: CanvasView }) {
   const k = infoKind(n), m = useContext(MoreCtx);
-  if (k === 'survey') { const h = m.line?.outputs?.hatch; return h?.verdict ? <span className={`cg-pill s-${verdictTone(h.verdict)}`}>{h.verdict}</span> : null; }
+  if (k === 'survey') { const h = m.line?.outputs?.hatch; return h?.verdict ? <span className="em-key">{h.verdict}</span> : null; }
   if (k === 'results') { const runs = m.data?.runs ?? []; return runs.length ? <span className="ci-st">{tr('{0} 次运行', runs.length)}</span> : null; }
   if (k === 'datasets') { const sets = uniq(m.data?.meta.datasets ?? []); return sets.length ? <span className="ci-st">{sets.length}</span> : null; }
-  if (k === 'card') return r.card ? <span className={`cg-pill h-${r.card.health}`}>{HEALTH[r.card.health]}</span> : null;
+  if (k === 'card') return r.card ? <StateWord state={r.card.health}>{HEALTH[r.card.health]}</StateWord> : null;
   if (k === 'agent') {
     const a = v.agents[roleOf(n)];
     return <span className="ci-st"><i className={`dot s-${a.there ? a.status : 'stopped'}`} />{a.there ? AGENT_STATUS[a.status ?? ''] ?? a.status : tr('尚未启动')}</span>;
   }
-  if (k === 'runs') return r.jobs.running ? <span className="cg-pill st-run">{tr('{0} 个运行中', r.jobs.running)}</span> : null;
+  if (k === 'runs') return r.jobs.running ? <span className="muted">{tr('{0} 个运行中', r.jobs.running)}</span> : null;
   if (k === 'code' || k === 'paper') {
     const x = r.repos[k];
-    return x && !x.missing && x.dirty ? <span className="cg-pill s-warn">{tr('{0} 处改动', x.dirty)}</span> : null;
+    return x && !x.missing && x.dirty ? <span className="em-mark" data-tone="warn">{tr('{0} 处改动', x.dirty)}</span> : null;
   }
   if (k === 'outputs') {
     const o = r.card?.outputs ?? [];
-    return o.length ? <span className="ci-st">{o.filter(x => x.state === 'done').length}/{o.length}</span> : null;
+    return o.length ? <span className="em-num">{o.filter(x => x.state === 'done').length}/{o.length}</span> : null;
   }
   return null;
 }
 
-function List({ title, items, cls, most }: { title: string; items: string[]; cls?: string; most?: number }) {
+function List({ title, items, cls, most }: { title: string; items: React.ReactNode[]; cls?: string; most?: number }) {
   if (!items.length) return null;
   const shown = most ? items.slice(0, most) : items;
   return (
     <div className={`ci-list ${cls ?? ''}`}>
       <h6>{title}{items.length > 1 && <em>{items.length}</em>}</h6>
-      <ul>{shown.map((x, i) => <li key={i}>{x}</li>)}</ul>
+      <ul>{shown.map((x, i) => <li key={i} className={cls === 'warn' ? 'em-bar' : cls === 'bad' ? 'em-state' : undefined} data-tone={cls}>{typeof x === 'string' ? modelText(x) : x}</li>)}</ul>
     </div>
   );
 }
@@ -97,18 +96,24 @@ function Repo({ x, which, full }: { x: CardRepo | null; which: 'code' | 'paper';
 }
 
 export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectCard; v: CanvasView; full?: boolean; onPick?: (id: string) => void }) {
+  return <>
+    {!!v.decided?.[n.mod] && <p className="ci-foot">{figures(tr('{0} 条有效决定', v.decided[n.mod]))}</p>}
+    <InfoContent n={n} r={r} v={v} full={full} onPick={onPick} />
+  </>;
+}
+function InfoContent({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectCard; v: CanvasView; full?: boolean; onPick?: (id: string) => void }) {
   const k = infoKind(n), c = r.card, m = useContext(MoreCtx);
   if (k === 'card') { // what the project is, then how it stands; on the canvas the one list that matters most
-    const need = (r.decisions ?? []).map(d => trx(d.title));
+    const need = (r.decisions ?? []).map(d => d.kind === 'matter' || d.kind === 'need' ? d.title : trx(d.title));
     const first = c && (need.length ? 'need' : c.blockers.length ? 'bad' : 'next');
     return (
       <>
         <p className={`ci-what${full ? '' : ' ci-clamp2'}`}>{r.line.title}</p>
         {!c ? <p className="muted">{noCardText(r)}</p> : (
           <>
-            <p className={full ? '' : 'ci-clamp2'}>{c.summary}</p>
+            <p className={full ? '' : 'ci-clamp2'}>{modelText(c.summary)}</p>
             {c.progress != null && (
-              <div className="ci-prog"><div className="cg-bar"><i style={{ width: `${c.progress}%` }} /></div><small>{c.progress}%{c.milestone && ` · ${c.milestone}`}</small></div>
+              <div className="ci-prog"><div className="cg-bar"><i style={{ width: `${c.progress}%` }} /></div><small><span className="em-num">{c.progress}%</span>{c.milestone && <> · <span className="em-state" data-icon="clock" data-tone="warn">{modelText(c.milestone)}</span></>}</small></div>
             )}
             {(full || first === 'need') && <List title={tr('待你决定')} items={need} cls="warn" most={full ? 0 : 2} />}
             {(full || first === 'bad') && <List title={tr('卡点和风险')} items={c.blockers} cls="bad" most={full ? 0 : 2} />}
@@ -126,12 +131,12 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     const near: { title: string; similarity?: number; year?: string }[] = found.length ? found : h?.similar ?? [];
     if (!m.line) return <p className="muted">{tr('加载中…')}</p>;
     if (!h && !near.length && !cited.length) return <p className="muted">{lp?.abstract ? gist(lp.abstract, 120) : tr('放入 idea 后孵化场先查重，最接近的工作列在此处。')}</p>;
-    const line = h ? gist(h.gap || h.summary, full ? 300 : 80) : '';
+    const line = h ? modelText(h.gap || h.summary, full ? 300 : 80) : '';
     return (
       <>
         {line && <p className={full ? '' : 'ci-clamp2'}>{line}</p>}
         {(full ? near.slice(0, 12) : near.slice(0, line ? 3 : 4)).map((x, i) => (
-          <p key={i} className="ci-paper" title={x.title}>{x.similarity != null && <b>{Number(x.similarity).toFixed(2)}</b>}<span>{x.title}</span>{full && x.year && <small>{x.year}</small>}</p>
+          <p key={i} className="ci-paper" title={x.title}>{x.similarity != null && <b className="em-num">{Number(x.similarity).toFixed(2)}</b>}<span>{x.title}</span>{full && x.year && <small>{x.year}</small>}</p>
         ))}
         {!near.length && cited.slice(0, full ? 12 : 3).map((x, i) => <p key={i} className="ci-paper" title={x.title}><span>{x.title}</span></p>)}
         <p className="muted ci-foot">{[found.length && tr('调研到 {0} 篇', found.length), cited.length && tr('论文引用 {0} 篇', cited.length)].filter(Boolean).join(' · ')}</p>
@@ -145,8 +150,8 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     const steps: string[] = md.mechanism ?? [], bases: string[] = (md.baselines ?? []).map((b: { name: string } | string) => (typeof b === 'string' ? b : b.name));
     return (
       <>
-        {md.problem && <p className={full ? '' : 'ci-clamp2'}>{full ? md.problem : gist(md.problem, 90)}</p>}
-        {steps.length > 0 && <ol className="ci-steps">{(full ? steps : steps.slice(0, 3)).map((x, i) => <li key={i}>{full ? x : gist(x, 60)}</li>)}</ol>}
+        {md.problem && <p className={full ? '' : 'ci-clamp2'}>{modelText(md.problem, full ? undefined : 90)}</p>}
+        {steps.length > 0 && <ol className="ci-steps">{(full ? steps : steps.slice(0, 3)).map((x, i) => <li key={i}>{modelText(x, full ? undefined : 60)}</li>)}</ol>}
         {bases.length > 0 && <p className="muted ci-line">Baseline · {bases.join('、')}</p>}
         {(md.metrics?.length ?? 0) > 0 && <p className="muted ci-line">{tr('指标')} · {md.metrics.join('、')}</p>}
       </>
@@ -165,7 +170,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
           <div className="ci-metrics top">
             {res.metrics.slice(0, full ? 12 : 3).map((name, i) => {
               const best = others.length ? Math.max(...others.map(x => x.values[i])) : null;
-              return <p key={name}><span>{name}</span><b>{fmt(ours.values[i])}</b>{best != null && <small>{tr('最优 baseline {0}', fmt(best))}</small>}</p>;
+              return <p key={name}><span>{name}</span><b className="em-num">{fmt(ours.values[i])}</b>{best != null && <small>{figures(tr('最优 baseline {0}', fmt(best)))}</small>}</p>;
             })}
           </div>
         )}
@@ -218,7 +223,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     const runs = full ? r.running : r.running.slice(0, 3);
     return (
       <>
-        {counts.length ? <p className="ci-counts">{counts.map(([key, name, cls]) => <span key={key} className={cls}><b>{r.jobs[key]}</b>{name}</span>)}</p>
+        {counts.length ? <p className="ci-counts">{counts.map(([key, name, cls]) => <span key={key} className={cls}><b className={key === 'failed' ? 'em-num' : undefined} data-tone="bad">{r.jobs[key]}</b>{name}</span>)}</p>
           : <p className="muted">{tr('暂无实验任务')}</p>}
         {runs.map(j => (
           <div key={j.id} className="ci-run">
@@ -227,7 +232,7 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
           </div>
         ))}
         {!full && r.running.length > 3 && <p className="muted">{tr('另有 {0} 个运行中', r.running.length - 3)}</p>}
-        {full && r.queued.length > 0 && <List title={tr('排队')} items={r.queued.map(j => [j.name, runText(j)].filter(Boolean).join(' · '))} />}
+        {full && r.queued.length > 0 && <List title={tr('排队')} items={r.queued.map(j => { const detail = runText(j); return <>{j.name}{detail && <> · {detail}</>}</>; })} />}
       </>
     );
   }
@@ -238,11 +243,11 @@ export function InfoBody({ n, r, v, full, onPick }: { n: CanvasNode; r: ProjectC
     return (
       <>
         {(full ? outs : outs.slice(0, 4)).map((o, i) => (
-          <p key={i} className={`ci-out o-${o.state}`}><i /><span>{o.name}</span><small>{[o.due, OUT_STATE[o.state]].filter(Boolean).join(' · ')}</small></p>
+          <p key={i} className={`ci-out o-${o.state}`}><i /><span>{o.name}</span><small>{o.due && <><Deadline text={o.due} done={o.state === 'done'} /> · </>}{OUT_STATE[o.state]}</small></p>
         ))}
         {metrics.length > 0 && (
           <div className="ci-metrics">
-            {(full ? metrics : metrics.slice(0, 3)).map((m, i) => <p key={i} title={m.note}><span>{m.name}</span><b>{m.value}</b></p>)}
+            {(full ? metrics : metrics.slice(0, 3)).map((m, i) => <p key={i} title={m.note}><span>{m.name}</span><b className="em-num">{m.value}</b></p>)}
           </div>
         )}
       </>

@@ -16,7 +16,10 @@ export const kindName = (kind?: string | null) => (kind ? KINDS[kind.toLowerCase
 export const agentName = (a: Agent) => a.task?.title || ({ coder: tr('代码员工'), writer: tr('写作员工'), monitor: tr('看田员'), lead: tr('项目负责人'), assistant: tr('小助手') })[a.role];
 export function WatchStatus({ agent }: { agent: Watched }) {
   const bucket = bucketOf(agent), name = bucket === 'off' && (agent.down || agent.status === 'offline') ? tr('连不上') : BUCKETS.find(x => x[0] === bucket)![1];
-  return <span className={`aw-status aw-${bucket}`}><i className="aw-dot" aria-hidden="true" />{name}</span>;
+  const offline = bucket === 'off' && (agent.down || agent.status === 'offline');
+  if (bucket === 'needs') return <span className="em-bar" data-tone="warn">{name}</span>;
+  if (bucket === 'failed' || offline) return <span className="em-state" data-tone="bad">{name}</span>;
+  return <span className="aw-status muted">{name}</span>;
 }
 export function TurnTime({ agent }: { agent: Agent }) {
   const since = Date.parse(agent.watch?.turn ?? '');

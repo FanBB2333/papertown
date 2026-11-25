@@ -17,7 +17,7 @@ export function Earlier({ agent = 'assistant', at, onPick, limit, title }: {
   return (
     <div className="as-convs">
       {title && <h4>{title}</h4>}
-      {err ? <p className="as-none">{err}</p>
+      {err ? <p className="as-none em-state" data-tone="bad">{err}</p>
         : !list ? <p className="as-none">{tr('加载中…')}</p>
           : !shown.length ? <p className="as-none">{tr('暂无历史对话。')}</p>
             : shown.map(c => (

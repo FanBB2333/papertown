@@ -1,6 +1,7 @@
 // A project's memory from before Papertown: agent conversations and notes found in its repositories
 // on this machine, imported on request and searched by questions and the agents (pt recall).
 
+import { modelText } from '../emphasis';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, listen, type MemoryFound, type MemoryFull, type MemoryItem, type MemorySource } from '../api';
@@ -13,10 +14,10 @@ const REPO = { code: tr('代码仓库'), paper: tr('论文仓库') };
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '');
 const span = (a: string | null, b: string | null) => (day(a) && day(b) && day(a) !== day(b) ? `${day(a)} – ${day(b)}` : day(b) || day(a));
 
-export function MemorySection({ lineId, toast, open }: { lineId: string; toast: (t: string) => void; open: (id: string, msg?: number) => void }) {
+export function MemorySection({ lineId, toast, open }: { lineId: string; toast: (t: string, error?: boolean) => void; open: (id: string, msg?: number) => void }) {
   const [items, setItems] = useState<MemoryItem[] | null>(null);
   const [importing, setImporting] = useState(false);
-  const load = () => api.memory(lineId).then(r => setItems(r.items)).catch(e => toast((e as Error).message));
+  const load = () => api.memory(lineId).then(r => setItems(r.items)).catch(e => toast((e as Error).message, true));
   useEffect(() => {
     setItems(null);
     load();
@@ -25,7 +26,7 @@ export function MemorySection({ lineId, toast, open }: { lineId: string; toast: 
 
   async function remove(m: MemoryItem) {
     if (!confirm(tr('从此项目中移除「{0}」？仅删除 Papertown 导入的副本，原对话保持不变。', m.title))) return;
-    try { await api.memoryRemove(lineId, m.id); load(); } catch (e) { toast((e as Error).message); }
+    try { await api.memoryRemove(lineId, m.id); load(); } catch (e) { toast((e as Error).message, true); }
   }
   const sessions = (items ?? []).filter(m => m.kind === 'session'), notes = (items ?? []).filter(m => m.kind === 'note');
   return (
@@ -80,7 +81,7 @@ function Overlay({ label, className, onClose, children }: { label: string; class
   );
 }
 
-function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toast: (t: string) => void; onClose: () => void; onDone: () => void }) {
+function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toast: (t: string, error?: boolean) => void; onClose: () => void; onDone: () => void }) {
   const [scan, setScan] = useState<Awaited<ReturnType<typeof api.memoryScan>> | null>(null);
   const [err, setErr] = useState('');
   const [pick, setPick] = useState<Set<string>>(new Set());
@@ -101,7 +102,7 @@ function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toas
       toast(r.failed.length ? tr('已导入 {0} 项，{1} 项失败：{2}', r.imported.length, r.failed.length, r.failed[0].why) : tr('已导入 {0} 项。提问时将一并检索。', r.imported.length));
       onDone();
       onClose();
-    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
 
   return (
@@ -112,7 +113,7 @@ function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toas
       </header>
       <div className="pd-body">
         <p className="small muted">{tr('仅导入对话内容（你的提问与 agent 的回复），跳过工具调用、思考过程与自动注入的上下文，密钥和 token 将脱敏，原文件保持不变。')}</p>
-        {err && <p className="warn-box small">{err}</p>}
+        {err && <p className="small em-state" data-tone="bad">{err}</p>}
         {!scan && !err && <p className="muted">{tr('查找中…')}</p>}
         {scan && !scan.roots.length && <p className="muted">{tr('该项目暂无代码或论文仓库。')}</p>}
         {groups.map(g => (
@@ -161,7 +162,7 @@ function Found({ x, on, toggle }: { x: MemoryFound; on: boolean; toggle: (on: bo
             {x.cwd && x.kind === 'session' && <> · <code>{x.cwd}</code></>}
           </span>
         </span>
-        {x.imported && <span className={`mem-tag${x.changed ? ' new' : ''}`}>{x.changed ? tr('有更新') : tr('已导入')}</span>}
+        {x.imported && <span className={x.changed ? 'em-mark' : 'mem-tag'}>{x.changed ? tr('有更新') : tr('已导入')}</span>}
       </label>
     </li>
   );
@@ -190,7 +191,7 @@ export function MemoryViewer({ lineId, id, msg, onClose }: { lineId: string; id:
         </p>
       )}
       <div className="pd-body" ref={body}>
-        {err && <p className="warn-box small">{err}</p>}
+        {err && <p className="small em-state" data-tone="bad">{err}</p>}
         {!m && !err && <p className="muted">{tr('加载中…')}</p>}
         {m?.text != null && <div className="mem-note">{m.text}</div>}
         {m?.messages && (
@@ -198,7 +199,7 @@ export function MemoryViewer({ lineId, id, msg, onClose }: { lineId: string; id:
             {m.messages.map((x, i) => (
               <li key={i} data-i={i} className={`${x.role}${msg === i || msg === i - 1 ? ' lit' : ''}`}>
                 <span className="small muted">{x.role === 'user' ? tr('你') : SOURCE[m.source]}{x.at ? ` · ${x.at.slice(0, 16).replace('T', ' ')}` : ''}</span>
-                <div>{x.text}</div>
+                <div className={x.role === 'user' ? 'em-bar user-words' : undefined}>{x.role === 'user' ? x.text : modelText(x.text)}</div>
               </li>
             ))}
           </ol>

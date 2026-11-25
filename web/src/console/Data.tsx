@@ -1,10 +1,13 @@
 // The data panel: the experiments' setup, a chart per result metric, what each nvidb run handed
 // back, and the repository's result files, with same-named files in sibling folders lined up as one table.
 
+import { figures, modelText, StateWord } from '../emphasis';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type DataRun, type LineData } from '../api';
 import { tr } from '../i18n';
+import { provPath } from '../route';
+import { RecordLink, useRecordTick } from '../progress/Records';
 import { Select } from '../components/Select';
 import { Bars, StateTag, Tip, fmtNum, stOf, useTip } from './charts';
 import { Icon } from './icons';
@@ -12,20 +15,20 @@ import { JobDrawer } from './JobDrawer';
 import { usePanelNote } from './page';
 import { ago, base, bytes, ext, flat, headlines, toggled, useFetch } from './util';
 
-interface Props { lineId: string; tick: number; onOpenFile: (path: string) => void }
+interface Props { lineId: string; seq: number; tick: number; onOpenFile: (path: string) => void }
 
 const KIND_NAME: Record<string, string> = { processed: tr('已处理结果'), raw: tr('原始数据'), other: tr('其他') };
 const SETTING = /^(config|args|params|hparams|settings|cfg)\./i;
 const SCORE = /(overall|score|acc|pass@|f1|bleu|rouge|exact|mean|avg|win|success|reward|auc|recall|precision)/i;
 
 export function Data(p: Props) {
-  const d = useFetch(() => api.data(p.lineId), p.lineId, p.tick);
+  const [provTick] = useRecordTick(p.lineId, 'prov');
+  const d = useFetch(() => api.data(p.lineId), p.lineId, p.tick + provTick);
   const [job, setJob] = useState<string | null>(null);
   const [file, setFile] = useState<string | null>(null);
   usePanelNote('data', 'open', { 打开着详情的任务: job, 打开着的数据文件: file });
-  if (!d.data) return <div className="cm-page"><p className="muted">{d.err || tr('加载中…')}</p></div>;
+  if (!d.data) return <div className="cm-page"><p className={d.err ? 'em-state' : 'muted'} data-tone="bad">{d.err || tr('加载中…')}</p></div>;
   const { meta, results, runs, files } = d.data;
-  const withResult = runs.filter(r => r.result && typeof r.result === 'object');
   const none = !results && !runs.length && !files.length && !meta.datasets.length;
   return (
     <div className="cm-page data">
@@ -41,7 +44,7 @@ export function Data(p: Props) {
       )}
 
       {results && <Results r={results} />}
-      {withResult.length > 0 && <RunResults runs={withResult} onOpen={setJob} />}
+      {runs.length > 0 && <RunResults runs={runs} seq={p.seq} onOpen={setJob} />}
       {files.length > 0 && <Files lineId={p.lineId} files={files} onOpen={setFile} />}
 
       {job && <JobDrawer id={job} onClose={() => setJob(null)} onJob={setJob} />}
@@ -64,20 +67,20 @@ function Results({ r }: { r: NonNullable<LineData['results']> }) {
           return (
             <div key={m} className="sm" style={{ ['--i' as string]: i }}>
               <h4 title={m}>{m}</h4>
-              {delta != null && <p className={`sm-d ${delta >= 0 ? 'up' : 'down'}`}>{delta >= 0 ? '▲' : '▼'} {delta >= 0 ? tr('高于最优 baseline {0}', fmtNum(delta)) : tr('低于最优 baseline {0}', fmtNum(-delta))}</p>}
-              <Bars bars={r.rows.map(x => ({ id: x.method, label: x.method, v: x.values[i], hi: x.ours, sub: m })).sort((a, b) => b.v - a.v)} />
+              {delta != null && <p className={`sm-d ${delta >= 0 ? 'up' : 'down'}`}>{delta >= 0 ? '▲' : '▼'} {(delta >= 0 ? tr('高于最优 baseline {0}') : tr('低于最优 baseline {0}')).split(/(\{0\})/).map((part, i) => part === '{0}' ? <mark key={i} className="em-mark" data-tone={delta >= 0 ? 'good' : 'warn'}>{fmtNum(Math.abs(delta))}</mark> : part)}</p>}
+              <Bars bars={r.rows.map(x => ({ id: x.method, label: x.method, v: x.values[i], hi: x.ours, benchmark: !x.ours && x.values[i] === best, sub: m })).sort((a, b) => b.v - a.v)} />
             </div>
           );
         })}
       </div>
-      {r.analysis && <p className="small res-note">{r.analysis}</p>}
-      {!!r.concerns?.length && <ul className="concerns">{r.concerns.map(c => <li key={c}>{c}</li>)}</ul>}
+      {r.analysis && <p className="small res-note">{modelText(r.analysis)}</p>}
+      {!!r.concerns?.length && <ul className="concerns">{r.concerns.map(c => <li key={c}>{modelText(c)}</li>)}</ul>}
     </section>
   );
 }
 
 // what each nvidb run handed back, and one measure compared across runs
-function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) => void }) {
+function RunResults({ runs, seq, onOpen }: { runs: DataRun[]; seq: number; onOpen: (id: string) => void }) {
   const shared = useMemo(() => {
     const n = new Map<string, number>();
     for (const r of runs) for (const [k, v] of flat(r.result)) if (typeof v === 'number' && !SETTING.test(k)) n.set(k, (n.get(k) ?? 0) + 1);
@@ -91,14 +94,18 @@ function RunResults({ runs, onOpen }: { runs: DataRun[]; onOpen: (id: string) =>
         {runs.map((r, i) => {
           const h = headlines(r.result, 4);
           return (
-            <button key={r.id} className={`rc s-${stOf(r.state)}`} style={{ ['--i' as string]: Math.min(i, 10) }} onClick={() => onOpen(r.id)}
+            <article key={r.id} className={`rc s-${stOf(r.state)}`} style={{ ['--i' as string]: Math.min(i, 10) }}
               data-ref={`job:${r.id}`} data-ref-label={`${tr('任务')} ${r.name}`}>
+              <button className="rc-open" onClick={() => onOpen(r.id)}>
               <span className="rc-h"><StateTag s={stOf(r.state)} /><span className="muted small">{ago(r.finished_at)}</span></span>
               <b className="rc-n" title={r.name}>{r.name}</b>
-              {h.length ? <span className="rc-m">{h.map(x => <span key={x.k}><strong>{fmtNum(x.v)}</strong><em title={x.k}>{x.name}</em></span>)}</span>
-                : '_truncated' in (r.result as object) ? <span className="muted small rc-s">{tr('结果过长，nvidb 仅返回前一部分，点击查看')}</span>
-                  : <span className="muted small rc-s">{JSON.stringify(r.result).slice(0, 120)}</span>}
-            </button>
+              {h.length ? <span className="rc-m">{h.map(x => <span key={x.k}><strong className="em-num">{fmtNum(x.v)}</strong><em title={x.k}>{x.name}</em></span>)}</span>
+                : r.result && typeof r.result === 'object' && '_truncated' in r.result ? <span className="muted small rc-s">{tr('结果过长，nvidb 仅返回前一部分，点击查看')}</span>
+                  : <span className="muted small rc-s">{r.result == null ? tr('暂无结果') : JSON.stringify(r.result).slice(0, 120)}</span>}
+              </button>
+              {r.prov?.map(n => <RecordLink key={n.id} className="rc-prov" to={provPath(seq, { node: n.id })} title={n.path}>
+                <code>{n.tag}</code>{n.state && ['changed', 'missing', 'moved'].includes(n.state) && <StateWord state={n.state}>{n.state === 'changed' ? tr('改过') : n.state === 'missing' ? tr('缺失') : tr('行号变了')}</StateWord>}<span>{figures(tr('用在文章 {0} 处', n.used ?? '—'))}</span></RecordLink>)}
+            </article>
           );
         })}
       </div>
@@ -363,7 +370,7 @@ function FileSheet({ lineId, path, onClose, onCode }: { lineId: string; path: st
           </div>
         </header>
         <div className="jd-body">
-          {f.err ? <p className="warn-box small">{f.err}</p>
+          {f.err ? <p className="small em-state" data-tone="bad">{f.err}</p>
             : !f.data ? <p className="muted small">{tr('读取中…')}</p>
               : f.data.binary || f.data.too_big ? <p className="muted small">{f.data.binary ? tr('二进制文件（{0}），此处无法打开。', bytes(f.data.size)) : tr('文件过大（{0}），请在本地打开。', bytes(f.data.size))}</p>
                 : grid ? <Sheet {...grid} /> : <pre className="json">{(f.data.text ?? '').slice(0, 40000)}</pre>}

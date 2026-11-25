@@ -13,7 +13,7 @@ import { endOf, jobRef, lineOf, placeOf, resOf, startOf, stj, t } from './jobs';
 import { usePanelNote } from './page';
 import { ago, dur, headline, headlines, pctOf, useFetch } from './util';
 
-interface Props { lineId: string; tick: number; onData: () => void }
+interface Props { lineId: string; job?: string | null; tick: number; onData: () => void }
 
 type Range = '1d' | '7d' | '30d' | 'all';
 const SPAN: Record<Exclude<Range, 'all'>, number> = { '1d': 864e5, '7d': 7 * 864e5, '30d': 30 * 864e5 };
@@ -29,6 +29,7 @@ export function Experiments(p: Props) {
   const [st, setSt] = useState<St | null>(null);
   const [q, setQ] = useState('');
   const [open, setOpenAt] = useState<{ id: string; list: string[] } | null>(null);
+  useEffect(() => { if (p.job) setOpenAt({ id: p.job, list: [] }); }, [p.job]);
   const openAt = (id: string, list: string[]) => setOpenAt({ id, list });
   const openIn = (list: string[]) => (id: string) => openAt(id, list);
   const now = Date.now();
@@ -101,14 +102,14 @@ export function Experiments(p: Props) {
           return (
             <button key={s} className={`tile pick st s-${s}${st === s ? ' on' : ''}${n ? '' : ' zero'}`} onClick={() => setSt(x => (x === s ? null : s))}
               data-ref={`count:${s}`} data-ref-label={`${ST[s].label} ${n}`}>
-              <b>{n}</b><span><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>
+              <b className={s === 'failed' && n ? 'em-num' : undefined} data-tone="bad">{n}</b><span><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>
             </button>
           );
         })}
         <div className="tile gh" title={tr('此时间段内该项目任务的占卡时长，按卡数累加')} data-ref="count:gpu-hours"
           data-ref-label={`${tr('GPU 小时')} ${gh}`}><b>{gh}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时')}</span></div>
       </div>
-      {board.err && <p className="warn-box small">{board.err}</p>}
+      {board.err && <p className="small em-state" data-tone="bad">{board.err}</p>}
 
       <Focus jobs={inRange} onOpen={openAt} />
 
@@ -153,7 +154,7 @@ function Focus({ jobs, onOpen: open }: { jobs: Job[]; onOpen: (id: string, list:
             {withRes.slice(0, 3).map(j => (
               <button key={j.id} className="fc-j" {...jobRef(j)} onClick={() => onOpen(j.id)}>
                 <span className="fc-t"><b title={j.name}>{j.name}</b><em>{when_(j)}</em></span>
-                <span className="fc-m">{headlines(resOf(j), 3).map(h => <span key={h.k} title={h.k}><strong>{fmtNum(h.v)}</strong><em>{h.name}</em></span>)}</span>
+                <span className="fc-m">{headlines(resOf(j), 3).map(h => <span key={h.k} title={h.k}><strong className="em-num">{fmtNum(h.v)}</strong><em>{h.name}</em></span>)}</span>
               </button>
             ))}
           </div>

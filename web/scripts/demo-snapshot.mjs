@@ -64,7 +64,47 @@ for (const ln of lines) {
   await get(`/api/lines/${ln.id}/papers`);
   await get(`/api/skim/resolve?line_id=${ln.id}`);
   // the project page, its research loop and what hangs off them
-  for (const part of ['card', 'canvas', 'canvas/report', 'pages', 'lead', 'memory', 'usage']) await get(`/api/lines/${ln.id}/${part}`);
+  const base = `/api/lines/${ln.id}`;
+  for (const part of ['card', 'canvas', 'canvas/report', 'pages', 'lead', 'usage', 'prov/ops']) await get(`${base}/${part}`);
+  const decisions = await get(`${base}/decided`);
+  for (const d of decisions?.decisions ?? []) {
+    const detail = await get(`${base}/decided/${encodeURIComponent(d.id)}`);
+    for (const w of detail?.work?.jobs ?? []) jobs.add(w.id);
+  }
+  for (const w of decisions?.loose ?? []) if (w.kind === 'job') jobs.add(w.id);
+  const tree = await get(`${base}/prov`);
+  const nodes = new Set(Object.keys(tree?.nodes ?? {}));
+  const ops = new Set();
+  const sessions = new Set();
+  for (const id of nodes) {
+    const n = await get(`${base}/prov/nodes/${encodeURIComponent(id)}`);
+    for (const ref of [...(n?.src ?? []), ...(n?.used ?? []), ...(n?.history ?? [])]) nodes.add(typeof ref === 'string' ? ref : ref.id);
+    if (n?.op) ops.add(n.op);
+    if (n?.made?.job?.id) jobs.add(n.made.job.id);
+    if (n?.made?.job?.op) ops.add(n.made.job.op);
+    if (n?.made?.session) sessions.add(n.made.session);
+  }
+  for (const f of tree?.files ?? []) {
+    const rows = await get(`${base}/prov/blame?${new URLSearchParams({ root: 'paper', path: f.path })}`);
+    for (const b of rows ?? []) if (b.op) ops.add(b.op);
+  }
+  let before;
+  do {
+    const options = new URLSearchParams({ limit: '40', ...(before ? { before } : {}) });
+    const page = await get(`${base}/prov/ops?${options}`);
+    for (const op of page ?? []) ops.add(op.id);
+    const next = page?.at(-1)?.ts;
+    if (!next || page.length < 40 || next === before) break;
+    before = next;
+  } while (true);
+  for (const id of ops) {
+    const op = await get(`${base}/prov/ops/${encodeURIComponent(id)}`);
+    if (op?.session) sessions.add(op.session);
+  }
+  const memory = await get(`${base}/memory`);
+  for (const m of memory?.items ?? []) {
+    if (m.kind === 'session' && (sessions.has(m.id) || sessions.has(m.key) || sessions.has(m.key.slice(m.source.length + 1)))) await get(`${base}/memory/${m.id}`);
+  }
   await get(`/api/reports?line_id=${ln.id}`);
   await get(`/api/bounds?line_id=${ln.id}`);
   for (const j of (await get(`/api/jobs?line_id=${ln.id}`))?.jobs ?? []) jobs.add(j.id);

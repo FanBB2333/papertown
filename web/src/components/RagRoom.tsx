@@ -19,7 +19,7 @@ export function RagRoom(p: Props) {
   const [res, setRes] = useState<RagResult | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { api.rag().then(r => { setV(r); setOpts(r.opts); }).catch(e => p.toast((e as Error).message)); }, [p.tick]);
+  useEffect(() => { api.rag().then(r => { setV(r); setOpts(r.opts); }).catch(e => p.toast((e as Error).message, true)); }, [p.tick]);
 
   async function save() {
     if (!opts) return;
@@ -28,14 +28,14 @@ export function RagRoom(p: Props) {
       setV(r); setOpts(r.opts);
       p.toast(tr('检索设置已保存，员工下次检索将按此执行'));
     } catch (e) {
-      p.toast((e as Error).message);
+      p.toast((e as Error).message, true);
     }
   }
 
   async function search() {
     if (!q.trim()) return;
     setBusy(true);
-    try { setRes(await api.ragSearch(q.trim())); } catch (e) { p.toast((e as Error).message); } finally { setBusy(false); }
+    try { setRes(await api.ragSearch(q.trim())); } catch (e) { p.toast((e as Error).message, true); } finally { setBusy(false); }
   }
 
   if (!v || !opts) return <div className="room-empty"><p>{tr('清点馆藏中…')}</p></div>;
@@ -66,7 +66,7 @@ export function RagRoom(p: Props) {
               <ol className="rag-hits">
                 {res.hits.map((h, i) => (
                   <li key={h.paper_id} style={{ ['--i' as string]: i }}>
-                    <span className="rag-sim" title={tr('相似度')}><i style={{ ['--v' as string]: Math.max(0, Math.min(1, h.similarity ?? 0)) }} />{(h.similarity ?? 0).toFixed(2)}</span>
+                    <span className="rag-sim" title={tr('相似度')}><i style={{ ['--v' as string]: Math.max(0, Math.min(1, h.similarity ?? 0)) }} /><span className="em-num">{(h.similarity ?? 0).toFixed(2)}</span></span>
                     <div>
                       <a href={h.url} target="_blank" rel="noreferrer"><b>{h.title}</b></a>
                       <span className="muted small">{h.year} · {h.authors}</span>

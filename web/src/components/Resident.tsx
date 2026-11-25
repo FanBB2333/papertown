@@ -13,7 +13,7 @@ const ABOUT = {
 };
 
 export function ResidentMark({ resident }: { resident: Resident }) {
-  return <span className={`resident-mark rs-${resident.state}`} title={resident.note ?? LABEL[resident.state]}><i aria-hidden />{STATE[resident.state]}</span>;
+  return <span className={resident.state === 'blocked' ? 'resident-mark em-state' : 'resident-mark'} data-tone="bad" title={resident.note ?? LABEL[resident.state]}>{STATE[resident.state]}</span>;
 }
 
 export function AgentPost({ stage }: { stage: Stage }) {
@@ -40,7 +40,7 @@ export function useResidentLine(id: string) {
 
 export function ResidentControl({ lineId, resident, model, sample, talk, onStartWith, toast, onChanged }: {
   lineId: string; resident: Resident; model?: string | null; sample?: boolean; talk?: string; onStartWith?: () => void;
-  toast: (s: string) => void; onChanged: () => void;
+  toast: (s: string, error?: boolean) => void; onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
   async function set(on: boolean) {
@@ -50,13 +50,13 @@ export function ResidentControl({ lineId, resident, model, sample, talk, onStart
       await api.setLead(lineId, { on });
       await api.lead(lineId);
       onChanged();
-    } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   return <section className={`psec resident-control rs-${resident.state}`} aria-label={tr('项目负责人')} aria-busy={busy}>
     <div className="resident-copy" aria-live="polite">
       <b className="resident-title">{tr('项目负责人')}<ResidentMark resident={resident} /></b>
       {resident.state === 'running' && <p className="muted small">{[resident.runtime, model, resident.status === 'working' ? tr('工作中') : resident.status === 'idle' ? tr('待命') : resident.status].filter(Boolean).join(' · ')}</p>}
-      {resident.state === 'blocked' && <p className="resident-warning">{resident.note ?? tr('负责人启动失败。')}</p>}
+      {resident.state === 'blocked' && <p className="resident-warning em-bar" data-tone="warn">{resident.note ?? tr('负责人启动失败。')}</p>}
       {resident.state === 'off' && sample && <p className="muted small">{tr('此为样例项目，内含占位内容。打开开关后，将由真实负责人接管推进。')}</p>}
       {(resident.state === 'starting' || resident.state === 'ended' || (resident.state === 'off' && !sample)) && <p className="muted small">{ABOUT[resident.state]}</p>}
     </div>

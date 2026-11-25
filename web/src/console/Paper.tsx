@@ -1,10 +1,12 @@
 // The paper panel, laid out like Overleaf: the paper's files, the LaTeX source and the compiled
 // PDF side by side (one at a time on a phone). Recompiling (Mod-Enter) saves what is unsaved first.
 
+import { figures } from '../emphasis';
 import { useEffect, useRef, useState } from 'react';
 import { api, paperPdfUrl, type Compiled, type WsInfo } from '../api';
 import { DEMO } from '../demo';
 import { tr } from '../i18n';
+import { follow, href, provPath } from '../route';
 import { themeVars, useLook } from './edthemes';
 import { FileView, Tabs, Tree, useFiles } from './files';
 import { Icon } from './icons';
@@ -12,7 +14,7 @@ import { usePanelNote } from './page';
 import { PHONE, useMedia } from './util';
 
 interface Props {
-  lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void;
+  lineId: string; seq: number; info: WsInfo | null; tick: number; toast: (t: string, error?: boolean) => void; onDirty: (n: number) => void; onAgents: () => void;
   reveal?: { path: string; line?: number; n: number } | null; // asked from the assistant: open this file, at this line
 }
 
@@ -66,7 +68,7 @@ function Tex(p: Props) {
   useEffect(() => p.onDirty(f.dirty), [f.dirty]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (p.reveal) { f.show(p.reveal.path); setLayout(l => (phone ? 'src' : l === 'pdf' ? 'split' : l)); } }, [p.reveal?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   const goto = p.reveal?.line && f.now?.path === p.reveal.path ? { line: p.reveal.line, n: p.reveal.n } : null;
-  useEffect(() => { if (!f.open.length && place.main) f.show(place.main); }, [place.main]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!p.reveal && !f.open.length && place.main) f.show(place.main); }, [place.main]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function compile() {
     if (DEMO) { p.toast(tr('此为只读演示，无法编译。')); return; }
@@ -79,7 +81,7 @@ function Tex(p: Props) {
       setLogOpen(!r.ok);
       if (r.ok) { setHasPdf(true); setV(Date.now()); }
     } catch (e) {
-      p.toast((e as Error).message);
+      p.toast((e as Error).message, true);
     } finally {
       setBusy(false);
     }
@@ -104,6 +106,7 @@ function Tex(p: Props) {
   const d = run && !run.ok ? digest(run.log) : null;
   const url = `${paperPdfUrl(p.lineId, v)}#view=FitH&navpanes=0`;
   const noTex = !p.info!.latexmk && p.info!.linked;
+  const prov = provPath(p.seq, f.cur || place.main ? { file: f.cur || place.main! } : {});
   usePanelNote('paper', 'tex', {
     论文目录: place.path, 主文件: place.main, 打开的文件: f.cur, 光标: f.cur ? `第 ${at.line} 行` : null, 选中的文字: at.picked,
     版面: { src: '只看源码', split: '源码和 PDF 对照', pdf: '只看 PDF' }[layout], 没保存: f.dirty ? `${f.dirty} 个文件` : null,
@@ -115,12 +118,13 @@ function Tex(p: Props) {
         <button className={`ib${side ? ' on' : ''}`} title={tr('文件列表')} onClick={() => setSide(s => !s)}><Icon n="sidebar" size={16} /></button>
         <span className="tex-name"><b>{place.name}</b>{place.git && place.branch && <span className="ide-br"><Icon n="branch" size={12} />{place.branch}</span>}</span>
         <span className="sp" />
+        <a className="btn" href={href(prov)} onClick={e => follow(e, prov)} title={tr('查看当前文件的溯源')}>{tr('查看溯源')}</a>
         <div className="seg tex-seg" role="tablist">
           <button className={layout === 'src' ? 'on' : ''} onClick={() => setLayout('src')}>{tr('源码')}</button>
           {!phone && <button className={layout === 'split' ? 'on' : ''} onClick={() => setLayout('split')}>{tr('对照')}</button>}
           <button className={layout === 'pdf' ? 'on' : ''} onClick={() => setLayout('pdf')}>PDF</button>
         </div>
-        {run && <span className={`tex-run ${run.ok ? 'ok' : 'bad'}`} onClick={() => setLogOpen(o => !o)} title={tr('查看编译日志')}>
+        {run && <span className={run.ok ? 'tex-run muted' : 'tex-run em-state'} data-tone="bad" onClick={() => setLogOpen(o => !o)} title={tr('查看编译日志')}>
           {run.ok ? tr('编译完成 · {0} 秒', run.seconds.toFixed(1)) + (run.pages ? tr(' · {0} 页', run.pages) : '') : tr('编译失败 · 查看日志')}
         </span>}
         {hasPdf && <a className="ib" href={paperPdfUrl(p.lineId, v)} target="_blank" rel="noreferrer" title={tr('在新标签页打开 PDF')}><Icon n="ext" size={15} /></a>}
@@ -147,7 +151,7 @@ function Tex(p: Props) {
             </div>
             {run && !run.ok && logOpen && d && (
               <div className="tex-log">
-                <div className="diff-h"><b>{tr('LaTeX 错误 · {0} 处 · 警告 {1} 条', d.errs.length, d.warns)}</b>
+                <div className="diff-h"><b>{figures(tr('LaTeX 错误 · {0} 处 · 警告 {1} 条', d.errs.length, d.warns), 'bad')}</b>
                   <button className="ib" onClick={() => setLogOpen(false)} aria-label={tr('关闭')}><Icon n="close" size={14} /></button></div>
                 {d.errs.map((x, i) => <pre key={i} className="tex-err">{x}</pre>)}
                 <details><summary>{tr('完整日志')}</summary><pre>{run.log.slice(-12000)}</pre></details>

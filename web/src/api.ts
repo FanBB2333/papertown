@@ -26,6 +26,7 @@ export interface Line {
   id: string; seq: number; title: string; idea: string; status: LineStatus; stage: string;
   mill_id: string | null; verdict: string | null; note: string | null; pct: number;
   current: Stage | null; stages: Stage[]; team: StageAgent[]; files: string[];
+  items?: { id: string; stage: string; title: string }[];
   sample: boolean; lead: Resident; outputs?: Record<string, any>; linked?: Linked | null;
 }
 export interface BuildingStaff { who: 'lead' | 'coder' | 'writer' | 'assistant'; agent: Agent | null; line: { id: string; seq: number; title: string } | null; name: string }
@@ -114,7 +115,7 @@ export interface ScreenStyle { fg?: string; bg?: string; b?: boolean; i?: boolea
 export interface StyledScreen { lines: [string, number][][]; styles: ScreenStyle[]; theme: { fg: string; bg: string } }
 export interface HerdrInfo { ok: boolean; note: string; live: boolean; socket: string; count: number; installed: boolean; enabled: boolean }
 
-export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act'; data: any }
+export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act' | 'sent'; data: { user_text?: string; decided?: string; [key: string]: any } }
 
 export interface ModelRef { provider: string; id: string; name: string; reasoning: boolean; contextWindow: number | null }
 
@@ -166,7 +167,7 @@ export interface ModelNews { key: string; provider: string; label: string; model
 export interface Report {
   id: number; line_id: string; agent_id: string | null; ts: string; kind: 'report' | 'ask' | 'usage';
   data: { text?: string; key?: boolean; who?: string; question?: string; choices?: string[]; open?: boolean; answer?: string;
-    answered_at?: string; by?: string; act?: { action: string } | null; result?: string };
+    answered_at?: string; by?: string; act?: { action: string } | null; result?: string; matter?: MatterContext; decided?: string };
 }
 export type Health = 'ok' | 'risk' | 'blocked';
 export type OutputState = 'todo' | 'doing' | 'done';
@@ -187,18 +188,66 @@ export interface ProjectCard {
   line: { id: string; seq: number; title: string; status: LineStatus; linked: boolean; updated_at: string; sample: boolean; lead: Resident; usage_state?: UsageState;
     stages: { key: string; name: string; status: 'todo' | 'run' | 'done' }[]; stage: { name: string; status: string; pct: number } | null };
   lead: Agent | null; card: Card | null; prev: number | null; pending: { at: string; note: string } | null;
-  jobs: Record<string, number>; asks: number; decisions?: Decision[];
+  jobs: Record<string, number>; asks: number; decisions?: CardDecision[];
+  decided?: DecisionStats & { latest?: Pick<Decision, 'id' | 'n' | 'mod' | 'text'>[] };
+  prov?: ProvStats & { recent?: Op[] };
   running: CardRun[]; queued: CardRun[]; repos: { code: CardRepo | null; paper: CardRepo | null }; memory: MemoryCounts;
   checks?: { hard: CheckCounts; soft: CheckCounts };
 }
 
 // 待你决定 on a card (decisions.py): a question, a native permission request, a terminal dialog, or a line of the card
 export interface DecisionOption { label: string; value: boolean | number | string; main?: boolean }
-export interface Decision {
-  kind: 'ask' | 'permission' | 'prompt' | 'need'; id: string; agent: string | null; who: string; title: string; detail: string;
+export interface CardDecision {
+  kind: 'matter' | 'ask' | 'permission' | 'prompt' | 'need'; id: string; agent: string | null; who: string; title: string; detail: string;
   options: DecisionOption[]; free: boolean; ready: boolean; since: string | null;
+  mod?: FlowPart; facts?: string[]; options_text?: string[]; materials?: Material[]; write?: boolean;
+  act?: { action: string } | null;
   later?: boolean; // a line of the card while no lead runs: it hears the choice with the next card request
 }
+
+export interface Material { kind: string; ref: string; title: string }
+export interface MatterContext { mod: FlowPart; facts: string[]; options: string[]; materials: Material[] }
+export interface Matter extends MatterContext { id: number; question: string; agent: string; who: string; since: string }
+export interface Work {
+  kind: 'job' | 'output' | 'tell' | 'task' | 'prov'; id: string; title: string; who: string; at: string | null; basis: string[];
+}
+type WorkGroup = 'jobs' | 'outputs' | 'tells' | 'tasks' | 'prov';
+export interface Decision {
+  id: string; n: number; mod: FlowPart; text: string; source: 'idea' | 'written' | 'answer' | 'chat'; ref: string | null;
+  state: 'active' | 'replaced' | 'withdrawn'; replaces: string | null; replaced_by: string | null;
+  materials: Material[]; matter: (MatterContext & { question: string }) | null; created_at: string; ended_at: string | null;
+  counts: Record<WorkGroup, number>;
+}
+export interface DecisionDetail extends Decision { work: Record<WorkGroup, Work[]> }
+export interface DecisionStats { total: number; active: number; anchored: number; loose: number }
+export interface DecidedView {
+  decisions: Decision[]; matters: Matter[]; loose: Work[]; stats: DecisionStats; mods: { id: FlowPart; name: string }[];
+}
+export interface WriteDecision { text: string; mod?: FlowPart; replaces?: string; matter?: number; need?: string; materials?: (Omit<Material, 'title'> & { title?: string })[] }
+
+export interface ProvStats { floats: { total: number; tagged: number }; numbers: { total: number; ok: number }; changed: number; ops: number }
+export interface ProvNode {
+  id: string; tag: string; kind: 'passage' | 'artifact' | 'result' | 'source'; title: string; root: WsRoot | null; path: string;
+  span: { start: number; end: number; text: string } | null; blob: string; op: string | null;
+  state: 'ok' | 'moved' | 'changed' | 'missing';
+  made: { at: string; agent: string | null; role: string | null; who: string; model: string | null; session: string | null; how: string | null; basis: string[];
+    job: { id: string; name: string | null; command: string | null; node: string | null; status: string | null; started_at: string | null; ended_at: string | null; op: string | null; cwd: string | null } | null };
+  src: string[]; numbers: { text: string; ok: boolean; where: string | null }[]; gaps: string[]; note: string | null; created_at: string;
+}
+export interface ProvDetail extends ProvNode {
+  now: string | null; then: string | null; diff: string; used: ProvRef[]; history: ProvRef[];
+}
+export type ProvRef = Pick<ProvNode, 'id' | 'tag' | 'title'>;
+export interface ProvView {
+  stats: ProvStats; files: { path: string; title: string; sections: { title: string; line: number; nodes: string[]; rest: { who: string; lines: number }[] }[] }[];
+  nodes: Record<string, ProvNode>; loose: string[];
+}
+export interface Op {
+  id: string; short: string; root: WsRoot; ts: string; trigger: string; agent: string | null; role: string | null; who: string;
+  session: string | null; basis: string[]; files: number; added: number; removed: number; summary: string;
+}
+export interface OpDetail extends Omit<Op, 'files'> { files: { path: string; added: number; removed: number; diff: string }[] }
+export interface BlameLine { start: number; end: number; op: string; who: string; role: string | null; at: string; node: string | null; commit?: string; author?: string; date?: string }
 
 // checks (checks.py): hard checks are code and must pass; soft checks are the lead's judgement
 export type CheckStatus = 'pass' | 'warn' | 'fail' | 'none' | 'wait';
@@ -232,7 +281,7 @@ export interface Gate {
   escalated: boolean; open: boolean; waived: boolean; reached: boolean; next: string | null; locks: string | null;
 }
 export interface BoundRule { id: string; kind: 'must' | 'never' | 'ask'; text: string; from: string; action: string | null }
-export interface HumanItem { kind: 'escalated' | 'blocked' | 'stale' | 'fail' | 'ask' | 'line'; id: string; text: string; gate?: string }
+export interface HumanItem { kind: 'escalated' | 'blocked' | 'stale' | 'fail' | 'ask' | 'line' | 'matter'; id: string; text: string; gate?: string; ask?: number }
 export interface CanvasNode {
   id: string; kind: CanvasKind; x: number; y: number; mod: FlowPart; title?: string; text?: string; // mod: the block it belongs to
   w?: number; h?: number; // an info card: how big it is drawn
@@ -240,6 +289,7 @@ export interface CanvasNode {
   note?: string; role?: TaskTo | null; locked?: { gate: string; title: string } | null; // a stage: its note, who works there, the gate holding it
   check?: Check; gate?: Gate;
   rules?: BoundRule[]; items?: HumanItem[];
+  basis?: string[]; created_by?: 'you' | 'assistant' | 'papertown';
   to?: TaskTo; sent_at?: string | null; done_at?: string | null; result?: string; by?: string; log?: TaskLog[];
   agent_id?: string | null; agent?: Agent | null;
   // a task's turn: what it waits for while queued, why it could not be delivered, and why its result is to be looked at again
@@ -250,6 +300,7 @@ export interface CanvasNode {
 export type EdgeKind = 'flow' | 'watch' | 'spec' | 'clamp' | 'hard_loop' | 'soft_loop' | 'escalate' | 'member' | 'order'; // order: between two tasks, the first before the second
 export interface CanvasEdge { id: string; source: string; target: string; label?: string; kind?: EdgeKind }
 export interface CanvasView {
+  decided?: Partial<Record<FlowPart, number>>;
   line_id: string; seq: number; title: string; nodes: CanvasNode[]; edges: CanvasEdge[]; gone: { id: string; title: string }[];
   spare: { id: string; title: string }[]; blocks: CanvasBlock[]; rows: FlowPart[][]; checks: Check[]; // rows: the blocks as they stand, row by row
   summary: { hard: CheckCounts; soft: CheckCounts }; tasks: Record<TaskStatus, number>;
@@ -303,8 +354,10 @@ export interface PaseoConversation {
   id: string; title: string | null; provider: string; model: string | null; cwd: string | null; status: string;
   updated: string; last_user: string | null; linked: string | null;
 }
-export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null }
+export interface PaseoItem { ts: string; kind: 'user' | 'assistant' | 'tool' | 'error' | 'note'; text?: string; id?: string; name?: string; status?: string; arg?: string; error?: string | null;
+  event_id?: number; origin?: string; decided?: string; user_text?: string; data?: { event_id?: number; origin?: string; decided?: string; user_text?: string } }
 export interface PaseoPermission { id: string; name: string; title: string | null; arg: string; kind?: string }
+interface AgentTimeline { agent: Agent; items: PaseoItem[]; queued: AgentEvent[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null }; transcript?: Transcript }
 export interface StartOpts { runtime?: 'pi' | 'paseo' | TermBackend; provider?: string; model?: string; thinking?: string; account?: string }
 
 export interface AssistantView { agent: Agent; asks: AgentEvent[]; acts: AgentEvent[]; actions: Record<string, { what: string; args: string }> }
@@ -341,6 +394,7 @@ export interface Job {
   id: string; line_id: string | null; name: string; backend: string; status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   progress: number; command: string | null; cwd: string | null; result: any; note: string | null; submitted_by: string | null;
   created_at: string; started_at: string | null; ended_at: string | null; log?: string;
+  basis?: string[]; op?: string | null; outs?: string[];
   external?: boolean; nvidb?: NvJob;
 }
 
@@ -388,6 +442,7 @@ export interface WsTree { root: WsRoot; files: WsEntry[]; truncated: boolean }
 export interface WsFile { path: string; size: number; mtime: number; binary: boolean; too_big: boolean; text: string | null }
 export interface Compiled { ok: boolean; log: string; pages?: number | null; seconds: number }
 export interface DataRun {
+  prov?: { id: string; tag: string; path: string; state?: ProvNode['state']; used?: number }[];
   id: string; name: string; state: string; where: string | null; started_at: string | null; finished_at: string | null;
   elapsed_s: number | null; exit_code: number | null; vram_mb: number | null; result: unknown;
   script?: string | null; entry?: string | null; // the file of the code repository its command ran, and the script or module as the command names it
@@ -454,15 +509,16 @@ const pageLook = () => {
   return h.classList.contains('ui-cf') ? `?look=${h.dataset.mode === 'dark' ? 'dark' : 'light'}` : '';
 };
 // localize() keep-predicates: what you and the agents wrote stays as written; only the town's own text is translated
-const said = (v: object) => ['user', 'assistant'].includes((v as { kind?: string }).kind ?? '') || (v as { type?: string }).type === 'agent_delta';
+const said = (v: object) => ['user', 'assistant', 'sent'].includes((v as { kind?: string }).kind ?? '') || (v as { type?: string }).type === 'agent_delta';
 const written = (v: object) => said(v) || 'question' in v || ('key' in v && 'text' in v && !('threshold' in v));
-const carded = (v: object) => said(v) || ('summary' in v && 'health' in v);
+const carded = (v: object) => said(v) || ('summary' in v && 'health' in v) || ('n' in v && 'mod' in v && 'text' in v)
+  || ('options' in v && 'free' in v) || ('recent' in v && 'ops' in v) || 'path' in v;
 const asIs = () => true;
 const ruled = (v: object) => 'inherit' in v && 'kind' in v;
 // a check's findings and results keep the paper's words and the lead's, and tasks and notes on the canvas keep
 // yours; the page translates their own labels
-const kept = (v: object) => ('file' in v && 'hit' in v) || ('seen' in v && 'note' in v) || ('source' in v && 'target' in v) || ['task', 'note'].includes((v as { kind?: string }).kind ?? '');
-const KEEP_EVENT: Record<string, (v: object) => boolean> = { report: written, card: carded, agent_event: said, agent_delta: said, page: asIs };
+const kept = (v: object) => ('file' in v && 'hit' in v) || ('seen' in v && 'note' in v) || ('source' in v && 'target' in v) || ['task', 'note', 'matter'].includes((v as { kind?: string }).kind ?? '');
+const KEEP_EVENT: Record<string, (v: object) => boolean> = { report: written, card: carded, decided: asIs, prov: asIs, agent_event: said, agent_delta: said, page: asIs };
 
 async function call<T>(method: string, url: string, body?: unknown, keep?: (v: object) => boolean): Promise<T> {
   if (DEMO) return localize(await demoCall(method, url), keep) as T;
@@ -473,13 +529,32 @@ async function call<T>(method: string, url: string, body?: unknown, keep?: (v: o
   let data;
   try { data = await r.json(); }
   catch { throw new Error(tr('服务返回了无效的 JSON（HTTP {0}）', r.status)); }
-  if (!r.ok) throw new Error(data.detail ? (typeof data.detail === 'string' ? trx(data.detail) : tr('输入有误')) : tr('请求失败 {0}', r.status));
+  if (!r.ok) throw new Error(data.detail === 'Not Found' && r.status === 404 ? tr('此接口暂不可用') : data.detail ? (typeof data.detail === 'string' ? trx(data.detail) : tr('输入有误')) : tr('请求失败 {0}', r.status));
   return localize(data, keep) as T;
 }
 
 async function residentCard(card: ProjectCard): Promise<ProjectCard> {
   const line = await call<Line>('GET', `/api/lines/${card.line.id}`);
   return { ...card, line: { ...card.line, lead: line.lead, sample: line.sample } };
+}
+
+// Older provider transcripts lack Papertown event IDs. Only attach an event when both the
+// original text and the send time identify a single message in both histories.
+async function agentTimeline(id: string) {
+  const v = await call<AgentTimeline>('GET', `/api/agents/${id}/timeline`, undefined, said);
+  const users = v.items.filter(x => x.kind === 'user');
+  if (!v.agent.line_id || users.every(x => (x.event_id || x.data?.event_id) && (x.origin || x.data?.origin))) return v;
+  const events = await call<{ events: AgentEvent[] }>('GET', `/api/agents/${id}?after=0`, undefined, said).catch(() => null);
+  if (!events) return v;
+  const matches = (x: PaseoItem, e: AgentEvent) => e.kind === 'user' && x.text === e.data.text && Math.abs(Date.parse(e.ts) - Date.parse(x.ts)) < 10000;
+  for (const x of users) {
+    const id = x.event_id ?? x.data?.event_id;
+    const candidates = id ? events.events.filter(e => e.kind === 'user' && e.id === id) : events.events.filter(e => matches(x, e));
+    const e = candidates[0];
+    if (candidates.length !== 1 || (!id && users.filter(item => matches(item, e)).length !== 1)) continue;
+    x.event_id = e.id; x.origin ??= e.data.origin; x.decided ??= e.data.decided; x.user_text ??= e.data.user_text;
+  }
+  return v;
 }
 
 export const api = {
@@ -556,7 +631,7 @@ export const api = {
   dismissModels: (keys?: string[]) => call<{ news: ModelNews[] }>('POST', '/api/paseo/news/dismiss', { keys: keys ?? null }),
   conversations: () => call<{ conversations: PaseoConversation[] }>('GET', '/api/paseo/conversations'),
   importAgent: (lineId: string, role: AgentRole, extId: string) => call<Agent>('POST', '/api/agents/import', { line_id: lineId, role, ext_id: extId }),
-  timeline: (id: string) => call<{ agent: Agent; items: PaseoItem[]; queued: AgentEvent[]; paseo: { permissions?: PaseoPermission[]; usage?: { cost: number } | null }; transcript?: Transcript }>('GET', `/api/agents/${id}/timeline`, undefined, said),
+  timeline: agentTimeline,
   permit: (id: string, requestId: string, allow: boolean) => call<{ ok: boolean }>('POST', `/api/agents/${id}/permit`, { request_id: requestId, allow }),
   samples: () => call<{ added: string[]; note: string }>('POST', '/api/samples'),
   library: (q = '', topic = '', limit = 60) => call<Shelf>('GET', `/api/library?${new URLSearchParams({ q, topic, limit: String(limit) })}`),
@@ -588,8 +663,23 @@ export const api = {
   setNetwork: (v: Partial<NetworkSettings>) => call<NetworkView>('PUT', '/api/network', v),
   accessKeys: () => call<{ keys: AccessKey[] }>('GET', '/api/auth/keys'),
   createKey: (name: string) => call<AccessKey & { key: string }>('POST', '/api/auth/keys', { name }),
-  decideCard: (lineId: string, d: { kind: Decision['kind']; id: string; agent: string | null; value: DecisionOption['value'] | null; text?: string }) =>
-    call<ProjectCard>('POST', `/api/lines/${encodeURIComponent(lineId)}/decide`, d),
+  decided: (line: string) => call<DecidedView>('GET', `/api/lines/${line}/decided`, undefined, asIs),
+  decision: (line: string, id: string) => call<DecisionDetail>('GET', `/api/lines/${line}/decided/${encodeURIComponent(id)}`, undefined, asIs),
+  writeDecision: (line: string, body: WriteDecision) => call<DecisionDetail>('POST', `/api/lines/${line}/decided`, body, asIs),
+  quoteDecision: (line: string, event_id: number, mod: FlowPart) => call<DecisionDetail>('POST', `/api/lines/${line}/decided/quote`, { event_id, mod }, asIs),
+  withdrawDecision: (line: string, id: string) => call<DecisionDetail>('POST', `/api/lines/${line}/decided/${encodeURIComponent(id)}/withdraw`, undefined, asIs),
+  prov: (line: string) => call<ProvView>('GET', `/api/lines/${line}/prov`, undefined, asIs),
+  provNode: (line: string, id: string) => call<ProvDetail>('GET', `/api/lines/${line}/prov/nodes/${encodeURIComponent(id)}`, undefined, asIs),
+  provOps: (line: string, opts: { root?: WsRoot; before?: string; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(opts)) if (v != null) q.set(k, String(v));
+    return call<Op[]>('GET', `/api/lines/${line}/prov/ops${q.size ? `?${q}` : ''}`, undefined, asIs);
+  },
+  provOp: (line: string, id: string) => call<OpDetail>('GET', `/api/lines/${line}/prov/ops/${encodeURIComponent(id)}`, undefined, asIs),
+  provBlame: (line: string, root: WsRoot, path: string) => call<BlameLine[]>('GET', `/api/lines/${line}/prov/blame?${new URLSearchParams({ root, path })}`, undefined, asIs),
+  provSnap: (line: string) => call<Record<WsRoot, string | null>>('POST', `/api/lines/${line}/prov/snap`, undefined, asIs),
+  decideCard: (lineId: string, d: { kind: CardDecision['kind']; id: string; agent: string | null; value: DecisionOption['value'] | null; text?: string }) =>
+    call<ProjectCard>('POST', `/api/lines/${encodeURIComponent(lineId)}/decide`, d, carded),
   revokeKey: (id: string) => call<{ keys: AccessKey[] }>('DELETE', `/api/auth/keys/${encodeURIComponent(id)}`),
   updateCard: (lineId: string, note = '') => call<ProjectCard>('POST', `/api/lines/${lineId}/card`, { note }, carded).then(residentCard),
   cancelCard: (lineId: string) => call<ProjectCard>('POST', `/api/lines/${lineId}/card/cancel`, {}, carded).then(residentCard),
@@ -597,19 +687,19 @@ export const api = {
   lead: (lineId: string) => call<LeadView>('GET', `/api/lines/${lineId}/lead`, undefined, written),
   setLead: (lineId: string, o: { on?: boolean; supervise?: boolean; every?: number }) => call<LeadView['settings']>('POST', `/api/lines/${lineId}/lead`, o),
   reports: (lineId?: string) => call<{ reports: Report[]; asks: Report[] }>('GET', `/api/reports${lineId ? `?line_id=${lineId}` : ''}`, undefined, written),
-  answer: (id: number, text: string) => call<Report>('POST', `/api/reports/${id}/answer`, { text }),
+  answer: (id: number, text: string) => call<Report>('POST', `/api/reports/${id}/answer`, { text }, written),
   bounds: (lineId?: string) => call<BoundsView>('GET', `/api/bounds${lineId ? `?line_id=${lineId}` : ''}`, undefined, ruled),
   saveBounds: (o: { line_id?: string; role?: string; rules: Partial<Bound>[]; off?: string[] }) => call<BoundsView>('PUT', '/api/bounds', o, ruled),
   say: (id: string, text: string, mode?: SayMode) => call<AgentEvent>('POST', `/api/agents/${id}/say`, { text, mode }),
   brief: (id: string) => call<AgentEvent>('POST', `/api/agents/${id}/brief`),
   abort: (id: string) => call<{ ok: boolean }>('POST', `/api/agents/${id}/abort`),
-  ws: (lineId: string) => call<WsInfo>('GET', `/api/lines/${lineId}/ws`),
-  wsTree: (lineId: string, root: WsRoot) => call<WsTree>('GET', `/api/lines/${lineId}/ws/${root}/tree`),
-  wsFile: (lineId: string, root: WsRoot, path: string) => call<WsFile>('GET', `/api/lines/${lineId}/ws/${root}/file?${new URLSearchParams({ path })}`),
-  wsSave: (lineId: string, root: WsRoot, path: string, text: string) => call<WsEntry>('PUT', `/api/lines/${lineId}/ws/${root}/file`, { path, text }),
-  wsDiff: (lineId: string, root: WsRoot, path: string) => call<{ path: string; diff: string }>('GET', `/api/lines/${lineId}/ws/${root}/diff?${new URLSearchParams({ path })}`),
+  ws: (lineId: string) => call<WsInfo>('GET', `/api/lines/${lineId}/ws`, undefined, asIs),
+  wsTree: (lineId: string, root: WsRoot) => call<WsTree>('GET', `/api/lines/${lineId}/ws/${root}/tree`, undefined, asIs),
+  wsFile: (lineId: string, root: WsRoot, path: string) => call<WsFile>('GET', `/api/lines/${lineId}/ws/${root}/file?${new URLSearchParams({ path })}`, undefined, asIs),
+  wsSave: (lineId: string, root: WsRoot, path: string, text: string) => call<WsEntry>('PUT', `/api/lines/${lineId}/ws/${root}/file`, { path, text }, asIs),
+  wsDiff: (lineId: string, root: WsRoot, path: string) => call<{ path: string; diff: string }>('GET', `/api/lines/${lineId}/ws/${root}/diff?${new URLSearchParams({ path })}`, undefined, asIs),
   compile: (lineId: string) => call<Compiled>('POST', `/api/lines/${lineId}/ws/paper/compile`),
-  data: (lineId: string) => call<LineData>('GET', `/api/lines/${lineId}/data`),
+  data: (lineId: string) => call<LineData>('GET', `/api/lines/${lineId}/data`, undefined, v => 'path' in v || 'result' in v),
   nvJob: (id: number) => call<NvJobFull>('GET', `/api/nvidb/jobs/${id}`),
   assistant: () => call<AssistantView>('GET', '/api/assistant'),
   assistantPage: (page: PageCtx) => call<{ ok: boolean }>('POST', '/api/assistant/page', { page }),
@@ -670,7 +760,7 @@ export function subscribe(onEvent: (e: ServerEvent) => void, onState: (ok: boole
   if (DEMO) { onState(true); return () => {}; }
   const es = new EventSource('/api/events');
   const types = ['line', 'message', 'trace', 'world', 'building', 'skills', 'library', 'item',
-    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'terminal', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas', 'usage'];
+    'job', 'agent', 'agent_event', 'agent_delta', 'agent_live', 'terminal', 'assistant_show', 'report', 'paseo_models', 'card', 'card_layout', 'memory', 'page', 'checks', 'canvas', 'usage', 'decided', 'prov'];
   for (const t of types) es.addEventListener(t, ev => {
     const e = localize(JSON.parse((ev as MessageEvent).data), KEEP_EVENT[t]);
     onEvent(e);

@@ -8,11 +8,12 @@ import { tr } from '../i18n';
 import { themeVars, useLook } from './edthemes';
 import { FileView, Tabs, Tree, langOf, useFiles } from './files';
 import { Icon } from './icons';
+import { DiffLines } from './DiffLines';
 import { usePanelNote } from './page';
 import { PHONE, useMedia } from './util';
 
 interface Props {
-  lineId: string; info: WsInfo | null; tick: number; toast: (t: string) => void; onDirty: (n: number) => void; onAgents: () => void;
+  lineId: string; info: WsInfo | null; tick: number; toast: (t: string, error?: boolean) => void; onDirty: (n: number) => void; onAgents: () => void;
   reveal?: { path: string; line?: number; n: number } | null; // asked from another panel or the assistant: open this file
 }
 
@@ -64,7 +65,7 @@ function Repo(p: Props) {
   const showDiff = () => {
     if (!cur) return;
     if (diff) { setDiff(null); return; }
-    api.wsDiff(p.lineId, 'code', cur.path).then(d => setDiff({ path: d.path, text: d.diff || tr('（与 git 中一致）') })).catch(e => p.toast((e as Error).message));
+    api.wsDiff(p.lineId, 'code', cur.path).then(d => setDiff({ path: d.path, text: d.diff || tr('（与 git 中一致）') })).catch(e => p.toast((e as Error).message, true));
   };
 
   return (
@@ -79,13 +80,13 @@ function Repo(p: Props) {
           {place.git && <span className="ide-br"><Icon n="branch" size={13} />{place.branch ?? 'HEAD'}</span>}
         </div>
         <input className="ide-filter" placeholder={tr('筛选文件')} value={q} onChange={e => setQ(e.target.value)} />
-        {f.tree.err && <p className="warn-box small">{f.tree.err}</p>}
+        {f.tree.err && <p className="small em-state" data-tone="bad">{f.tree.err}</p>}
         {changed.length > 0 && !q && (
           <div className="ide-changes">
             <span className="ide-t">{tr('改动 · {0}', changed.length)}</span>
             {changed.slice(0, 6).map(x => (
               <button key={x.path} className={`ide-ch st-${x.status}`} onClick={() => open(x.path)} title={x.path}>
-                <span>{x.path}</span><em>{x.status?.[0].toUpperCase()}</em>
+                <span>{x.path}</span><em className="em-mark" data-tone="warn">{x.status?.[0].toUpperCase()}</em>
               </button>
             ))}
             {changed.length > 6 && <span className="muted small">{tr('还有 {0} 个', changed.length - 6)}</span>}
@@ -107,7 +108,7 @@ function Repo(p: Props) {
         <footer className="ide-status">
           {place.git && <span><Icon n="branch" size={12} />{place.branch ?? 'HEAD'}</span>}
           <span>{tr('{0} 处改动', changed.length)}</span>
-          {f.dirty > 0 && <span className="warn-t">{tr('{0} 个未保存', f.dirty)}</span>}
+          {f.dirty > 0 && <span className="em-mark" data-tone="warn">{tr('{0} 个未保存', f.dirty)}</span>}
           {DEMO && <span>{tr('只读')}</span>}
           <span className="sp" />
           {cur && <><span>{tr('行 {0}，列 {1}', pos[0], pos[1])}</span><span>{langOf(cur.path)}</span><span>UTF-8</span></>}
@@ -121,9 +122,7 @@ function Diff({ text, onClose }: { text: string; onClose: () => void }) {
   return (
     <div className="diff">
       <div className="diff-h"><b>{tr('和 git 里的版本对比')}</b><button className="ib" onClick={onClose} aria-label={tr('关闭')}><Icon n="close" size={14} /></button></div>
-      <pre>{text.split('\n').map((l, i) => (
-        <span key={i} className={l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : l.startsWith('@@') ? 'hunk' : ''}>{l}{'\n'}</span>
-      ))}</pre>
+      <DiffLines text={text} />
     </div>
   );
 }

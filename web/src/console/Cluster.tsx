@@ -2,6 +2,7 @@
 // it, by card or by person, then what waits for a card.
 
 import { useMemo, useState } from 'react';
+import { figures } from '../emphasis';
 import type { Gpu, GpuNode, GpuProc, GpuStatus, NvJob } from '../api';
 import { gb, refreshGpus, useGpus } from '../components/Gpus';
 import { tr } from '../i18n';
@@ -70,7 +71,7 @@ export function Cluster({ mine, onOpen }: Props) {
   }, [hover, byId]);
 
   const head = <span className="cs-ic"><Icon n="gpu" size={15} /></span>;
-  if (!g || !g.ok) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className="muted small">{g ? g.note : tr('读取 nvidb 中…')}</p></section>;
+  if (!g || !g.ok) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className={g ? 'small em-state' : 'muted small'} data-tone="bad">{g ? g.note : tr('读取 nvidb 中…')}</p></section>;
 
   const up = g.nodes.filter(n => n.state === 'up');
   const probed = Math.max(...up.map(n => t(n.probed_at ?? n.last_seen)).filter(Number.isFinite), 0);
@@ -83,8 +84,8 @@ export function Cluster({ mine, onOpen }: Props) {
     <section className="cs queue cl">
       <div className="cs-h">
         {head}<h3>{tr('GPU 与队列')}</h3>
-        <span className={`live${stale ? ' stale' : ''}`} title={tr('nvidb 的 keeper 定时读取各机器显卡，Papertown 每 {0} 秒从 nvidb 获取最新读数', g.poll_s ?? 10)}>
-          <i />{stale ? (probed ? tr('nvidb 已 {0} 无新读数', dur(age / 1000)) : tr('暂无读数')) : tr('实时 · {0}读取', secsAgo(age))}
+        <span className={`live${stale ? ' em-state' : ''}`} data-tone={stale ? 'warn' : undefined} title={tr('nvidb 的 keeper 定时读取各机器显卡，Papertown 每 {0} 秒从 nvidb 获取最新读数', g.poll_s ?? 10)}>
+          {stale ? (probed ? tr('nvidb 已 {0} 无新读数', dur(age / 1000)) : tr('暂无读数')) : tr('实时 · {0}读取', secsAgo(age))}
         </span>
         <button className="ib" onClick={refreshGpus} title={tr('立即从 nvidb 读取')}><Icon n="refresh" size={14} /></button>
         <div className="seg mini cl-sw">
@@ -93,8 +94,8 @@ export function Cluster({ mine, onOpen }: Props) {
         </div>
       </div>
       <p className="cl-sum muted small">
-        {tr('{0} 张卡 · {1} 张有余量 · {2} 个运行中 · {3} 个排队', g.summary?.gpus ?? 0, g.summary?.room ?? 0, running, pending)}
-        {g.alerts ? <span className="warn-t"> · {tr('{0} 条告警未确认', g.alerts)}</span> : null}
+        <span>{figures(tr('{0} 张卡 · {1} 张有余量 · {2} 个运行中 · {3} 个排队', g.summary?.gpus ?? 0, g.summary?.room ?? 0, running, pending))}</span>
+        {g.alerts ? <span className="em-bar" data-tone="warn"> · {tr('{0} 条告警未确认', g.alerts)}</span> : null}
         <label className={`qb-mine${mine.size ? '' : ' off'}`} title={mine.size ? '' : tr('该项目当前暂无队列任务')}>
           <input type="checkbox" checked={onlyMine} disabled={!mine.size} onChange={e => setOnlyMine(e.target.checked)} />{tr('仅看本项目')}
         </label>
@@ -143,7 +144,7 @@ function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
                 <span className="qb-pill">{tr('{0} 张卡', n.gpus.length)}</span>
                 <span className={`qb-pill${users.size ? ' busy' : ''}`}>{tr('{0} 人使用中', users.size)}</span>
                 {all.some(r => r.occ.some(o => o.job && mine.has(o.job.id))) && <span className="qb-pill mine">{tr('含本项目')}</span>}
-              </> : <span className="qb-pill">{n.state}</span>}
+              </> : <span className="em-state" data-tone="bad">{n.state}</span>}
               {Number.isFinite(p) && <span className="cl-age muted small">{tr('{0}读取', secsAgo(now - p))}</span>}
             </button>
             {!closed && rows.map(({ x, occ, queued }, i) => (
@@ -152,7 +153,7 @@ function ByCard({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
                 <div className="cl-gpu">
                   <div className="cl-gh">
                     <b>GPU {x.index}</b><span className="muted small" title={x.name}>{x.name}</span>
-                    <span className={`qb-util${x.util_percent > 80 ? ' hot' : ''}`} style={{ ['--u' as string]: x.util_percent / 100 }} title={tr('利用率')}>{x.util_percent}%</span>
+                    <span className="qb-util em-num" data-tone={x.util_percent > 80 ? 'warn' : 'info'} style={{ ['--u' as string]: x.util_percent / 100 }} title={tr('利用率')}>{x.util_percent}%</span>
                   </div>
                   <div className="cl-mem">
                     <Meter total={x.mem_total_mb} label={`${n.name} · GPU ${x.index} · ${gb(x.mem_total_mb)}`} parts={[
@@ -241,7 +242,7 @@ function NextChip({ id, k, ctx }: { id: number; k: number; ctx: Ctx }) {
         ...(j?.created_at ? [{ v: when(Date.parse(j.created_at)), k: tr('提交') }] : [])],
         foot: j?.notes ? j.notes.slice(0, 160) : undefined })}
       onPointerLeave={() => { setHover(null); tip.hide(); }}>
-      <em>{j?.held ? '!' : k}</em><b>#{id}</b><span>{j?.name ?? ''}</span>
+      <em className={j?.held ? 'em-state' : undefined} data-tone="warn">{j?.held ? tr('挂起') : k}</em><b>#{id}</b><span>{j?.name ?? ''}</span>
     </button>
   );
 }
@@ -292,7 +293,7 @@ function Waiting({ ctx, onlyMine }: { ctx: Ctx; onlyMine: boolean }) {
     <div className="qb-wait">
       {groups.filter(([, , js]) => js.length).map(([k, name, js]) => (
         <div key={k} className={`qw qw-${k}`}>
-          <h4><i>{k === 'held' ? '!' : k === 'dep' ? '⛓' : ST.queued.sign}</i>{name}<span>{js.length}</span></h4>
+          <h4 className={k === 'held' && js.length ? 'em-bar' : undefined} data-tone="warn"><i>{k === 'held' ? '!' : k === 'dep' ? '⛓' : ST.queued.sign}</i>{name}<span>{js.length}</span></h4>
           {js.slice(0, 14).map(j => (
             <button key={j.id} className={`qw-j${mine.has(j.id) ? ' mine' : ''}${lit && !lit.has(j.id) ? ' dim' : ''}`}
               onClick={() => onOpen(`nvidb-${j.id}`)} onPointerEnter={() => setHover(j.id)} onPointerLeave={() => setHover(null)}>

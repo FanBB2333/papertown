@@ -2,6 +2,7 @@
 // to in a sidebar. On a phone it is one column: the project bar on top, the most-used panels as bottom tabs.
 //   #view=console&line=line_2&m=paper   — open a project's panel directly
 
+import { Tooltip } from '@cloudflare/kumo';
 import { typing } from '../components/walk';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type Line, type Placement, type Report, type ShowTarget } from '../api';
@@ -12,6 +13,7 @@ import { StatusTag } from '../components/MillRoom';
 import { RagRoom } from '../components/RagRoom';
 import { SkillRoom } from '../components/SkillRoom';
 import { tr, trx } from '../i18n';
+import { query } from '../route';
 import { Bounds } from './Bounds';
 import { Code } from './Code';
 import { Data } from './Data';
@@ -147,6 +149,11 @@ export function Console(p: Props) {
   // the panels that keep their state (editors, open files, edits) while another is shown
   const [kept, setKept] = useState<Set<ModId>>(new Set());
   useEffect(() => { setKept(new Set()); setReveal(null); }, [id]);
+  const target = p.active && p.at?.seq === cur?.seq ? query() : null;
+  const file = target?.get('file'), at = Number(target?.get('line')) || undefined;
+  useEffect(() => {
+    if (file && (mod === 'paper' || mod === 'code')) setReveal(r => ({ root: mod, path: file, line: at, n: (r?.n ?? 0) + 1 }));
+  }, [id, mod, file, at]);
   useEffect(() => { if (mod === 'code' || mod === 'paper') setKept(k => (k.has(mod) ? k : new Set([...k, mod]))); }, [mod, id]);
 
   const unsaved = () => dirty.current.code + dirty.current.paper;
@@ -277,7 +284,7 @@ export function Console(p: Props) {
         </nav>
         <div className="fb-r">
           {waiting > 0 && (
-            <button className="fb-wait" onClick={() => { setRailTab('projects'); setFilter('you'); setRail(true); }} title={tr('{0} 项目待处理', waiting)}>
+            <button className="fb-wait em-bar" data-tone="warn" onClick={() => { setRailTab('projects'); setFilter('you'); setRail(true); }} title={tr('{0} 项目待处理', waiting)}>
               <i /><span className="fb-wl">{tr('{0} 项目待处理', waiting)}</span><b className="fb-wn">{waiting}</b>
             </button>
           )}
@@ -306,8 +313,8 @@ export function Console(p: Props) {
             <section className={`cm-mod on${BLEED.has(mod) ? ' bleed' : ''}`} key={mod} style={{ ['--dir' as string]: dir }}>
               {mod === 'overview' ? <Overview line={line} info={ws.data} tick={p.tick} typeOf={typeOf} go={m => go({ mod: m })} onAsk={() => p.onAsk('mill', tr('造纸厂'))} onOpen={bid => openBuilding(bid, id)} />
                 : mod === 'survey' ? <Survey line={line} tick={p.tick} />
-                  : mod === 'exp' ? <Experiments lineId={id} tick={p.tick} onData={() => go({ mod: 'data' })} />
-                    : mod === 'data' ? <Data lineId={id} tick={p.tick} onOpenFile={path => { setReveal(r => ({ root: 'code', path, n: (r?.n ?? 0) + 1 })); go({ mod: 'code' }); }} />
+                  : mod === 'exp' ? <Experiments lineId={id} job={target?.get('job')} tick={p.tick} onData={() => go({ mod: 'data' })} />
+                    : mod === 'data' ? <Data lineId={id} seq={cur.seq} tick={p.tick} onOpenFile={path => { setReveal(r => ({ root: 'code', path, n: (r?.n ?? 0) + 1 })); go({ mod: 'code' }); }} />
                       : mod === 'agents' ? (
                         <div className="cm-agents">
                           <div className="cm-sub">
@@ -335,7 +342,7 @@ export function Console(p: Props) {
           )}
           {kept.has('paper') && (
             <section className={`cm-mod bleed${mod === 'paper' ? ' on' : ''}`} style={{ ['--dir' as string]: dir }}>
-              <Paper lineId={id} info={ws.data} tick={p.tick} toast={p.toast} reveal={reveal?.root === 'paper' ? reveal : null} onDirty={n => { dirty.current.paper = n; }} onAgents={() => { setRole('writer'); go({ mod: 'agents' }); }} />
+              <Paper lineId={id} seq={cur.seq} info={ws.data} tick={p.tick} toast={p.toast} reveal={reveal?.root === 'paper' ? reveal : null} onDirty={n => { dirty.current.paper = n; }} onAgents={() => { setRole('writer'); go({ mod: 'agents' }); }} />
             </section>
           )}
         </div>
@@ -373,7 +380,7 @@ function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
         title={`${m.name} · ${m.sub}${i < 10 ? `  (${(i + 1) % 10})` : ''}`} style={{ ['--i' as string]: i }}>
         <Icon n={m.icon} size={18} />
         <span className="cd-name">{m.name}</span>
-        {m.id === 'code' && code > 0 ? <em className="cd-n" title={tr('{0} 处改动', code)}>{code}</em> : k && <i className={`cd-dot k-${k}`} />}
+        {m.id === 'code' && code > 0 ? <em className="cd-n em-mark" data-tone="warn" title={tr('{0} 处改动', code)}>{code}</em> : k && <i className={`cd-dot k-${k}`} />}
       </button>
     );
   };
@@ -400,7 +407,7 @@ function PhoneTabs({ mod, line, code, onPick }: { mod: ModId; line: Line | null;
   const pick = (m: ModId) => { setMore(false); onPick(m); };
   const mark = (m: ModId) => {
     const k = markOf(line, m);
-    return m === 'code' && code > 0 ? <em className="cd-n">{code}</em> : k && <i className={`cd-dot k-${k}`} />;
+    return m === 'code' && code > 0 ? <em className="cd-n em-mark" data-tone="warn">{code}</em> : k && <i className={`cd-dot k-${k}`} />;
   };
   const behind = code > 0 || line?.lead.state === 'blocked';
   return (
@@ -526,15 +533,15 @@ function Rail({ open, lines, cur, tab, setTab, filter, setFilter, q, setQ, asked
 function Folder({ l, i, on, hi, onPick }: { l: Line; i: number; on: boolean; hi: boolean; onPick: () => void }) {
   const done = l.stages.filter(s => s.status === 'done').length;
   return (
-    <button className={`fcard d-${l.status}${on ? ' on' : ''}${hi ? ' hi' : ''}`} style={{ ['--i' as string]: i }} onClick={onPick} title={l.idea}>
+    <Tooltip content={<span className="research-tip user-words em-bar">{l.idea}</span>} render={<button className={`fcard d-${l.status}${on ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={onPick} />}>
       <span className="fc-tab" />
       <span className="fc-body">
         <span className="fc-top"><b>#{l.seq}</b><StatusTag status={l.status} /></span>
-        <span className="fc-title">{l.title}</span>
+        <span className={hi ? 'fc-title em-bar' : 'fc-title'} data-tone="warn">{l.title}</span>
         <span className="fc-stages" title={tr('{0}/{1} 站完成', done, l.stages.length)}>{l.stages.map(s => <i key={s.key} className={`k-${s.status}`} />)}</span>
         <span className="fc-foot muted small">{l.linked ? tr('本地项目 · {0}', l.linked.key) : l.current?.name ?? l.stage}</span>
       </span>
-    </button>
+    </Tooltip>
   );
 }
 
@@ -542,10 +549,10 @@ function PaperCard({ l, i, on, hi, onPick }: { l: Line; i: number; on: boolean; 
   const pp = l.linked?.paper;
   const write = l.stages.find(s => s.key === 'write');
   return (
-    <button className={`pcard2${on ? ' on' : ''}${hi ? ' hi' : ''}`} style={{ ['--i' as string]: i }} onClick={onPick}>
+    <button className={`pcard2${on ? ' on' : ''}`} style={{ ['--i' as string]: i }} onClick={onPick}>
       <span className="pp-fold" />
       <span className="pp-lines"><i /><i /><i /><i /></span>
-      <b className="pp-title">{pp?.title ?? l.title}</b>
+      <b className={hi ? 'pp-title em-bar' : 'pp-title'} data-tone="warn">{pp?.title ?? l.title}</b>
       <span className="pp-foot muted small">
         #{l.seq} · {pp ? (pp.main ?? pp.name) : 'main.tex'}
         {(pp?.pdf || l.files.includes('main.pdf')) && <em>PDF</em>}

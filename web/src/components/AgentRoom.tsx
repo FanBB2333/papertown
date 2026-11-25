@@ -14,12 +14,14 @@ import { Select, type Opt } from './Select';
 import { FileLinks } from './Sheet';
 import { ConvSkills } from './SkillRoom';
 import { History } from '../console/Convs';
+import { QuoteDecision } from '../progress/QuoteDecision';
 import { LeadAside } from '../console/Lead';
 import { Compose } from '../agents/Compose';
 import { useReadReceipt, useTalkPoll } from '../agents/live';
 import { agentName, isWorking, TurnTime, WatchStatus } from '../agents/watch';
 import { ago } from '../console/util';
 import { tr, trx } from '../i18n';
+import { modelText } from '../emphasis';
 
 interface Props extends RoomActions {
   role: AgentRole;
@@ -37,7 +39,7 @@ const ROLE = {
 } as const;
 
 // a role's roster, read again on that role's agent events and on refresh()
-function useRoster(role: AgentRole, tick: number, toast: (t: string) => void) {
+function useRoster(role: AgentRole, tick: number, toast: (t: string, error?: boolean) => void) {
   const [roster, setRoster] = useState<Roster | null>(null);
   const [bump, setBump] = useState(0);
   useEffect(() => listen(e => { if (e.type === 'agent' && e.agent?.role === role) setBump(b => b + 1); }), [role]);
@@ -77,7 +79,7 @@ export function AgentRoom(p: Props) {
             <span className="muted small">{STATUS[line.status] ?? line.status}{agent ? ` · ${AGENT_STATUS[agent.status]}` : ''}</span>
           </button>
         ))}
-        {roster && !roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
+        {roster && !roster.available.ok && <p className="small em-state" data-tone="bad">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
       </aside>
       {cur && <Seat {...p} row={cur} ok={!!roster?.available.ok} onDone={refresh} />}
     </div>
@@ -102,7 +104,7 @@ export function AgentDesk(p: Props & { lineId: string }) {
   if (!roster) return <p className="muted">{tr('加载中…')}</p>;
   return (
     <div className="room room-agents desk">
-      {!roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
+      {!roster.available.ok && <p className="small em-state" data-tone="bad">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
       {row ? <Seat {...p} row={row} ok={roster.available.ok} onDone={refresh} /> : <p className="muted">{tr('该项目暂无法配置员工。')}</p>}
     </div>
   );
@@ -114,7 +116,7 @@ function lastLine(e: AgentEvent): string {
 }
 
 function Hire({ line, role, agent, ok, toast, onDone, repo }: {
-  line: { id: string; seq: number; title: string }; role: AgentRole; agent: Agent | null; ok: boolean; toast: (t: string) => void; onDone: () => void;
+  line: { id: string; seq: number; title: string }; role: AgentRole; agent: Agent | null; ok: boolean; toast: (t: string, error?: boolean) => void; onDone: () => void;
   repo?: string;
 }) {
   const [busy, setBusy] = useState(false);
@@ -127,7 +129,7 @@ function Hire({ line, role, agent, ok, toast, onDone, repo }: {
       await fn();
       onDone();
     } catch (e) {
-      toast((e as Error).message);
+      toast((e as Error).message, true);
     } finally {
       setBusy(false);
     }
@@ -195,8 +197,8 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
 
   const pv = info?.providers.find(x => x.id === prov), m = pv?.models.find(x => x.id === model);
   if (!info) return <p className="muted small">{tr('正在连接本机 Paseo…')}</p>;
-  if (info.chat === false) return <p className="warn-box small">{tr('Paseo 接入正在调试，暂时停用。请使用终端启动。')}</p>;
-  if (!info.status.ok) return <p className="warn-box small">{info.status.note}</p>;
+  if (info.chat === false) return <p className="small em-state" data-tone="bad">{tr('Paseo 接入正在调试，暂时停用。请使用终端启动。')}</p>;
+  if (!info.status.ok) return <p className="small em-state" data-tone="bad">{info.status.note}</p>;
   const d = role ? info.defaults?.[role] : undefined;
   return (
     <>
@@ -204,7 +206,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
       <label className="field">{tr('供应商')}
         <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.error ? tr('{0}（模型列表读取失败）', x.label) : x.label }))} onChange={id => pick(info, id)} />
       </label>
-      {pv?.error && <p className="warn-box small">{tr('{0} 的模型列表读取失败：{1}。可使用默认模型启动，或选择其他供应商。', pv.label, pv.error)}</p>}
+      {pv?.error && <p className="small em-state" data-tone="bad">{tr('{0} 的模型列表读取失败：{1}。可使用默认模型启动，或选择其他供应商。', pv.label, pv.error)}</p>}
       {!!pv?.models.length && (
         <label className="field">{tr('模型')}
           <Select value={model} options={pv.models.map(x => ({ value: x.id, label: x.name }))} onChange={id => pick(info, prov, id)} />
@@ -257,7 +259,7 @@ export function ImportCard({ busy, onPick }: { busy: boolean; onPick: (id: strin
     <div className="hire-card import-card">
       <h3>{tr('导入 Paseo 中的已有对话')}</h3>
       <p className="muted small">{tr('选择本机 Paseo 对话关联至该项目，随后可在此继续对话，工作目录保持不变。')}</p>
-      {err ? <p className="warn-box small">{err}</p> : !list ? <p className="muted small">{tr('正在读取 Paseo 的对话…')}</p> : !list.length ? <p className="muted small">{tr('Paseo 中暂无对话。')}</p> : (
+      {err ? <p className="small em-state" data-tone="bad">{err}</p> : !list ? <p className="muted small">{tr('正在读取 Paseo 的对话…')}</p> : !list.length ? <p className="muted small">{tr('Paseo 中暂无对话。')}</p> : (
         <>
           {list.length > 5 && <input className="conv-q" value={q} placeholder={tr('按标题、供应商或目录筛选')} onChange={e => setQ(e.target.value)} />}
           <div className="conv-list">
@@ -295,7 +297,7 @@ export type ToolSt = 'run' | 'ok' | 'bad';
 export const Thinking = () => <div className="thinking"><i /><i /><i /></div>;
 
 // what the project has next to the chat: experiments for code, the manuscript for papers
-function Aside({ agent, role, line, onOpen, toast, children }: { agent: Agent; role: AgentRole; line?: Line; onOpen: RoomActions['onOpen']; toast: (t: string) => void; children: React.ReactNode }) {
+function Aside({ agent, role, line, onOpen, toast, children }: { agent: Agent; role: AgentRole; line?: Line; onOpen: RoomActions['onOpen']; toast: (t: string, error?: boolean) => void; children: React.ReactNode }) {
   const lid = agent.line_id ?? '';
   const [jobs, setJobs] = useState<Job[]>([]);
   const [repos, setRepos] = useState<any[]>([]);
@@ -385,7 +387,8 @@ export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t
 
 // a Paseo conversation's body: messages and tool trails, what is still sending, `children`, the
 // permissions it asks for, and the dots while it works
-export function PaseoLog({ rows, sent, asks, working, onPermit, children }: {
+export function PaseoLog({ rows, sent, asks, working, onPermit, children, lineId }: {
+  lineId?: string | null;
   rows: (PaseoItem | PaseoItem[])[]; sent: string[]; asks: PaseoPermission[]; working: boolean;
   onPermit: (id: string, allow: boolean) => void; children?: React.ReactNode;
 }) {
@@ -393,14 +396,17 @@ export function PaseoLog({ rows, sent, asks, working, onPermit, children }: {
     <>
       {rows.map((x, i) => Array.isArray(x)
         ? <Trail key={i} tools={x.map(paseoTool)} />
-        : x.kind === 'user' ? <UserMsg key={i} text={x.text ?? ''} />
+        : x.kind === 'user' ? <UserMsg key={x.event_id ?? x.data?.event_id ?? `${x.ts}-${i}`} text={x.user_text ?? x.data?.user_text ?? x.text ?? ''} origin={x.origin ?? x.data?.origin}>
+          <QuoteDecision line={lineId} event={x.event_id ?? x.data?.event_id} origin={x.origin ?? x.data?.origin} decided={x.decided ?? x.data?.decided}
+            text={x.user_text ?? x.data?.user_text ?? x.text ?? ''} />
+        </UserMsg>
           : x.kind === 'assistant' ? <div key={i} className="msg-a"><Text text={x.text ?? ''} /></div>
             : <div key={i} className={`note${x.kind === 'error' ? ' err' : ''}`}>{x.text}</div>)}
-      {sent.map((t, i) => <div key={`s${i}`} className="msg-u"><Text text={t} /><span className="meta">{tr('发送中')}</span></div>)}
+      {sent.map((t, i) => <div key={`s${i}`} className="msg-u"><div className="user-words em-bar">{t}</div><span className="meta">{tr('发送中')}</span></div>)}
       {children}
       {asks.map(q => (
         <div key={q.id} className="ask">
-          <p><b>{tr('请求')}{q.name === 'Bash' ? tr('运行命令') : tr('使用 {0}', q.name)}</b>{q.title && q.title !== q.name ? ` · ${q.title}` : ''}</p>
+          <p className="em-bar" data-tone="warn"><b>{tr('请求')}{q.name === 'Bash' ? tr('运行命令') : tr('使用 {0}', q.name)}</b>{q.title && q.title !== q.name ? ` · ${q.title}` : ''}</p>
           {q.arg && <pre className="code">{q.arg}</pre>}
           <div className="btns">
             <button className="btn pri" onClick={() => onPermit(q.id, true)}>{tr('允许')}</button>
@@ -414,10 +420,10 @@ export function PaseoLog({ rows, sent, asks, working, onPermit, children }: {
 }
 
 // tools: what the page around the conversation adds to its header
-type ChatProps = { agent: Agent; line?: Line; role: AgentRole; toast: (t: string) => void; onOpen?: RoomActions['onOpen']; tools?: React.ReactNode };
+type ChatProps = { agent: Agent; line?: Line; role: AgentRole; toast: (t: string, error?: boolean) => void; onOpen?: RoomActions['onOpen']; tools?: React.ReactNode };
 
 // The standalone page supplies its own context column.
-export function Conversation({ agent, toast, tools }: { agent: Agent; toast: (t: string) => void; tools?: React.ReactNode }) {
+export function Conversation({ agent, toast, tools }: { agent: Agent; toast: (t: string, error?: boolean) => void; tools?: React.ReactNode }) {
   if (agent.term) return <HostedRoom key={agent.id} agent={agent} toast={toast} tools={tools} />;
   return agent.runtime === 'paseo'
     ? <PaseoChat key={agent.ext_id ?? agent.id} agent={agent} role={agent.role} toast={toast} tools={tools} />
@@ -438,7 +444,7 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
     if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [items?.length, sent.length, full]);
 
-  const run = (fn: () => Promise<unknown>) => fn().then(() => reload()).catch(e => toast((e as Error).message));
+  const run = (fn: () => Promise<unknown>) => fn().then(() => reload()).catch(e => toast((e as Error).message, true));
   const rows = useMemo(() => fold(items ?? [], i => i.kind === 'tool'), [items]);
   return (
     <>
@@ -465,9 +471,9 @@ function PaseoChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
                 const el = e.currentTarget;
                 stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
               }}>
-                {err && <div className="note err">{err}</div>}
+                {err && <div className="note em-state" data-tone="bad">{err}</div>}
                 {items && !items.length && !sent.length && <div className="room-empty small-empty"><p>{tr('暂无对话。')}</p></div>}
-                <PaseoLog rows={rows} sent={sent} asks={asks} working={working}
+                <PaseoLog lineId={agent.line_id} rows={rows} sent={sent} asks={asks} working={working}
                   onPermit={(id, allow) => run(async () => { await api.permit(agent.id, id, allow); answered(id); })} />
               </div>
               <Compose agent={agent} queued={queued} permission={asks.length > 0} toast={toast} onChanged={reload}
@@ -500,17 +506,63 @@ function tagged(t: string) {
   return { k: m[1], label, body: m[3] };
 }
 
+function inputSource(text: string, origin?: string) {
+  const tag = origin === 'web' || origin === 'terminal' ? null : tagged(text);
+  return { tag, personal: !tag && (!origin || ['web', 'terminal', 'you'].includes(origin)) };
+}
+
+// The farm shows the same event as a transcript, sometimes only its first line.
+export function eventPreview(event?: AgentEvent | null, limit?: number) {
+  if (!event) return null;
+  const raw = event.data?.user_text ?? event.data?.text;
+  if (typeof raw !== 'string' || !raw) return null;
+  const line = limit === undefined ? raw : raw.split('\n', 1)[0];
+  if (event.kind !== 'user') return modelText(line, limit);
+  const { tag, personal } = inputSource(raw, event.data?.origin);
+  if (tag?.body && limit === undefined) {
+    const at = raw.indexOf(tag.body, raw.indexOf('>') + 1);
+    return <>{raw.slice(0, at)}<ForwardedBody kind={tag.k} text={tag.body} />{raw.slice(at + tag.body.length)}</>;
+  }
+  const shown = line.slice(0, limit);
+  return personal ? <span className="user-words em-bar">{shown}</span> : shown;
+}
+
+// Card and answer envelopes can contain both a person's words and a town instruction or receipt.
+function ForwardedBody({ kind, text }: { kind: string; text: string }) {
+  if (kind === 'card') {
+    const note = /(?:^|\n)用户附言：/.exec(text);
+    const brief = note ? text.slice(0, note.index) : text;
+    const choices = /(^卡片上要用户决定的事，用户已经决定了，[^\n]*\n)([\s\S]+)$/m.exec(brief);
+    return <>
+      <Text text={choices ? brief.slice(0, choices.index) + choices[1] : brief} />
+      {choices && choices[2].split(/\n(?=- 「)/).map((row, i) => {
+        const item = /^(- 「[^\n]*?」：)([\s\S]*)$/.exec(row);
+        return item ? <div key={i}>{item[1]}<span className="user-words em-bar">{item[2]}</span></div> : <Text key={i} text={row} />;
+      })}
+      {note && <><span>{note[0].trimStart()}</span><div className="user-words em-bar">{text.slice(note.index + note[0].length)}</div></>}
+    </>;
+  }
+  const separator = kind === 'answer' && /」，用户回答：/.exec(text);
+  if (!separator) return <Text text={text} />;
+  const start = separator.index + separator[0].length, body = text.slice(start);
+  const accepted = /^(?:可以|允许|同意|好|行|yes|ok|y)(?=\n(?:但没办成：|已经替它发给|已经提交了 |[^\n]{1,8}(?:已经在运行|启动了)（|「[^」\n]+」(?:收尾了|开工了|放回去了)))/i.exec(body);
+  const declined = '\n所以没有做。';
+  const end = accepted?.[0].length ?? (body.endsWith(declined) ? body.length - declined.length : body.length);
+  return <><Text text={text.slice(0, start)} /><div className="user-words em-bar">{body.slice(0, end)}</div>{end < body.length && <Text text={body.slice(end)} />}</>;
+}
+
 // a long message from you (a project brief, a pasted log) shows its first lines until opened
-export function UserMsg({ text: raw }: { text: string }) {
+export function UserMsg({ text: raw, origin, children }: { text: string; origin?: string; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  const tag = tagged(raw), text = tag?.body ?? raw;
+  const { tag, personal } = inputSource(raw, origin), text = tag?.body ?? raw;
   const lines = text.split('\n'), long = lines.length > 6 || text.length > 360;
   const shown = open || !long ? text : lines.slice(0, 4).join('\n').slice(0, 240).trimEnd() + '…';
   return (
     <div className={`msg-u${long ? ' long' : ''}${tag ? ` msg-tag t-${tag.k}` : ''}`}>
       {tag && <span className="mt-k">{tag.label}</span>}
-      <Text text={shown} />
+      {personal ? <div className="user-words em-bar">{shown}</div> : <ForwardedBody kind={tag?.k ?? ''} text={shown} />}
       {long && <button className="more" onClick={() => setOpen(o => !o)}>{open ? tr('收起') : tr('展开全部（{0} 行）', lines.length)}</button>}
+      {children}
     </div>
   );
 }
@@ -591,12 +643,12 @@ export function usePiTalk(initial: Agent) {
 }
 
 // a pi conversation's body: its entries and tool trails, the reply streaming in, the dots while it works
-export function PiLog({ rows, live, working }: { rows: (Item | Item[])[]; live: string; working: boolean }) {
+export function PiLog({ rows, live, working, lineId }: { rows: (Item | Item[])[]; live: string; working: boolean; lineId?: string | null }) {
   return (
     <>
       {rows.map(x => Array.isArray(x)
         ? <Trail key={x[0].ev.id} tools={x.map(piTool)}><div className="trail-list">{x.map(t => <Tool key={t.ev.id} {...t} />)}</div></Trail>
-        : <Entry key={x.ev.id} ev={x.ev} end={x.end} />)}
+        : <Entry key={x.ev.id} ev={x.ev} end={x.end} lineId={lineId} />)}
       {live && <div className="msg-a streaming"><Text text={live} /><i className="caret" /></div>}
       {working && !live && <Thinking />}
     </>
@@ -616,7 +668,7 @@ function AgentChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
     if (el && stick.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [items.length, live]);
 
-  const run = (fn: () => Promise<unknown>) => fn().then(() => reload()).catch(e => toast((e as Error).message));
+  const run = (fn: () => Promise<unknown>) => fn().then(() => reload()).catch(e => toast((e as Error).message, true));
   const on = ['idle', 'working', 'starting'].includes(agent.status);
 
   const st = agent.state;
@@ -645,9 +697,9 @@ function AgentChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         }}>
-          {err && <p className="note err">{err}</p>}
+          {err && <p className="note em-state" data-tone="bad">{err}</p>}
           {!items.length && !live && <div className="room-empty small-empty"><p>{tr('暂无对话。可先「发送项目简报」，待其读取项目信息后再开始。')}</p></div>}
-          <PiLog rows={rows} live={live} working={agent.status === 'working'} />
+          <PiLog lineId={agent.line_id} rows={rows} live={live} working={agent.status === 'working'} />
         </div>
         <Compose agent={agent} queued={queued} toast={toast} onChanged={reload} value={text} onChange={setText}
           placeholder={tr('向{0}输入内容，输入 / 调用 pi 命令，Enter 发送', r.name)}
@@ -679,17 +731,18 @@ function AgentChat({ agent: initial, line, role, toast, onOpen, tools }: ChatPro
 // a pi tool call, paired with its result, as a tool trail shows it
 export const piTool = ({ ev, end }: Item) => ({ name: ev.data.name as string, arg: toolArg(ev.data.args), st: (!end ? 'run' : end.data.error ? 'bad' : 'ok') as ToolSt });
 
-function Entry({ ev, end }: Item) {
+function Entry({ ev, end, lineId }: Item & { lineId?: string | null }) {
   const d = ev.data ?? {};
   if (ev.kind === 'user' && d.cmd) {
-    return <div className="msg-u cmd"><code>{d.text}</code><span className="meta">{tr('命令')}{d.delivered ? '' : tr(' · 发送中')}</span></div>;
+    return <div className="msg-u cmd"><code className={d.origin === 'web' || d.origin === 'terminal' ? 'em-bar' : undefined}>{d.user_text ?? d.text}</code><span className="meta">{tr('命令')}{d.delivered ? '' : tr(' · 发送中')}</span>
+      <QuoteDecision line={lineId} event={ev.id} origin={d.origin} decided={d.decided} text={d.user_text ?? d.text} /></div>;
   }
   if (ev.kind === 'user') {
     return (
-      <div className="msg-u">
-        <Text text={d.text} />
+      <UserMsg text={d.user_text ?? d.text ?? ''} origin={d.origin}>
+        <QuoteDecision line={lineId} event={ev.id} origin={d.origin} decided={d.decided} text={d.user_text ?? d.text} />
         <span className="meta">{d.origin === 'terminal' ? tr('终端') : tr('网页')}{d.origin === 'web' ? (d.delivered ? (d.queued ? tr(' · 已排队') : d.steered ? tr(' · 已插话') : tr(' · 已送达')) : d.held ? tr(' · 排队中') : tr(' · 发送中')) : ''}</span>
-      </div>
+      </UserMsg>
     );
   }
   if (ev.kind === 'assistant') {
@@ -765,7 +818,7 @@ export function Text({ text, link }: { text: string; link?: Linker }) {
     const tag = <T extends 'p' | 'li' | 'td' | 'th' | 'strong' | 'em' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'>(T: T) =>
       ({ node: _, children, ...props }: React.ComponentProps<T> & { node?: unknown }) => createElement(T, props, linked(children));
     return {
-      p: tag('p'), li: tag('li'), td: tag('td'), th: tag('th'), strong: tag('strong'), em: tag('em'),
+      p: tag('p'), li: tag('li'), td: tag('td'), th: tag('th'), strong: ({ children }) => <strong className="em-mark">{linked(children)}</strong>, em: tag('em'),
       h1: tag('h1'), h2: tag('h2'), h3: tag('h3'), h4: tag('h4'), h5: tag('h5'), h6: tag('h6'),
       pre: ({ children }) => <pre className="code">{children}</pre>,
       code: ({ className, children }) => {

@@ -113,7 +113,7 @@ function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] 
   const status = !rows ? (auth && !auth.authed ? tr('登录后查看项目进展。') : '')
     : !n ? tr('暂无项目。') : wait ? tr('{0} 个项目，{1} 个待你决定。', n, wait) : tr('{0} 个项目，无待你决定事项。', n);
   const line = useOneLine(status);
-  const head = <><span className="ld-hi">{tr('{0}。', hi)}</span>{status && <span className="ld-st" ref={line}>{status}</span>}</>;
+  const head = <><span className="ld-hi">{tr('{0}。', hi)}</span>{status && <span className={wait ? 'ld-st em-bar' : 'ld-st'} data-tone="warn" ref={line}>{status}</span>}</>;
   if (!rows) return <h1>{head}</h1>;
   const marked = [...rows.filter(r => r.card?.health === 'blocked'), ...rows.filter(r => r.card?.health === 'risk')];
   const shown = marked.slice(0, 3);
@@ -129,7 +129,7 @@ function Headline({ auth, rows }: { auth: AuthState | null; rows: ProjectCard[] 
             {shown.length ? (
               <>
                 {shown.map((r, i) => (
-                  <span key={r.line.id}>{i > 0 && tr('，')}<a className={`h-${r.card!.health}`} href={href(`/progress/${r.line.seq}`)} onClick={e => follow(e, `/progress/${r.line.seq}`)}>
+                  <span key={r.line.id}>{i > 0 && tr('，')}<a className="em-state" data-tone={r.card!.health === 'blocked' ? 'bad' : 'warn'} href={href(`/progress/${r.line.seq}`)} onClick={e => follow(e, `/progress/${r.line.seq}`)}>
                     {r.card!.health === 'blocked' ? tr('#{0} 已受阻', r.line.seq) : tr('#{0} 有风险', r.line.seq)}</a></span>
                 ))}
                 {marked.length > shown.length && tr('，还有 {0} 个', marked.length - shown.length)}
@@ -175,7 +175,7 @@ function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: strin
     );
   }
   if (!auth) {
-    return <p className="muted ld-wait">{err ? tr('无法连接服务器：{0}', err) : tr('确认中…')}</p>;
+    return <p className={err ? 'ld-wait em-state' : 'muted ld-wait'} data-tone="bad">{err ? tr('无法连接服务器：{0}', err) : tr('确认中…')}</p>;
   }
 
   async function login(e: React.FormEvent) {
@@ -199,13 +199,13 @@ function Door({ auth, err, reload, enter }: { auth: AuthState | null; err: strin
           <span>{tr('访问密码')}</span>
           <input ref={field} type="password" autoComplete="current-password" value={pw} onChange={e => setPw(e.target.value)} disabled={busy} />
         </label>
-        {msg && <p className="ld-err" role="alert">{msg}</p>}
+        {msg && <p className="ld-err em-state" data-tone="bad" role="alert">{msg}</p>}
         <button className="btn pri ld-go" type="submit" disabled={busy || !pw}>{busy ? tr('登录中…') : tr('登录')}<Icon n="right" size={16} /></button>
         <p className="small muted">{tr('登录保持 30 天，或直至你在设置中退出。')}</p>
       </form>
     ) : (
       <>
-        <h2>{tr('暂无法进入')}</h2>
+        <h2 className="em-state" data-tone="warn">{tr('暂无法进入')}</h2>
         <p className="muted">{tr('尚未设置访问密码，仅运行 Papertown 的电脑可打开。')}</p>
         <ol className="ld-steps">
           <li>{onHost ? tr('在那台电脑上打开 Papertown（{0}）', onHost) : tr('在那台电脑上打开 Papertown')}</li>
@@ -261,7 +261,7 @@ function Password({ auth, reload }: { auth: AuthState; reload: () => Promise<Aut
         <form onSubmit={save} className="ld-pwf">
           <input type="password" autoComplete="new-password" placeholder={tr('新的访问密码（至少 6 位）')} value={a} onChange={e => setA(e.target.value)} autoFocus />
           <input type="password" autoComplete="new-password" placeholder={tr('再次输入')} value={b} onChange={e => setB(e.target.value)} />
-          {msg && <p className="ld-err" role="alert">{msg}</p>}
+          {msg && <p className="ld-err em-state" data-tone="bad" role="alert">{msg}</p>}
           <div className="btns">
             <button className="btn pri" type="submit" disabled={busy || a.length < 6 || !b}>{tr('保存')}</button>
             <button className="btn" type="button" onClick={() => { setOpen(false); setMsg(''); }}>{tr('取消')}</button>

@@ -4,6 +4,7 @@
 // log; the spec and the clamp the work boundaries behind them; the human gate what waits for you; every node the
 // list of what it is wired to.
 
+import { figures, hitText, modelText, StateWord, stateTone } from '../emphasis';
 import { useMemo, useState } from 'react';
 import { api, type CanvasEdge, type CanvasNode, type CanvasView, type Check, type NewNode, type ProjectCard, type TaskLog, type TaskStatus, type TaskTo } from '../api';
 import { AGENT_STATUS } from '../components/MillRoom';
@@ -11,7 +12,8 @@ import { Select } from '../components/Select';
 import { Icon } from '../console/icons';
 import { ago } from '../console/util';
 import { tr, trx } from '../i18n';
-import { follow, href } from '../route';
+import { follow, href, writePath } from '../route';
+import { Basis, RecordLink } from './Records';
 import { INFO_MOD, InfoBody, infoKind, InfoState } from './CanvasInfo';
 import { CheckHistory, CheckResult, CheckSettings, ST, STAGE, status, type Act } from './Checks';
 import { bad, gateChecks, gateLook, GATE_ST, level, LEVEL, over, ROLE, VERDICT } from './loop';
@@ -68,20 +70,20 @@ export function Mark({ n }: { n: CanvasNode }) {
 }
 
 function Pill({ n }: { n: CanvasNode }) {
-  if (n.check?.kind === 'soft') return <span className={`cg-pill s-${n.check.on ? status(n.check) : 'none'}`}>{n.check.on ? VERDICT[status(n.check)] : tr('已关闭')}</span>;
+  if (n.check?.kind === 'soft') return <StateWord state={n.check.on ? status(n.check) : undefined}>{n.check.on ? VERDICT[status(n.check)] : tr('已关闭')}</StateWord>;
   if (n.check) {
     const lv = level(n.check);
-    return <span className={`cg-pill g-${lv}`}>{lv === 'off' ? tr('已关闭') : lv === 'pass' ? tr('放行') : lv === 'none' ? ST.none : LEVEL[lv]}</span>;
+    return <StateWord state={lv}>{lv === 'off' ? tr('已关闭') : lv === 'pass' ? tr('放行') : lv === 'none' ? ST.none : LEVEL[lv]}</StateWord>;
   }
   if (n.gate) {
     const look = gateLook(n.gate);
-    return <span className={`cg-pill g-${look}`}>{look === 'block' && <Icon n="lock" size={11} />}{n.gate.waived && n.gate.state === 'block' ? tr('已放行') : GATE_ST[look]}</span>;
+    return <StateWord state={look}>{n.gate.waived && n.gate.state === 'block' ? tr('已放行') : GATE_ST[look]}</StateWord>;
   }
-  if (n.kind === 'human' && n.items?.length) return <span className="cg-pill g-warn">{tr('{0} 待定', n.items.length)}</span>;
-  if (n.kind === 'task' && n.converged) return <span className="cg-pill t-done">{tr('已收敛')}</span>;
-  if (n.kind === 'task' && n.escalated) return <span className="cg-pill g-warn">{tr('待你拍板')}</span>;
-  if (n.kind === 'stage') return <span className={`cg-pill st-${n.status}`}>{n.status === 'run' ? `${STAGE.run} · ${n.pct ?? 0}%` : STAGE[n.status ?? 'todo']}</span>;
-  if (n.kind === 'task') return <span className={`cg-pill t-${n.status}`}>{TASK[(n.status ?? 'draft') as TaskStatus]}</span>;
+  if (n.kind === 'human' && n.items?.length) return <span className="em-bar" data-tone="warn">{tr('{0} 待定', n.items.length)}</span>;
+  if (n.kind === 'task' && n.converged) return <span className="muted">{tr('已收敛')}</span>;
+  if (n.kind === 'task' && n.escalated) return <span className="em-bar" data-tone="warn">{tr('待你拍板')}</span>;
+  if (n.kind === 'stage') return <span className="muted">{n.status === 'run' ? <>{STAGE.run} · <span className="em-num">{n.pct ?? 0}%</span></> : <StateWord state={n.status}>{STAGE[n.status ?? 'todo']}</StateWord>}</span>;
+  if (n.kind === 'task') return <span className={stateTone(n.status) ? 'em-state' : 'muted'} data-tone={stateTone(n.status)}>{TASK[(n.status ?? 'draft') as TaskStatus]}</span>;
   return null;
 }
 
@@ -122,6 +124,7 @@ export function Inspector({ n, v, r, line, wide, onWide, busy, act, onConsole, o
         {tabs.map(([k, t]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{t}</button>)}
       </nav>
       <div className="cv-side-b" role="tabpanel">
+        {tab === 'main' && (n.kind === 'task' || n.kind === 'stage') && <section className="cv-sec"><h5>{tr('依据')}</h5><Basis seq={line.seq} ids={n.basis} /></section>}
         {tab === 'links' ? <Links near={near} busy={busy} onPick={onPick} onCut={onCut} onNew={onNew} />
           : n.gate ? (
             tab === 'curve' ? <GateCurve n={n} v={v} />
@@ -211,12 +214,12 @@ function GateDetail({ n, v, busy, act, lineId, onConsole, onPick }: {
               <tr key={c.id} className={`l-${level(c)}`}>
                 <td><button className="lnk" onClick={() => onPick(`check:${c.id}`)} disabled={!v.nodes.some(x => x.id === `check:${c.id}`)}>{ruleNo(c.rule)} {trx(c.title)}</button></td>
                 <td>{c.first?.value ?? '—'}</td>
-                <td><b>{c.last?.value ?? '—'}</b></td>
-                <td><span className={`gp-st l-${level(c)}`}>{c.prio} · {levelText(c)}</span></td>
+                <td><b className={c.last?.value != null && c.first?.value != null && c.first.value !== c.last.value ? 'em-mark' : 'em-num'} data-tone={stateTone(level(c))}>{c.last?.value ?? '—'}</b></td>
+                <td><StateWord state={level(c)}>{c.prio} · {levelText(c)}</StateWord></td>
               </tr>
             ))}
           </tbody>
-          <tfoot><tr><td>{tr('超出允许的合计')}</td><td>{g.before}</td><td><b>{g.now}</b></td><td>{g.pass}/{g.total} {tr('过')}</td></tr></tfoot>
+          <tfoot><tr><td>{tr('超出允许的合计')}</td><td>{g.before}</td><td><b className={g.before !== g.now ? 'em-mark' : 'em-num'}>{g.now}</b></td><td>{g.pass}/{g.total} {tr('过')}</td></tr></tfoot>
         </table>
       </section>
 
@@ -229,7 +232,7 @@ function GateDetail({ n, v, busy, act, lineId, onConsole, onPick }: {
                 <em>{c.prio} · {ruleNo(c.rule)} {trx(c.title)}</em>
                 {(f.file || c.id === 'results') && <button className="lnk cg-at" onClick={() => open(c, f)}>{f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : f.hit} ↗</button>}
               </header>
-              {f.text && <p className="gp-src">{f.text}</p>}
+              {f.text && <p className="gp-src">{hitText(f.text, f.hit)}</p>}
               {f.hint && <p className="muted">{tr('建议：{0}', trx(f.hint))}</p>}
               {who && who.status !== 'done' && <p className="gp-tk">↳ {tr('已写入修补单 {0}，{1}{2}', who.id, WHO[who.to ?? 'lead'], who.status === 'sent' ? tr('修改中') : TASK[(who.status ?? 'draft') as TaskStatus])}</p>}
             </div>
@@ -309,7 +312,7 @@ function BoundsDetail({ n, onRules }: { n: CanvasNode; onRules: () => void }) {
       {rules.length ? (
         <ul className="gp-bounds">
           {rules.map(r => (
-            <li key={r.id}><em className={`gp-bk k-${r.kind}`}>{BOUND[r.kind]}</em><span>{r.text}</span><small className="muted">{FROM[r.from] ?? r.from}{r.action ? ` · ${r.action}` : ''}</small></li>
+            <li key={r.id}><em className={`gp-bk k-${r.kind}`}>{BOUND[r.kind]}</em><span className="em-bar">{r.text}</span><small className="muted">{FROM[r.from] ?? r.from}{r.action ? ` · ${r.action}` : ''}</small></li>
           ))}
         </ul>
       ) : <p className="small muted">{spec ? tr('工作边界中暂无针对 agent 的要求，仅按项目简报执行。') : tr('暂无绑定动作的边界：Papertown 不拦截任何动作。')}</p>}
@@ -327,7 +330,7 @@ function HumanDetail({ n, v, busy, act, line, onPick }: { n: CanvasNode; v: Canv
       <ul className="gp-human">
         {items.map(x => (
           <li key={`${x.kind}:${x.id}`} className={`k-${x.kind}`}>
-            <p>{x.text}</p>
+            <p className="em-bar" data-tone="warn">{modelText(x.text)}</p>
             <div className="cv-row">
               {x.kind === 'escalated' && x.gate && <>
                 <button className="btn pri" disabled={busy} onClick={() => act(() => api.gateAct(line.id, x.gate!, 'more'), tr('再退回两轮'))}>{tr('追加两轮')}</button>
@@ -337,6 +340,7 @@ function HumanDetail({ n, v, busy, act, line, onPick }: { n: CanvasNode; v: Canv
               {x.kind === 'stale' && <button className="btn" disabled={busy} onClick={() => act(() => api.setNode(line.id, x.id, { stale: false }), tr('已确认结果有效'))}>{tr('结果仍然有效')}</button>}
               {(x.kind === 'blocked' || x.kind === 'stale' || x.kind === 'fail') && <button className="lnk" onClick={() => onPick(x.id)}>{x.kind === 'fail' ? tr('查看巡检') : tr('看任务')}</button>}
               {x.kind === 'ask' && <a className="lnk" href={href(ask)} onClick={e => follow(e, ask)}>{tr('前往回复')}</a>}
+              {x.kind === 'matter' && <RecordLink className="lnk" to={writePath(line.seq, 'matter', x.ask ?? x.id)}>{tr('前往写下决定')}</RecordLink>}
               {x.kind === 'line' && <a className="lnk" href={href(home)} onClick={e => follow(e, home)}>{tr('返回项目页处理')}</a>}
             </div>
           </li>
@@ -375,7 +379,7 @@ function StageDetail({ n, near, onPick }: { n: CanvasNode; near: CanvasNode[]; o
   return (
     <>
       <div className={`cg-meter st-${n.status}`}>
-        <p><b>{pct}%</b><span>{STAGE[n.status ?? 'todo']}</span>{on.length > 0 && <small>{tr('关联检查 {0}/{1} 通过', pass, on.length)}</small>}</p>
+        <p><b className="em-num">{pct}%</b><span>{STAGE[n.status ?? 'todo']}</span>{on.length > 0 && <small>{figures(tr('关联检查 {0}/{1} 通过', pass, on.length))}</small>}</p>
         <div className="cg-bar"><i style={{ width: `${pct}%` }} /></div>
       </div>
       {n.locked && <div className="gp-card g-block"><p>{tr('被「{0}」硬卡口锁住：阻断级规则清零或先放行后才能继续。', trx(n.locked.title))}</p>
@@ -402,7 +406,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
   const { before, after, drafts } = orderOf(v, n.id), waits = n.waits ?? [], dirWait = waits.some(w => w.kind === 'dir');
   const near = (x: CanvasNode) => (
     <button key={x.id} className="cv-near" onClick={() => onPick(x.id)} title={x.title}>
-      <span>{x.id}「{clip(x.title, 14)}」</span><i className={`cg-pill t-${x.status}`}>{x.stale ? tr('待复核') : TASK[(x.status ?? 'draft') as TaskStatus]}</i>
+      <span>{x.id}「{clip(x.title, 14)}」</span><StateWord state={x.stale ? 'stale' : x.status}>{x.stale ? tr('待复核') : TASK[(x.status ?? 'draft') as TaskStatus]}</StateWord>
     </button>
   );
   const gate = n.loop === 'hard' ? v.nodes.find(x => x.id === `gate:${n.stage}`) : null, from = n.loop === 'soft' ? v.nodes.find(x => x.id === `check:${n.from}`) : null;
@@ -412,7 +416,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
         <div className={`gp-card g-${n.converged ? 'pass' : 'block'}`}>
           <p>{n.converged ? tr('「{0}」硬卡口已放行：{1} 轮收敛。', gate?.gate?.name ?? n.stage ?? '', n.round || 1)
             : tr('「{0}」硬卡口阻断时 Papertown 自动生成的修补单，当前为第 {1} 轮。完成后卡口仍未放行时，将再退回一轮。', gate?.gate?.name ?? n.stage ?? '', n.round || 1)}</p>
-          {(n.trail?.length ?? 0) > 0 && <p className="gp-trail">{tr('收敛进度：{0}', (n.trail ?? []).map(x => tr('{0} 处', x)).join(' → '))}</p>}
+          {(n.trail?.length ?? 0) > 0 && <p className="gp-trail"><span className="em-mark">{tr('收敛进度：{0}', (n.trail ?? []).map(x => tr('{0} 处', x)).join(' → '))}</span></p>}
           {gate && <button className="lnk" onClick={() => onPick(gate.id)}>{tr('查看该卡口')}</button>}
         </div>
       )}
@@ -449,7 +453,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
               </li>
             ))}</ul>
           )}
-          {n.wait_note && <p className="small cv-turn-err">{tr('轮到时派发失败：{0}', trx(n.wait_note))}</p>}
+          {n.wait_note && <p className="small em-state" data-tone="bad">{tr('轮到时派发失败：{0}', trx(n.wait_note))}</p>}
           <div className="cv-row">
             <button className="btn" disabled={busy} onClick={() => act(() => api.setNode(line.id, n.id, { status: 'draft' }), tr('已取消排队'))}>{tr('取消排队')}</button>
             {n.wait_note && <button className="btn" disabled={busy} onClick={() => act(() => api.sendNode(line.id, n.id), sentWord(n.id, to))}>{tr('重试')}</button>}
@@ -458,7 +462,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
         </div>
       )}
       {n.stale && (
-        <div className="cv-turn stale">
+        <div className="cv-turn stale em-bar" data-tone="warn">
           <p><Icon n="refresh" size={13} /><b>{tr('结果待复核')}</b></p>
           <p className="small">{tr('{0}。这份结果依据的是旧产出，后续任务将等待你确认。需要重做时，可退回或重新派发。', trx(n.stale))}</p>
           <div className="cv-row">
@@ -468,7 +472,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
       )}
       {returned && (
         <blockquote className={`cg-verdict ${st === 'done' ? 's-pass' : 's-fail'}`}>
-          <p>{n.result}</p>
+          <p>{modelText(n.result)}</p>
           <footer className="small muted">{trx(n.by ?? '')}{n.done_at ? ` · ${ago(n.done_at)}` : ''}</footer>
         </blockquote>
       )}
@@ -480,7 +484,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
         </div>
       ) : (
         <div className="cv-form">
-          <textarea autoFocus rows={3} value={back} maxLength={4000} placeholder={st === 'done' ? tr('哪里不行、要怎么改') : tr('解答受阻问题')} onChange={e => setBack(e.target.value)} />
+          <textarea className={back ? 'em-bar' : undefined} autoFocus rows={3} value={back} maxLength={4000} placeholder={st === 'done' ? tr('哪里不行、要怎么改') : tr('解答受阻问题')} onChange={e => setBack(e.target.value)} />
           <div className="cv-row">
             <button className="btn pri" disabled={busy || !back.trim()} onClick={() => act(() => api.backNode(line.id, n.id, back.trim()), tr('已重新发送')).then(() => setBack(null))}>
               <Icon n="send" size={13} />{tr('重新发送')}
@@ -500,7 +504,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
         </label>
         <label className="field">{tr('名字')}<input value={title} maxLength={60} onChange={e => setTitle(e.target.value)} /></label>
         <label className="field">{tr('任务内容')}
-          <textarea rows={wideRows(text)} value={text} maxLength={4000} placeholder={tr('写明任务内容与完成标准，派发时将连同该节点关联的检查与工序一并发送')} onChange={e => setText(e.target.value)} />
+          <textarea className={n.created_by === 'you' ? 'em-bar' : undefined} rows={wideRows(text)} value={text} maxLength={4000} placeholder={tr('写明任务内容与完成标准，派发时将连同该节点关联的检查与工序一并发送')} onChange={e => setText(e.target.value)} />
         </label>
       </div>
       <div className="cv-row">
@@ -530,7 +534,7 @@ function TaskLogList({ log }: { log: TaskLog[] }) {
       {[...log].reverse().map((x, i) => (
         <li key={i} className={`l-${x.kind}`}>
           <p><b>{LOG[x.kind] ?? x.kind}</b><span className="muted">{trx(x.by)} · {ago(x.ts)}</span></p>
-          {x.text && <p className="cv-log-t">{x.text}</p>}
+          {x.text && <p className={x.kind === 'back' ? 'cv-log-t em-bar' : 'cv-log-t'}>{x.kind === 'back' ? x.text : modelText(x.text)}</p>}
         </li>
       ))}
     </ol>
@@ -542,7 +546,7 @@ function NoteDetail({ n, busy, act, lineId }: { n: CanvasNode; busy: boolean; ac
   return (
     <>
       <div className="cv-form">
-        <textarea rows={8} value={text} maxLength={2000} onChange={e => setText(e.target.value)} />
+        <textarea className={n.created_by === 'you' ? 'em-bar' : undefined} rows={8} value={text} maxLength={2000} onChange={e => setText(e.target.value)} />
       </div>
       {text.trim() !== (n.text ?? '') && (
         <div className="cv-row"><button className="btn pri" disabled={busy || !text.trim()} onClick={() => act(() => api.setNode(lineId, n.id, { text: text.trim() }), tr('已保存'))}>{tr('保存')}</button></div>
@@ -634,7 +638,7 @@ export function NewForm({ d, v, busy, onKind, onAdd, onCancel }: {
               {d.kind === 'task' ? tr('任务内容') : d.kind === 'soft' ? tr('向负责人提问') : d.kind === 'hard' ? tr('论文禁用内容（正则表达式，不区分大小写）') : tr('备注')}
               {d.kind === 'hard'
                 ? <input value={text} maxLength={500} placeholder={'\\bnovel\\b'} onChange={e => setText(e.target.value)} />
-                : <textarea autoFocus={d.kind === 'note'} rows={d.kind === 'task' ? wideRows(text) : 4} value={text} maxLength={d.kind === 'task' ? 4000 : 2000} onChange={e => setText(e.target.value)}
+                : <textarea className={text ? 'em-bar' : undefined} autoFocus={d.kind === 'note'} rows={d.kind === 'task' ? wideRows(text) : 4} value={text} maxLength={d.kind === 'task' ? 4000 : 2000} onChange={e => setText(e.target.value)}
                   placeholder={d.kind === 'task' ? tr('写明任务内容与完成标准，派发时将连同该节点关联的检查与工序一并发送')
                     : d.kind === 'soft' ? tr('例如「每个模块都有消融实验吗？请列出缺失项」') : ''} />}
             </label>

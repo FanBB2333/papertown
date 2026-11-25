@@ -1,17 +1,24 @@
 // The town in 3D, walked in first person (town3d/engine.ts does the work), flying in from and
 // back out to the map's view. Loaded on demand, so the map does not carry three.js.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { figures, modelText } from '../emphasis';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { BUILDINGS } from '@design/sprites.js';
 import { placementName, renderMap } from '@design/world.js';
 import { api, type Placement } from '../api';
 import { leaveFull } from '../fullscreen';
 import { useSettings } from '../settings';
 import { Engine, type Mode, type Target } from '../town3d/engine';
-import type { HallData } from '../town3d/halls';
+import type { HallData, Thing } from '../town3d/halls';
 import '../town3d.css';
 import { where, type MapView } from './WorldMap';
 import { tr } from '../i18n';
+
+function Caption({ thing }: { thing: Thing }) {
+  return <>{thing.sub.split(' · ').map((part, i) => <Fragment key={i}>{i > 0 && ' · '}{part === thing.alert
+    ? <span className="em-state" data-tone="bad">{part}</span>
+    : /^\d+(?:\.\d+)?(?:%|\/[\d.]+ GB)$/.test(part) ? figures(part) : part}</Fragment>)}</>;
+}
 
 type Phase = 'enter' | 'live' | 'leave' | 'off';
 
@@ -160,14 +167,14 @@ export default function Town3D({ placements, notes, phase, from, active, onOpen,
         <div className="pnl t3-card" key={pl.id}>
           <b>{placementName(pl)}</b><span>{where(b.district)}</span>
           <p>{b.rep}</p>
-          <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : tr('尚未接入，进入查看计划 ·')}{press(tr('进去'))}</em>
+          <em>{pl.live ? (pl.tech && pl.tech !== '—' ? `${pl.tech} · ` : '') : <span className="em-state" data-tone="warn">{tr('尚未接入，进入查看计划 ·')}</span>}{press(tr('进去'))}</em>
         </div>
       )}
       {live && target?.kind === 'thing' && (
         <div className="pnl t3-card" key={`${target.thing.title}|${target.thing.sub}`}>
           <b>{target.thing.title}</b>
-          <p>{target.thing.sub}</p>
-          {target.thing.note && <p className="muted">{target.thing.note}</p>}
+          <p><Caption thing={target.thing} /></p>
+          {target.thing.note && <p className={target.thing.noteAuthor === 'user' ? 'user-words em-bar' : 'muted'}>{target.thing.noteAuthor === 'model' ? modelText(target.thing.note) : target.thing.note}</p>}
           <em>{press(target.thing.act.kind === 'exit' ? tr('返回小镇') : target.thing.verb ?? tr('打开面板'))}</em>
         </div>
       )}

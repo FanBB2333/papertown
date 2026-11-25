@@ -1,11 +1,14 @@
 // The shop floor of a core building: one lane per project with stations along it and the agents
 // working them, dressed as the mill's conveyor, the depot's rack, the farm's field row or the press.
 
+import { Tooltip } from '@cloudflare/kumo';
+import { figures, modelText, StateWord } from '../emphasis';
 import { useEffect, useMemo, useState } from 'react';
 import { api, listen, type Agent, type Job, type Line, type StageAgent, type RosterRow } from '../api';
 import { Ava, Item } from '../art';
 import '../floor.css';
 import { GpuStrip } from './Gpus';
+import { eventPreview } from './AgentRoom';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import { POST_NAMES } from './Resident';
 import { tr } from '../i18n';
@@ -14,8 +17,8 @@ type WState = 'working' | 'waiting' | 'resting' | 'error' | 'done' | 'off';
 type SState = 'run' | 'wait' | 'done' | 'todo' | 'rest' | 'bad';
 
 interface Worker { id: string; role: string; post?: string; state: WState; title: string; say?: string }
-interface Station { key: string; name: string; state: SState; art: React.ReactNode; workers: Worker[]; note?: string }
-interface Lane { id: string; seq: number; title: string; status: string; tag: string; note?: string; stations: Station[]; at: number; token?: React.ReactNode; moving: boolean }
+interface Station { key: string; name: string; state: SState; art: React.ReactNode; workers: Worker[]; note?: React.ReactNode }
+interface Lane { id: string; seq: number; title: string; status: string; tag: string; note?: React.ReactNode; stations: Station[]; at: number; token?: React.ReactNode; moving: boolean }
 
 export type CoreType = 'mill' | 'depot' | 'farm' | 'press';
 
@@ -60,7 +63,7 @@ function millLanes(lines: Line[]): Lane[] {
     const linked = l.linked && [l.linked.code?.name, l.linked.paper?.name].filter(Boolean).join(' + ');
     return {
       id: l.id, seq: l.seq, title: l.title, status: l.status, tag: STATUS[l.status] ?? l.status,
-      note: linked ? tr('本地仓库 {0}', linked) : l.note ?? (l.status === 'done' ? tr('已出厂') : cur ? tr('在「{0}」', cur.name) : undefined),
+      note: linked ? tr('本地仓库 {0}', linked) : modelText(l.note) ?? (l.status === 'done' ? tr('已出厂') : cur ? tr('在「{0}」', cur.name) : undefined),
       stations, at, token: <Item k={cur?.out ?? 'egg'} />,
       moving: l.lead.state === 'running' && l.stages.some(s => s.status === 'run'),
     };
@@ -103,11 +106,12 @@ function depotLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
         : i === 0 ? (l?.linked ? method?.note ?? undefined : find === 'done' ? tr('方法设计时在仓库群中查找过 baseline') : tr('方法设计工序将在此查找 baseline')) : undefined,
     }));
     const at = live.length ? 3 : st !== 'off' ? bay : find === 'done' ? 1 : 0;
+    const code = l?.linked?.code;
+    const employee = agent?.started ? `${agent.runtime === 'paseo' ? 'Paseo' : agent.runtime || 'pi'}${(agent.term?.model || agent.model) ? ` · ${agent.term?.model || agent.model}` : ''}` : l?.linked ? '' : tr('在「明细」中为其配置一位代码员工');
     return {
-      id: line.id, seq: line.seq, title: line.title, status: l?.status ?? line.status,
+      id: line.id, seq: line.seq, title: line.title, status: agent?.started ? agent.status : '',
       tag: agent?.started ? AGENT_STATUS[agent.status] ?? agent.status : tr('尚未配置代码员工'),
-      note: [l?.linked?.code ? `${l.linked.code.path} · ${l.linked.code.branch ?? ''}${l.linked.code.dirty ? tr('· {0} 处未提交', l.linked.code.dirty) : ''}` : '',
-        agent?.started ? `${agent.runtime === 'paseo' ? 'Paseo' : agent.runtime || 'pi'}${(agent.term?.model || agent.model) ? ` · ${agent.term?.model || agent.model}` : ''}` : l?.linked ? '' : tr('在「明细」中为其配置一位代码员工')].filter(Boolean).join(' · '),
+      note: code ? <>{code.path} · {code.branch}{!!code.dirty && <mark className="em-mark" data-tone="warn">{tr('· {0} 处未提交', code.dirty)}</mark>}{employee && ' · '}{employee}</> : employee,
       stations, at, token: <Item k="crate" />, moving: st === 'working' || live.length > 0,
     };
   });
@@ -158,7 +162,7 @@ function farmLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
       key: j.id, name: j.name, art: <Plant status={j.status} pct={j.progress} />,
       state: j.status === 'running' ? 'run' : j.status === 'done' ? 'done' : j.status === 'failed' ? 'bad' : j.status === 'queued' ? 'wait' : 'todo',
       workers: i === at ? [watcher] : [],
-      note: `${j.backend} · ${{ queued: tr('排队'), running: tr('运行中 {0}%', j.progress), done: tr('运行完成'), failed: tr('失败'), cancelled: tr('已取消') }[j.status]}`,
+      note: <>{j.backend} · {{ queued: tr('排队'), running: figures(tr('运行中 {0}%', j.progress)), done: tr('运行完成'), failed: <StateWord state="failed">{tr('失败')}</StateWord>, cancelled: tr('已取消') }[j.status]}</>,
     }));
     while (stations.length < PLOTS) {
       const k = stations.length;
@@ -167,8 +171,7 @@ function farmLanes(rows: RosterRow[], jobs: Job[], lines: Line[]): Lane[] {
     return {
       id, seq: ln?.seq ?? row?.line.seq ?? 0, title: ln?.title ?? row?.line.title ?? id, status: running >= 0 ? 'running' : all.some(j => j.status === 'queued') ? 'waiting' : all.length ? 'done' : '',
       tag: running >= 0 ? tr('实验运行中') : all.some(j => j.status === 'queued') ? tr('排队中') : all.length ? tr('已收获 {0} 茬', all.filter(j => j.status === 'done').length) : tr('尚未播种'),
-      note: row?.agent?.last?.data?.text ? String(row.agent.last.data.text).split('\n')[0].slice(0, 60)
-        : ln?.linked ? ln.stages.find(s => s.key === 'exp')?.note ?? tr('nvidb 中暂无其任务') : tr('代码员工提交实验任务后随即播种'),
+      note: eventPreview(row?.agent?.last, 60) ?? (ln?.linked ? modelText(ln.stages.find(s => s.key === 'exp')?.note) ?? tr('nvidb 中暂无其任务') : tr('代码员工提交实验任务后随即播种')),
       stations, at, moving: running >= 0,
     };
   }).sort((a, b) => b.seq - a.seq);
@@ -222,7 +225,7 @@ function AgentFig({ w }: { w: Worker }) {
   if (w.post) return <span className="muted small">{w.post}</span>;
   return (
     <span className={`wk w-${w.state}`} title={w.title}>
-      {w.say && <em className="bub">{w.say}</em>}
+      {w.say && <em className="bub">{w.say.endsWith('%') ? figures(w.say) : modelText(w.say)}</em>}
       {w.state === 'resting' && !w.say && <em className="bub z">z</em>}
       <Ava role={w.role} />
     </span>
@@ -234,7 +237,7 @@ function LaneRow({ lane, i, onPick }: { lane: Lane; i: number; onPick: (id: stri
   return (
     <button className={`lane ls-${lane.status}${lane.moving ? ' moving' : ''}`} style={{ ['--i' as string]: i }} onClick={() => onPick(lane.id)} title={tr('查看该项目明细')}>
       <div className="ln-tag">
-        <div className="proj-top"><b>#{lane.seq}</b><span className={`pst pst-${lane.status}`}>{lane.tag}</span></div>
+        <div className="proj-top"><b>#{lane.seq}</b><StateWord state={lane.status}>{lane.tag}</StateWord></div>
         <h4>{lane.title}</h4>
         {lane.note && <small>{lane.note}</small>}
       </div>
@@ -242,14 +245,14 @@ function LaneRow({ lane, i, onPick }: { lane: Lane; i: number; onPick: (id: stri
         <div className="ln-rail" />
         {lane.token && <div className="ln-token">{lane.token}</div>}
         {lane.stations.map(s => (
-          <div key={s.key} className={`fst st-${s.state}`} title={s.note ? `${s.name} · ${s.note}` : s.name}>
+          <Tooltip key={s.key} content={<span className="research-tip">{s.note ? <>{s.name} · {typeof s.note === 'string' ? modelText(s.note) : s.note}</> : s.name}</span>} render={<div className={`fst st-${s.state}`} />}>
             <div className="fst-crew">
               {s.workers.slice(0, CREW).map(w => <AgentFig key={w.id} w={w} />)}
               {s.workers.length > CREW && <span className="wk-more" title={s.workers.slice(CREW).map(w => w.title).join('\n')}>+{s.workers.length - CREW}</span>}
             </div>
             <div className="fst-art">{s.art}</div>
-            <span className="fst-name">{s.name}</span>
-          </div>
+            <span className={s.state === 'bad' ? 'fst-name em-state' : 'fst-name'} data-tone="bad">{s.name}</span>
+          </Tooltip>
         ))}
       </div>
     </button>

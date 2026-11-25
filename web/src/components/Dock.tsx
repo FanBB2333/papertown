@@ -13,7 +13,7 @@ export function Dock({ view, open, setOpen, away, target, setTarget, focusKey, o
   view: string; open: boolean; setOpen: (open: boolean) => void; away: boolean;
   target: Target; setTarget: (t: Target) => void; focusKey: number;
   onIdea: (text: string) => Promise<boolean>;
-  toast: (t: string) => void;
+  toast: (t: string, error?: boolean) => void;
 }) {
   const lens = useLens<HTMLDivElement>(14, 30);
   const col = useColumn(view);

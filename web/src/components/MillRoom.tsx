@@ -1,6 +1,7 @@
 // The mill as the base camp: every project at a glance on the left, the chosen one's
 // production line and outputs on the right.
 
+import { StateWord } from '../emphasis';
 import { useEffect, useMemo, useState } from 'react';
 import { api, listen, type Agent, type Line, type Placement } from '../api';
 import type { RoomActions } from './Interior';
@@ -19,8 +20,8 @@ export const STATUS: Record<string, string> = {
   linked: tr('本地项目'),
 };
 export function StatusTag({ status, sample }: { status: string; sample?: boolean }) {
-  const tag = <span className={`pst pst-${status}`}>{STATUS[status] ?? status}</span>;
-  return sample ? <>{tag}<span className="pst pst-sample" title={tr('预制样例项目，内含占位内容')}>{tr('样例')}</span></> : tag;
+  const tag = <StateWord state={status}>{STATUS[status] ?? status}</StateWord>;
+  return sample ? <>{tag}<span className="small muted" title={tr('预制样例项目，内含占位内容')}>{tr('样例')}</span></> : tag;
 }
 export const AGENT_STATUS: Record<string, string> = {
   stopped: tr('未启动'), starting: tr('启动中'), idle: tr('待命'), working: tr('工作中'), error: tr('出错'), watching: tr('值守'), offline: tr('连不上'),
@@ -110,7 +111,7 @@ export function MillRoom(p: Props) {
               <div>
                 <StatusTag status={line.status} />
                 <h2>#{line.seq} {line.title}</h2>
-                <p>{line.idea}</p>
+                <p className="user-words em-bar">{line.idea}</p>
               </div>
               <div className="go-row">
                 <button className="btn" onClick={() => p.onOpen('depot', line.id)}>{tr('前往仓库 · 代码')}</button>

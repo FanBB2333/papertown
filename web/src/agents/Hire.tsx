@@ -86,7 +86,7 @@ export function HireDialog({ lineId, initialPost, lockLine, onClose, onStarted, 
     <Dialog size="lg" className="st-dlg aw-hire">
       <Dialog.Title>{tr('新建员工')}</Dialog.Title>
       <Dialog.Description>{tr('为项目指定岗位启动员工。工作目录为该项目在小镇中的目录，启动时将收到项目简报。')}</Dialog.Description>
-      {!ready ? <p className="aw-hire-wait">{error || tr('加载中…')}</p> : !rosters.coder.roster.length ? <Banner description={tr('暂无项目。请先在小镇中放入一颗 idea。')} /> : <form onSubmit={start}>
+      {!ready ? <p className={error ? 'aw-hire-wait em-state' : 'aw-hire-wait'} data-tone="bad">{error || tr('加载中…')}</p> : !rosters.coder.roster.length ? <Banner description={tr('暂无项目。请先在小镇中放入一颗 idea。')} /> : <form onSubmit={start}>
         {!lockLine && <div className="aw-hire-row">
           <Select label={tr('项目')} value={line} items={Object.fromEntries(rosters.coder.roster.map(r => [r.line.id, `#${r.line.seq} ${r.line.title}`]))} onValueChange={v => setLine(String(v))} disabled={busy} />
         </div>}
@@ -120,7 +120,7 @@ export function HireDialog({ lineId, initialPost, lockLine, onClose, onStarted, 
               items={Object.fromEntries(chosen.thinking.map(t => [t, t]))} onValueChange={v => setThinking(String(v))} />}
           </div>}
           {terminal && !current?.models.length && <p className="aw-hire-note">{tr('暂无模型列表，将使用 CLI 默认模型。')}</p>}
-          {error && <Banner variant="error" description={error} />}
+          {error && <p className="em-state" data-tone="bad" role="alert">{error}</p>}
           <div className="st-btns">
             <Button type="button" disabled={busy} onClick={onClose}>{tr('取消')}</Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!line || !!why || (runtime !== 'pi' && !provider)}>{tr('启动员工')}</Button>

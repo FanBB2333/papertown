@@ -13,19 +13,13 @@
 .lane {
   display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 18px; align-items: stretch; padding: 12px 18px 8px 16px;
   text-align: left; color: var(--ink); font: inherit; cursor: pointer; border-radius: 16px;
-  --ls: transparent; background: var(--panel); border: 1px solid var(--line); box-shadow: inset 4px 0 0 var(--ls), 0 1px 0 rgba(46, 31, 18, .05);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 1px 0 rgba(46, 31, 18, .05);
   animation: rise-in .55s var(--out) both; animation-delay: calc(var(--i, 0) * 60ms);
   transition: transform .55s var(--spring), box-shadow .4s var(--out), border-color .3s var(--out);
 }
-.lane:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent, var(--brand)) 45%, var(--line)); box-shadow: inset 4px 0 0 var(--ls), 0 12px 30px -20px rgba(46, 31, 18, .55); }
-.lane.ls-done { background: color-mix(in srgb, var(--ok) 4%, var(--panel)); }
-/* the lane's state as a stripe down its left edge */
-.lane:is(.ls-running, .ls-hatching, .ls-working) { --ls: var(--brand); }
-.lane:is(.ls-waiting, .ls-queued) { --ls: var(--warn); }
-.lane:is(.ls-done, .ls-linked) { --ls: var(--ok); }
-.lane:is(.ls-failed, .ls-error) { --ls: var(--bad); }
+.lane:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent, var(--brand)) 45%, var(--line)); box-shadow: 0 12px 30px -20px rgba(46, 31, 18, .55); }
 .ln-tag { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-.ln-tag .proj-top > b { font: 15px var(--head); color: var(--brand); }
+.ln-tag .proj-top > b { font: inherit; color: var(--muted); }
 .ln-tag h4 { margin: 6px 0 4px; font-size: 14px; font-weight: 600; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ln-tag small { color: var(--muted); font-size: 11.5px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 

@@ -1,6 +1,7 @@
 // Papers from the library, as cards: the library's shelves (by topic, or a search), and
 // what one paper read and cites (the hatchery's survey and the press's references).
 
+import { modelText } from '../emphasis';
 import { useEffect, useState } from 'react';
 import { api, type PaperCard, type Shelf } from '../api';
 import { tr } from '../i18n';
@@ -14,10 +15,10 @@ function Card({ p, i }: { p: PaperCard; i: number }) {
       </div>
       <b>{p.title}</b>
       <span className="pc-au">{p.authors}</span>
-      {p.note ? <p className="pc-note">{p.note}</p> : <p className="pc-snip">{p.snippet}</p>}
+      {p.note ? <p className="pc-note">{modelText(p.note)}</p> : <p className="pc-snip">{p.snippet}</p>}
       {p.similarity != null && (
         <span className="pc-sim" title={tr('与本论文 idea 的接近程度')}>
-          <i style={{ ['--v' as string]: Math.max(0, Math.min(1, p.similarity)) }} />{p.similarity.toFixed(2)}
+          <i style={{ ['--v' as string]: Math.max(0, Math.min(1, p.similarity)) }} /><span className="em-num">{p.similarity.toFixed(2)}</span>
         </span>
       )}
     </a>
@@ -56,7 +57,7 @@ export function LibraryShelf({ tick }: { tick: number }) {
           </button>
         ))}
       </div>
-      {err && <p className="warn-box small">{err}</p>}
+      {err && <p className="small em-state" data-tone="bad">{err}</p>}
       <div className="pcards">
         {shelf?.papers.map((p, i) => <Card key={p.paper_id} p={p} i={Math.min(i, 12)} />)}
         {shelf && !shelf.papers.length && <p className="muted">{tr('此处为空。')}</p>}

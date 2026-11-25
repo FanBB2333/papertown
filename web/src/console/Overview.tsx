@@ -1,6 +1,8 @@
 // The overview panel: the project's stages (each opening the panel its work is in: the stage says which), its parts and the
 // mill's full sheet folded away underneath. How it is going, deciding and talking to its lead are in 进展.
 
+import { Tooltip } from '@cloudflare/kumo';
+import { figures, modelText } from '../emphasis';
 import type { Line, WsInfo } from '../api';
 import { MillDetail } from '../components/Sheet';
 import { StatusTag } from '../components/MillRoom';
@@ -42,13 +44,13 @@ export function Overview(p: Props) {
           <StatusTag status={l.status} />
           <a className="ov-brief small" href={href(brief)} onClick={e => follow(e, brief)} title={tr('进展、卡片和对话')}>{tr('进展中查看')}<Icon n="right" size={12} /></a>
         </div>
-        {l.idea && <p className="ov-idea">{gist(l.idea, 140)}</p>}
+        {l.idea && <p className="ov-idea user-words em-bar">{l.idea}</p>}
       </section>
 
       {ask && (
         <a className="ov-ask" href={href(brief)} onClick={e => follow(e, brief)}>
           <Icon n="bell" size={20} />
-          <div><b>{ask}</b><p className="small">{tr('在「进展」中决定，也可在此与负责人沟通')}</p></div>
+          <div className="em-bar" data-tone="warn"><b>{modelText(ask)}</b><p className="small">{tr('在「进展」中决定，也可在此与负责人沟通')}</p></div>
           <Icon n="right" size={16} />
         </a>
       )}
@@ -56,16 +58,16 @@ export function Overview(p: Props) {
       <section className="cs">
         <div className="cs-h">
           <h3>{tr('研究进度')}</h3>
-          <span className="muted small">{tr('{0}/{1} 站完成', done, l.stages.length)}</span>
+          <span className="muted small">{figures(tr('{0}/{1} 站完成', done, l.stages.length))}</span>
         </div>
         <ol className="ov-steps" style={{ ['--done' as string]: done, ['--n' as string]: l.stages.length }}>
           {l.stages.map((s, i) => (
             <li key={s.key} className={`ov-step s-${s.status}`} style={{ ['--i' as string]: i }} data-ref={`stage:${s.key}`} data-ref-label={`${tr('工序')} ${s.name}`}>
-              <button onClick={() => p.go(s.mod as ModId)} title={s.note ?? s.out}>
+              <Tooltip content={<span className="research-tip">{s.note ? modelText(s.note) : s.out}</span>} disabled={!s.note && !s.out} render={<button onClick={() => p.go(s.mod as ModId)} />}>
                 <span className="ov-dot">{s.status === 'done' ? '✓' : i + 1}</span>
                 <b>{s.name}</b>
-                <span className="muted small">{s.status === 'run' ? `${s.pct}%` : '\u00a0'}</span>
-              </button>
+                <span className={s.status === 'run' ? 'em-num small' : 'muted small'}>{s.status === 'run' ? `${s.pct}%` : '\u00a0'}</span>
+              </Tooltip>
             </li>
           ))}
         </ol>
@@ -76,8 +78,8 @@ export function Overview(p: Props) {
           <button key={x.m} className="ov-part" style={{ ['--i' as string]: i }} onClick={() => p.go(x.m)}>
             <Icon n={x.icon} size={20} />
             <span className="ov-pt">{x.t}</span>
-            <b>{x.v}</b>
-            {x.s && <span className="muted small">{x.s}</span>}
+            <b className={x.m === 'survey' && h?.verdict ? 'em-key' : undefined}>{x.v}</b>
+            {x.s && <span className="muted small">{modelText(x.s)}</span>}
             <Icon n="right" size={14} className="ov-go" />
           </button>
         ))}

@@ -1,6 +1,7 @@
 // A project's jobs as a table, cards, a board, groups or a grid, or "auto" picking one from the
 // jobs in view; the choice is remembered in this browser.
 
+import { figures } from '../emphasis';
 import { Fragment, useMemo, useState } from 'react';
 import type { Job } from '../api';
 import { tr } from '../i18n';
@@ -104,7 +105,7 @@ function Table({ jobs, open, onOpen }: V) {
               {head && tally && (
                 <tr className="xt-day"><td colSpan={7}>
                   <b>{Number.isFinite(day) ? dayName(day!) : tr('尚未开始')}</b><em>{tr('{0} 个', tally.n)}</em>
-                  {tally.failed > 0 && <em className="bad-t">✕ {tally.failed}</em>}{tally.done > 0 && <em>✓ {tally.done}</em>}
+                  {tally.failed > 0 && <em className="em-num" data-tone="bad">✕ {tally.failed}</em>}{tally.done > 0 && <em>✓ {tally.done}</em>}
                 </td></tr>
               )}
               <tr className={`s-${s}${open === j.id ? ' on' : ''}`} {...jobRef(j)} onClick={() => onOpen(j.id, order)}>
@@ -113,10 +114,10 @@ function Table({ jobs, open, onOpen }: V) {
                 <td><StateTag s={s} /></td>
                 <td className="muted nw">{placeOf(j)}</td>
                 <td className="muted nw">{Number.isFinite(startOf(j)) ? when(startOf(j)) : '—'}</td>
-                <td>{s === 'running' && j.nvidb?.progress ? <span className="mono small">{j.nvidb.progress}</span>
+                <td>{s === 'running' && j.nvidb?.progress ? <span className="mono small">{figures(j.nvidb.progress)}</span>
                   : s === 'failed' && j.nvidb?.last_error ? <><span>{dur(j.nvidb.elapsed_s)}</span><span className="xt-err" title={j.nvidb.last_error}>{lastLine(j.nvidb.last_error)}</span></>
                   : dur(ranFor(j))}</td>
-                <td className="xt-res">{headlines(resOf(j), 2).map(h => <span key={h.k} title={h.k}><i>{h.name}</i><b>{fmtNum(h.v)}</b></span>)}</td>
+                <td className="xt-res">{headlines(resOf(j), 2).map(h => <span key={h.k} title={h.k}><i>{h.name}</i><b className="em-num">{fmtNum(h.v)}</b></span>)}</td>
               </tr>
             </Fragment>
           );
@@ -141,9 +142,9 @@ function Cards({ jobs, open, onOpen, now }: V) {
               <span className="jc-h"><StateTag s={s} />{j.nvidb && <span className="muted small mono">#{j.nvidb.id}</span>}
                 <em>{s === 'running' ? dur(took) : ago(j.nvidb?.finished_at ?? j.ended_at ?? j.created_at)}</em></span>
               <b className="jc-n" title={j.name}>{j.name}</b>
-              {pct != null && <span className="jc-bar"><span><i style={{ width: `${Math.min(100, pct)}%` }} /></span><em>{Math.round(pct)}%</em></span>}
+              {pct != null && <span className="jc-bar"><span><i style={{ width: `${Math.min(100, pct)}%` }} /></span><em className="em-num">{Math.round(pct)}%</em></span>}
               {line && <span className={`jc-line${s === 'failed' ? ' err' : ''} mono`} title={s === 'failed' ? j.nvidb?.last_error : line}><span>{line}</span></span>}
-              {res.length > 0 && <span className="jc-m">{res.map(h => <span key={h.k} title={h.k}><strong>{fmtNum(h.v)}</strong><em>{h.name}</em></span>)}</span>}
+              {res.length > 0 && <span className="jc-m">{res.map(h => <span key={h.k} title={h.k}><strong className="em-num">{fmtNum(h.v)}</strong><em>{h.name}</em></span>)}</span>}
               <span className="jc-f"><span>{placeOf(j)}</span>{s !== 'running' && took != null && <span>{dur(took)}</span>}</span>
             </button>
           );
@@ -170,7 +171,7 @@ function Board({ jobs, open, onOpen, now }: V) {
       <div className="jb">
         {cols.map(([s, js]) => (
           <div key={s} className={`jb-col s-${s}`}>
-            <h4><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}<span>{js.length}</span></h4>
+            <h4><i className="tile-key" style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}<span className={s === 'failed' && js.length ? 'em-num' : undefined} data-tone="bad">{js.length}</span></h4>
             <div className="jb-list">
               {js.slice(0, all.includes(s) ? 500 : 12).map(j => {
                 const pct = pctFor(j), res = headline(resOf(j), 1)[0], line = lineOf(j);
@@ -178,7 +179,7 @@ function Board({ jobs, open, onOpen, now }: V) {
                   <button key={j.id} className={`jb-j${open === j.id ? ' on' : ''}`} {...jobRef(j)} onClick={() => onOpen(j.id, order)}>
                     <b title={j.name}>{j.name}</b>
                     {pct != null && <span className="jc-bar thin"><span><i style={{ width: `${Math.min(100, pct)}%` }} /></span></span>}
-                    {res && <span className="jb-r"><strong>{fmtNum(res[1])}</strong><em>{shortKey(res[0])}</em></span>}
+                    {res && <span className="jb-r"><strong className="em-num">{fmtNum(res[1])}</strong><em>{shortKey(res[0])}</em></span>}
                     {line && s !== 'done' && <span className={`jb-l mono${s === 'failed' ? ' err' : ''}`}>{line}</span>}
                     <span className="jb-m">{placeOf(j)} · {s === 'running' ? dur(ranFor(j, now)) : s === 'queued' ? ago(j.created_at) : ago(j.nvidb?.finished_at ?? j.ended_at)}</span>
                   </button>
@@ -230,7 +231,7 @@ function Groups({ jobs, open, onOpen, now }: V) {
               <span className="jg-n">{(['running', 'queued', 'failed', 'done'] as St[]).filter(n).map(s => <em key={s} className={`s-${s}`}>{ST[s].sign} {n(s)}</em>)}</span>
             </button>
             {top && (
-              <p className="jg-top">{tr('最高')} <span className="muted">{shortKey(top.k)}</span> <strong>{fmtNum(top.v)}</strong>
+              <p className="jg-top">{tr('最高')} <span className="muted">{shortKey(top.k)}</span> <strong className="em-num">{fmtNum(top.v)}</strong>
                 <button className="lnk" onClick={() => onOpen(top.j.id, order)}>{top.j.name}</button>
                 <span className="muted small">{tr('（{0} 个返回了此项）', top.n)}</span></p>
             )}

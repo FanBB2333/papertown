@@ -19,7 +19,7 @@ export class Guard extends Component<{ children: ReactNode; onClose?: () => void
     if (!error) return this.props.children;
     return (
       <div className="guard" role="alert">
-        <b>{tr('此处内容未能显示')}</b>
+        <b className="em-state" data-tone="bad">{tr('此处内容未能显示')}</b>
         <p className="muted small">{tr('渲染出错，页面其余部分照常可用。错误信息：')}</p>
         <code>{error.message || String(error)}</code>
         <div className="btns">

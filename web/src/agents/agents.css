@@ -146,7 +146,7 @@ html .theme-sketch .aw .transcript .msg-a.err { padding: 10px 14px; border: 1px 
 .term-main > :is(.transcript, .terminal-screen) { animation: aw-pane-in .45s var(--out) both; }
 .aw .terminal-screen { margin: 4px 20px 12px; border: 1px solid var(--line); border-radius: 12px; }
 .term-none { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.term-wait { flex: none; display: flex; align-items: center; gap: 12px; margin: 4px 16px 16px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--warn) 38%, var(--line)); border-radius: 14px; background: color-mix(in srgb, var(--warn) 8%, var(--panel)); animation: aw-banner-in .6s var(--spring) both; }
+.term-wait { flex: none; display: flex; align-items: center; gap: 12px; margin: 4px 16px 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: transparent; animation: aw-banner-in .6s var(--spring) both; }
 .aw .term-wait { margin-inline: max(20px, calc(50% - var(--aw-col) / 2)); }
 .term-wait > div { flex: 1; min-width: 0; }
 .term-wait b { display: block; font-size: 13.5px; }
@@ -231,7 +231,7 @@ html.ui-mac .aw-failed { --aw-color: var(--mac-red); }
 }
 @media (max-width: 720px) {
   .ac-input textarea, .aw input { font-size: 16px; }
-  .hud:has(.aw-count) .hud-r > .chip:not(.aw-count) { display: none; }
+  .hud:has(.aw-count) .hud-r > .hq-connection:not(.em-state) { display: none; }
   html.ui-cf .theme-sketch.la .hud .demo-gh { width: 32px; height: 32px; padding: 0; gap: 0; font-size: 0; }
 }
 

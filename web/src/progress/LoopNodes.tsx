@@ -7,7 +7,9 @@
 // reads it): everything up close; further out the small print fades and the name, state and figure grow; from far
 // away <Far> fades in over the rest: a name and one figure in large type, the state as its colour.
 
+import { modelText, StateWord, stateTone } from '../emphasis';
 import { createContext, useContext } from 'react';
+import { writePath, href, follow } from '../route';
 import { Handle, NodeToolbar, Position, type Node, type NodeProps } from '@xyflow/react';
 import type { CanvasNode, CanvasView, ProjectCard, TaskStatus, TaskTo } from '../api';
 import { ago } from '../console/util';
@@ -40,7 +42,7 @@ const refOf = (n: CanvasNode) => ({ 'data-ref': `node:${n.id}`, 'data-ref-label'
 const STAGES = ['idea', 'hatch', 'team', 'method', 'exp', 'write', 'review', 'ship'];
 
 // what a node says from far away, in place of everything else in it
-const Far = ({ t, x }: { t?: string; x?: React.ReactNode }) => <div className="cv-far"><b>{t}</b>{x ? <em>{x}</em> : null}</div>;
+const Far = ({ t, x }: { t?: React.ReactNode; x?: React.ReactNode }) => <div className="cv-far"><b>{t}</b>{x ? <em>{x}</em> : null}</div>;
 
 const SIDES = [Position.Top, Position.Right, Position.Bottom, Position.Left];
 const Ports = () => <>{SIDES.map(p => <Handle key={p} id={p} type="source" position={p} />)}</>;
@@ -76,16 +78,16 @@ function StageNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   return (
     <div className={`cv-n cv-st st-${st}${n.locked ? ' locked' : ''}${selected ? ' on' : ''}`} {...refOf(n)}>
       <span className="cv-ring" style={{ ['--pct' as string]: `${pct}%` }}>
-        {n.locked ? <Icon n="lock" size={13} /> : st === 'done' ? <Icon n="check" size={14} /> : <b>{pct}<small>%</small></b>}
+        {n.locked ? <Icon n="lock" size={13} /> : st === 'done' ? <Icon n="check" size={14} /> : <b className="em-num">{pct}<small>%</small></b>}
       </span>
       <div className="cv-st-b">
         <small>STAGE {String(STAGES.indexOf(n.ref ?? '') + 1).padStart(2, '0')}</small>
         <b>{n.title}</b>
-        {line && <p title={line}>{line}</p>}
+        {line && <p title={line} className={n.locked ? 'em-state' : undefined} data-tone="bad">{modelText(line)}</p>}
       </div>
       {n.role && <em className="cv-who" title={who?.there ? '' : tr('尚未启动')}><i className={`dot s-${who?.there ? who.status : 'stopped'}`} />{ROLE[n.role as TaskTo]}</em>}
       {st === 'run' && <span className="cv-st-bar"><i style={{ width: `${pct}%` }} /></span>}
-      <Far t={n.title} x={n.locked ? tr('锁住') : st === 'run' ? `${pct}%` : ''} />
+      <Far t={n.title} x={n.locked ? <StateWord state="blocked">{tr('锁住')}</StateWord> : st === 'run' ? <span className="em-num">{pct}%</span> : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
@@ -102,15 +104,15 @@ function GateNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   return (
     <div className={`cv-gw g-${look}${selected ? ' on' : ''}`} {...refOf(n)}>
       <div className="cv-n cv-gate">
-        <header><i className="cv-dia" /><span>HARD · {prios(on) || 'P1'}</span><em className="cv-chip">{g.waived && g.state === 'block' ? tr('已放行') : GATE_ST[look]}</em></header>
+        <header><i className="cv-dia" /><span>HARD · {prios(on) || 'P1'}</span><em className="cv-chip"><StateWord state={look}>{g.waived && g.state === 'block' ? tr('已放行') : GATE_ST[look]}</StateWord></em></header>
         <p className="cv-gate-t">
           <b>{one ? trx(one.title) : tr('{0}卡口组', g.name)}</b>
-          <span className="cv-num">{one ? (val != null ? `${val} / ≤${one.max ?? 0}` : '—') : tr('{0}/{1} 过', g.pass, g.total)}</span>
+          <span className="cv-num em-num" data-tone={stateTone(look) ?? 'info'}>{one ? (val != null ? `${val} / ≤${one.max ?? 0}` : '—') : tr('{0}/{1} 过', g.pass, g.total)}</span>
         </p>
         {!one && <span className="cv-matrix">{cs.map(c => <i key={c.id} className={`m-${level(c)}`} title={`${trx(c.title)} · ${c.on ? (level(c) === 'pass' ? tr('放行') : level(c) === 'none' ? tr('尚未检查') : LEVEL[level(c)]) : tr('已关闭')}`} />)}</span>}
-        <small>{g.before > g.now ? tr('R1:{0}处 → R{1}:{2}处', g.before, o.v.rounds, g.now) : g.now ? tr('剩余 {0} 处', g.now) : look === 'none' ? tr('暂无可查项') : tr('全部放行')}
+        <small><span className={g.before !== g.now ? 'em-mark' : undefined}>{g.before !== g.now ? tr('R1:{0}处 → R{1}:{2}处', g.before, o.v.rounds, g.now) : g.now ? tr('剩余 {0} 处', g.now) : look === 'none' ? tr('暂无可查项') : tr('全部放行')}</span>
           {g.ticket && g.round > 0 && !g.waived && look === 'block' && <> · {tr('第 {0} 轮', g.round)}</>}</small>
-        <Far t={one ? trx(one.title) : tr('{0}卡口', g.name)} x={one ? (val != null ? `${val}/${one.max ?? 0}` : '') : g.total ? `${g.pass}/${g.total}` : ''} />
+        <Far t={one ? trx(one.title) : tr('{0}卡口', g.name)} x={one && val != null ? <span className="em-num" data-tone={stateTone(look)}>{val}/{one.max ?? 0}</span> : g.total ? <span className="em-num">{g.pass}/{g.total}</span> : ''} />
       </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
@@ -126,11 +128,11 @@ function HardNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   return (
     <div className={`cv-gw g-${lv === 'none' ? 'none' : lv} small${selected ? ' on' : ''}`} {...refOf(n)}>
       <div className="cv-n cv-gate">
-        <header><i className="cv-dia" /><span>HARD · {ruleNo(trx(c.rule))} {c.prio}</span><em className="cv-chip">{lv === 'pass' ? tr('放行') : lv === 'off' ? tr('已关闭') : lv === 'none' ? tr('尚未检查') : LEVEL[lv]}</em></header>
-        <p className="cv-gate-t"><b>{trx(c.title)}</b><span className="cv-num">{val != null ? `${val} / ≤${c.max ?? 0}` : '—'}</span></p>
-        <small>{first != null && val != null && first !== val ? tr('R1:{0} → 当前:{1}', first, val) : c.last?.findings[0]?.file ? `${c.last.findings[0].file}:${c.last.findings[0].line}` : trx(c.rule)}
+        <header><i className="cv-dia" /><span>HARD · {ruleNo(trx(c.rule))} {c.prio}</span><em className="cv-chip"><StateWord state={lv}>{lv === 'pass' ? tr('放行') : lv === 'off' ? tr('已关闭') : lv === 'none' ? tr('尚未检查') : LEVEL[lv]}</StateWord></em></header>
+        <p className="cv-gate-t"><b>{trx(c.title)}</b><span className="cv-num em-num" data-tone={stateTone(lv) ?? 'info'}>{val != null ? `${val} / ≤${c.max ?? 0}` : '—'}</span></p>
+        <small>{first != null && val != null && first !== val ? <mark className="em-mark">{tr('R1:{0} → 当前:{1}', first, val)}</mark> : c.last?.findings[0]?.file ? `${c.last.findings[0].file}:${c.last.findings[0].line}` : trx(c.rule)}
           {first && val === 0 ? ` · ${tr('清零')}` : ''}</small>
-        <Far t={trx(c.title)} x={val != null ? `${val}/${c.max ?? 0}` : ''} />
+        <Far t={trx(c.title)} x={val != null ? <span className="em-num" data-tone={stateTone(lv)}>{val}/{c.max ?? 0}</span> : ''} />
       </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
@@ -150,12 +152,12 @@ function SoftNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
     <div className={`cv-n cv-sen v-${k}${c.on ? '' : ' off'}${selected ? ' on' : ''}`} {...refOf(n)}>
       <header>
         <i className="cv-ring2" /><span>SOFT · {stage ? tr('监测{0}', stage.title ?? '') : tr('持续询问')} · {tr('每 {0}h', c.every ?? 24)}</span>
-        {c.due && <em className="cv-chip due">{tr('到期')}</em>}
-        <em className="cv-chip">{c.on ? VERDICT[k] : tr('已关闭')}</em>
+        {c.due && <em className="em-state" data-tone="warn" data-icon="clock">{tr('到期')}</em>}
+        <em className="cv-chip"><StateWord state={k}>{c.on ? VERDICT[k] : tr('已关闭')}</StateWord></em>
       </header>
       <p className="cv-sen-t"><b>{trx(c.title)}</b><span className="cv-dots">{c.history.slice(-4).map((h, i) => <i key={i} className={`s-${h.status}`} />)}</span></p>
-      <q>{last?.note ? clip(last.note, 46) : clip(trx(c.text), 46)}</q>
-      <Far t={trx(c.title)} x={c.on && ['pass', 'warn', 'fail'].includes(k) ? VERDICT[k] : ''} />
+      <q>{last?.note ? modelText(last.note, 46) : clip(trx(c.text), 46)}</q>
+      <Far t={trx(c.title)} x={c.on && ['pass', 'warn', 'fail'].includes(k) ? <StateWord state={k}>{VERDICT[k]}</StateWord> : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
@@ -166,7 +168,7 @@ function SpecNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
   return (
     <div className={`cv-n cv-spec${selected ? ' on' : ''}`} {...refOf(n)}>
       <header><i className="cv-spdot" /><span>SOFT SPEC · Prompt / AGENTS.md</span></header>
-      <b>{rules.length ? clip(rules[0].text, 30) : tr('项目简报与 agent 要求')}</b>
+      <b className={rules.length ? 'em-bar' : undefined}>{rules.length ? clip(rules[0].text, 30) : tr('项目简报与 agent 要求')}</b>
       <small>{rules.length ? tr('{0} 条要求 · 概率引导，下游验证', rules.length) : tr('工作边界中尚未填写要求 · 概率引导')}</small>
       <Far t={tr('软限制')} x={rules.length ? tr('{0} 条', rules.length) : ''} />
       <Ports /><Tools n={n} on={selected && !dragging} />
@@ -190,18 +192,25 @@ function ClampNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
 // ---------- the loop back ----------
 
 function HumanNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
-  const items = n.items ?? [];
+  const items = n.items ?? [], seq = useContext(OpsCtx)?.r.line.seq;
+  const matter = items.find(i => i.kind === 'matter');
+  const to = seq && matter ? writePath(seq, 'matter', matter.ask ?? matter.id) : null;
   return (
     <div className={`cv-hw${items.length ? ' has' : ''}${selected ? ' on' : ''}`} {...refOf(n)}>
       <div className="cv-n cv-human">
         <header><Icon n="person" size={13} /><span>HUMAN GATE · {tr('人类拍板节点')}</span></header>
-        <b>{items.length ? tr('{0} 件待你拍板', items.length) : tr('暂无待你拍板事项')}</b>
-        <small>{items.length ? clip(items[0].text, 40) : tr('超轮次卡口、偏离巡检及 agent 提问将汇集在此处')}</small>
-        <Far t={tr('人类拍板')} x={items.length ? tr('{0} 件', items.length) : ''} />
+        <b className={items.length ? 'em-bar' : undefined} data-tone="warn">{items.length ? tr('{0} 件待你拍板', items.length) : tr('暂无待你拍板事项')}</b>
+        <small>{to && matter ? <a className="nodrag nopan" href={href(to)} onClick={e => { e.stopPropagation(); follow(e, to); }}>{modelText(matter.text, 40)} ↗</a>
+          : items.length ? modelText(items[0].text, 40) : tr('超轮次卡口、偏离巡检及 agent 提问将汇集在此处')}</small>
+        <Far t={tr('人类拍板')} x={items.length ? <span className="em-bar" data-tone="warn">{tr('{0} 件', items.length)}</span> : ''} />
       </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
+}
+
+function nodeText(n: CanvasNode, limit: number) {
+  return n.created_by === 'assistant' || n.created_by === 'papertown' ? modelText(n.text, limit) : clip(n.text, limit);
 }
 
 function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
@@ -216,24 +225,25 @@ function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
       <header>
         {n.loop === 'hard' ? <Icon n="refresh" size={11} /> : n.loop === 'soft' ? <Icon n="spark" size={11} /> : <i className={`dot s-${who?.there ? who.status : 'stopped'}`} />}
         <span>{head} · {n.id} · {WHO[n.to ?? 'lead']}</span>
-        <em>{n.converged ? tr('已收敛') : n.escalated ? tr('待你拍板') : TASK[st]}</em>
+        <em className={n.escalated ? 'em-bar' : st === 'blocked' ? 'em-state' : undefined} data-tone={n.escalated ? 'warn' : 'bad'}>{n.converged ? tr('已收敛') : n.escalated ? tr('待你拍板') : TASK[st]}</em>
       </header>
       <b>{n.title}</b>
       {st === 'queued' && <p className="turn"><Icon n="clock" size={11} />{n.wait_note ? tr('派发失败，将自动重试') : wait?.kind === 'dir' ? tr('等待 {0} 释放工作目录', wait.id) : wait ? tr('等待 {0} {1}', (n.waits ?? []).map(w => w.id).join('、'), wait.stale ? tr('复核') : tr('完成')) : tr('轮到时自动派发')}</p>}
-      {n.stale && <p className="turn again"><Icon n="refresh" size={11} />{tr('前序已重做，结果待复核')}</p>}
+      {n.stale && <p className="turn again em-bar" data-tone="warn"><Icon n="refresh" size={11} />{tr('前序已重做，结果待复核')}</p>}
       {n.loop === 'hard' && trail.length > 0
         ? <p>{tr('收敛进度：{0}', trail.map(x => tr('{0} 处', x)).join(' → '))}</p>
-        : n.text && <p className="two">{clip(n.text, 96)}</p>}
-      {n.result && <p className="res">{clip(n.result, 60)}</p>}
+        : n.text && <p className={n.created_by === 'you' ? 'two user-words em-bar' : 'two'}>{nodeText(n, 96)}</p>}
+      {n.result && <p className="res">{modelText(n.result, 60)}</p>}
       {when && <small>{st === 'sent' ? tr('{0}派发', ago(when)) : ago(when)}{(n.log?.length ?? 0) > 2 && ` · ${tr('{0} 条记录', n.log?.length ?? 0)}`}</small>}
-      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated ? tr('待你拍板') : n.stale ? tr('待复核') : TASK[st]} />
+      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated || n.stale ? <span className="em-bar" data-tone="warn">{n.escalated ? tr('待你拍板') : tr('待复核')}</span> : <StateWord state={st}>{TASK[st]}</StateWord>} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );
 }
 
 function NoteNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
-  return <div className={`cv-n cv-note${selected ? ' on' : ''}`} {...refOf(n)}><p>{clip(n.text, 120)}</p><Far t={clip(n.text, 24)} /><Ports /><Tools n={n} on={selected && !dragging} /></div>;
+  const words = n.created_by === 'you' ? 'user-words em-bar' : undefined;
+  return <div className={`cv-n cv-note${selected ? ' on' : ''}`} {...refOf(n)}><p className={words}>{nodeText(n, 120)}</p><Far t={<span className={words}>{nodeText(n, 24)}</span>} /><Ports /><Tools n={n} on={selected && !dragging} /></div>;
 }
 
 // the project live: its progress card, an agent, its jobs, code, paper or outputs (CanvasInfo.tsx)

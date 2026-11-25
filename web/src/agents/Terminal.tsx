@@ -18,6 +18,7 @@ interface Reading<T> { subject: T; queued: AgentEvent[]; text?: string; styled?:
 // What a conversation in a terminal needs from where it runs. Employees in herdr or tmux and herdr sessions that
 // are not employees both plug in here, and a further backend only has to supply these.
 interface Source<T extends Subject> {
+  lineId?: string | null;
   first: T; name: (x: T) => string; about: (x: T) => string;
   blocked: (x: T) => boolean; exited: (x: T) => boolean;
   read: (want: { chat: boolean; screen: boolean; styled: boolean }) => Promise<Reading<T>>;
@@ -81,7 +82,7 @@ function StyledLines({ screen }: { screen: StyledScreen }) {
   })}{'\n'}</span>)}</>;
 }
 
-function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<T>; toast: (s: string) => void; tools?: React.ReactNode }) {
+function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<T>; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode }) {
   const [subject, setSubject] = useState(source.first), [queued, setQueued] = useState<AgentEvent[]>([]);
   const [text, setText] = useState<string | null>(null), [prompt, setPrompt] = useState<TermPrompt | null>(null), [styled, setStyled] = useState<StyledScreen | null>(null);
   const [items, setItems] = useState<PaseoItem[] | null>(null), [transcript, setTranscript] = useState<Transcript | null>(null);
@@ -95,7 +96,7 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
   const id = source.first.id, blocked = source.blocked(subject), exited = source.exited(subject), working = isWorking(subject);
   const canType = !!source.type && !!source.typing?.(subject) && !exited;
   const typeIn = useTyper(t => 'keys' in t ? source.keys(t.keys) : source.type!('text' in t ? t.text : t.paste, 'paste' in t),
-    () => reload.current(), toast);
+    () => reload.current(), message => toast(message, true));
   const typed = canType ? {
     'data-typing': '', title: tr('点击画面后可直接用键盘输入'),
     onKeyDown: (e: React.KeyboardEvent<HTMLPreElement>) => {
@@ -155,7 +156,7 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
   async function act(fn: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
-    try { await fn(); reload.current(); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+    try { await fn(); reload.current(); } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   const rows = useMemo(() => fold(items ?? [], i => i.kind === 'tool'), [items]);
   const choose = (next: 'chat' | 'screen') => { picked.current = true; stick.current = true; setTab(next); };
@@ -183,14 +184,14 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
       </div>}
       {transcript?.ok && !rows.length && !sent.length && <div className="room-empty small-empty"><p>{tr('暂无对话。')}</p></div>}
       {!transcript && !error && <div className="room-empty small-empty"><p>{tr('加载中…')}</p></div>}
-      <PaseoLog rows={rows} sent={sent.map(m => m.text)} asks={[]} working={working && !blocked} onPermit={() => {}} />
+      <PaseoLog lineId={source.lineId} rows={rows} sent={sent.map(m => m.text)} asks={[]} working={working && !blocked} onPermit={() => {}} />
     </div> : <pre className="terminal-screen" key="screen" ref={el => { pane.current = el; }} tabIndex={0} aria-label={tr('终端内容')} onScroll={scrolled} {...typed}
       style={styled ? { color: styled.theme.fg, background: styled.theme.bg } : undefined}>
       {styled ? <StyledLines screen={styled} /> : text === null ? tr('加载中…') : text.replace(/\n(?:[ \t]*\n){2,}/g, '\n\n') || tr('终端暂未输出内容。')}
     </pre>}
     {exited ? <div className="term-wait term-off" role="status">
       <div className="term-off-row">
-        <div><b>{tr('终端已关闭')}</b><p>{tr('再次启动时将续接上次会话，也可换种运行方式启动。')}</p></div>
+        <div><b className="em-state" data-tone="warn">{tr('终端已关闭')}</b><p>{tr('再次启动时将续接上次会话，也可换种运行方式启动。')}</p></div>
         <div className="btns">
           {source.switchRuntime && <button className="btn" disabled={busy} onClick={() => setSwitching(v => !v)}>{switching ? tr('收起') : tr('换种方式启动')}</button>}
           {source.restart && <button className="btn pri" disabled={busy} onClick={() => act(source.restart!)}>{tr('接着会话启动')}</button>}
@@ -201,7 +202,7 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
       </div>}
     </div> : blocked ? <div className="term-wait" role="status">
       <i className="aw-dot" aria-hidden="true" />
-      <div><b>{tr('终端中有提示待你处理')}</b><p>{prompt?.title || tr('请查看终端画面，选择回答或按键。')}</p></div>
+      <div className="em-bar" data-tone="warn"><b>{tr('终端中有提示待你处理')}</b><p>{prompt?.title || tr('请查看终端画面，选择回答或按键。')}</p></div>
       <button className="btn pri" onClick={() => setAsking(true)}>{tr('处理')}</button>
     </div> : <Compose agent={{ ...subject, down: error || subject.down || null }} queued={queued} adapter={source.compose} toast={toast} value={draft} onChange={setDraft}
       onChanged={() => reload.current()} onSent={(event, said) => {
@@ -229,7 +230,7 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
 const held = (e: AgentEvent) => e.data.sending ? { ...e, data: { ...e.data, error: UNSURE } } : e;
 
 // a herdr session that is not an employee
-export function TerminalRoom({ terminal, toast, tools }: { terminal: Terminal; toast: (s: string) => void; tools?: React.ReactNode }) {
+export function TerminalRoom({ terminal, toast, tools }: { terminal: Terminal; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode }) {
   const id = terminal.id;
   const source = useMemo<Source<Terminal>>(() => ({
     first: terminal,
@@ -255,10 +256,10 @@ export function TerminalRoom({ terminal, toast, tools }: { terminal: Terminal; t
 }
 
 // an employee that runs a CLI in a herdr tab, a tmux window or a background terminal
-export function HostedRoom({ agent, toast, tools }: { agent: Agent; toast: (s: string) => void; tools?: React.ReactNode }) {
+export function HostedRoom({ agent, toast, tools }: { agent: Agent; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode }) {
   const id = agent.id;
   const source = useMemo<Source<Agent>>(() => ({
-    first: agent,
+    first: agent, lineId: agent.line_id,
     name: a => a.name,
     about: a => [kindName(a.term?.provider), a.runtime, a.term?.model].filter(Boolean).join(' · '),
     blocked: a => a.watch?.why === 'terminal', exited: a => a.term?.status === 'exited',
@@ -296,7 +297,7 @@ export function TerminalContext({ terminal: t }: { terminal: Terminal }) {
   </dl>;
 }
 
-export function HostedContext({ agent, toast }: { agent: Agent; toast: (s: string) => void }) {
+export function HostedContext({ agent, toast }: { agent: Agent; toast: (s: string, error?: boolean) => void }) {
   const [busy, setBusy] = useState(false);
   return <>
     <dl className="aw-facts">
@@ -309,7 +310,7 @@ export function HostedContext({ agent, toast }: { agent: Agent; toast: (s: strin
       <dt>{tr('接入方式')}</dt><dd className="aw-path">{agent.attach || (agent.runtime === 'headless' ? tr('Papertown 后台终端，在此页面查看与操作') : tr('未指定'))}</dd>
     </dl>
     <button className="btn" disabled={busy || agent.term?.status === 'exited'} onClick={async () => {
-      setBusy(true); try { await api.closeTerminal(agent.id); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+      setBusy(true); try { await api.closeTerminal(agent.id); } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
     }}>{tr('关闭终端')}</button>
   </>;
 }

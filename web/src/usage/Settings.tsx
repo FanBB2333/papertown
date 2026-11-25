@@ -1,4 +1,4 @@
-import { Banner, Button, Input } from '@cloudflare/kumo';
+import { Button, Input } from '@cloudflare/kumo';
 import { useEffect, useState } from 'react';
 import { api, type UsageSettings as Settings } from '../api';
 import { Card, Note, Row, Toggle } from '../components/controls';
@@ -20,7 +20,7 @@ export function UsageSettings() {
     try { setValue(await api.setUsageSettings(value)); setSaved(true); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
   return <Card title={tr('订阅用量与项目预算')}>
-    {error && <Banner variant="error" description={tr(error)} />}
+    {error && <p role="alert" className="em-state" data-tone="bad">{tr(error)}</p>}
     {value ? <form onSubmit={save}>
       <Row label={tr('默认 Agent 用量预算（美元）')} desc={tr('按 API 价格折算，开启项目时预填。留空表示不设预算。')} />
       <BudgetFields value={value.default_budget} onChange={default_budget => change({ ...value, default_budget })} disabled={busy} />

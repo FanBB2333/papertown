@@ -58,13 +58,13 @@ export function SkillRoom(p: Props) {
       setRes(await api.skimSet(sel.scope, key, value, lineOf(sel), agentOf(sel)));
       if (key === 'core.env' || sel.scope === 'global') api.skim(true).then(setSt).catch(() => {});
     } catch (e) {
-      p.toast((e as Error).message);
+      p.toast((e as Error).message, true);
     } finally {
       setBusy(null);
     }
   }
 
-  if (!st) return <div className="room-empty"><p>{err || tr('查询 skim 中…')}</p></div>;
+  if (!st) return <div className="room-empty"><p className={err ? 'em-state' : undefined} data-tone="bad">{err || tr('查询 skim 中…')}</p></div>;
   if (!st.ok) {
     return (
       <div className="room-empty">
@@ -135,7 +135,7 @@ export function SkillRoom(p: Props) {
           <div>
             <b>{tr('起始环境')}</b>
             <p className="muted small">
-              {res ? (res.env ? <>{tr('当前使用')} <code>{res.env}</code>{tr('（')}{res.env_scope === 'active' ? tr('skim 当前激活的环境') : tr('{0}层设定', SCOPE_NAME[res.env_scope ?? ''])}{tr('）')}{res.env_missing && <span className="warn"> {tr('· 该环境不存在')}</span>}</> : tr('当前不基于任何环境，仅启用各层单独开启的 skill。')) : '…'}
+              {res ? (res.env ? <>{tr('当前使用')} <code>{res.env}</code>{tr('（')}{res.env_scope === 'active' ? tr('skim 当前激活的环境') : tr('{0}层设定', SCOPE_NAME[res.env_scope ?? ''])}{tr('）')}{res.env_missing && <span className="em-state" data-tone="warn"> {tr('· 该环境不存在')}</span>}</> : tr('当前不基于任何环境，仅启用各层单独开启的 skill。')) : '…'}
             </p>
           </div>
           <Select value={envHere === null ? '__inherit' : envHere === '' ? '__none' : envHere} disabled={busy === 'core.env'} label={tr('起始环境')}
@@ -151,7 +151,7 @@ export function SkillRoom(p: Props) {
               <button key={v} className={show === v ? 'on' : ''} onClick={() => setShow(v)}>{t}</button>)}
           </div>
         </div>
-        {err && <p className="warn-box small">{err}</p>}
+        {err && <p className="small em-state" data-tone="bad">{err}</p>}
         <div className="sk-list">
           {skills.map((s, i) => {
             const key = `skill.${s.name}.enabled`;
@@ -162,7 +162,7 @@ export function SkillRoom(p: Props) {
                 <div className="sk-name">
                   <b>{s.name}</b>
                   {s.description && <span className="muted small">{s.description}</span>}
-                  {!s.in_store && <span className="warn small">{tr('skim 仓库无此 skill')}</span>}
+                  {!s.in_store && <span className="small em-state" data-tone="warn">{tr('skim 仓库无此 skill')}</span>}
                 </div>
                 <span className={`sk-from f-${s.scope ?? 'none'}`} title={s.origin}>{fromLabel(s, res?.env ?? '')}</span>
                 <div className="tri" role="group" aria-label={tr('{0} 在本层', s.name)}>
@@ -211,7 +211,7 @@ export function SkillRoom(p: Props) {
             })}
             <button className="btn" disabled={busy === '__sync'} onClick={async () => {
               setBusy('__sync');
-              try { await api.skimSync(); setSt(await api.skim(true)); } catch (e) { p.toast((e as Error).message); } finally { setBusy(null); }
+              try { await api.skimSync(); setSt(await api.skim(true)); } catch (e) { p.toast((e as Error).message, true); } finally { setBusy(null); }
             }}>{busy === '__sync' ? tr('同步中…') : tr('同步到 skim')}</button>
           </div>
         )}
