@@ -30,11 +30,12 @@ public struct StageInfo: Decodable, Sendable, Equatable, Identifiable {
     public let note: String?
     public let owner: String?
     public var building: String? = nil
+    public var mod: String? = nil
     public var startedAt: String? = nil
     public var endedAt: String? = nil
 
     enum CodingKeys: String, CodingKey {
-        case key, name, status, pct, note, owner, building
+        case key, name, status, pct, note, owner, building, mod
         case startedAt = "started_at"
         case endedAt = "ended_at"
     }
@@ -50,6 +51,10 @@ public struct StageAgentInfo: Decodable, Sendable, Equatable, Identifiable {
 }
 
 public struct ProjectSnapshot: Decodable, Sendable, Equatable, Identifiable {
+    public struct Item: Decodable, Sendable, Equatable {
+        public let id: String?, stage: String?
+        enum CodingKeys: String, CodingKey { case id, stage }
+    }
     public let id: String
     public let seq: Int
     public let title: String
@@ -68,9 +73,10 @@ public struct ProjectSnapshot: Decodable, Sendable, Equatable, Identifiable {
     public var linked: JSONValue? = nil
     /// Only in the single-project answer: what each stage produced, keyed by stage.
     public var outputs: ProjectOutputs? = nil
+    public var items: [Item]? = nil
 
     enum CodingKeys: String, CodingKey {
-        case id, seq, title, idea, status, stage, pct, sample, note, stages, team, lead, verdict, linked, outputs
+        case id, seq, title, idea, status, stage, pct, sample, note, stages, team, lead, verdict, linked, outputs, items
         case updatedAt = "updated_at"
         case createdAt = "created_at"
     }
@@ -125,9 +131,10 @@ public struct ReportPayload: Decodable, Sendable, Equatable {
     public var answeredAt: String? = nil
     public var by: String? = nil
     public var result: String? = nil
+    public var matter: Matter? = nil
 
     enum CodingKeys: String, CodingKey {
-        case text, question, open, answer, who, key, choices, by, result
+        case text, question, open, answer, who, key, choices, by, result, matter
         case answeredAt = "answered_at"
     }
 }
@@ -175,6 +182,7 @@ public struct StaffAgent: Decodable, Sendable, Identifiable {
     public var cost: Double? = nil
     public var started: Bool? = nil
     public var extID: String? = nil
+    public var sessionID: String? = nil
     public var nodeID: String? = nil
 
     enum CodingKeys: String, CodingKey {
@@ -182,6 +190,7 @@ public struct StaffAgent: Decodable, Sendable, Identifiable {
         case lineID = "line_id"
         case updatedAt = "updated_at"
         case extID = "ext_id"
+        case sessionID = "session_id"
         case nodeID = "node_id"
     }
 

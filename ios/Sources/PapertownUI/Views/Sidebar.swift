@@ -36,7 +36,7 @@ private struct SidebarButton: ViewModifier {
                             .overlay(alignment: .topTrailing) {
                                 // something waits in the Inbox, which the drawer hides
                                 if !store.inboxItems.isEmpty {
-                                    Circle().fill(Color.red).frame(width: 8, height: 8).offset(x: 4, y: -3)
+                                    Text("\(store.inboxItems.count)").font(.caption2).emNum(.warn).offset(x: 6, y: -5)
                                 }
                             }
                     }
@@ -279,16 +279,13 @@ struct PapertownSidebar: View {
                     picked()
                 } label: {
                     HStack(spacing: 6) {
-                        Text(project.title.isEmpty ? project.idea : project.title)
+                        EmText(project.title.isEmpty ? project.idea : project.title, .matches([query]))
                             .font(.subheadline)
                             .fontWeight(open ? .semibold : .regular)
                             .lineLimit(1)
-                        if needs {
-                            // waits on you: a question, a decision, or the lead is stuck
-                            Circle().fill(Color.orange).frame(width: 6, height: 6)
-                        }
                         Spacer(minLength: 0)
                     }
+                    .emBar(needs ? .warn : (project.title.isEmpty || project.title == project.idea ? .info : nil))
                     .modifier(RowLook(selected: open, compact: true))
                 }
                 .buttonStyle(.plain)
@@ -376,8 +373,7 @@ private struct SidebarRow: View {
                 if count > 0 {
                     Text("\(count)")
                         .font(.footnote)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
+                        .emNum(.warn)
                 }
             }
             .modifier(RowLook(selected: selected))
@@ -403,19 +399,11 @@ private struct ServerRow: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(width: 30, height: 30)
                     .background(Circle().fill(Color.primary.opacity(0.08)))
-                    .overlay(alignment: .bottomTrailing) {
-                        Circle()
-                            .fill(store.connectionColor)
-                            .frame(width: 9, height: 9)
-                            .overlay(Circle().stroke(store.appearance.sidebarBackground, lineWidth: 2))
-                    }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(name)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                    Text(detail(lang))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(detail(lang)).font(.caption).emState(store.connectionIssue)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)

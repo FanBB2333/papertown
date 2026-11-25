@@ -83,7 +83,7 @@ struct HireSheet: View {
                     }
                 }
                 if let error {
-                    Section { Text(error).foregroundStyle(.red).font(.footnote) }
+                    Section { Text(error).emState(.bad, detail: true).font(.footnote) }
                 }
             }
             .formStyle(.grouped)
@@ -116,7 +116,7 @@ struct HireSheet: View {
                 }
             }
             if let why = blocked(runtime) {
-                Label(lang.server(why), systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange)
+                Text(lang.server(why)).font(.caption).emState(.warn, detail: true)
             } else {
                 Text(lang.string("runtime.\(runtime).sub")).font(.caption).foregroundStyle(.secondary)
             }
@@ -305,14 +305,14 @@ struct ImportConversationList: View {
                             Text(c.title ?? lang.string("hire.untitled")).foregroundStyle(.primary).lineLimit(2)
                             Text([c.provider, c.model, c.cwd.map(shortPath), Stamp.ago(c.lastUser ?? c.updated, lang)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            if let who = c.linked { Text(lang.format("hire.import.linked", lang.server(who))).font(.caption).foregroundStyle(.orange) }
-                            if c.cwd == nil { Text(lang.string("hire.import.no_cwd")).font(.caption).foregroundStyle(.orange) }
+                            if let who = c.linked { Text(lang.format("hire.import.linked", lang.server(who))).font(.caption).foregroundStyle(.secondary) }
+                            if c.cwd == nil { Text(lang.string("hire.import.no_cwd")).font(.caption).emState(.warn, detail: true) }
                         }
                     }
                     .disabled(busy || c.linked != nil || c.cwd == nil)
                 }
             } else if let error {
-                Text(error).foregroundStyle(.red).font(.footnote)
+                Text(error).emState(.bad, detail: true).font(.footnote)
             } else {
                 ProgressView().frame(maxWidth: .infinity)
             }
@@ -371,7 +371,7 @@ struct ConversationsSheet: View {
                         }
                         .disabled(busy || c.current == true)
                     }
-                    if let error { Text(error).foregroundStyle(.red).font(.footnote) }
+                    if let error { Text(error).emState(.bad, detail: true).font(.footnote) }
                 }
                 .papertownInsetGroupedList()
             }

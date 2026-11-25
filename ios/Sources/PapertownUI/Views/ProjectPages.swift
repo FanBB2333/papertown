@@ -18,26 +18,26 @@ struct ProgressCardSection: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Pill(text: lang.string("health.\(c.health)"), color: Tone.color(c.health), symbol: Tone.symbol(c.health))
-                        if let m = c.milestone, !m.isEmpty { Text(lang.server(m)).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+                        Text(lang.string("health.\(c.health)")).font(.caption).emState(EmTone.issue(c.health))
+                        if let m = c.milestone, !m.isEmpty { Text(lang.server(m)).font(.caption).emState(.warn, icon: "flag.checkered", detail: true).lineLimit(1) }
                         Spacer()
-                        if let p = c.progress { Text("\(p)%").font(.caption.weight(.semibold)).foregroundStyle(store.appearance.tintColor) }
+                        if let p = c.progress { Text("\(p)%").font(.caption).emNum() }
                     }
-                    Text(lang.server(c.summary)).font(.subheadline)
+                    EmText(lang.server(c.summary)).font(.subheadline)
                 }
                 .padding(.vertical, 2)
                 if !c.needYou.isEmpty {
-                    labeled("card.need_you", c.needYou, symbol: "person.fill.questionmark", color: .orange)
+                    labeled("card.need_you", c.needYou, symbol: "person.fill.questionmark")
                 }
                 if !c.blockers.isEmpty {
-                    labeled("card.blockers", c.blockers, symbol: "exclamationmark.triangle.fill", color: .red)
+                    labeled("card.blockers", c.blockers, symbol: "exclamationmark.triangle.fill")
                 }
                 if !c.next.isEmpty {
-                    labeled("card.next", c.next, symbol: "arrow.right.circle", color: store.appearance.tintColor)
+                    labeled("card.next", c.next, symbol: "arrow.right.circle")
                 }
                 if !c.metrics.isEmpty {
                     ForEach(c.metrics, id: \.self) { m in
-                        InfoRow(label: lang.server(m.name), value: lang.server(m.value))
+                        InfoRow(label: lang.server(m.name), value: lang.server(m.value), number: .info)
                     }
                 }
             } header: {
@@ -50,17 +50,19 @@ struct ProgressCardSection: View {
             .papertownRowBackground(store.appearance)
         } else if let pending = card.pending {
             Section(lang.string("card.title")) {
-                Label(lang.server(pending.note) .isEmpty ? lang.string("card.pending") : lang.server(pending.note), systemImage: "clock")
+                Text((pending.note ?? "").isEmpty ? lang.string("card.pending") : pending.note ?? "").emBar((pending.note ?? "").isEmpty ? nil : .info)
                     .font(.footnote).foregroundStyle(.secondary)
             }
             .papertownRowBackground(store.appearance)
         }
     }
 
-    private func labeled(_ key: String, _ items: [String], symbol: String, color: Color) -> some View {
+    private func labeled(_ key: String, _ items: [String], symbol: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label(store.language.string(key), systemImage: symbol).font(.caption.weight(.semibold)).foregroundStyle(color)
+            Text(store.language.string(key)).font(.caption).emState(key == "card.blockers" ? .bad : nil, icon: symbol)
             BulletList(items: items.map(store.language.server))
+                .emBar(key == "card.need_you" ? .warn : nil)
+
         }
     }
 }
@@ -69,39 +71,46 @@ struct ProgressCardSection: View {
 
 struct ReportsPage: View {
     let projectID: String
+    var reportID: Int? = nil
     @EnvironmentObject private var store: TownStore
     @State private var answering: ReportItem?
 
     var body: some View {
         let lang = store.language
         LoadingList(load: { try await $0.reports(projectID: projectID) }, content: { r in
-            List {
-                let open = r.asks.filter { $0.data.open != false }
-                if !open.isEmpty {
-                    Section(lang.string("reports.asks")) {
-                        ForEach(open) { ask in askRow(ask, lang) }
-                    }
-                }
-                Section(lang.string("reports.title")) {
-                    if r.reports.isEmpty {
-                        Text(lang.string("reports.empty")).font(.footnote).foregroundStyle(.secondary)
-                    }
-                    ForEach(r.reports.reversed()) { rep in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(lang.server(rep.data.who ?? "")).font(.caption.weight(.semibold))
-                                if rep.data.key == true { Pill(text: lang.string("reports.key"), color: .orange) }
-                                Spacer()
-                                Text(Stamp.ago(rep.ts, lang)).font(.caption2).foregroundStyle(.secondary)
-                            }
-                            Text(lang.server(rep.data.text ?? "")).font(.subheadline).textSelection(.enabled)
+            ScrollViewReader { proxy in
+                List {
+                    let open = r.asks.filter { $0.data.open != false }
+                    if !open.isEmpty {
+                        Section(lang.string("reports.asks")) {
+                            ForEach(open) { ask in askRow(ask, lang) }
                         }
-                        .padding(.vertical, 2)
+                    }
+                    Section(lang.string("reports.title")) {
+                        if r.reports.isEmpty {
+                            Text(lang.string("reports.empty")).font(.footnote).foregroundStyle(.secondary)
+                        }
+                        ForEach(r.reports.reversed()) { rep in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(lang.server(rep.data.who ?? "")).font(.caption).foregroundStyle(.secondary)
+                                    if rep.data.key == true { Text(lang.string("reports.key")).font(.caption).foregroundStyle(.secondary) }
+                                    Spacer()
+                                    Text(Stamp.ago(rep.ts, lang)).font(.caption2).foregroundStyle(.secondary)
+                                }
+                                EmText(lang.server(rep.data.text ?? rep.data.question ?? "")).font(.subheadline).textSelection(.enabled)
+                                if let answer = rep.data.answer, !answer.isEmpty { Text(answer).font(.subheadline).emBar(.info) }
+                            }
+                            .padding(.vertical, 2)
+                            .emBar(rep.data.key == true ? .info : nil)
+                            .id(rep.id)
+                        }
                     }
                 }
+                .papertownInsetGroupedList()
+                .papertownListAppearance(store.appearance)
+                .task { if let reportID { proxy.scrollTo(reportID, anchor: .top) } }
             }
-            .papertownInsetGroupedList()
-            .papertownListAppearance(store.appearance)
         }, reloadKey: "\(store.openAsks.count)")
         .navigationTitle(lang.string("reports.nav"))
         .papertownInlineTitle()
@@ -112,7 +121,7 @@ struct ReportsPage: View {
 
     private func askRow(_ ask: ReportItem, _ lang: AppLanguage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(lang.server(ask.data.question ?? ask.data.text ?? "")).font(.subheadline)
+            Text(lang.server(ask.data.question ?? ask.data.text ?? "")).font(.subheadline).emBar(.warn)
             Button(lang.string("action.reply")) { answering = ask }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -134,28 +143,34 @@ struct AnswerSheet: View {
         let lang = store.language
         NavigationStack {
             Form {
-                Section {
-                    Text(lang.server(ask.data.question ?? ask.data.text ?? "")).font(.subheadline)
-                }
-                if let choices = ask.data.choices, !choices.isEmpty {
-                    Section(lang.string("answer.choices")) {
-                        ForEach(choices, id: \.self) { c in
-                            Button(lang.server(c)) { Task { await submit(c) } }
+                if ask.data.matter != nil {
+                    DecisionRow(projectID: ask.lineID, d: ask.pendingDecision) { dismiss() }
+                } else {
+                    Section {
+                        Text(lang.server(ask.data.question ?? ask.data.text ?? "")).font(.subheadline).emBar(.warn)
+                    }
+                    if let choices = ask.data.choices, !choices.isEmpty {
+                        Section(lang.string("answer.choices")) {
+                            ForEach(choices, id: \.self) { c in
+                                Button(lang.server(c)) { Task { await submit(c) } }
+                            }
                         }
                     }
+                    Section(lang.string("answer.own")) {
+                        TextField(lang.string("answer.placeholder"), text: $text, axis: .vertical).lineLimit(3...8).emBar(text.isEmpty ? nil : .info, reserve: true)
+                    }
+                    if let error { Section { Text(error).emState(.bad, detail: true).font(.footnote) } }
                 }
-                Section(lang.string("answer.own")) {
-                    TextField(lang.string("answer.placeholder"), text: $text, axis: .vertical).lineLimit(3...8)
-                }
-                if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
             }
             .navigationTitle(lang.string("answer.title"))
             .papertownInlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(lang.string("action.cancel")) { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(lang.string("action.send")) { Task { await submit(text) } }
-                        .disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if ask.data.matter == nil {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(lang.string("action.send")) { Task { await submit(text) } }
+                            .disabled(sending || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
                 }
             }
         }
@@ -198,14 +213,14 @@ struct OverlapPage: View {
                             HStack {
                                 Text(lang.string("overlap.verdict")).foregroundStyle(.secondary)
                                 Spacer()
-                                Pill(text: lang.server(verdict), color: verdictColor(verdict))
+                                Text(lang.server(verdict)).emKey()
                             }
                         }
-                        if let s = h.summary { Text(lang.server(s)).font(.subheadline) }
+                        if let s = h.summary { EmText(lang.server(s)).font(.subheadline) }
                         if let gap = h.gap {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(lang.string("overlap.gap")).font(.caption).foregroundStyle(.secondary)
-                                Text(lang.server(gap)).font(.subheadline)
+                                EmText(lang.server(gap)).font(.subheadline)
                             }
                         }
                         if let sug = h.suggestions, !sug.isEmpty { BulletList(items: sug.map(lang.server)) }
@@ -228,11 +243,6 @@ struct OverlapPage: View {
         .papertownInlineTitle()
     }
 
-    private func verdictColor(_ v: String) -> Color {
-        if v.contains("做过") || v.lowercased().contains("done") { return .red }
-        if v.contains("调整") || v.lowercased().contains("adjust") { return .orange }
-        return .green
-    }
 }
 
 struct PaperRow: View {
@@ -247,15 +257,15 @@ struct PaperRow: View {
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top) {
-                    Text(paper.title).font(.subheadline.weight(.medium)).foregroundStyle(.primary).multilineTextAlignment(.leading)
+                    EmText(paper.title, .matches(paper.matched ?? [])).font(.subheadline.weight(.medium)).foregroundStyle(.primary).multilineTextAlignment(.leading)
                     Spacer(minLength: 6)
-                    if let s = paper.similarity { Text(String(format: "%.2f", s)).font(.caption.monospacedDigit()).foregroundStyle(paper.closest == true ? .orange : .secondary) }
+                    if let s = paper.similarity { Text(String(format: "%.2f", s)).font(.caption.monospacedDigit()).emNum(paper.closest == true ? .warn : .info) }
                 }
                 Text([paper.authors, paper.year].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 if let m = paper.matched, !m.isEmpty {
-                    Text(m.joined(separator: " · ")).font(.caption2.monospaced()).foregroundStyle(store.appearance.tintColor).lineLimit(1)
+                    EmText(m.joined(separator: " · "), .matches(m)).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 } else if let note = paper.note {
-                    Text(lang.server(note)).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                    EmText(lang.server(note)).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
                 }
             }
             .padding(.vertical, 2)
@@ -276,7 +286,7 @@ struct MethodPage: View {
         LoadingList(load: { try await $0.projectSnapshot(id: projectID).outputs?.method }) { m in
             if let m {
                 List {
-                    if let p = m.problem { Section(lang.string("method.problem")) { Text(lang.server(p)).font(.subheadline).textSelection(.enabled) } }
+                    if let p = m.problem { Section(lang.string("method.problem")) { EmText(lang.server(p)).font(.subheadline).textSelection(.enabled) } }
                     list("method.mechanism", m.mechanism)
                     if let b = m.baselines, !b.isEmpty {
                         Section(lang.string("method.baselines")) {
@@ -305,7 +315,9 @@ struct MethodPage: View {
     @ViewBuilder
     private func list(_ key: String, _ items: [String]?) -> some View {
         if let items, !items.isEmpty {
-            Section(store.language.string(key)) { BulletList(items: items.map(store.language.server)) }
+            Section(store.language.string(key)) { BulletList(items: items.map(store.language.server))
+                .emBar(key == "card.need_you" ? .warn : nil)
+                 }
         }
     }
 }
@@ -320,21 +332,21 @@ struct ExperimentsPage: View {
 
     var body: some View {
         let lang = store.language
-        LoadingList(load: { client -> Loaded in
+        LivePage(load: { client -> Loaded in
             async let d = client.lineData(projectID: projectID)
             async let j = client.jobs(projectID: projectID)
             return Loaded(data: try await d, jobs: try await j)
-        }) { v in
+        }, events: ["prov", "job", "line"], projectID: projectID) { v, _ in
             List {
                 if let r = v.data.results, !r.rows.isEmpty {
                     Section {
                         ResultsTableView(table: r)
-                        if let a = r.analysis { Text(lang.server(a)).font(.footnote).foregroundStyle(.secondary) }
+                        if let a = r.analysis { EmText(lang.server(a)).font(.footnote).foregroundStyle(.secondary) }
                         if let c = r.concerns, !c.isEmpty { BulletList(items: c.map(lang.server), symbol: "exclamationmark.triangle", color: .orange) }
                     } header: {
                         HStack {
                             Text(lang.string("exp.results"))
-                            if r.simulated == true || r.sample == true { Pill(text: lang.string("exp.placeholder"), color: .orange) }
+                            if r.simulated == true || r.sample == true { Text(lang.string("exp.placeholder")).font(.caption).emState(.warn) }
                         }
                     }
                 }
@@ -358,11 +370,25 @@ struct ExperimentsPage: View {
                     ForEach(v.jobs.jobs) { job in NavigationLink { JobPage(jobID: job.id) } label: { JobRow(job: job) } }
                     ForEach(v.data.runs ?? []) { run in
                         HStack {
-                            Image(systemName: Tone.symbol(run.state)).foregroundStyle(Tone.color(run.state))
+                            Image(systemName: Tone.symbol(run.state)).foregroundStyle(.secondary).accessibilityLabel(run.state)
+                            if let issue = EmTone.issue(run.state) { Text(lang.string("job.status.\(run.state)")).font(.caption).emState(issue) }
                             VStack(alignment: .leading) {
                                 Text(run.name).font(.subheadline)
                                 Text([run.where, run.elapsedS.map { "\(Int($0))s" }].compactMap { $0 }.joined(separator: " · "))
                                     .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        ForEach(Array((run.prov ?? []).enumerated()), id: \.offset) { _, result in
+                            if let id = result.id ?? result.tag {
+                                NavigationLink { ProvNodePage(projectID: projectID, nodeID: id) } label: {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text([result.tag, result.path].compactMap { $0 }.joined(separator: " · ")).font(.footnote.monospaced())
+                                        HStack {
+                                            if let state = result.state { ProvState(state: state) }
+                                            if let used = result.used { EmText(lang.format("prov.used.count", used), .numbers(.info)).font(.caption).foregroundStyle(.secondary) }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -387,14 +413,13 @@ struct ExperimentsPage: View {
     }
 }
 
-/// A results table that scrolls sideways; the row marked as ours is in bold, and each column's best value is tinted.
+/// Metric direction varies by column, so comparable values share a neutral tone.
 struct ResultsTableView: View {
     let table: ResultsTable
     @EnvironmentObject private var store: TownStore
 
     var body: some View {
         let lang = store.language
-        let best = table.metrics.indices.map { i in table.rows.compactMap { $0.values.indices.contains(i) ? $0.values[i] : nil }.max() }
         ScrollView(.horizontal, showsIndicators: false) {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 6) {
                 GridRow {
@@ -406,11 +431,13 @@ struct ResultsTableView: View {
                 Divider()
                 ForEach(table.rows, id: \.self) { row in
                     GridRow {
-                        Text(lang.server(row.method)).font(.footnote.weight(row.ours == true ? .bold : .regular)).lineLimit(2).frame(maxWidth: 160, alignment: .leading)
-                        ForEach(Array(row.values.enumerated()), id: \.offset) { i, val in
-                            Text(val.map { String(format: "%.1f", $0) } ?? "–")
-                                .font(.footnote.monospacedDigit().weight(row.ours == true ? .bold : .regular))
-                                .foregroundStyle(val != nil && best.indices.contains(i) && val == best[i] ? store.appearance.tintColor : .primary)
+                        Text(lang.server(row.method)).font(.footnote).lineLimit(2).frame(maxWidth: 160, alignment: .leading)
+                        ForEach(Array(row.values.enumerated()), id: \.offset) { _, val in
+                            Group {
+                                if let val { Text(String(format: "%.1f", val)).emNum() }
+                                else { Text("–").foregroundStyle(.secondary) }
+                            }
+                                .font(.footnote)
                                 .frame(maxWidth: 120, alignment: .trailing)
                         }
                     }
@@ -428,20 +455,23 @@ struct JobRow: View {
     var body: some View {
         let lang = store.language
         HStack(spacing: 10) {
-            Image(systemName: Tone.symbol(job.status)).foregroundStyle(Tone.color(job.status))
+            if let issue = EmTone.issue(job.status) {
+                Text(lang.string("job.status.\(job.status)")).font(.caption).emState(issue)
+            } else { Image(systemName: Tone.symbol(job.status)).foregroundStyle(.secondary) }
             VStack(alignment: .leading, spacing: 2) {
                 Text(lang.server(job.name)).font(.subheadline)
                 Text([job.backend, Stamp.ago(job.startedAt ?? job.createdAt, lang)].filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            if job.status == "running", let p = job.progress { Text("\(Int(p * (p <= 1 ? 100 : 1)))%").font(.caption.monospacedDigit()) }
+            if job.status == "running", let p = job.progress { Text("\(Int(p * (p <= 1 ? 100 : 1)))%").font(.caption).emNum() }
         }
     }
 }
 
 struct JobPage: View {
     let jobID: String
+    var readOnly = false
     @EnvironmentObject private var store: TownStore
     @State private var reload = 0
 
@@ -450,11 +480,11 @@ struct JobPage: View {
         LoadingList(load: { try await $0.job(id: jobID) }, content: { job in
             List {
                 Section {
-                    InfoRow(label: lang.string("job.status"), value: lang.string("job.status.\(job.status)"))
+                    InfoRow(label: lang.string("job.status"), value: lang.string("job.status.\(job.status)"), status: EmTone.issue(job.status))
                     InfoRow(label: lang.string("exp.backend"), value: job.backend)
                     if let c = job.command { MonoBlock(text: c, maxHeight: 120) }
-                    if let n = job.note { Text(lang.server(n)).font(.footnote).foregroundStyle(.secondary) }
-                    if ["queued", "running"].contains(job.status) {
+                    if let n = job.note { EmText(lang.server(n)).font(.footnote).foregroundStyle(.secondary) }
+                    if !readOnly, !jobID.hasPrefix("nvidb-"), ["queued", "running"].contains(job.status) {
                         Button(lang.string("job.cancel"), role: .destructive) {
                             Task {
                                 _ = try? await store.fetch { try await $0.cancelJob(id: jobID) }
@@ -481,6 +511,7 @@ struct PaperPage: View {
     let projectID: String
     @EnvironmentObject private var store: TownStore
     @State private var compiling = false
+    @State private var compileFailed = false
     @State private var compileNote: String?
     @State private var reload = 0
 
@@ -513,7 +544,7 @@ struct PaperPage: View {
                         }
                         .disabled(compiling)
                     }
-                    if let compileNote { Text(compileNote).font(.caption).foregroundStyle(.secondary) }
+                    if let compileNote { Text(compileNote).font(.caption).emState(compileFailed ? .bad : nil, detail: true) }
                     if let p = v.ws.paper {
                         NavigationLink { FilesPage(projectID: projectID, root: "paper") } label: {
                             Label(lang.string("paper.files"), systemImage: "folder")
@@ -525,7 +556,7 @@ struct PaperPage: View {
                     if let a = w.abstract {
                         Section(lang.string("paper.abstract")) {
                             if let t = w.title { Text(lang.server(t)).font(.subheadline.weight(.semibold)) }
-                            Text(lang.server(a)).font(.subheadline).textSelection(.enabled)
+                            EmText(lang.server(a)).font(.subheadline).textSelection(.enabled)
                         }
                     }
                     if let sections = w.sections, !sections.isEmpty {
@@ -541,15 +572,15 @@ struct PaperPage: View {
                 }
                 if let r = v.snap.outputs?.review {
                     Section {
-                        if let verdict = r.verdict { HStack { Text(lang.string("review.verdict")).foregroundStyle(.secondary); Spacer(); Pill(text: lang.server(verdict), color: .orange) } }
-                        if let mean = r.mean { InfoRow(label: lang.string("review.mean"), value: String(format: "%.1f", mean)) }
+                        if let verdict = r.verdict { HStack { Text(lang.string("review.verdict")).foregroundStyle(.secondary); Spacer(); Text(lang.server(verdict)).emKey() } }
+                        if let mean = r.mean { InfoRow(label: lang.string("review.mean"), value: String(format: "%.1f", mean), number: .info) }
                         if let f = r.format?.summary { InfoRow(label: lang.string("review.format"), value: lang.server(f)) }
                         ForEach(r.reviews ?? [], id: \.self) { rv in
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Text(lang.server(rv.persona ?? "")).font(.subheadline.weight(.semibold))
                                     Spacer()
-                                    if let o = rv.overall { Text(String(format: "%.0f/5", o)).font(.caption.monospacedDigit()) }
+                                    if let o = rv.overall { Text(String(format: "%.0f/5", o)).font(.caption).emNum() }
                                 }
                                 if let w = rv.weaknesses, !w.isEmpty { BulletList(items: w.map(lang.server), symbol: "minus.circle", color: .orange) }
                             }
@@ -581,11 +612,13 @@ struct PaperPage: View {
         compiling = true
         do {
             let r = try await store.fetch { try await $0.compilePaper(projectID: projectID) }
+            compileFailed = !r.ok
             compileNote = r.ok
                 ? store.language.format("paper.compiled", r.pages ?? 0)
                 : store.language.string("paper.compile_failed")
             reload += 1
         } catch {
+            compileFailed = true
             compileNote = store.message(for: error)
         }
         compiling = false
@@ -653,7 +686,7 @@ struct FilesPage: View {
                                 Image(systemName: icon(f.path)).foregroundStyle(.secondary)
                                 Text(f.path).font(.footnote.monospaced()).lineLimit(1).truncationMode(.middle)
                                 Spacer()
-                                if let st = f.status { Pill(text: lang.string("files.status.\(st)"), color: .orange) }
+                                if let st = f.status { Text(lang.string("files.status.\(st)")).font(.caption).emState(.warn, icon: "pencil") }
                                 if let size = f.size { Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)).font(.caption2).foregroundStyle(.secondary) }
                             }
                         }
@@ -685,12 +718,27 @@ struct FileTextPage: View {
     let projectID: String
     let root: String
     let path: String
+    var line: Int? = nil
     @EnvironmentObject private var store: TownStore
 
     var body: some View {
         let lang = store.language
         LoadingList(load: { try await $0.workspaceFile(projectID: projectID, root: root, path: path) }) { f in
-            if let text = f.text {
+            if let text = f.text, let line {
+                ScrollViewReader { proxy in
+                    ScrollView([.vertical, .horizontal]) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(Array(text.components(separatedBy: "\n").enumerated()), id: \.offset) { i, value in
+                                Text(value.isEmpty ? " " : value)
+                                    .emMark(active: i + 1 == line)
+                                    .id(i + 1)
+                            }
+                        }
+                        .font(.system(size: 12, design: .monospaced)).textSelection(.enabled).padding(12)
+                    }
+                    .task { proxy.scrollTo(line, anchor: .center) }
+                }
+            } else if let text = f.text {
                 ScrollView([.vertical, .horizontal]) {
                     Text(text).font(.system(size: 12, design: .monospaced)).textSelection(.enabled).padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -702,6 +750,15 @@ struct FileTextPage: View {
         }
         .navigationTitle((path as NSString).lastPathComponent)
         .papertownInlineTitle()
+        .toolbar {
+            if root == "paper", store.cards[projectID]?.prov != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink { ProvPage(projectID: projectID, file: path) } label: {
+                        Label(lang.string("prov.open"), systemImage: "point.3.connected.trianglepath.dotted")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -714,7 +771,7 @@ struct OutlinePage: View {
     var body: some View {
         LoadingList(load: { try await $0.outline(projectID: projectID) }) { text in
             ScrollView {
-                Text(store.language.server(text)).font(.footnote).textSelection(.enabled).padding()
+                EmText(store.language.server(text)).font(.footnote).textSelection(.enabled).padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }

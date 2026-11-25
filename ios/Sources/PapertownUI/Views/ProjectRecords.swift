@@ -47,7 +47,7 @@ struct PagesPage: View {
                     }
                     ForEach(Array(shown)) { page in
                         NavigationLink {
-                            PageViewer(projectID: projectID, page: page)
+                            PageViewer(projectID: projectID, pageID: page.id, title: page.title)
                         } label: {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(lang.server(page.title)).font(.subheadline.weight(.medium)).lineLimit(2)
@@ -82,7 +82,8 @@ struct PagesPage: View {
 /// A published page, in the policy the server serves it under: its scripts run, but it reaches nothing outside itself.
 struct PageViewer: View {
     let projectID: String
-    let page: PageMeta
+    let pageID: String
+    let title: String
     @EnvironmentObject private var store: TownStore
     @Environment(\.colorScheme) private var scheme
     @State private var html: String?
@@ -90,23 +91,26 @@ struct PageViewer: View {
 
     var body: some View {
         let lang = store.language
+        let look = store.appearance == .paper ? nil : (scheme == .dark ? "dark" : "light")
         Group {
             if let html {
-                HTMLView(html: html)
+                HTMLView(html: html).id(html)
             } else if let error {
                 EmptyStateView(title: error, systemImage: "exclamationmark.triangle", description: "")
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle(lang.server(page.title))
+        .navigationTitle(lang.server(title))
         .papertownInlineTitle()
-        .task {
+        .task(id: look) {
             do {
-                let look = store.appearance == .paper ? nil : (scheme == .dark ? "dark" : "light")
-                let (body, policy) = try await store.fetch { try await $0.page(projectID: projectID, id: page.id, look: look) }
+                let (body, policy) = try await store.fetch { try await $0.page(projectID: projectID, id: pageID, look: look) }
+                try Task.checkCancellation()
                 html = PageViewer.contained(body, policy: policy)
             } catch {
+                guard !Task.isCancelled else { return }
+                html = nil
                 self.error = store.message(for: error)
             }
         }
@@ -131,6 +135,9 @@ struct PageViewer: View {
 /// HTML in a web view; links open in the browser.
 struct HTMLView {
     let html: String
+    @Environment(\.self) private var env
+
+    init(html: String) { self.html = html }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -162,6 +169,8 @@ struct HTMLView {
     fileprivate func make(_ coordinator: Coordinator) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
+        config.userContentController.addUserScript(WKUserScript(source: env.emPageScript, injectionTime: .atDocumentEnd,
+                                                                 forMainFrameOnly: true, in: .defaultClient))
         let view = WKWebView(frame: .zero, configuration: config)
         view.navigationDelegate = coordinator
         view.uiDelegate = coordinator
@@ -286,8 +295,11 @@ struct MemoryViewer: View {
                                 Text([msg.role == "user" ? lang.string("memory.you") : lang.string("memory.source.\(m.source)"),
                                       msg.at.map { String($0.prefix(16)).replacingOccurrences(of: "T", with: " ") }].compactMap { $0 }.joined(separator: " · "))
                                     .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(msg.role == "user" ? store.appearance.tintColor : .secondary)
-                                Text(msg.text).font(.footnote).textSelection(.enabled)
+                                    .foregroundStyle(.secondary)
+                                Group {
+                                    if msg.role == "user" { Text(verbatim: msg.text).emBar(.info) }
+                                    else { EmText(msg.text) }
+                                }.font(.footnote).textSelection(.enabled)
                             }
                             .padding(.vertical, 2)
                         }
@@ -339,9 +351,9 @@ struct MemoryImportSheet: View {
                                     }
                                     Spacer()
                                     if f.changed == true {
-                                        Pill(text: lang.string("memory.import.changed"), color: .orange)
+                                        Text(lang.string("memory.import.changed")).font(.caption).emMark(.warn)
                                     } else if f.imported == true {
-                                        Pill(text: lang.string("memory.import.have"), color: .secondary)
+                                        Text(lang.string("memory.import.have")).font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
                             }
@@ -375,13 +387,13 @@ struct ProjectUsagePage: View {
         LivePage(load: { try await $0.lineUsage(projectID: projectID) }, events: ["usage"]) { u, act in
             List {
                 Section {
-                    InfoRow(label: lang.string("usage.spent"), value: u.spent.dollars)
-                    InfoRow(label: lang.string("usage.week"), value: (u.week ?? 0).dollars)
-                    InfoRow(label: lang.string("usage.budget"), value: u.budget.map(\.dollars) ?? lang.string("usage.no_budget"))
+                    InfoRow(label: lang.string("usage.spent"), value: u.spent.dollars, number: .info)
+                    InfoRow(label: lang.string("usage.week"), value: (u.week ?? 0).dollars, number: .info)
+                    InfoRow(label: lang.string("usage.budget"), value: u.budget.map(\.dollars) ?? lang.string("usage.no_budget"), number: u.budget == nil ? nil : .info)
                     if let b = u.budget, b > 0 {
                         Meter(value: u.spent / b, color: Tone.color(u.state))
-                        Text(lang.format("usage.used", Int((u.spent / b * 100).rounded()), lang.string("usage.state.\(u.state)")))
-                            .font(.caption).foregroundStyle(Tone.color(u.state))
+                        EmText(lang.format("usage.used", Int((u.spent / b * 100).rounded()), lang.string("usage.state.\(u.state)")), .numbers(EmTone.issue(u.state) ?? .info))
+                            .font(.caption).emState(EmTone.issue(u.state))
                     }
                 } footer: {
                     Text(lang.string(u.logs == false ? "usage.no_logs" : "usage.api_prices"))
@@ -410,7 +422,7 @@ struct ProjectUsagePage: View {
                 if let models = u.models, !models.isEmpty {
                     Section(lang.string("usage.models")) {
                         ForEach(models, id: \.self) { m in
-                            InfoRow(label: "\(m.provider) · \(m.model)", value: m.priced == false ? lang.string("usage.unpriced") : m.cost.dollars)
+                            InfoRow(label: "\(m.provider) · \(m.model)", value: m.priced == false ? lang.string("usage.unpriced") : m.cost.dollars, number: m.priced == false ? nil : .info)
                         }
                     }
                 }
@@ -481,25 +493,27 @@ struct ChecksPage: View {
         HStack(spacing: 10) {
             Text(title).font(.subheadline.weight(.medium))
             Spacer()
-            if c.pass > 0 { Pill(text: "\(c.pass)", color: .green, symbol: "checkmark") }
-            if c.warn > 0 { Pill(text: "\(c.warn)", color: .orange, symbol: "exclamationmark") }
-            if c.fail > 0 { Pill(text: "\(c.fail)", color: .red, symbol: "xmark") }
+            if c.pass > 0 { Label("\(c.pass)", systemImage: "checkmark").font(.caption).emNum(.good) }
+            if c.warn > 0 { Label("\(c.warn)", systemImage: "exclamationmark").font(.caption).emNum(.warn) }
+            if c.fail > 0 { Label("\(c.fail)", systemImage: "xmark").font(.caption).emNum(.bad) }
             Text("\(c.total)").font(.caption).foregroundStyle(.secondary)
         }
     }
 
     private func checkRow(_ check: ResearchCheck, _ lang: AppLanguage) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: Tone.symbol(check.status)).foregroundStyle(Tone.color(check.status))
+            if let issue = EmTone.issue(check.status) {
+                Text(lang.string("check.status.\(check.status)")).font(.caption).emState(issue)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(lang.server(check.title)).font(.subheadline.weight(.medium))
-                    if check.kind == "hard", check.gate == "block" { Pill(text: lang.string("checks.gate"), color: .secondary) }
+                    if check.kind == "hard", check.gate == "block" { Text(lang.string("checks.gate")).font(.caption2).foregroundStyle(.secondary) }
                 }
                 if let note = check.last?.note, !note.isEmpty {
-                    Text(lang.server(note)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    EmText(lang.server(note)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 } else if let text = check.text {
-                    Text(lang.server(text)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    EmText(lang.server(text)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
             }
         }
@@ -541,14 +555,14 @@ private struct CheckDetailList: View {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Pill(text: lang.string("check.status.\(check.status)"), color: Tone.color(check.status), symbol: Tone.symbol(check.status))
-                        Pill(text: lang.string(check.kind == "hard" ? "checks.hard" : "checks.soft"), color: .secondary)
-                        if let p = check.prio, !p.isEmpty { Pill(text: p, color: .secondary) }
+                        Text(lang.string("check.status.\(check.status)")).font(.caption).emState(EmTone.issue(check.status))
+                        Text(lang.string(check.kind == "hard" ? "checks.hard" : "checks.soft")).font(.caption).foregroundStyle(.secondary)
+                        if let p = check.prio, !p.isEmpty { Text(p).font(.caption).foregroundStyle(.secondary) }
                     }
-                    if let text = check.text { Text(lang.server(text)).font(.subheadline) }
+                    if let text = check.text { EmText(lang.server(text)).font(.subheadline) }
                 }
-                if let note = check.last?.note, !note.isEmpty { InfoRow(label: lang.string("check.last"), value: lang.server(note)) }
-                if let v = check.last?.value { InfoRow(label: lang.string("check.value"), value: v.formatted() + (check.unit.map { " " + lang.server($0) } ?? "")) }
+                if let note = check.last?.note, !note.isEmpty { InfoRow(label: lang.string("check.last"), value: lang.server(note), modelText: true) }
+                if let v = check.last?.value { InfoRow(label: lang.string("check.value"), value: v.formatted() + (check.unit.map { " " + lang.server($0) } ?? ""), number: EmTone.issue(check.status) ?? .info) }
                 if let ts = check.last?.ts { InfoRow(label: lang.string("check.ran"), value: Stamp.short(ts, lang)) }
                 if check.kind == "soft", let asked = check.asked { InfoRow(label: lang.string("check.asked"), value: Stamp.ago(asked, lang)) }
             }
@@ -566,20 +580,25 @@ private struct CheckDetailList: View {
                     ForEach(findings, id: \.self) { f in
                         VStack(alignment: .leading, spacing: 3) {
                             if let file = f.file { Text(file + (f.line.map { ":\($0)" } ?? "")).font(.caption.monospaced()).foregroundStyle(.secondary) }
-                            if let t = f.text { Text(lang.server(t)).font(.footnote) }
-                            if let h = f.hint, !h.isEmpty { Text(lang.server(h)).font(.caption).foregroundStyle(.orange) }
+                            if let t = f.text { EmText(lang.server(t)).font(.footnote) }
+                            if let h = f.hint, !h.isEmpty { EmText(lang.server(h)).font(.caption).foregroundStyle(.secondary) }
                         }
                     }
                 }
             }
             if let hist = check.history, hist.count > 1 {
                 Section(lang.string("check.history")) {
-                    ForEach(hist.reversed(), id: \.self) { h in
+                    ForEach(hist.indices.reversed(), id: \.self) { i in
+                        let h = hist[i]
                         HStack {
-                            Image(systemName: Tone.symbol(h.status)).foregroundStyle(Tone.color(h.status))
+                            Text(lang.string("check.status.\(h.status)")).font(.caption).emState(EmTone.issue(h.status))
                             Text(Stamp.short(h.ts, lang)).font(.footnote)
                             Spacer()
-                            if let v = h.value { Text(v.formatted()).font(.footnote.monospacedDigit()) }
+                            if let value = h.value {
+                                let changed = i > 0 && hist[i - 1].value != nil && hist[i - 1].value != value
+                                Text(value.formatted()).font(.footnote).emNum(EmTone.issue(h.status) ?? .info)
+                                    .emMark(EmTone.issue(h.status) ?? .info, active: changed)
+                            }
                         }
                     }
                 }

@@ -13,6 +13,7 @@ public enum ConnectionStatus: Equatable, Sendable {
 
 public enum InboxItemKind: Equatable, Sendable {
     case ask(ReportItem)
+    case decision(Decision)
     case permission(agentID: String, role: String, prompt: PermissionPrompt)
     case blockedLead(ProjectSnapshot)
 }
@@ -25,6 +26,14 @@ public struct InboxItem: Identifiable, Equatable, Sendable {
     public let agentID: String?
     public let timestamp: String?
     public let kind: InboxItemKind
+
+    var section: String {
+        switch kind {
+        case .decision(let d): return "decided.group.\(d.group)"
+        case .blockedLead: return "inbox.section.needs"
+        default: return "decided.group.permissions"
+        }
+    }
 }
 
 enum TownStoreError: Error { case notPapertown }
@@ -95,6 +104,7 @@ public final class TownStore: ObservableObject {
     /// Conversations being read now, and those asked for again meanwhile: one read at a time per conversation.
     private var chatReading: Set<String> = []
     private var chatAgain: Set<String> = []
+    private var changedChatEvents: Set<String> = []
     /// The open conversation shows its terminal tab, so its screen is read every time.
     public var chatShowsTerminal = false
     /// What each agent's conversation can switch its model to, read when its page opens.
@@ -137,8 +147,22 @@ public final class TownStore: ObservableObject {
             }
         }
 
-        // 2. Open asks from reports
+        // Card rows also include terminal dialogs and lines that have no report.
+        for project in projects {
+            for d in decisions(project.id) {
+                if d.kind == "ask", openAsks.contains(where: { $0.lineID == project.id && String($0.id) == d.id }) { continue }
+                if d.kind == "permission", items.contains(where: { $0.id == "perm:\(d.agent ?? ""):\(d.id)" }) { continue }
+                items.append(InboxItem(id: "\(project.id):\(d.key)", projectID: project.id, projectSeq: project.seq,
+                                       projectTitle: project.title, agentID: d.agent, timestamp: d.since, kind: .decision(d)))
+            }
+        }
+
+        // Open reports can arrive before their card.
         for ask in openAsks where ask.data.open != false {
+            if items.contains(where: { item in
+                guard item.projectID == ask.lineID, case .decision(let d) = item.kind else { return false }
+                return d.kind == "matter" && d.id == String(ask.id)
+            }) { continue }
             let proj = projectByID[ask.lineID]
             items.append(InboxItem(
                 id: "ask:\(ask.id)",
@@ -147,7 +171,7 @@ public final class TownStore: ObservableObject {
                 projectTitle: proj?.title ?? ask.lineID,
                 agentID: ask.agentID ?? proj?.leadAgentID,
                 timestamp: ask.ts,
-                kind: .ask(ask)
+                kind: ask.data.matter == nil ? .ask(ask) : .decision(ask.pendingDecision)
             ))
         }
 
@@ -440,6 +464,7 @@ public final class TownStore: ObservableObject {
         hud = nil
         cards = [:]
         conversations = [:]
+        changedChatEvents.removeAll()
     }
 
     /// Adds the offline demo to the saved servers and connects to it.
@@ -515,11 +540,18 @@ public final class TownStore: ObservableObject {
     public func refreshProject(id: String) async {
         guard let client else { return }
         do {
+            async let card = try? client.card(projectID: id)
+            async let reports = try? client.reports(projectID: id)
             let updated = try await client.projectSnapshot(id: id)
             if let idx = projects.firstIndex(where: { $0.id == id }) {
                 projects[idx] = updated
             } else {
                 projects.insert(updated, at: 0)
+            }
+            if let row = await card { cards[id] = row }
+            if let reports = await reports {
+                openAsks.removeAll { $0.lineID == id }
+                openAsks.append(contentsOf: reports.asks)
             }
         } catch {
             handleError(error)
@@ -571,7 +603,8 @@ public final class TownStore: ObservableObject {
             connectionStatus = .reconnecting
         case .event(let name, let payload):
             events.send((name, payload))
-            if ["line", "agent", "report", "card", "checks", "job", "terminal", "usage"].contains(name) {
+            if name == "decided" { rereadDecisionEvents(projectID: payload["line_id"]?.stringValue) }
+            if ["line", "agent", "report", "card", "checks", "job", "terminal", "usage", "decided", "prov"].contains(name) {
                 scheduleSnapshotRefresh(delayNanoseconds: 400_000_000)
             }
             guard let activeChat else { return }
@@ -586,6 +619,19 @@ public final class TownStore: ObservableObject {
                 if about == nil || about == id { scheduleChatRefresh(activeChat) }
             default: break
             }
+        }
+    }
+
+    func decisionChanged(_ projectID: String) async {
+        rereadDecisionEvents(projectID: projectID)
+        events.send(("decided", ["line_id": .string(projectID)]))
+        await refreshAll()
+    }
+
+    private func rereadDecisionEvents(projectID: String?) {
+        // An existing user event gained a decision number. Incremental reads would skip it.
+        for key in Array(conversations.keys) where projectID == nil || conversations[key]?.agent?.lineID == projectID {
+            changedChatEvents.insert(key)
         }
     }
 
@@ -726,6 +772,7 @@ public final class TownStore: ObservableObject {
     private func readChat(_ target: ChatTarget) async {
         guard let client else { return }
         var state = conversations[target.key] ?? ConversationState()
+        if changedChatEvents.remove(target.key) != nil { state.lastEventID = 0 }
         if state.entries.isEmpty && state.agent == nil && state.terminal == nil {
             state.isLoading = true
             conversations[target.key] = state
@@ -737,25 +784,27 @@ public final class TownStore: ObservableObject {
                 if !useTimeline {
                     let read = try await client.agentEvents(agentID: id, after: state.lastEventID)
                     state.agent = read.agent
+                    state.merge(read.events)
                     useTimeline = read.agent.usesTimeline && read.agent.started == true
                     if !useTimeline {
                         state.screen = nil
                         state.prompt = nil
-                        state.merge(read.events)
                     }
+                } else if !target.isAssistant, let read = try? await client.agentEvents(agentID: id, after: state.lastEventID) {
+                    state.merge(read.events)
                 }
                 if useTimeline {
                     do {
                         let tl = try await client.timeline(agentID: id)
                         state.agent = tl.agent
-                        var entries = ConversationState.entries(from: tl.items)
+                        var entries = ConversationState.entries(from: tl.items, events: state.events)
                         // an agent's asks and acts live in its events even when its words are in a transcript
                         if target.isAssistant {
                             let extra = ((assistant?.asks ?? []) + (assistant?.acts ?? [])).sorted { $0.id < $1.id }
                             entries += ConversationState.entries(from: extra)
                         }
                         state.entries = entries
-                        state.queued = (tl.queued ?? []).map { QueuedMessage(id: $0.id, text: $0.data.field("text")?.stringValue ?? "") }
+                        state.queued = (tl.queued ?? []).map(QueuedMessage.init(event:))
                         state.permissions = tl.agent.watch?.permissions ?? tl.paseo?.permissions ?? []
                         state.transcriptNote = tl.transcript?.ok == false ? tl.transcript?.note : nil
                         state.title = tl.transcript?.title ?? state.title
@@ -807,7 +856,7 @@ public final class TownStore: ObservableObject {
                 state.screen = d.text
                 state.styledScreen = d.styled
                 state.prompt = d.prompt
-                state.queued = (d.queued ?? []).filter { $0.state == "queued" }.map { QueuedMessage(id: $0.id, text: $0.text) }
+                state.queued = (d.queued ?? []).filter { $0.state == "queued" }.map(QueuedMessage.init(terminal:))
                 state.permissions = d.terminal.watch?.permissions ?? []
                 if let t = await tl {
                     state.entries = ConversationState.entries(from: t.items)

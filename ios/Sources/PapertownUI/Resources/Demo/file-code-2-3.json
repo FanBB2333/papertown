@@ -1,0 +1,1 @@
+{"path":"sample_review.py","size":248,"mtime":1795627776.2010088,"binary":false,"too_big":false,"text":"import json\nfrom pathlib import Path\n\nvalues = [[47.7, 46.2, 46.1], [49.7, 48.0, 55.7], [36.7, 59.9, 42.5], [53.4, 64.2, 62.8]]\nPath('outputs').mkdir(exist_ok=True)\nPath('outputs/review.json').write_text(json.dumps({'seeds': 3, 'values': values}))\n"}

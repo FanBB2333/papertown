@@ -1,1 +1,1 @@
-{"line_id":"line_2","linked":false,"latexmk":true,"code":null,"paper":{"path":"~/papertown/press/line_2","name":"line_2","git":false,"main":"main.tex","pdf":false}}
+{"line_id":"line_2","linked":false,"latexmk":false,"code":{"path":"~/papertown/projects/line_2/code","name":"code","git":false},"paper":{"path":"~/papertown/press/line_2","name":"line_2","git":false,"main":"main.tex","pdf":false}}

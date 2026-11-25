@@ -1,8 +1,40 @@
 import XCTest
+import SwiftUI
 import PapertownCore
 @testable import PapertownUI
 
 final class PapertownUITests: XCTestCase {
+    func testEmphasisPreservesCodeAndMarksOnlySemanticRanges() {
+        let prose = "复核 `**literal**`。**三个种子**，另见原文。"
+        for appearance in [AppAppearance.system, .light, .dark, .paper] {
+            var env = EnvironmentValues()
+            env.emAppearance = appearance
+            env.colorScheme = appearance == .dark ? .dark : .light
+            let rich = EmText.render(prose, .model, env)
+            XCTAssertEqual(String(rich.characters), prose.replacingOccurrences(of: "**三个种子**", with: "三个种子"))
+            let marked = rich.runs.filter { $0.backgroundColor != nil }
+            XCTAssertEqual(marked.map { String(rich[$0.range].characters) }, ["三个种子"])
+            XCTAssertNotNil(marked.first?.font)
+
+            let matches = EmText.render("Score / score + sample", .matches(["score"]), env)
+            XCTAssertEqual(matches.runs.filter { $0.backgroundColor != nil }.map { String(matches[$0.range].characters) }, ["Score", "score"])
+            let numbers = EmText.render("评分 53.4% / 基线 49.7", .numbers(.info), env)
+            XCTAssertEqual(numbers.runs.filter { $0.font != nil }.map { String(numbers[$0.range].characters) }, ["53.4%", "49.7"])
+            let diff = EmText.render("--- a\n+++ b\n@@ -1 +1 @@\n-old\n+new\n same", .diff, env)
+            XCTAssertEqual(diff.runs.filter { $0.backgroundColor != nil }.map { String(diff[$0.range].characters) }, ["-old", "+new"])
+        }
+    }
+
+    func testDeadlineUsesTheViewersCalendar() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 8 * 3600))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 26, hour: 18)))
+        XCTAssertEqual(EmTone.deadline("2026-11-25", at: now, calendar: calendar), .bad)
+        XCTAssertEqual(EmTone.deadline("2026-11-27", at: now, calendar: calendar), .warn)
+        XCTAssertNil(EmTone.deadline("2026-12-20", at: now, calendar: calendar))
+        XCTAssertNil(EmTone.deadline("论文定稿时", at: now, calendar: calendar))
+    }
+
     func testEnglishPrimaryAndChineseOptionalLocalization() {
         XCTAssertEqual(AppLanguage.english.string("tab.inbox"), "Inbox")
         XCTAssertEqual(AppLanguage.english.string("tab.projects"), "Projects")

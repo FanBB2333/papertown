@@ -20,7 +20,7 @@ struct SkimPage: View {
             List {
                 if !st.ok {
                     Section {
-                        Text(lang.string("skim.down")).font(.subheadline.weight(.medium))
+                        Text(lang.string("skim.down")).font(.subheadline).emState(.warn)
                         if let n = st.note { Text(lang.server(n)).font(.caption).foregroundStyle(.secondary) }
                         Text("skim init").font(.caption.monospaced())
                     }
@@ -88,11 +88,11 @@ private struct SkimScope: View {
                 let q = query.lowercased()
                 ForEach(r.skills.filter { q.isEmpty || $0.name.lowercased().contains(q) || ($0.description ?? "").lowercased().contains(q) }) { s in
                     HStack(alignment: .top) {
-                        Circle().fill(s.enabled == true ? Color.green : Color.secondary.opacity(0.3)).frame(width: 8, height: 8).padding(.top, 6)
+                        Image(systemName: s.enabled == true ? "checkmark" : "minus").font(.caption2).foregroundStyle(.secondary).padding(.top, 6)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(s.name).font(.subheadline.weight(.medium))
                             if let d = s.description { Text(lang.server(d)).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-                            Text(source(s, lang)).font(.caption2).foregroundStyle(s.inStore == false ? .orange : .secondary)
+                            Text(source(s, lang)).font(.caption2).emState(s.inStore == false ? .warn : nil)
                         }
                         Spacer()
                         Picker("", selection: Binding(get: { s.scope == scope ? (s.enabled == true ? "true" : "false") : "" }, set: { v in
@@ -110,9 +110,9 @@ private struct SkimScope: View {
             } header: {
                 Text(lang.format("skim.skills", r.skills.filter { $0.enabled == true }.count, r.skills.count))
             }
-            if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
+            if let error { Section { Text(error).emState(.bad, detail: true).font(.footnote) } }
         } else {
-            Section { if let error { Text(error).foregroundStyle(.red).font(.footnote) } else { ProgressView().frame(maxWidth: .infinity) } }
+            Section { if let error { Text(error).emState(.bad, detail: true).font(.footnote) } else { ProgressView().frame(maxWidth: .infinity) } }
                 .task { await load() }
         }
     }
@@ -265,7 +265,7 @@ private struct BoundsLevel: View {
             Section {
                 Button(lang.string("action.save")) { save() }.disabled(busy || !dirty)
                 if dirty { Button(lang.string("bounds.revert")) { (rules, off) = saved } }
-                if let error { Text(error).foregroundStyle(.red).font(.footnote) }
+                if let error { Text(error).emState(.bad, detail: true).font(.footnote) }
             } footer: {
                 Text(lang.string("bounds.save.footer"))
             }
@@ -282,7 +282,7 @@ private struct BoundsLevel: View {
                 }
             }
         } else {
-            Section { if let error { Text(error).foregroundStyle(.red).font(.footnote) } else { ProgressView().frame(maxWidth: .infinity) } }
+            Section { if let error { Text(error).emState(.bad, detail: true).font(.footnote) } else { ProgressView().frame(maxWidth: .infinity) } }
                 .task { await load() }
         }
     }
@@ -357,7 +357,7 @@ struct TracePage: View {
                 ForEach(rows.reversed()) { r in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
-                            if let k = r.kind { Pill(text: k, color: .secondary) }
+                            if let k = r.kind { Text(k).font(.caption2).emState(EmTone.issue(k)) }
                             Text(r.label ?? "").font(.caption.monospaced()).lineLimit(1)
                             Spacer()
                             if let ms = r.ms { Text("\(Int(ms)) ms").font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
@@ -397,11 +397,11 @@ struct ToolsPage: View {
                     ForEach(v.mcp?.servers ?? []) { srv in
                         NavigationLink { McpServerPage(name: srv.name) } label: {
                             HStack {
-                                Image(systemName: Tone.symbol(mcpTone(srv))).foregroundStyle(Tone.color(mcpTone(srv)))
+                                Image(systemName: Tone.symbol(mcpTone(srv))).foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(srv.name).font(.subheadline.weight(.medium))
+                                    Text(srv.name).font(.subheadline)
                                     Text([lang.string("mcp.state.\(srv.state)"), lang.string("mcp.source.\(srv.source ?? "town")")].joined(separator: " · "))
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .font(.caption).emState(EmTone.issue(mcpTone(srv)))
                                 }
                                 Spacer()
                                 Text(lang.format("tools.count", srv.tools?.count ?? 0)).font(.caption).foregroundStyle(.secondary)
@@ -419,7 +419,7 @@ struct ToolsPage: View {
                             if let d = sk.description { Text(lang.server(d)).font(.caption).foregroundStyle(.secondary).lineLimit(3) }
                             if let roles = sk.roles, !roles.isEmpty {
                                 Text(roles.map { TextFormatters.roleName($0, language: lang) }.joined(separator: " · "))
-                                    .font(.caption2).foregroundStyle(store.appearance.tintColor)
+                                    .font(.caption2).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -463,14 +463,14 @@ struct McpServerPage: View {
                 List {
                     Section {
                         HStack {
-                            Pill(text: lang.string("mcp.state.\(s.state)"), color: Tone.color(mcpTone(s)), symbol: Tone.symbol(mcpTone(s)))
-                            Pill(text: lang.string("mcp.source.\(s.source ?? "town")"), color: .secondary)
+                            Text(lang.string("mcp.state.\(s.state)")).font(.caption).emState(EmTone.issue(mcpTone(s)))
+                            Text(lang.string("mcp.source.\(s.source ?? "town")")).font(.caption).foregroundStyle(.secondary)
                         }
                         if let c = s.command {
                             Text(([c] + (s.args ?? [])).joined(separator: " ")).font(.caption.monospaced()).textSelection(.enabled)
                         }
                         if let env = s.env, !env.isEmpty { InfoRow(label: lang.string("mcp.env"), value: env.joined(separator: ", ")) }
-                        if let e = s.error { Text(lang.server(e)).font(.caption).foregroundStyle(.red) }
+                        if let e = s.error { Text(lang.server(e)).font(.caption).emState(.bad, detail: true) }
                     }
                     Section {
                         if s.enabled {

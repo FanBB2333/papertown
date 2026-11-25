@@ -1,1 +1,1 @@
-{"local":true,"password":false,"authed":true,"signed_in":false,"sessions":0}
+{"local":true,"password":false,"authed":true,"signed_in":false,"key":false,"via":"local","methods":{"password":true,"keys":true},"days":30,"sessions":0,"keys":0}

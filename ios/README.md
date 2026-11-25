@@ -32,22 +32,33 @@ ios/scripts/build-mac.sh   # ios/build/Papertown.app
 
 | Tab | Pages |
 |---|---|
-| **Inbox** | Questions from project leads (answered with their choices or your own words), permission requests, blocked leads, active projects |
-| **Projects** | Search and filters, new idea, Update All, new papers; per project: **To Decide** (questions, permission requests, terminal dialogs and lines of the card, each settled with one tap), resident lead switch and its rounds, 8-stage progress, progress card and asking the lead to update it, reports and questions, research loop (gates with rework / more rounds / let through and their policy, tasks sent, sent back or marked done, new tasks and checks, the loop report), gates and checks (with their settings, run now, ask the lead), reports and explainers the lead publishes, imported memory, overlap report, method, experiments (results table, jobs and runs), paper (abstract, review, compile, PDF), workspace files, usage and budget, team |
+| **Inbox** | Matters with facts, possible approaches and materials, card lines waiting for your decision, permissions, blocked leads and active projects |
+| **Projects** | Search and filters, new idea, Update All and new papers. Each project has its progress card, resident lead, research loop, gates and checks, decisions, provenance, reports, published pages, imported memory, overlap report, method, experiments, paper, workspace files, usage, budget and team. |
 | **Staff** | Agents by urgency or project, herdr / tmux terminal sessions, new staff (Paseo, herdr, tmux, background terminal or pi, with provider, model and thinking) or a Paseo conversation imported; each opens a conversation: messages, tool calls, permission prompts, dialogs on a terminal's screen, queued messages, the live screen with Enter / Esc / arrow / Ctrl-C keys, Steer / Queue / Interrupt while an agent works, earlier conversations, a new one, the project brief, closing a terminal |
 | **Town** | The assistant (with actions waiting for approval), projects in progress and leads on duty, departments, library search and its settings, compute (executors, jobs, GPUs), model quotas, MCP servers (add, edit, reconnect, turn off) and skills, Skills per scope (skim), work bounds, the call trace |
 | **Server** | Current connection, saved servers, this server's settings (access password and access keys, default runtime and models, usage and budgets, sample projects), appearance and language |
 
 The town's map and 3D walk are the web's alone.
 
+### Decisions
+
+In the Inbox or on a project, open **View Facts** to see the evidence, possible approaches and materials. Selecting an approach copies its wording into the reply field. Edit it and choose **Record Decision** to answer the matter. Card lines also take a written decision. Permission requests keep their own controls. The two summary rows under the resident lead open the project's decisions and provenance.
+
+Open **Decisions** below the resident lead to see active decisions by research area. The last filter shows work without a basis when present. Expand the history at the bottom to see replaced and withdrawn decisions. A decision opens its original wording, supporting materials, related work and replacement history. **Write a Decision** creates a record. **Rewrite** creates a replacement, and **Withdraw** retains the original in the history. **Save as Decision** on your own chat message records its full text. The research loop links matters to their reply fields and shows the basis of tasks and stages.
+
+### Provenance
+
+Open **Provenance** below the resident lead. Sections with registered passages open first. Expand a passage to trace its sources down to the result files, or expand the remaining sections to see their lines grouped by author. Results outside the paper appear at the end. Changed records open on the diff, with a switch for the registered and current text. Record details also show the responsible operation, method, code version, basis and verification. **Operations** lists changed files and their diffs. A run's result tags in **Experiments** and **View Provenance** on a paper file open the corresponding records or tree. Both pages use the existing navigation stack in portrait, landscape and on the Mac.
+
 Text the server writes in Chinese (stage names, notes, reports, check titles) is shown in English when the app is in English, with the web's dictionary (`Resources/server-en.json`); run `ios/scripts/sync-server-text.sh` after `web/src/i18n/en.json` changes.
 
 ## Offline demo
 
-**Connect Server › Try the Offline Demo** opens a read-only town with the five sample projects, answered from `Sources/PapertownUI/Resources/Demo` without any server. To export it again, start a server that holds only the samples (its own data dir, no leads) and run:
+**Connect Server › Try the Offline Demo** opens a read-only town with the five sample projects, answered from `Sources/PapertownUI/Resources/Demo`. Project #2 (peer review) includes a worked example from a written decision through a task, a run and a results table to the paper. To export the demo again, use an isolated samples server with its own data directory and `PAPERTOWN_LEAD_RESIDENT=0`, and point the sample configuration’s history directories at that same temporary root. With the server’s environment active, record the sample actions and export the responses from the checkout:
 
 ```bash
-python3 ios/scripts/make-demo.py http://127.0.0.1:<port>
+uv run --frozen --project server ios/scripts/prepare-demo.py "$sample_root"
+uv run --frozen --project server ios/scripts/make-demo.py "http://127.0.0.1:$sample_port"
 ```
 
 Local paths in the answers are replaced by `~/papertown/...`. Never point it at a server with your own projects: everything it reads goes into the app bundle.

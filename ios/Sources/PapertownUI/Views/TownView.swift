@@ -15,6 +15,7 @@ struct TownView: View {
                     NavigationLink {
                         AgentChatView(target: .agent("assistant"), role: "assistant", subtitle: lang.string("staff.town_wide"))
                     } label: {
+                        let pending = (store.assistant?.acts ?? []).filter { $0.data.field("status")?.stringValue == "pending" }.count
                         HStack(spacing: 11) {
                             RoleBadgeView(role: "assistant", size: 34)
                             VStack(alignment: .leading, spacing: 2) {
@@ -22,13 +23,13 @@ struct TownView: View {
                                 Text(lang.string("staff.assistant.sub")).font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            let pending = (store.assistant?.acts ?? []).filter { $0.data.field("status")?.stringValue == "pending" }.count
                             if pending > 0 {
-                                Pill(text: "\(pending)", color: .purple, symbol: "hand.raised.fill")
+                                Text("\(pending)").font(.caption).emNum(.warn)
                             } else if let a = store.assistantAgent, a.started != true {
                                 Text(lang.string("staff.not_started")).font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        .emBar(pending > 0 ? .warn : nil)
                     }
                 }
                 .papertownRowBackground(store.appearance)
@@ -71,20 +72,17 @@ struct TownView: View {
             HStack {
                 Label(lang.string("town.running"), systemImage: "folder")
                 Spacer()
-                Text("\(hud.lines.running)").font(.body.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(hud.lines.running > 0 ? store.appearance.tintColor : .secondary)
+                Text("\(hud.lines.running)").font(.body).emNum()
                 Text("/ \(hud.lines.total)").font(.caption).foregroundStyle(.secondary)
             }
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Label(lang.string("town.leads"), systemImage: "cpu")
                     Spacer()
-                    Circle().fill(tone.color).frame(width: 8, height: 8).opacity(tone.state == "off" ? 0 : 1)
                         .overlay(Circle().stroke(tone.color, lineWidth: 1.5).opacity(tone.state == "off" ? 1 : 0))
-                    Text("\(hud.leads.running)/\(hud.leads.on)").font(.body.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(tone.state == "off" ? Color.secondary : tone.color)
+                    Text("\(hud.leads.running)/\(hud.leads.on)").font(.body).emNum(EmTone.issue(tone.state) ?? .info)
                 }
-                Text(tone.tip(lang)).font(.caption).foregroundStyle(.secondary)
+                Text(tone.tip(lang)).font(.caption).emState(EmTone.issue(tone.state), detail: true)
             }
         } header: {
             Text(lang.string("town.section.now"))
@@ -140,7 +138,7 @@ struct DepartmentsPage: View {
                         HStack {
                             Text(lang.server(d.name)).font(.body.weight(.medium))
                             Spacer()
-                            Pill(text: lang.string("dept.state.\(d.state)"), color: deptColor(d.state))
+                            Text(lang.string("dept.state.\(d.state)")).font(.caption).emState(EmTone.issue(d.state))
                         }
                         if let job = d.job, !job.isEmpty { Text(lang.server(job)).font(.caption).foregroundStyle(.secondary) }
                         ForEach(d.lines) { l in
@@ -166,13 +164,6 @@ struct DepartmentsPage: View {
         .papertownInlineTitle()
     }
 
-    private func deptColor(_ s: String) -> Color {
-        switch s {
-        case "busy": return .green
-        case "wait": return .orange
-        default: return .secondary
-        }
-    }
 }
 
 // MARK: - Library
@@ -189,7 +180,7 @@ struct LibraryPage: View {
         let lang = store.language
         LoadingList(load: { client -> LibraryShelf in try await client.library(limit: 60) }) { shelf in
             List {
-                if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
+                if let error { Section { Text(error).emState(.bad, detail: true).font(.footnote) } }
                 if let result {
                     Section {
                         if result.hits.isEmpty { Text(lang.string("library.no_hits")).font(.footnote).foregroundStyle(.secondary) }
@@ -272,8 +263,8 @@ struct ComputePage: View {
                     ForEach(v.jobs.backends ?? []) { b in
                         VStack(alignment: .leading, spacing: 2) {
                             HStack {
-                                Image(systemName: b.ready ? "checkmark.circle.fill" : "minus.circle").foregroundStyle(b.ready ? .green : .secondary)
-                                Text(lang.server(b.name)).font(.subheadline.weight(.medium))
+                                Image(systemName: b.ready ? "checkmark.circle" : "minus.circle").foregroundStyle(.secondary)
+                                Text(lang.server(b.name)).font(.subheadline).emState(b.ready ? nil : .warn, detail: true)
                                 Spacer()
                                 if let a = b.active, a > 0 { Text(lang.format("compute.active", a)).font(.caption).foregroundStyle(.secondary) }
                             }
@@ -287,24 +278,24 @@ struct ComputePage: View {
                 }
                 if let g = v.gpus {
                     Section {
-                        if !g.ok, let note = g.note { Text(lang.server(note)).font(.footnote).foregroundStyle(.secondary) }
+                        if !g.ok, let note = g.note { Text(lang.server(note)).font(.footnote).emState(.warn, detail: true) }
                         ForEach(g.nodes) { node in
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Text(node.name).font(.subheadline.weight(.semibold))
                                     Spacer()
-                                    if let s = node.state { Pill(text: s, color: s == "up" ? .green : .secondary) }
+                                    if let s = node.state { Text(s).font(.caption).emState(EmTone.issue(s)) }
                                 }
                                 ForEach(node.gpus ?? [], id: \.self) { gpu in
                                     VStack(alignment: .leading, spacing: 2) {
                                         HStack {
                                             Text("GPU \(gpu.index ?? 0) · \(gpu.name ?? "")").font(.caption)
                                             Spacer()
-                                            if let u = gpu.utilPercent { Text("\(Int(u))%").font(.caption.monospacedDigit()) }
+                                            if let u = gpu.utilPercent { Text("\(Int(u))%").font(.caption).emNum() }
                                         }
                                         if let used = gpu.memUsedMB, let total = gpu.memTotalMB, total > 0 {
                                             Meter(value: used / total, color: used / total > 0.9 ? .red : .accentColor)
-                                            Text(String(format: "%.1f / %.0f GB", used / 1024, total / 1024)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                                            EmText(String(format: "%.1f / %.0f GB", used / 1024, total / 1024), .numbers(EmTone.usage(used / total))).font(.caption2)
                                         }
                                     }
                                 }
@@ -335,26 +326,25 @@ struct QuotaPage: View {
             List {
                 ForEach(u.providers) { p in
                     Section {
-                        if let e = p.error { Label(lang.server(e), systemImage: "exclamationmark.circle").font(.footnote).foregroundStyle(.secondary) }
+                        if let e = p.error { Text(lang.server(e)).font(.footnote).emState(.warn, detail: true) }
                         ForEach(p.windows) { w in
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
                                     Text(lang.server(w.label)).font(.subheadline)
                                     Spacer()
-                                    Text("\(Int(w.used))%").font(.subheadline.monospacedDigit().weight(.semibold))
-                                        .foregroundStyle(w.used >= 90 ? .red : w.used >= 70 ? .orange : .primary)
+                                    Text("\(Int(w.used))%").font(.subheadline).emNum(EmTone.usage(w.used / 100))
                                 }
                                 Meter(value: w.used / 100, color: w.used >= 90 ? .red : w.used >= 70 ? .orange : store.appearance.tintColor)
-                                if let r = w.resetsAt { Text(lang.format("usage.resets", Stamp.short(r, lang))).font(.caption2).foregroundStyle(.secondary) }
+                                if let r = w.resetsAt { Text(lang.format("usage.resets", Stamp.short(r, lang))).font(.caption2).emState(.warn, icon: "clock", detail: true) }
                             }
                         }
                         if let week = p.week, let cost = week.cost, cost > 0 {
-                            InfoRow(label: lang.string("usage.week_cost"), value: cost.dollars)
+                            InfoRow(label: lang.string("usage.week_cost"), value: cost.dollars, number: .info)
                         }
                     } header: {
                         HStack {
                             Text(p.label)
-                            if let plan = p.plan { Text(plan).foregroundStyle(store.appearance.tintColor) }
+                            if let plan = p.plan { Text(plan).foregroundStyle(.secondary) }
                             Spacer()
                             Text(lang.string("usage.status.\(p.status)"))
                         }

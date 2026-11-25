@@ -1,0 +1,1 @@
+{"id":"dc_f995c5668b","n":3,"mod":"code","text":"工具交接时传递请求编号、参数摘要及上次调用的状态，接收方按编号查重。","source":"written","ref":null,"state":"active","replaces":null,"materials":[],"matter":null,"created_at":"2026-11-25T17:29:36+00:00","ended_at":null,"replaced_by":null,"counts":{"jobs":0,"outputs":0,"tells":0,"tasks":0,"prov":0},"work":{"jobs":[],"outputs":[],"tells":[],"tasks":[],"prov":[]}}

@@ -13,11 +13,12 @@ struct InboxView: View {
 
     var body: some View {
         let lang = store.language
+        let items = store.inboxItems
         NavigationStack(path: $store.inboxPath) {
             List {
                 connectionBannerSection(lang: lang)
 
-                if store.projects.isEmpty && store.inboxItems.isEmpty && !store.isRefreshing {
+                if store.projects.isEmpty && items.isEmpty && !store.isRefreshing {
                     Section {
                         EmptyStateView(
                             title: lang.string("inbox.noprojects.title"),
@@ -34,26 +35,26 @@ struct InboxView: View {
                     }
                     .papertownRowBackground(store.appearance)
                 } else {
-                    Section {
-                        if store.inboxItems.isEmpty {
+                    if items.isEmpty {
+                        Section(lang.string("inbox.section.needs")) {
                             EmptyStateView(
                                 title: lang.string("inbox.empty.title"),
                                 systemImage: "checkmark.circle",
                                 description: lang.string("inbox.empty.desc")
                             )
                             .papertownRowBackground(store.appearance)
-                        } else {
-                            ForEach(store.inboxItems) { item in
-                                inboxRow(item, lang: lang)
-                                    .papertownRowBackground(store.appearance)
-                            }
                         }
-                    } header: {
-                        HStack {
-                            Text(lang.string("inbox.section.needs"))
-                            Spacer()
-                            if !store.inboxItems.isEmpty {
-                                Text("\(store.inboxItems.count)")
+                    } else {
+                        ForEach(["decided.group.matter", "decided.group.need", "decided.group.permissions", "inbox.section.needs"], id: \.self) { key in
+                            let group = items.filter { $0.section == key }
+                            if !group.isEmpty {
+                                Section {
+                                    ForEach(group) { item in
+                                        inboxRow(item, lang: lang).papertownRowBackground(store.appearance)
+                                    }
+                                } header: {
+                                    HStack { Text(lang.string(key)); Spacer(); Text("\(group.count)").emNum(.warn) }
+                                }
                             }
                         }
                     }
@@ -118,25 +119,15 @@ struct InboxView: View {
         switch store.connectionStatus {
         case .reconnecting:
             Section {
-                Label {
-                    Text(lang.format("conn.banner.reconnecting", serverName))
-                        .font(.footnote)
-                } icon: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .foregroundStyle(.orange)
-                }
+                Text(lang.format("conn.banner.reconnecting", serverName))
+                    .font(.footnote).emState(.warn, icon: "arrow.triangle.2.circlepath", detail: true)
                 .papertownRowBackground(store.appearance)
             }
         case .disconnected where store.currentProfile != nil:
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label {
-                        Text(store.lastError ?? lang.format("conn.banner.offline", serverName))
-                            .font(.footnote)
-                    } icon: {
-                        Image(systemName: "wifi.slash")
-                            .foregroundStyle(.red)
-                    }
+                    Text(store.lastError ?? lang.format("conn.banner.offline", serverName))
+                        .font(.footnote).emState(.bad, icon: "wifi.slash", detail: true)
                     Button(lang.string("action.retry")) {
                         if let profile = store.currentProfile {
                             Task { await store.connect(to: profile, allowBiometricAutoLogin: true) }
@@ -179,30 +170,25 @@ struct InboxView: View {
             }
             .padding(.leading, 39)
         }
+        .emBar(.warn)
         .padding(.vertical, 4)
     }
 
     @ViewBuilder
     private func iconBadge(for kind: InboxItemKind) -> some View {
-        let (symbol, color): (String, Color) = switch kind {
-        case .ask: ("questionmark.bubble.fill", .blue)
-        case .permission: ("terminal.fill", .orange)
-        case .blockedLead: ("exclamationmark.triangle.fill", .red)
+        let symbol = switch kind {
+        case .ask: "questionmark.bubble"
+        case .decision: "square.and.pencil"
+        case .permission: "terminal"
+        case .blockedLead: "exclamationmark.triangle"
         }
-        ZStack {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(color.opacity(0.14))
-                .frame(width: 29, height: 29)
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(color)
-        }
+        Image(systemName: symbol).foregroundStyle(.secondary).frame(width: 29, height: 29)
     }
 
     private func headerTitle(for item: InboxItem, lang: AppLanguage) -> String {
         let prefix = item.projectSeq.map { "#\($0) " } ?? ""
         switch item.kind {
-        case .ask:
+        case .ask, .decision:
             return "\(prefix)\(lang.server(item.projectTitle))"
         case .permission(_, let role, _):
             return "\(prefix)\(TextFormatters.roleName(role, language: lang))"
@@ -214,6 +200,8 @@ struct InboxView: View {
     @ViewBuilder
     private func bodyText(for item: InboxItem, lang: AppLanguage) -> some View {
         switch item.kind {
+        case .decision(let d):
+            if let id = item.projectID { DecisionRow(projectID: id, d: d, showsActionBar: false) }
         case .ask(let report):
             Text(lang.server(report.data.question ?? report.data.text ?? lang.string("inbox.badge.waiting")))
                 .font(.footnote)
@@ -246,7 +234,7 @@ struct InboxView: View {
                 language: lang
             ))
             .font(.footnote)
-            .foregroundStyle(.red)
+            .foregroundStyle(.primary)
             .lineLimit(3)
         }
     }
@@ -254,6 +242,11 @@ struct InboxView: View {
     @ViewBuilder
     private func actions(for item: InboxItem, lang: AppLanguage) -> some View {
         switch item.kind {
+        case .decision:
+            if let id = item.projectID {
+                Button(lang.string("action.open_project")) { store.inboxPath.append(InboxRoute.project(id)) }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
         case .ask(let report):
             Button(lang.string("action.reply")) { answering = report }
                 .buttonStyle(.borderedProminent)

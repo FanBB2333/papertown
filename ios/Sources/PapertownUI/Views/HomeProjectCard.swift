@@ -16,19 +16,15 @@ struct HomeProjectCard: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("#\(project.seq)")
-                    .font(.subheadline.weight(.semibold).monospacedDigit())
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(.secondary)
-                Text(lang.server(project.title.isEmpty ? project.idea : project.title))
-                    .font(.subheadline.weight(.semibold))
+                Text(project.title.isEmpty || project.title == project.idea ? project.idea : lang.server(project.title))
+                    .font(.subheadline).emKey()
+                    .emBar(project.title.isEmpty || project.title == project.idea ? .info : nil)
                     .lineLimit(2)
                 Spacer(minLength: 4)
                 if let health = progress?.health, !health.isEmpty {
-                    HStack(spacing: 3) {
-                        Image(systemName: Tone.symbol(health))
-                        Text(lang.string("health.\(health)"))
-                    }
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Tone.color(health))
+                    Text(lang.string("health.\(health)")).font(.caption2).emState(EmTone.issue(health))
                     .fixedSize()
                 }
             }
@@ -38,24 +34,20 @@ struct HomeProjectCard: View {
                     fallbackIndex: TextFormatters.orderedStages.firstIndex(of: project.stage) ?? 0,
                     blocked: blocked
                 )
-                Text("\(TextFormatters.stageName(project.stage, language: lang)) · \(project.pct)%")
+                Text(TextFormatters.stageName(project.stage, language: lang) + " ·").font(.caption).foregroundStyle(.secondary)
+                Text("\(project.pct)%")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(blocked ? Color.red : Color.secondary)
+                    .emNum(blocked ? .bad : .info)
                     .fixedSize()
             }
             if let summary = progress?.summary, !summary.isEmpty {
-                Text(lang.server(summary))
+                EmText(lang.server(summary))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
             if let milestone = progress?.milestone, !milestone.isEmpty {
-                HStack(spacing: 5) {
-                    Image(systemName: "flag.checkered")
-                    Text(lang.server(milestone)).lineLimit(1)
-                }
-                .font(.caption)
-                .foregroundStyle(Color.purple)
+                Text(lang.server(milestone)).lineLimit(1).font(.caption).emState(.warn, icon: "flag.checkered", detail: true)
             }
             ChipFlow(spacing: 10, lineSpacing: 4) { statusLine(lang) }
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -69,44 +61,46 @@ struct HomeProjectCard: View {
     private func statusLine(_ lang: AppLanguage) -> some View {
         let lead = project.lead.on ? project.lead.state : "off"
         HStack(spacing: 4) {
-            Circle().fill(TextFormatters.leadStateColor(lead)).frame(width: 6, height: 6)
             Text(lang.string("home.lead")).foregroundStyle(Self.muted)
-            Text(TextFormatters.leadStateLabel(lead, language: lang)).foregroundStyle(TextFormatters.leadStateColor(lead))
+            Text(TextFormatters.leadStateLabel(lead, language: lang)).emState(EmTone.issue(lead))
         }
         if let hard = card?.checks?.hard, hard.total > 0 {
             HStack(spacing: 4) {
                 Text(lang.string("home.checks")).foregroundStyle(Self.muted)
-                Text("\(hard.pass)✓").foregroundStyle(Color.green)
-                if hard.warn > 0 { Text("\(hard.warn)!").foregroundStyle(Color.orange) }
-                if hard.fail > 0 { Text("\(hard.fail)✗").foregroundStyle(Color.red) }
+                Text("\(hard.pass)✓").emNum(.good)
+                if hard.warn > 0 { Text("\(hard.warn)!").emNum(.warn) }
+                if hard.fail > 0 { Text("\(hard.fail)✗").emNum(.bad) }
             }
         }
         ForEach(Array((card?.card?.metrics ?? []).prefix(2)), id: \.self) { m in
             HStack(spacing: 4) {
                 Text(lang.server(m.name)).foregroundStyle(Self.muted).lineLimit(1)
-                Text(m.value).foregroundStyle(Color.teal)
+                Text(m.value).emNum()
             }
         }
         if let running = card?.running, !running.isEmpty {
-            Text(lang.format("home.running", running.count)).foregroundStyle(Color.blue)
+            EmText(lang.format("home.running", running.count), .numbers(.info))
         }
         if let queued = card?.queued, !queued.isEmpty {
-            Text(lang.format("home.queued", queued.count)).foregroundStyle(Self.muted)
+            EmText(lang.format("home.queued", queued.count), .numbers(.info))
         }
-        let waiting = (card?.asks ?? 0) + (card?.decisions?.count ?? 0) + (card?.card?.needYou.count ?? 0)
+        if let count = card?.decided?.total, count > 0 {
+            EmText(lang.format("decided.count", count), .numbers(.info))
+        }
+        let waiting = card?.decisions?.count ?? ((card?.asks ?? 0) + (card?.card?.needYou.count ?? 0))
         if waiting > 0 {
-            Text(lang.format("home.waiting", waiting)).foregroundStyle(Color.orange)
+            EmText(lang.format("home.waiting", waiting), .numbers(.warn))
         }
         if let code = card?.repos?.code, let branch = code.branch {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.triangle.branch").font(.system(size: 9, weight: .bold))
                 Text(branch).lineLimit(1)
-                if let dirty = code.dirty, dirty > 0 { Text("*\(dirty)") }
+                if let dirty = code.dirty, dirty > 0 { Text("*\(dirty)").emMark(.warn) }
             }
-            .foregroundStyle(Color.orange)
+            .foregroundStyle(.secondary)
         }
         if let words = card?.repos?.paper?.words, words > 0 {
-            Text(lang.format("home.words", Self.count(words))).foregroundStyle(Color.indigo)
+            Text(lang.format("home.words", Self.count(words))).foregroundStyle(.secondary)
         }
         let when = TextFormatters.relativeTime(from: card?.card?.at ?? project.updatedAt, language: lang)
         if !when.isEmpty {

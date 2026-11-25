@@ -88,39 +88,40 @@ enum LoopRead {
 
     /// A block's header in a few words: its stages, the worst of its gates, its sentinels, its tasks, and in the
     /// overview what waits for you.
-    static func pills(_ key: String, _ ctx: LoopContext) -> [(String, Color)] {
+    static func pills(_ key: String, _ ctx: LoopContext) -> [LoopCaption] {
         let lang = ctx.lang
         let ns = ctx.view.nodes.filter { $0.mod == key }
-        var out: [(String, Color)] = []
+        var out: [LoopCaption] = []
+        if let count = ctx.view.decided?[key], count > 0 { out.append(.number(lang.format("decided.count", count), .info)) }
         let stages = ns.filter { $0.kind == "stage" }, tasks = ns.filter { $0.kind == "task" }
         if !stages.isEmpty {
             let done = stages.filter { $0.status == "done" }.count
-            out.append((lang.format("canvas.pill.stages", done, stages.count),
-                        done == stages.count ? LoopInk.pass : stages.contains { $0.status == "run" } ? LoopInk.brand : LoopInk.muted))
+            out.append(.number(lang.format("canvas.pill.stages", done, stages.count),
+                        done == stages.count ? .good : .info))
         }
         let looks = ns.compactMap { $0.kind == "gate" ? $0.gate.map(gateLook) : nil }
         if looks.contains("block") {
-            out.append((lang.string("canvas.pill.block"), LoopInk.hard))
+            out.append(.state(lang.string("canvas.pill.block"), .bad))
         } else if looks.contains("warn") {
-            out.append((lang.string("canvas.pill.warn"), LoopInk.amber))
+            out.append(.state(lang.string("canvas.pill.warn"), .warn))
         } else if !looks.isEmpty, looks.allSatisfy({ $0 == "pass" }) {
-            out.append((lang.string("canvas.pill.pass"), LoopInk.pass))
+            out.append(.state(lang.string("canvas.pill.pass"), nil))
         }
         let off = ns.filter { $0.kind == "soft" && ($0.check.map { $0.on && ["warn", "fail"].contains($0.status) } ?? false) }.count
-        if off > 0 { out.append((lang.format("canvas.pill.soft", off), LoopInk.amber)) }
+        if off > 0 { out.append(.number(lang.format("canvas.pill.soft", off), .warn)) }
         if !tasks.isEmpty {
             let open = tasks.filter { $0.status != "done" }.count
             let stuck = tasks.filter { $0.status == "blocked" || $0.stale != nil }.count
             if stuck > 0 {
-                out.append((lang.format("canvas.pill.tasks.stuck", tasks.count, stuck), LoopInk.hard))
+                out.append(.number(lang.format("canvas.pill.tasks.stuck", tasks.count, stuck), .bad))
             } else if open > 0 {
-                out.append((lang.format("canvas.pill.tasks.open", tasks.count, open), LoopInk.brand))
+                out.append(.number(lang.format("canvas.pill.tasks.open", tasks.count, open), .info))
             } else {
-                out.append((lang.format("canvas.pill.tasks.done", tasks.count), LoopInk.pass))
+                out.append(.number(lang.format("canvas.pill.tasks.done", tasks.count), .good))
             }
         }
         if key == "overview", let n = ctx.view.nodes.first(where: { $0.kind == "human" })?.items?.count, n > 0 {
-            out.append((lang.format("loop.human", n), LoopInk.amber))
+            out.append(.number(lang.format("loop.human", n), .warn))
         }
         return out
     }
@@ -212,22 +213,10 @@ struct LoopNodeView: View {
         let look = NodeLook.of(node, ctx)
         ZStack(alignment: .topLeading) {
             look.shape.fill(LoopInk.panel)
-            if let tint = look.tint { look.shape.fill(tint) }
-            if let bar = look.bar {
-                HStack(spacing: 0) { bar.frame(width: look.barWidth); Spacer(minLength: 0) }
-                    .clipShape(look.shape)
-            }
-            look.shape.stroke(look.stroke, style: StrokeStyle(lineWidth: look.width, dash: look.dash))
-            if node.kind == "soft" {
-                RoundedRectangle(cornerRadius: 36)
-                    .stroke(look.stroke.opacity(0.5), style: StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
-                    .padding(-6)
-            }
-            if node.escalated == true {
-                RoundedRectangle(cornerRadius: 15).stroke(LoopInk.amber, lineWidth: 2).padding(-4)
-            }
+            look.shape.stroke(LoopInk.line, style: StrokeStyle(lineWidth: 1.5, dash: look.dash))
             if detail == .far {
-                FarLabel(title: look.farTitle, figure: look.farFigure, zoom: zoom)
+                let issue = node.locked != nil ? EmTone.bad : EmTone.issue(node.check?.status ?? node.gate?.state ?? node.status)
+                FarLabel(title: look.farTitle, figure: look.farFigure, issue: issue ?? (LoopRead.needs(node) ? .warn : nil), zoom: zoom)
             } else {
                 content(small: detail == .near)
             }
@@ -235,6 +224,7 @@ struct LoopNodeView: View {
                 look.shape.stroke(LoopInk.brand, lineWidth: 3).padding(-3)
             }
         }
+        .emBar(node.kind == "human" && node.items?.isEmpty == false || node.escalated == true ? .warn : node.kind == "task" && node.createdBy == "you" ? .info : nil)
         .opacity(look.opacity)
         .foregroundStyle(.primary)
     }
@@ -262,36 +252,41 @@ struct LoopNodeView: View {
 
 /// Far out: the name and one figure, large enough to read.
 private struct FarLabel: View {
+    @Environment(\.self) private var env
     let title: String
     let figure: String
+    let issue: EmTone?
     let zoom: CGFloat
 
     var body: some View {
         let k = min(2.6, 0.85 / max(zoom, 0.01))
-        // too small to read even so: the shape and its colour say enough
+        // At fit-to-screen size only a status symbol remains legible.
         if 15 * k * zoom >= 6 {
             VStack(spacing: 2 * k) {
                 Text(title).font(.system(size: 15 * k, weight: .semibold)).lineLimit(2).multilineTextAlignment(.center)
                 if !figure.isEmpty {
-                    Text(figure).font(.system(size: 13 * k, weight: .medium).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+                    if figure.contains(where: \.isNumber) {
+                        EmText(figure, .numbers(issue ?? .info)).font(.system(size: 13 * k)).lineLimit(1)
+                    } else { Text(figure).font(.system(size: 13 * k)).emState(issue).lineLimit(1) }
                 }
             }
             .minimumScaleFactor(0.5)
             .padding(8)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let issue {
+            Image(systemName: issue.symbol)
+                .font(.system(size: min(60, 7 / max(zoom, 0.01)), weight: .medium))
+                .foregroundStyle(env.emInk(issue))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel(Text(figure.isEmpty ? title : figure))
         }
     }
 }
 
-/// A node's outline and colours, and what it says far out.
+/// The node's silhouette and the label shown when zoomed out.
 private struct NodeLook {
     var shape: AnyShape
-    var stroke: Color
-    var width: CGFloat = 1.5
     var dash: [CGFloat] = []
-    var tint: Color? = nil
-    var bar: Color? = nil
-    var barWidth: CGFloat = 5
     var opacity: Double = 1
     var farTitle: String
     var farFigure: String = ""
@@ -302,9 +297,8 @@ private struct NodeLook {
         switch n.kind {
         case "stage":
             let st = n.status ?? "todo", pct = Int(n.pct ?? 0)
-            let c = n.locked != nil ? LoopInk.muted : st == "done" ? LoopInk.pass : st == "run" ? LoopInk.brand : LoopInk.muted
-            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 14)), stroke: c, dash: st == "todo" ? [5, 4] : [],
-                            bar: c, opacity: st == "todo" && n.locked == nil ? 0.85 : 1, farTitle: title,
+            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 14)), dash: st == "todo" ? [5, 4] : [],
+                            opacity: st == "todo" && n.locked == nil ? 0.85 : 1, farTitle: title,
                             farFigure: n.locked != nil ? lang.string("canvas.locked") : st == "run" ? "\(pct)%" : "")
         case "gate":
             let g = n.gate
@@ -313,51 +307,42 @@ private struct NodeLook {
             let one = cs.count == 1 ? cs[0] : nil
             let figure = one.map { c in c.last?.value.map { "\(LoopRead.number($0))/\(LoopRead.number(c.max ?? 0))" } ?? "" }
                 ?? ((g?.total ?? 0) > 0 ? "\(g?.pass ?? 0)/\(g?.total ?? 0)" : "")
-            let c = gateColor(look)
-            return NodeLook(shape: AnyShape(Octagon(cut: 13)), stroke: c, width: 2, tint: c.opacity(0.06), opacity: look == "off" ? 0.55 : 1,
+            return NodeLook(shape: AnyShape(Octagon(cut: 13)), opacity: look == "off" ? 0.55 : 1,
                             farTitle: one.map { lang.server($0.title) } ?? title, farFigure: figure)
         case "hard":
             let lv = n.check.map(LoopRead.level) ?? "none"
-            let c = gateColor(lv)
             let v = n.check?.last?.value
-            return NodeLook(shape: AnyShape(Octagon(cut: 10)), stroke: c, width: 2, tint: c.opacity(0.06), opacity: lv == "off" ? 0.55 : 1,
+            return NodeLook(shape: AnyShape(Octagon(cut: 10)), opacity: lv == "off" ? 0.55 : 1,
                             farTitle: title, farFigure: v.map { "\(LoopRead.number($0))/\(LoopRead.number(n.check?.max ?? 0))" } ?? "")
         case "soft":
             let k = n.check?.status ?? "none"
-            let c = k == "pass" ? LoopInk.pass : k == "warn" ? LoopInk.amber : k == "fail" ? LoopInk.hard : LoopInk.muted
-            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 30)), stroke: c, width: 2, tint: c.opacity(0.05),
-                            opacity: n.check?.on == false ? 0.5 : 1, farTitle: title,
+            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 30)), opacity: n.check?.on == false ? 0.5 : 1, farTitle: title,
                             farFigure: ["pass", "warn", "fail"].contains(k) ? lang.string("canvas.verdict.\(k)") : "")
         case "spec":
             let count = n.rules?.count ?? 0
-            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 10)), stroke: LoopInk.spec, dash: [5, 4], tint: LoopInk.spec.opacity(0.05),
+            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 10)), dash: [5, 4],
                             farTitle: lang.string("canvas.spec.far"), farFigure: count > 0 ? lang.format("canvas.rules.n", count) : "")
         case "clamp":
             let count = n.rules?.count ?? 0
-            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 10)), stroke: LoopInk.clamp, width: 2,
+            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 10)),
                             farTitle: lang.string("canvas.clamp.far"), farFigure: count > 0 ? lang.format("canvas.rules.n", count) : "")
         case "human":
             let count = n.items?.count ?? 0
-            return NodeLook(shape: AnyShape(Hexagon(point: 26)), stroke: LoopInk.amber.opacity(count > 0 ? 1 : 0.45), width: 2,
-                            tint: count > 0 ? LoopInk.amber.opacity(0.10) : nil,
+            return NodeLook(shape: AnyShape(Hexagon(point: 26)),
                             farTitle: lang.string("canvas.human.far"), farFigure: count > 0 ? lang.format("canvas.human.n", count) : "")
         case "task":
             let st = n.status ?? "draft"
-            var c = st == "sent" ? LoopInk.brand : st == "done" ? LoopInk.ok : st == "blocked" ? LoopInk.hard : st == "queued" ? LoopInk.amber : LoopInk.muted
-            if n.loop == "hard" { c = LoopInk.hard } else if n.loop == "soft" { c = LoopInk.amber }
-            if n.converged == true { c = LoopInk.muted }
             let dashed = st == "draft" || st == "queued" || n.stale != nil
             let figure = n.converged == true ? lang.string("canvas.task.converged")
                 : n.escalated == true ? lang.string("canvas.task.escalated")
                 : n.stale != nil ? lang.string("canvas.task.recheck") : taskState(st, lang)
-            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 12)), stroke: n.stale != nil ? LoopInk.amber : c,
-                            dash: dashed ? [5, 4] : [], bar: c, barWidth: n.loop != nil ? 6 : 4,
+            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 12)), dash: dashed ? [5, 4] : [],
                             opacity: n.converged == true ? 0.7 : 1, farTitle: title, farFigure: figure)
         case "note":
-            return NodeLook(shape: AnyShape(NoteShape()), stroke: LoopInk.amber.opacity(0.45), width: 1, tint: LoopInk.amber.opacity(0.13),
+            return NodeLook(shape: AnyShape(NoteShape()),
                             farTitle: LoopRead.clip(n.text ?? "", 24))
         default:
-            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 12)), stroke: LoopInk.line, width: 1, farTitle: title)
+            return NodeLook(shape: AnyShape(RoundedRectangle(cornerRadius: 12)), farTitle: title)
         }
     }
 
@@ -438,7 +423,7 @@ struct NoteShape: Shape {
 private struct Head: View {
     let text: String
     var chip: String? = nil
-    var chipColor: Color = LoopInk.muted
+    var chipTone: EmTone? = nil
     var symbol: String? = nil
     var color: Color = .secondary
 
@@ -450,23 +435,21 @@ private struct Head: View {
                 .foregroundStyle(color)
                 .lineLimit(1)
             Spacer(minLength: 4)
-            if let chip { Chip(text: chip, color: chipColor) }
+            if let chip { Text(chip).font(.system(size: 10)).emState(chipTone) }
         }
     }
 }
 
-private struct Chip: View {
-    let text: String
-    let color: Color
+enum LoopCaption: View {
+    case number(String, EmTone), state(String, EmTone?), key(String), change(String)
+
     var body: some View {
-        Text(text)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1.5)
-            .background(Capsule().fill(color.opacity(0.13)))
-            .lineLimit(1)
-            .fixedSize()
+        switch self {
+        case .number(let text, let tone): EmText(text, .numbers(tone))
+        case .state(let text, let tone): Text(text).emState(tone)
+        case .key(let text): Text(text).emKey()
+        case .change(let text): Text(text).emMark(.warn)
+        }
     }
 }
 
@@ -490,7 +473,7 @@ private struct StageBody: View {
                     } else if st == "done" {
                         Image(systemName: "checkmark").font(.system(size: 14, weight: .bold)).foregroundStyle(c)
                     } else {
-                        Text("\(pct)%").font(.system(size: 11, weight: .bold).monospacedDigit())
+                        Text("\(pct)%").font(.system(size: 11)).emNum()
                     }
                 }
                 .frame(width: 38, height: 38)
@@ -546,7 +529,7 @@ private struct GateBody: View {
             let prios = Set(on.compactMap(\.prio)).sorted().joined(separator: "/")
             let chip = g.waived == true && g.state == "block" ? lang.string("canvas.gate.waived") : lang.string("loop.gate.\(look)")
             VStack(alignment: .leading, spacing: 5) {
-                Head(text: "◆ HARD · \(prios.isEmpty ? "P1" : prios)", chip: chip, chipColor: NodeLook.gateColor(look))
+                Head(text: "◆ HARD · \(prios.isEmpty ? "P1" : prios)", chip: chip, chipTone: EmTone.issue(look))
                 HStack(alignment: .firstTextBaseline) {
                     Text(one.map { lang.server($0.title) } ?? lang.format("canvas.gate.group", TextFormatters.stageName(g.stage, language: lang)))
                         .font(.system(size: 14, weight: .semibold)).lineLimit(1)
@@ -554,7 +537,7 @@ private struct GateBody: View {
                     Text(one.map { c in c.last?.value.map { "\(LoopRead.number($0)) / ≤\(LoopRead.number(c.max ?? 0))" } ?? "—" }
                          ?? lang.format("canvas.gate.pass_n", g.pass ?? 0, g.total ?? 0))
                         .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(NodeLook.gateColor(look))
+                        .emNum(EmTone.issue(look) ?? .info)
                 }
                 if one == nil, !cs.isEmpty {
                     HStack(spacing: 3) {
@@ -568,7 +551,7 @@ private struct GateBody: View {
                     }
                 }
                 if small {
-                    Text(footnote(g, look)).font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(1)
+                    Text(footnote(g, look)).font(.system(size: 10.5)).foregroundStyle(.secondary).emMark(.warn, active: g.before != nil && g.now != nil && g.before != g.now).lineLimit(1)
                 }
             }
             .padding(.horizontal, 16)
@@ -597,13 +580,13 @@ private struct HardBody: View {
         if let c = n.check {
             let lv = LoopRead.level(c), v = c.last?.value
             VStack(alignment: .leading, spacing: 4) {
-                Head(text: "HARD · \(c.prio ?? "")", chip: lang.string("loop.gate.\(lv)"), chipColor: NodeLook.gateColor(lv))
+                Head(text: "HARD · \(c.prio ?? "")", chip: lang.string("loop.gate.\(lv)"), chipTone: EmTone.issue(lv))
                 HStack(alignment: .firstTextBaseline) {
                     Text(lang.server(c.title)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                     Spacer(minLength: 4)
                     Text(v.map { "\(LoopRead.number($0)) / ≤\(LoopRead.number(c.max ?? 0))" } ?? "—")
                         .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(NodeLook.gateColor(lv))
+                        .emNum(EmTone.issue(lv) ?? .info)
                 }
                 if small, let f = c.last?.findings?.first, let file = f.file {
                     Text("\(file):\(f.line ?? 0)").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
@@ -632,8 +615,8 @@ private struct SoftBody: View {
                     Text("SOFT · \(what) · \(lang.format("canvas.soft.every", every))")
                         .font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 4)
-                    if c.due == true { Chip(text: lang.string("canvas.soft.due"), color: LoopInk.brand) }
-                    Chip(text: lang.string("canvas.verdict.\(k)"), color: LoopInk.tone(k))
+                    if c.due == true { Text(lang.string("canvas.soft.due")).font(.caption2).emState(.warn, icon: "clock") }
+                    Text(lang.string("canvas.verdict.\(k)")).font(.caption2).emState(EmTone.issue(k))
                 }
                 HStack {
                     Text(lang.server(c.title)).font(.system(size: 14, weight: .semibold)).lineLimit(1)
@@ -645,8 +628,8 @@ private struct SoftBody: View {
                     }
                 }
                 if small {
-                    Text(LoopRead.clip(c.last?.note ?? lang.server(c.text ?? ""), 46))
-                        .font(.system(size: 11)).italic().foregroundStyle(.secondary).lineLimit(1)
+                    EmText(lang.server(c.last?.note ?? c.text))
+                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             .padding(.horizontal, 24)
@@ -685,10 +668,10 @@ private struct ClampBody: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("HARD CLAMP · \(lang.string("canvas.clamp.title"))")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(LoopInk.panel)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
                 .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-                .background(LoopInk.clamp)
+
             VStack(alignment: .leading, spacing: 3) {
                 Text(rules.isEmpty ? lang.string("canvas.clamp.empty") : rules.prefix(2).map { LoopRead.clip($0.text, 16) }.joined(separator: " · "))
                     .font(.system(size: 13, weight: .semibold)).lineLimit(1)
@@ -715,7 +698,7 @@ private struct HumanBody: View {
             Text(items.isEmpty ? lang.string("canvas.human.empty") : lang.format("loop.human", items.count))
                 .font(.system(size: 14, weight: .semibold)).lineLimit(1)
             if small {
-                Text(items.first.map { LoopRead.clip(lang.server($0.text), 40) } ?? lang.string("canvas.human.hint"))
+                EmText(items.first.map { lang.server($0.text) } ?? lang.string("canvas.human.hint"))
                     .font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(2)
             }
         }
@@ -736,10 +719,9 @@ private struct TaskBody: View {
         let who = TextFormatters.roleName(n.to ?? "lead", language: lang)
         let chip = n.converged == true ? lang.string("canvas.task.converged")
             : n.escalated == true ? lang.string("canvas.task.escalated") : NodeLook.taskState(st, lang)
-        let chipColor = n.escalated == true ? LoopInk.amber : LoopInk.tone(st)
         let symbol = n.loop == "hard" ? "arrow.triangle.2.circlepath" : n.loop == "soft" ? "sparkle" : nil
         VStack(alignment: .leading, spacing: 3) {
-            Head(text: "\(head) · \(n.id) · \(who)", chip: chip, chipColor: chipColor, symbol: symbol)
+            Head(text: "\(head) · \(n.id) · \(who)", chip: chip, chipTone: n.escalated == true ? .warn : EmTone.issue(st), symbol: symbol)
             Text(n.title ?? "").font(.system(size: 13.5, weight: .semibold)).lineLimit(2)
             if st == "queued" {
                 Label(wait(lang), systemImage: "clock").font(.system(size: 11)).foregroundStyle(LoopInk.amber).lineLimit(1)
@@ -752,7 +734,9 @@ private struct TaskBody: View {
                     Text(lang.format("canvas.task.trail", trail.map { lang.format("canvas.places", $0) }.joined(separator: " → ")))
                         .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 } else if let t = n.text, !t.isEmpty {
-                    Text(LoopRead.clip(t, 96)).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    Group {
+                        if n.createdBy == "you" { Text(verbatim: t) } else { EmText(lang.server(t)) }
+                    }.font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 let when = st == "sent" ? n.sentAt : st == "draft" ? nil : n.doneAt
                 if let when {
@@ -788,7 +772,10 @@ struct InfoCard: View {
                 Image(systemName: InfoCard.symbol(kind)).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
                 Text(ctx.lang.server(n.title ?? "")).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 Spacer(minLength: 4)
-                if let s = InfoCard.state(n, ctx) { Chip(text: s.0, color: s.1) }
+                if let mod = n.mod, let count = ctx.view.decided?[mod], count > 0 {
+                    EmText(ctx.lang.format("decided.count", count), .numbers(.info)).font(.caption2)
+                }
+                if let state = InfoCard.state(n, ctx) { state.font(.caption2) }
             }
             InfoBody(n: n, ctx: ctx, full: false)
                 .font(.system(size: 12))
@@ -819,29 +806,29 @@ struct InfoCard: View {
     }
 
     /// The few words in a card's header: how the thing stands.
-    static func state(_ n: LoopNode, _ ctx: LoopContext) -> (String, Color)? {
+    static func state(_ n: LoopNode, _ ctx: LoopContext) -> LoopCaption? {
         let lang = ctx.lang, r = ctx.card
         switch kind(n) {
         case "card":
             guard let h = r?.card?.health, !h.isEmpty else { return nil }
-            return (lang.string("health.\(h)"), Tone.color(h))
+            return .state(lang.string("health.\(h)"), EmTone.issue(h))
         case "agent":
             let role = String((n.ref ?? "").split(separator: ":").last ?? "")
-            guard let a = ctx.view.agents?[role], a.there == true else { return (lang.string("canvas.info.nostart"), LoopInk.muted) }
-            return (lang.server(a.status ?? ""), LoopInk.ok)
+            guard let a = ctx.view.agents?[role], a.there == true else { return .state(lang.string("canvas.info.nostart"), nil) }
+            return .state(lang.server(a.status), EmTone.issue(a.status))
         case "survey":
             guard let v = ctx.outputs?.hatch?.verdict, !v.isEmpty else { return nil }
-            return (lang.server(v), LoopInk.brand)
+            return .key(lang.server(v))
         case "runs":
             let k = r?.running?.count ?? 0
-            return k > 0 ? (lang.format("canvas.part.running", k), LoopInk.brand) : nil
+            return k > 0 ? .number(lang.format("canvas.part.running", k), .info) : nil
         case "code", "paper":
             let x = kind(n) == "code" ? r?.repos?.code : r?.repos?.paper
             guard let x, x.missing != true, let d = x.dirty, d > 0 else { return nil }
-            return (lang.format("canvas.part.changes", d), LoopInk.amber)
+            return .change(lang.format("canvas.part.changes", d))
         case "outputs":
             let o = r?.card?.outputs ?? []
-            return o.isEmpty ? nil : ("\(o.filter { $0.state == "done" }.count)/\(o.count)", LoopInk.muted)
+            return o.isEmpty ? nil : .number("\(o.filter { $0.state == "done" }.count)/\(o.count)", .info)
         default:
             return nil
         }
@@ -861,16 +848,22 @@ struct InfoBody: View {
             case "card":
                 Text(lang.server(r?.line.title ?? ctx.view.title ?? "")).fontWeight(.semibold).lineLimit(full ? nil : 2)
                 if let c = r?.card {
-                    if !c.summary.isEmpty { Text(lang.server(c.summary)).foregroundStyle(.secondary).lineLimit(full ? nil : 2) }
+                    if !c.summary.isEmpty { EmText(lang.server(c.summary)).foregroundStyle(.secondary).lineLimit(full ? nil : 2) }
                     if let p = c.progress {
                         ProgressView(value: Double(p), total: 100).tint(LoopInk.brand)
-                        Text("\(p)%" + (c.milestone.map { " · " + lang.server($0) } ?? "")).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        HStack(spacing: 3) {
+                            Text("\(p)%").emNum()
+                            if let milestone = c.milestone, !milestone.isEmpty {
+                                Text("·").foregroundStyle(.secondary)
+                                Text(lang.server(milestone)).emState(.warn, icon: "flag", detail: true)
+                            }
+                        }.font(.caption2).lineLimit(1)
                     }
                     let need = (r?.decisions ?? []).map { lang.server($0.title) }
-                    if full || !need.isEmpty { list(lang.string("canvas.info.need"), need, LoopInk.amber) }
-                    if full || need.isEmpty && !c.blockers.isEmpty { list(lang.string("canvas.info.blockers"), c.blockers.map(lang.server), LoopInk.hard) }
-                    if full || need.isEmpty && c.blockers.isEmpty { list(lang.string("canvas.info.next"), c.next.map(lang.server), .secondary) }
-                    if full { list(lang.string("canvas.info.done"), c.done.map(lang.server), LoopInk.pass) }
+                    if full || !need.isEmpty { list(lang.string("canvas.info.need"), need, action: true) }
+                    if full || need.isEmpty && !c.blockers.isEmpty { list(lang.string("canvas.info.blockers"), c.blockers.map(lang.server), action: true) }
+                    if full || need.isEmpty && c.blockers.isEmpty { list(lang.string("canvas.info.next"), c.next.map(lang.server)) }
+                    if full { list(lang.string("canvas.info.done"), c.done.map(lang.server)) }
                 } else {
                     Text(lang.string("canvas.info.nocard")).foregroundStyle(.secondary)
                 }
@@ -879,15 +872,20 @@ struct InfoBody: View {
                 if o.isEmpty && m.isEmpty { Text(lang.string("canvas.info.nooutputs")).foregroundStyle(.secondary) }
                 ForEach(Array(o.prefix(full ? 50 : 4).enumerated()), id: \.offset) { _, x in
                     HStack(spacing: 6) {
-                        Circle().fill(LoopInk.tone(x.state == "done" ? "pass" : x.state == "doing" ? "run" : "none")).frame(width: 7, height: 7)
+                        Image(systemName: x.state == "done" ? "checkmark.circle" : "circle").font(.caption2).foregroundStyle(.secondary)
                         Text(lang.server(x.name)).lineLimit(1)
+                        if let due = x.due?.nonEmpty {
+                            Spacer(minLength: 3)
+                            Text(lang.server(due)).font(.caption2).lineLimit(1)
+                                .emState(x.state == "done" ? nil : EmTone.deadline(due), icon: "calendar")
+                        }
                     }
                 }
                 ForEach(Array(m.prefix(full ? 50 : 3).enumerated()), id: \.offset) { _, x in
                     HStack {
                         Text(lang.server(x.name)).foregroundStyle(.secondary).lineLimit(1)
                         Spacer(minLength: 4)
-                        Text(x.value).monospacedDigit().foregroundStyle(LoopInk.pass)
+                        EmText(x.value, .numbers(.info))
                     }
                 }
             case "agent":
@@ -896,23 +894,23 @@ struct InfoBody: View {
                 let tasks = ctx.view.nodes.filter { $0.kind == "task" && ($0.to ?? "lead") == role }
                 if let model = a?.model, !model.isEmpty { Text(model).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1) }
                 if !tasks.isEmpty {
-                    Text(lang.format("canvas.info.tasks", tasks.count, tasks.filter { $0.status == "done" }.count)).foregroundStyle(.secondary)
+                    EmText(lang.format("canvas.info.tasks", tasks.count, tasks.filter { $0.status == "done" }.count), .numbers(.info))
                 }
             case "survey":
                 if let h = out?.hatch {
-                    if let gap = h.gap ?? h.summary { Text(lang.server(gap)).foregroundStyle(.secondary).lineLimit(full ? nil : 5) }
-                    if full, let s = h.suggestions, !s.isEmpty { list(lang.string("canvas.info.next"), s.map(lang.server), .secondary) }
+                    if let gap = h.gap ?? h.summary { EmText(lang.server(gap)).foregroundStyle(.secondary).lineLimit(full ? nil : 5) }
+                    if full, let s = h.suggestions, !s.isEmpty { list(lang.string("canvas.info.next"), s.map(lang.server)) }
                 } else {
                     Text(lang.string("canvas.info.nosurvey")).foregroundStyle(.secondary)
                 }
             case "method":
                 if let m = out?.method {
-                    if let p = m.problem { Text(lang.server(p)).lineLimit(full ? nil : 2) }
+                    if let p = m.problem { EmText(lang.server(p)).lineLimit(full ? nil : 2) }
                     ForEach(Array((m.mechanism ?? []).prefix(full ? 20 : 3).enumerated()), id: \.offset) { i, step in
-                        Text("\(i + 1). \(lang.server(step))").foregroundStyle(.secondary).lineLimit(full ? nil : 1)
+                        EmText("\(i + 1). \(lang.server(step))").foregroundStyle(.secondary).lineLimit(full ? nil : 1)
                     }
-                    if full, let b = m.baselines, !b.isEmpty { list(lang.string("canvas.info.baselines"), b.map(\.name), .secondary) }
-                    if full, let x = m.metrics, !x.isEmpty { list(lang.string("canvas.info.metrics"), x.map(lang.server), .secondary) }
+                    if full, let b = m.baselines, !b.isEmpty { list(lang.string("canvas.info.baselines"), b.map(\.name)) }
+                    if full, let x = m.metrics, !x.isEmpty { list(lang.string("canvas.info.metrics"), x.map(lang.server)) }
                 } else {
                     Text(lang.string("canvas.info.nomethod")).foregroundStyle(.secondary)
                 }
@@ -951,12 +949,12 @@ struct InfoBody: View {
     }
 
     @ViewBuilder
-    private func list(_ title: String, _ items: [String], _ color: Color) -> some View {
+    private func list(_ title: String, _ items: [String], action: Bool = false) -> some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.caption2.weight(.semibold)).foregroundStyle(color)
+                Text(title).font(.caption2).foregroundStyle(.secondary)
                 ForEach(Array(items.prefix(full ? 50 : 2).enumerated()), id: \.offset) { _, x in
-                    Text("· " + x).lineLimit(full ? nil : 1)
+                    EmText("· " + x).lineLimit(full ? nil : 1).emBar(action ? .warn : nil)
                 }
             }
         }
@@ -989,8 +987,8 @@ struct InfoBody: View {
                 HStack {
                     Text(lang.server(m)).foregroundStyle(.secondary).lineLimit(1)
                     Spacer(minLength: 4)
-                    Text(LoopRead.number(mine)).monospacedDigit().fontWeight(.semibold).foregroundStyle(LoopInk.pass)
-                    Text("/ " + LoopRead.number(best)).monospacedDigit().foregroundStyle(.secondary)
+                    Text(LoopRead.number(mine)).emNum()
+                    Text("/ " + LoopRead.number(best)).emNum()
                 }
             }
             Text("\(lang.string("canvas.info.ours")) / \(lang.string("canvas.info.best"))").font(.caption2).foregroundStyle(.tertiary)

@@ -72,7 +72,7 @@ struct AccessSettingsPage: View {
                     SecureField(lang.string("access.password.new"), text: $new)
                     SecureField(lang.string("access.password.again"), text: $again)
                     if !again.isEmpty && new != again {
-                        Text(lang.string("access.password.mismatch")).font(.caption).foregroundStyle(.red)
+                        Text(lang.string("access.password.mismatch")).font(.caption).emState(.bad)
                     }
                     Button(lang.string(v.auth.password ? "access.password.change" : "access.password.save")) {
                         let (pw, previous) = (new, old)
@@ -211,12 +211,12 @@ struct AgentSettingsPage: View {
                 }
                 paseo(v.paseo, v.paseoError, act, lang)
                 Section("herdr") {
-                    InfoRow(label: lang.string("agents.status"), value: v.herdr.map { $0.ok ? lang.string("agents.running") : lang.server($0.note ?? "") } ?? lang.string("agents.down"))
+                    InfoRow(label: lang.string("agents.status"), value: v.herdr.map { $0.ok ? lang.string("agents.running") : lang.server($0.note ?? "") } ?? lang.string("agents.down"), status: v.herdr?.ok == true ? nil : .warn)
                     if let s = v.herdr?.socket { InfoRow(label: lang.string("agents.herdr.socket"), value: s) }
                     if let n = v.herdr?.count { InfoRow(label: lang.string("agents.herdr.count"), value: "\(n)") }
                 }
                 Section(lang.string("agents.pi")) {
-                    InfoRow(label: lang.string("agents.status"), value: v.pi.map { $0.ok ? lang.string("agents.available") : lang.server($0.note ?? "") } ?? "—")
+                    InfoRow(label: lang.string("agents.status"), value: v.pi.map { $0.ok ? lang.string("agents.available") : lang.server($0.note ?? "") } ?? "—", status: v.pi?.ok == false ? .warn : nil)
                 }
             }
             .papertownInsetGroupedList()
@@ -230,14 +230,14 @@ struct AgentSettingsPage: View {
     private func paseo(_ p: PaseoInfo?, _ problem: String?, _ act: PageActions, _ lang: AppLanguage) -> some View {
         Section {
             InfoRow(label: lang.string("agents.status"), value: p?.status.ok == true
-                    ? lang.format("agents.paseo.ok", p?.status.version ?? "") : lang.string("agents.down"))
+                    ? lang.format("agents.paseo.ok", p?.status.version ?? "") : lang.string("agents.down"), status: p?.status.ok == true ? nil : .warn)
             if let note = p?.status.note ?? problem, p?.status.ok != true {
-                Text(lang.server(note)).font(.caption).foregroundStyle(.orange)
+                Text(lang.server(note)).font(.caption).foregroundStyle(.secondary)
             }
             if let p, p.status.ok {
                 InfoRow(label: lang.string("agents.paseo.web"), value: p.status.web ?? lang.string("agents.paseo.web.off"))
                 ForEach(p.providers) { pr in
-                    InfoRow(label: pr.label ?? pr.id, value: pr.error != nil ? lang.string("agents.paseo.models_failed") : lang.format("agents.paseo.models", pr.models?.count ?? 0))
+                    InfoRow(label: pr.label ?? pr.id, value: pr.error != nil ? lang.string("agents.paseo.models_failed") : lang.format("agents.paseo.models", pr.models?.count ?? 0), status: pr.error == nil ? nil : .warn)
                 }
                 Button(lang.string("agents.paseo.reload")) { fresh = true; act.run { _ = try await $0.paseo(fresh: true) } }
                     .disabled(act.busy)
@@ -267,7 +267,7 @@ struct AgentSettingsPage: View {
                 Section {
                     ForEach(news.prefix(4)) { n in
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(n.label ?? n.provider) · \(n.name ?? n.model)").font(.subheadline)
+                            Text("\(n.label ?? n.provider) · \(n.name ?? n.model)").font(.subheadline).emMark()
                             if let t = n.thinking, !t.isEmpty { Text(lang.format("agents.news.thinking", t.joined(separator: " / "))).font(.caption).foregroundStyle(.secondary) }
                         }
                     }
@@ -316,7 +316,7 @@ struct DefaultModelPage: View {
                     }
                 } footer: {
                     if let d, d.set == true, let dp = d.provider, !p.providers.contains(where: { $0.id == dp && ($0.models ?? []).contains { $0.id == d.model } }) {
-                        Text(lang.format("agents.default.gone", [d.provider, d.model].compactMap { $0 }.joined(separator: " / ")))
+                        Text(lang.format("agents.default.gone", [d.provider, d.model].compactMap { $0 }.joined(separator: " / "))).emState(.warn, detail: true)
                     } else {
                         Text(lang.string(d?.set == true ? "agents.default.set" : "agents.default.unset"))
                     }

@@ -99,9 +99,7 @@ struct ConnectionSheet: View {
 
                 if let validationError {
                     Section {
-                        Label(validationError, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                        Text(validationError).font(.footnote).emState(.bad, detail: true)
                     }
                 }
             }
@@ -187,7 +185,7 @@ struct LoginSheet: View {
                              ? lang.format("login.expired_subtitle", serverName)
                              : lang.format("login.subtitle", serverName, host))
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .emState(expired ? .warn : nil, icon: "clock", detail: true)
                     }
                     .padding(.vertical, 2)
 
@@ -197,9 +195,7 @@ struct LoginSheet: View {
 
                 if let errorMessage {
                     Section {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                        Text(errorMessage).font(.footnote).emState(.bad, detail: true)
                     }
                 }
 

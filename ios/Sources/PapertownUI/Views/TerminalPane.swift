@@ -29,7 +29,7 @@ struct TerminalPane: View {
             header(lang)
             screen(lang)
             if let error = keyError ?? typer.error {
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).font(.caption).emState(.bad, detail: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14).padding(.top, 6)
             }
@@ -72,10 +72,8 @@ struct TerminalPane: View {
         return HStack(spacing: 8) {
             if st == "working" || st == "starting" {
                 ProgressView().controlSize(.small)
-            } else {
-                Circle().fill(Self.tone(st)).frame(width: 8, height: 8)
             }
-            Text(lang.string("term.status.\(st)")).font(.footnote.weight(.medium))
+            Text(lang.string("term.status.\(st)")).font(.footnote).emState(EmTone.issue(st))
             if let t = state.agent?.term {
                 Text([t.backend, t.provider].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -115,14 +113,6 @@ struct TerminalPane: View {
         .padding(.vertical, 8)
     }
 
-    static func tone(_ status: String) -> Color {
-        switch status {
-        case "working", "starting": return .green
-        case "blocked": return .orange
-        case "exited": return .gray
-        default: return .blue
-        }
-    }
 
     // MARK: Screen
 

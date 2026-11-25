@@ -26,7 +26,9 @@ public enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
     }
 
     public var bundle: Bundle {
-        guard let path = Bundle.module.path(forResource: resolvedCode, ofType: "lproj"),
+        // SwiftPM's native builder lowercases localization directories; Xcode preserves their names.
+        let code = resolvedCode
+        guard let path = Bundle.module.path(forResource: code, ofType: "lproj") ?? Bundle.module.path(forResource: code.lowercased(), ofType: "lproj"),
               let lproj = Bundle(path: path) else {
             return .module
         }

@@ -8,7 +8,7 @@ struct LoopCanvasData {
     let outputs: ProjectOutputs?
 }
 
-private let canvasEvents: Set<String> = ["canvas", "checks", "line", "agent"]
+private let canvasEvents: Set<String> = ["canvas", "checks", "line", "agent", "decided", "report"]
 
 /// The whole loop on one canvas, as on the web: pinch, pan, tap a node for its page, long-press one to move it, add
 /// a task, check or note where you are looking.
@@ -233,15 +233,14 @@ struct LoopNodeDetail: View {
         let st = node.status ?? "todo"
         Section {
             HStack {
-                Pill(text: TextFormatters.stageStatus(st, language: lang), color: LoopInk.tone(st == "done" ? "pass" : st == "run" ? "run" : "none"))
+                Text(TextFormatters.stageStatus(st, language: lang)).font(.caption).emState(EmTone.issue(st))
                 Spacer()
-                Text("\(Int(node.pct ?? 0))%").font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+                Text("\(Int(node.pct ?? 0))%").font(.subheadline).emNum()
             }
             ProgressView(value: node.pct ?? 0, total: 100)
                 .tint(LoopInk.tone(st == "done" ? "pass" : st == "run" ? "run" : "none"))
             if let l = node.locked {
-                Label(lang.format("canvas.stage.locked", TextFormatters.stageName(l.gate, language: lang)), systemImage: "lock.fill")
-                    .foregroundStyle(LoopInk.hard)
+                Text(lang.format("canvas.stage.locked", TextFormatters.stageName(l.gate, language: lang))).emState(.bad, icon: "lock.fill", detail: true)
             }
             let line = LoopRead.stationLine(node, ctx)
             if !line.isEmpty, node.locked == nil { Text(line).foregroundStyle(.secondary) }
@@ -250,6 +249,7 @@ struct LoopNodeDetail: View {
             }
         }
         .papertownRowBackground(store.appearance)
+        BasisSection(projectID: projectID, basis: node.basis)
         let checks = (ctx.view.checks ?? []).filter { $0.stage == node.ref }
         if !checks.isEmpty {
             Section(lang.string("canvas.detail.checks")) {
@@ -258,10 +258,10 @@ struct LoopNodeDetail: View {
                         CheckDetailPage(projectID: projectID, checkID: c.id)
                     } label: {
                         HStack {
-                            Image(systemName: c.kind == "soft" ? "eye" : "diamond").foregroundStyle(Tone.color(c.status))
+                            Image(systemName: c.kind == "soft" ? "eye" : "diamond").foregroundStyle(.secondary)
                             Text(lang.server(c.title))
                             Spacer()
-                            Text(lang.string("canvas.verdict.\(c.status)")).font(.caption).foregroundStyle(Tone.color(c.status))
+                            Text(lang.string("canvas.verdict.\(c.status)")).font(.caption).emState(EmTone.issue(c.status))
                         }
                     }
                 }
@@ -296,7 +296,9 @@ struct LoopNodeDetail: View {
         Section {
             if items.isEmpty { Text(lang.string("canvas.human.hint")).foregroundStyle(.secondary) }
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                if let gate = item.gate {
+                if item.kind == "matter", let ask = item.ask {
+                    NavigationLink { ProjectDetailView(projectID: projectID, matterID: ask) } label: { humanRow(item, lang) }
+                } else if let gate = item.gate {
                     NavigationLink { LoopGatePage(projectID: projectID, stage: gate) } label: { humanRow(item, lang) }
                 } else if let id = item.id, item.kind == "blocked" || item.kind == "stale" {
                     NavigationLink { LoopTaskPage(projectID: projectID, nodeID: id) } label: { humanRow(item, lang) }
@@ -312,8 +314,10 @@ struct LoopNodeDetail: View {
 
     private func humanRow(_ item: LoopHumanItem, _ lang: AppLanguage) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Circle().fill(item.kind == "fail" || item.kind == "blocked" ? LoopInk.hard : LoopInk.amber).frame(width: 7, height: 7)
-            Text(lang.server(item.text))
+            EmText(lang.server(item.text)).emBar(.warn)
+            if let basis = item.basis, !basis.isEmpty {
+                Text(lang.format("decided.basis.refs", basis.joined(separator: " · "))).font(.caption.monospaced())
+            }
         }
     }
 
@@ -467,12 +471,7 @@ struct LoopPreviewSection: View {
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                         ChipFlow(spacing: 6, lineSpacing: 4) {
                             ForEach(Array(summary(ctx).enumerated()), id: \.offset) { _, p in
-                                Text(p.0)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(p.1)
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 2)
-                                    .background(Capsule().fill(p.1.opacity(0.12)))
+                                EmText(p.0, .numbers(p.1)).font(.caption2)
                             }
                         }
                     } else {
@@ -503,26 +502,26 @@ struct LoopPreviewSection: View {
     }
 
     /// The whole loop in a few words: its stages, its gates, its sentinels, its tasks, what waits for you.
-    private func summary(_ ctx: LoopContext) -> [(String, Color)] {
+    private func summary(_ ctx: LoopContext) -> [(String, EmTone)] {
         let lang = ctx.lang, ns = ctx.view.nodes
-        var out: [(String, Color)] = []
+        var out: [(String, EmTone)] = []
         let stages = ns.filter { $0.kind == "stage" }
         if !stages.isEmpty {
             let done = stages.filter { $0.status == "done" }.count
-            out.append((lang.format("canvas.pill.stages", done, stages.count), done == stages.count ? LoopInk.pass : LoopInk.brand))
+            out.append((lang.format("canvas.pill.stages", done, stages.count), done == stages.count ? .good : .info))
         }
         let looks = ns.compactMap { $0.kind == "gate" ? $0.gate.map(LoopRead.gateLook) : nil }
         let blocking = looks.filter { $0 == "block" }.count, warning = looks.filter { $0 == "warn" }.count
-        if blocking > 0 { out.append((lang.format("canvas.sum.block", blocking), LoopInk.hard)) }
-        if warning > 0 { out.append((lang.format("canvas.sum.warn", warning), LoopInk.amber)) }
+        if blocking > 0 { out.append((lang.format("canvas.sum.block", blocking), .bad)) }
+        if warning > 0 { out.append((lang.format("canvas.sum.warn", warning), .warn)) }
         let off = ns.filter { $0.kind == "soft" && ($0.check.map { $0.on && ["warn", "fail"].contains($0.status) } ?? false) }.count
-        if off > 0 { out.append((lang.format("canvas.pill.soft", off), LoopInk.amber)) }
+        if off > 0 { out.append((lang.format("canvas.pill.soft", off), .warn)) }
         let tasks = ns.filter { $0.kind == "task" }
         if !tasks.isEmpty {
-            out.append((lang.format("canvas.pill.tasks.open", tasks.count, tasks.filter { $0.status != "done" }.count), LoopInk.brand))
+            out.append((lang.format("canvas.pill.tasks.open", tasks.count, tasks.filter { $0.status != "done" }.count), .info))
         }
         if let n = ns.first(where: { $0.kind == "human" })?.items?.count, n > 0 {
-            out.append((lang.format("loop.human", n), LoopInk.amber))
+            out.append((lang.format("loop.human", n), .warn))
         }
         return out
     }

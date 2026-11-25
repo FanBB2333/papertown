@@ -135,7 +135,7 @@ struct AttachmentTags: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(Color.white.opacity(0.18), in: Capsule())
+                    .foregroundStyle(.secondary)
             }
         }
     }

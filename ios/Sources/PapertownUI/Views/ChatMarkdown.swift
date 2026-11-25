@@ -5,12 +5,16 @@ import SwiftUI
 /// code blocks, tables, links). A line break in the text stays a line break, as the agents' CLIs show it.
 struct ChatMarkdown: View {
     let text: String
-    /// On the tint of your own messages: white text, lighter panels.
-    var onTint = false
+    @Environment(\.self) private var env
 
     var body: some View {
         Markdown(text)
-            .markdownTheme(onTint ? .chatOnTint : .chat)
+            .markdownTheme(.chat)
+            .markdownTextStyle(\.strong) {
+                FontWeight(.semibold)
+                ForegroundColor(.primary)
+                BackgroundColor(env.emWash(.info))
+            }
             .markdownSoftBreakMode(.lineBreak)
             .textSelection(.enabled)
     }
@@ -129,52 +133,4 @@ extension MarkdownUI.Theme {
             Divider().markdownMargin(top: .em(0.6), bottom: .em(0.6))
         }
 
-    static let chatOnTint = Theme.chat
-        .text {
-            ForegroundColor(.white)
-        }
-        .code {
-            FontFamilyVariant(.monospaced)
-            FontSize(.em(0.88))
-            BackgroundColor(Color.white.opacity(0.2))
-        }
-        .link {
-            ForegroundColor(.white)
-            UnderlineStyle(.single)
-        }
-        .codeBlock { configuration in
-            ScrollView(.horizontal, showsIndicators: false) {
-                configuration.label
-                    .fixedSize(horizontal: false, vertical: true)
-                    .relativeLineSpacing(.em(0.15))
-                    .markdownTextStyle {
-                        FontFamilyVariant(.monospaced)
-                        FontSize(.em(0.82))
-                    }
-                    .padding(10)
-            }
-            .background(Color.white.opacity(0.16), in: RoundedRectangle(cornerRadius: 8))
-            .markdownMargin(top: .zero, bottom: .em(0.6))
-        }
-        .blockquote { configuration in
-            HStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.white.opacity(0.6))
-                    .frame(width: 3)
-                configuration.label
-                    .markdownTextStyle { ForegroundColor(Color.white.opacity(0.85)) }
-                    .relativePadding(.leading, length: .em(0.7))
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            .markdownMargin(top: .zero, bottom: .em(0.6))
-        }
-        .table { configuration in
-            ScrollView(.horizontal, showsIndicators: false) {
-                configuration.label
-                    .fixedSize(horizontal: false, vertical: true)
-                    .markdownTableBorderStyle(.init(color: Color.white.opacity(0.4)))
-                    .markdownTableBackgroundStyle(.alternatingRows(Color.clear, Color.white.opacity(0.08)))
-            }
-            .markdownMargin(top: .zero, bottom: .em(0.6))
-        }
 }

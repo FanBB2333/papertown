@@ -37,8 +37,33 @@ public struct Decision: Decodable, Sendable, Equatable {
     public var ready: Bool? = nil
     public var since: String? = nil
     public var later: Bool? = nil
+    public var mod: String? = nil
+    public var facts: [String]? = nil
+    public var optionsText: [String]? = nil
+    public var materials: [DecisionMaterial]? = nil
+    public var write: Bool? = nil
 
     public var key: String { "\(kind):\(agent ?? ""):\(id)" }
+    var group: String { kind == "matter" || kind == "need" ? kind : "permissions" }
+    var writtenAnswer: Bool { kind == "matter" || kind == "need" || write == true }
+    enum CodingKeys: String, CodingKey {
+        case kind, id, agent, who, title, detail, options, free, ready, since, later, mod, facts, materials, write
+        case optionsText = "options_text"
+    }
+}
+
+extension Decision {
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(String.self, forKey: .kind)
+        id = try c.decodeIfPresentID(forKey: .id) ?? ""
+        title = try c.decode(String.self, forKey: .title)
+        agent = c.opt(.agent); who = c.opt(.who) ?? ""; detail = c.opt(.detail) ?? ""
+        options = c.opt(.options) ?? []; free = c.opt(.free) ?? false
+        ready = c.opt(.ready); since = c.opt(.since); later = c.opt(.later)
+        mod = c.opt(.mod); facts = c.opt(.facts); optionsText = c.opt(.optionsText)
+        materials = c.opt(.materials); write = c.opt(.write)
+    }
 }
 
 public struct CardLead: Decodable, Sendable, Equatable {
@@ -210,6 +235,18 @@ public struct LoopHumanItem: Decodable, Sendable, Equatable {
     public var id: String? = nil
     public let text: String
     public var gate: String? = nil
+    public let ask: Int?
+    public let basis: [String]?
+    enum CodingKeys: String, CodingKey { case kind, id, text, gate, ask, basis }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decode(String.self, forKey: .kind)
+        text = try c.decode(String.self, forKey: .text)
+        id = try c.decodeIfPresentID(forKey: .id); gate = c.opt(.gate)
+        ask = try c.decodeIfPresentID(forKey: .ask).flatMap(Int.init)
+        basis = c.opt(.basis)
+    }
 }
 
 public struct LoopAgentRef: Decodable, Sendable, Equatable {
@@ -261,6 +298,8 @@ public struct LoopNode: Decodable, Sendable, Identifiable, Equatable {
     public var trail: [Int]? = nil
     public var escalated: Bool? = nil
     public var converged: Bool? = nil
+    public let basis: [String]?
+    public let createdBy: String?
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -269,6 +308,7 @@ public struct LoopNode: Decodable, Sendable, Identifiable, Equatable {
         x = c.opt(.x) ?? 0; y = c.opt(.y) ?? 0; w = c.opt(.w); h = c.opt(.h); ref = c.opt(.ref); role = c.opt(.role)
         locked = c.opt(.locked); rules = c.opt(.rules); waits = c.opt(.waits); trail = c.opt(.trail)
         escalated = c.opt(.escalated); converged = c.opt(.converged)
+        basis = c.opt(.basis); createdBy = c.opt(.createdBy)
         mod = c.opt(.mod); title = c.opt(.title); text = c.opt(.text); status = c.opt(.status); to = c.opt(.to)
         note = c.opt(.note); pct = c.opt(.pct); gate = c.opt(.gate); check = c.opt(.check); items = c.opt(.items)
         sentAt = c.opt(.sentAt); doneAt = c.opt(.doneAt); result = c.opt(.result); waitNote = c.opt(.waitNote)
@@ -277,6 +317,7 @@ public struct LoopNode: Decodable, Sendable, Identifiable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, kind, mod, title, text, status, to, note, pct, gate, check, items, result, stale, agent, loop, round, log
         case x, y, w, h, ref, role, locked, rules, waits, trail, escalated, converged
+        case basis, createdBy = "created_by"
         case sentAt = "sent_at", doneAt = "done_at", waitNote = "wait_note", agentID = "agent_id"
     }
 }
@@ -336,6 +377,8 @@ public struct LoopView: Decodable, Sendable {
     public var rounds: Int? = nil
     public var agents: [String: There]? = nil
     public var lead: Bool? = nil
+    public var decided: [String: Int]? = nil
+    enum CodingKeys: String, CodingKey { case seq, title, nodes, edges, blocks, checks, gone, spare, rules, rounds, agents, lead, decided }
 }
 
 public struct LoopReport: Decodable, Sendable {
@@ -644,6 +687,49 @@ public struct RagOptions: Decodable, Sendable {
 // MARK: - Calls
 
 public extension PapertownClient {
+    func decided(projectID: String) async throws -> DecidedList { try await get(["lines", projectID, "decided"]) }
+    func decidedRecord(projectID: String, id: String) async throws -> DecidedRecord {
+        try await get(["lines", projectID, "decided", id])
+    }
+    @discardableResult
+    func writeDecision(projectID: String, text: String, mod: String?, replaces: String? = nil, matter: Int? = nil,
+                       need: String? = nil, materials: [DecisionMaterial]? = nil) async throws -> DecidedRecord {
+        struct Body: Encodable {
+            let text: String; let mod: String?; let replaces: String?; let matter: Int?; let need: String?; let materials: [DecisionMaterial]?
+            enum CodingKeys: String, CodingKey { case text, mod, replaces, matter, need, materials }
+        }
+        return try await send(.post, ["lines", projectID, "decided"],
+                              body: Body(text: text, mod: mod, replaces: replaces, matter: matter, need: need, materials: materials))
+    }
+    @discardableResult
+    func quoteDecision(projectID: String, eventID: Int, mod: String) async throws -> DecidedRecord {
+        struct Body: Encodable {
+            let eventID: Int; let mod: String
+            enum CodingKeys: String, CodingKey { case eventID = "event_id", mod }
+        }
+        return try await send(.post, ["lines", projectID, "decided", "quote"], body: Body(eventID: eventID, mod: mod))
+    }
+    @discardableResult
+    func withdrawDecision(projectID: String, id: String) async throws -> DecidedRecord {
+        try await send(.post, ["lines", projectID, "decided", id, "withdraw"], body: Empty())
+    }
+    func prov(projectID: String) async throws -> ProvTree { try await get(["lines", projectID, "prov"]) }
+    func provNode(projectID: String, id: String) async throws -> ProvNode { try await get(["lines", projectID, "prov", "nodes", id]) }
+    func provOps(projectID: String, root: String? = nil, before: String? = nil, limit: Int? = nil) async throws -> [ProvOp] {
+        var query: [URLQueryItem] = []
+        if let root { query.append(URLQueryItem(name: "root", value: root)) }
+        if let before { query.append(URLQueryItem(name: "before", value: before)) }
+        if let limit { query.append(URLQueryItem(name: "limit", value: String(limit))) }
+        return try await get(["lines", projectID, "prov", "ops"], query: query)
+    }
+    func provOp(projectID: String, id: String) async throws -> ProvOp { try await get(["lines", projectID, "prov", "ops", id]) }
+    func provSnap(projectID: String) async throws -> ProvSnapshot {
+        try await send(.post, ["lines", projectID, "prov", "snap"], body: Empty())
+    }
+    func provBlame(projectID: String, root: String, path: String) async throws -> [ProvBlame] {
+        try await get(["lines", projectID, "prov", "blame"], query: [URLQueryItem(name: "root", value: root), URLQueryItem(name: "path", value: path)])
+    }
+
     // decisions and the card
     func decide(projectID: String, _ d: Decision, value: JSONValue?, text: String?) async throws -> ProjectCardView {
         struct Body: Encodable { let kind: String; let id: String; let agent: String?; let value: JSONValue?; let text: String? }

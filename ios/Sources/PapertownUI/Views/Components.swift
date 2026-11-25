@@ -21,8 +21,7 @@ struct LoadingList<Value, Content: View>: View {
             } else if let error {
                 List {
                     Section {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                        Text(error).emState(.bad, detail: true)
                             .font(.subheadline)
                         Button(lang.string("action.retry")) { Task { await run() } }
                     }
@@ -50,40 +49,81 @@ struct LoadingList<Value, Content: View>: View {
     }
 }
 
-/// A small coloured label: a state, a verdict, a health.
-struct Pill: View {
-    let text: String
-    var color: Color = .secondary
-    var symbol: String? = nil
-
-    var body: some View {
-        HStack(spacing: 3) {
-            if let symbol { Image(systemName: symbol).imageScale(.small) }
-            Text(text).lineLimit(1)
-        }
-        .font(.caption2.weight(.semibold))
-        .padding(.horizontal, 7)
-        .padding(.vertical, 2.5)
-        .foregroundStyle(color)
-        .background(color.opacity(0.13), in: Capsule())
-    }
-}
-
 /// A row of a label on the left and its value on the right.
 struct InfoRow: View {
     let label: String
     let value: String
     var mono = false
+    var number: EmTone? = nil
+    var status: EmTone? = nil
+    var modelText = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(label).foregroundStyle(.secondary)
             Spacer(minLength: 8)
-            Text(value)
+            Group {
+                if let number { EmText(value, .numbers(number)) }
+                else if let status { Text(value).emState(status) }
+                else if modelText { EmText(value) }
+                else { Text(value) }
+            }
                 .font(mono ? .system(.footnote, design: .monospaced) : .body)
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
         }
+    }
+}
+
+/// One inline summary, shared by the project links and their destination pages.
+struct RecordStatsLine: View {
+    struct Item {
+        let label: String
+        let count: Int?
+        var total: Int? = nil
+        var attention = false
+        var tone: EmTone = .info
+    }
+
+    let items: [Item]
+    var empty: String? = nil
+    @Environment(\.self) private var env
+
+    var body: some View {
+        let visible = items.filter { $0.count != nil && ($0.total ?? $0.count ?? 0) > 0 }
+        if !visible.isEmpty {
+            Text(visible.reduce(into: AttributedString()) { line, item in
+                if !line.characters.isEmpty { line += AttributedString(" · ") }
+                if !item.label.isEmpty { line += AttributedString(item.label + " ") }
+                var number = AttributedString(String(item.count ?? 0))
+                if let total = item.total { number += AttributedString("/\(total)") }
+                number.foregroundColor = env.emInk(item.attention ? .warn : item.tone)
+                number.font = .caption.monospacedDigit()
+                line += number
+            })
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+        } else if let empty {
+            Text(empty).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func recordList(_ appearance: AppAppearance) -> some View {
+        let list = papertownInsetGroupedList().papertownListAppearance(appearance)
+        #if os(iOS)
+        if #available(iOS 17, *) {
+            list.listSectionSpacing(12).contentMargins(.top, 8, for: .scrollContent)
+        } else {
+            list
+        }
+        #else
+        list
+        #endif
     }
 }
 
@@ -101,7 +141,7 @@ struct BulletList: View {
                         .font(.system(size: symbol == "circle.fill" ? 5 : 11, weight: .semibold))
                         .foregroundStyle(color)
                         .frame(width: 12)
-                    Text(item).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+                    EmText(item).font(.subheadline).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
@@ -174,6 +214,17 @@ enum Stamp {
         return f
     }()
     private static let plain = ISO8601DateFormatter()
+    private static let rowTime = numericFormat("HH:mm")
+    private static let rowDate = numericFormat("MM-dd HH:mm")
+    private static let rowDateWithYear = numericFormat("yyyy-MM-dd HH:mm")
+
+    private static func numericFormat(_ format: String) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = format
+        return formatter
+    }
 
     static func date(_ s: String?) -> Date? {
         guard let s else { return nil }
@@ -194,6 +245,14 @@ enum Stamp {
         f.dateStyle = .medium
         f.timeStyle = .short
         return f.string(from: d)
+    }
+
+    /// Fixed-width dates for record rows. Older years stay explicit.
+    static func compact(_ s: String?, timeOnly: Bool = false) -> String {
+        guard let d = date(s) else { return s ?? "" }
+        let calendar = Calendar(identifier: .gregorian)
+        if !calendar.isDate(d, equalTo: Date(), toGranularity: .year) { return rowDateWithYear.string(from: d) }
+        return (timeOnly ? rowTime : rowDate).string(from: d)
     }
 }
 

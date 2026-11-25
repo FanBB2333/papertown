@@ -8,7 +8,11 @@ public final class DemoServer: URLProtocol {
 
     private static let routes: [String: String] = {
         guard let data = file("routes.json"), let map = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
-        return map
+        var routes = map
+        for (key, file) in map where key.contains("%") {
+            if let decoded = key.removingPercentEncoding { routes[decoded] = file }
+        }
+        return routes
     }()
 
     private static func file(_ name: String) -> Data? {
@@ -32,6 +36,9 @@ public final class DemoServer: URLProtocol {
         }
         if path == "/api/rag/search" { return answer(200, data: search(comps)) }
         let query = comps.queryItems ?? []
+        if path.hasSuffix("/prov/ops"), let page = operationPage(path, query) {
+            return answer(200, data: page)
+        }
         // the exported answers are keyed by path and the query the app sends; "after" and cache-busting values do not matter
         let keep = query.filter { !["v", "tail"].contains($0.name) }
         var keys = [path + (keep.isEmpty ? "" : "?" + keep.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: "&"))]
@@ -41,7 +48,18 @@ public final class DemoServer: URLProtocol {
             keys.append(path + "?path=" + (p.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? p))
         }
         for key in keys {
-            if let name = Self.routes[key], let data = Self.file(name) { return answer(200, data: data) }
+            if let name = Self.routes[key], let data = Self.file(name) {
+                if path.hasSuffix("/conversations") || path == "/api/paseo",
+                   let error = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let code = error["_http_error"] as? Int, let body = error["body"],
+                   let message = try? JSONSerialization.data(withJSONObject: body) {
+                    return answer(code, data: message)
+                }
+                if path.hasSuffix("/view"), let page = try? JSONDecoder().decode([String: String].self, from: data), let html = page["html"] {
+                    return answer(200, data: Data(html.utf8), headers: ["Content-Type": "text/html", "Content-Security-Policy": page["policy"] ?? "default-src 'none'"])
+                }
+                return answer(200, data: data)
+            }
         }
         answer(404, json: #"{"detail":"离线演示里没有这一项"}"#)
     }
@@ -50,10 +68,10 @@ public final class DemoServer: URLProtocol {
 
     private func answer(_ status: Int, json: String) { answer(status, data: Data(json.utf8)) }
 
-    private func answer(_ status: Int, data: Data) {
+    private func answer(_ status: Int, data: Data, headers: [String: String] = ["Content-Type": "application/json"]) {
         guard let url = request.url,
               let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1",
-                                             headerFields: ["Content-Type": "application/json"]) else { return }
+                                             headerFields: headers) else { return }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)
         client?.urlProtocolDidFinishLoading(self)
@@ -66,6 +84,25 @@ public final class DemoServer: URLProtocol {
                                              headerFields: ["Content-Type": "text/event-stream"]) else { return }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data("retry: 3000\n\n".utf8))
+    }
+
+    /// Apply the live server's root, cursor and limit to its recorded operation summaries.
+    private func operationPage(_ path: String, _ query: [URLQueryItem]) -> Data? {
+        guard Self.routes[path] != nil else { return nil }
+        let files = Set(Self.routes.compactMap { key, name in
+            key == path || key.hasPrefix(path + "?") ? name : nil
+        })
+        let rows = files.flatMap { name -> [[String: Any]] in
+            guard let data = Self.file(name), let page = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+            return page
+        }.sorted { ($0["ts"] as? String ?? "") > ($1["ts"] as? String ?? "") }
+        func item(_ key: String) -> String? { query.first { $0.name == key }?.value }
+        let before = item("before").map { id in rows.first { $0["id"] as? String == id }?["ts"] as? String ?? id }
+        let root = item("root"), limit = min(200, max(1, item("limit").flatMap(Int.init) ?? 50))
+        let page = rows.filter { row in
+            (root == nil || row["root"] as? String == root) && (before.map { (row["ts"] as? String ?? "") < $0 } ?? true)
+        }
+        return try? JSONSerialization.data(withJSONObject: Array(page.prefix(limit)))
     }
 
     /// Scores the bundled shelf by how many query words a paper's title and abstract contain.

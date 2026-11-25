@@ -148,6 +148,9 @@ public struct ProjectCardView: Decodable, Sendable {
     /// What its agents wait on you for (servers before 待你决定 leave it out).
     public var decisions: [Decision]? = nil
     public var lead: CardLead? = nil
+    public var decided: DecidedStats? = nil
+    public var prov: ProvStats? = nil
+    enum CodingKeys: String, CodingKey { case line, card, prev, pending, asks, running, queued, repos, memory, checks, decisions, lead, decided, prov }
 }
 
 public struct CardsResponse: Decodable, Sendable {
@@ -387,9 +390,10 @@ public struct DataRun: Decodable, Sendable, Equatable, Identifiable {
     public let finishedAt: String?
     public let elapsedS: Double?
     public let exitCode: Int?
+    public var prov: [RunProv]? = nil
 
     enum CodingKeys: String, CodingKey {
-        case id, name, state, `where`
+        case id, name, state, `where`, prov
         case startedAt = "started_at"
         case finishedAt = "finished_at"
         case elapsedS = "elapsed_s"
@@ -702,6 +706,10 @@ public struct TownSkill: Decodable, Sendable, Identifiable, Equatable {
 
 /// One entry of a conversation read through /timeline: what was said, a tool call, an error or a note.
 public struct TimelineItem: Decodable, Sendable, Equatable {
+    public struct EventData: Decodable, Sendable, Equatable {
+        public let eventID: Int?, origin: String?, decided: String?, userText: String?
+        enum CodingKeys: String, CodingKey { case eventID = "event_id", origin, decided, userText = "user_text" }
+    }
     public let ts: String?
     public let kind: String
     public let text: String?
@@ -710,6 +718,12 @@ public struct TimelineItem: Decodable, Sendable, Equatable {
     public let status: String?
     public let arg: String?
     public let error: String?
+    public var eventID: Int? = nil
+    public var origin: String? = nil
+    public var decided: String? = nil
+    public var userText: String? = nil
+    public var data: EventData? = nil
+    enum CodingKeys: String, CodingKey { case ts, kind, text, id, name, status, arg, error, origin, decided, data, eventID = "event_id", userText = "user_text" }
 }
 
 public struct AgentTermInfo: Decodable, Sendable, Equatable {
@@ -914,4 +928,279 @@ public struct TerminalTimeline: Decodable, Sendable {
     public let usage: SessionUsage?
     public let git: GitState?
     public let limits: [UsageLimit]?
+}
+
+// MARK: - Decisions and the work based on them
+
+extension KeyedDecodingContainer {
+    /// Report and event IDs are integers in their own tables and strings in some references.
+    func decodeIfPresentID(forKey key: Key) throws -> String? {
+        if let number = try? decode(Int.self, forKey: key) { return String(number) }
+        return try decodeIfPresent(String.self, forKey: key)
+    }
+}
+
+public struct DecisionMaterial: Codable, Sendable, Equatable {
+    public let kind: String?
+    public let ref: String?
+    public let title: String?
+    enum CodingKeys: String, CodingKey { case kind, ref, title }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind)
+        ref = try c.decodeIfPresentID(forKey: .ref)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+    }
+}
+
+/// The same facts and options accompany an open report and the decision that answered it.
+public struct Matter: Decodable, Sendable, Equatable {
+    public let id: Int?
+    public let agent: String?
+    public let who: String?
+    public let question: String?
+    public let mod: String?
+    public let facts: [String]?
+    public let options: [String]?
+    public let materials: [DecisionMaterial]?
+    public let since: String?
+    enum CodingKeys: String, CodingKey { case id, agent, who, question, mod, facts, options, materials, since }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresentID(forKey: .id).flatMap(Int.init)
+        agent = try c.decodeIfPresent(String.self, forKey: .agent)
+        who = try c.decodeIfPresent(String.self, forKey: .who)
+        question = try c.decodeIfPresent(String.self, forKey: .question)
+        mod = try c.decodeIfPresent(String.self, forKey: .mod)
+        facts = try c.decodeIfPresent([String].self, forKey: .facts)
+        options = try c.decodeIfPresent([String].self, forKey: .options)
+        materials = try c.decodeIfPresent([DecisionMaterial].self, forKey: .materials)
+        since = try c.decodeIfPresent(String.self, forKey: .since)
+    }
+}
+
+public struct DecidedRecord: Decodable, Sendable, Identifiable {
+    public let id: String?
+    public let n: Int?
+    public let mod: String?
+    public let text: String?
+    public let source: String?
+    public let ref: JSONValue?
+    public let state: String?
+    public let replaces: String?
+    public let replacedBy: String?
+    public let materials: [DecisionMaterial]?
+    public let matter: Matter?
+    public let createdAt: String?
+    public let endedAt: String?
+    public let counts: [String: Int]?
+    public let work: WorkList?
+    enum CodingKeys: String, CodingKey {
+        case id, n, mod, text, source, ref, state, replaces, materials, matter, counts, work
+        case replacedBy = "replaced_by", createdAt = "created_at", endedAt = "ended_at"
+    }
+    var number: String { n.map { "D\($0)" } ?? id ?? "" }
+    var isActive: Bool { state == nil || state == "active" }
+}
+
+public struct Work: Decodable, Sendable {
+    public let kind: String?
+    public let id: String?
+    public let title: String?
+    public let who: String?
+    public let at: String?
+    public let basis: [String]?
+    public let agent: String?
+    public let stage: String?
+    enum CodingKeys: String, CodingKey { case kind, id, title, who, at, basis, agent, stage }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresentID(forKey: .id)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        who = try c.decodeIfPresent(String.self, forKey: .who)
+        at = try c.decodeIfPresent(String.self, forKey: .at)
+        basis = try c.decodeIfPresent([String].self, forKey: .basis)
+        agent = try c.decodeIfPresent(String.self, forKey: .agent)
+        stage = try c.decodeIfPresent(String.self, forKey: .stage)
+    }
+}
+
+public struct WorkList: Decodable, Sendable {
+    public let jobs: [Work]?
+    public let outputs: [Work]?
+    public let tells: [Work]?
+    public let tasks: [Work]?
+    public let prov: [Work]?
+    enum CodingKeys: String, CodingKey { case jobs, outputs, tells, tasks, prov }
+    var all: [Work] { [jobs, outputs, tells, tasks, prov].flatMap { $0 ?? [] } }
+}
+
+public struct DecidedStats: Decodable, Sendable {
+    public let total: Int?
+    public let active: Int?
+    public let anchored: Int?
+    public let loose: Int?
+    public let latest: [DecidedRecord]?
+    enum CodingKeys: String, CodingKey { case total, active, anchored, loose, latest }
+}
+
+public struct DecidedModule: Decodable, Sendable {
+    public let id: String?
+    public let name: String?
+    enum CodingKeys: String, CodingKey { case id, name }
+    static let order = ["overview", "survey", "code", "exp", "data", "paper", "agents"]
+}
+
+public struct DecidedList: Decodable, Sendable {
+    public let decisions: [DecidedRecord]?
+    public let matters: [Matter]?
+    public let loose: [Work]?
+    public let stats: DecidedStats?
+    public let mods: [DecidedModule]?
+    enum CodingKeys: String, CodingKey { case decisions, matters, loose, stats, mods }
+
+    func record(_ ref: String) -> DecidedRecord? {
+        decisions?.first { $0.id == ref || $0.number == ref }
+    }
+}
+
+// MARK: - Provenance
+
+public struct RunProv: Decodable, Sendable, Equatable {
+    public let id: String?, tag: String?, path: String?, state: String?
+    public let used: Int?
+    enum CodingKeys: String, CodingKey { case id, tag, path, state, used }
+}
+
+public struct ProvStats: Decodable, Sendable {
+    public struct Floats: Decodable, Sendable {
+        public let total: Int?, tagged: Int?
+        enum CodingKeys: String, CodingKey { case total, tagged }
+    }
+    public struct Numbers: Decodable, Sendable {
+        public let total: Int?, ok: Int?
+        enum CodingKeys: String, CodingKey { case total, ok }
+    }
+    public let floats: Floats?, numbers: Numbers?
+    public let changed: Int?, ops: Int?
+    public let recent: [ProvOp]?
+    enum CodingKeys: String, CodingKey { case floats, numbers, changed, ops, recent }
+}
+
+public struct ProvTree: Decodable, Sendable {
+    public struct File: Decodable, Sendable {
+        public let path: String?, title: String?
+        public let sections: [Section]?
+        enum CodingKeys: String, CodingKey { case path, title, sections }
+    }
+    public struct Section: Decodable, Sendable {
+        public let title: String?, line: Int?
+        public let nodes: [String]?, rest: [Rest]?
+        enum CodingKeys: String, CodingKey { case title, line, nodes, rest }
+    }
+    public struct Rest: Decodable, Sendable {
+        public let who: String?, lines: Int?
+        enum CodingKeys: String, CodingKey { case who, lines }
+    }
+    public let stats: ProvStats?
+    public let files: [File]?
+    public let nodes: [String: ProvNode]?
+    public let loose: [String]?
+    enum CodingKeys: String, CodingKey { case stats, files, nodes, loose }
+}
+
+public struct ProvNode: Decodable, Sendable {
+    public struct Span: Decodable, Sendable {
+        public let start: Int?, end: Int?, text: String?
+        enum CodingKeys: String, CodingKey { case start, end, text }
+    }
+    public struct Number: Decodable, Sendable {
+        public let text: String?, ok: Bool?, locations: [String]?
+        enum CodingKeys: String, CodingKey { case text, ok, `where` }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            text = try c.decodeIfPresent(String.self, forKey: .text)
+            ok = try c.decodeIfPresent(Bool.self, forKey: .ok)
+            if let path = try? c.decode(String.self, forKey: .where) { locations = [path] }
+            else { locations = try c.decodeIfPresent([String].self, forKey: .where) }
+        }
+    }
+    public struct Made: Decodable, Sendable {
+        public let at: String?, agent: String?, role: String?, who: String?, model: String?, session: String?, how: String?
+        public let job: Job?, basis: [String]?
+        enum CodingKeys: String, CodingKey { case at, agent, role, who, model, session, how, job, basis }
+    }
+    public struct Job: Decodable, Sendable {
+        public let id: String?, name: String?, command: String?, node: String?, cwd: String?, status: String?, startedAt: String?, endedAt: String?, op: String?
+        enum CodingKeys: String, CodingKey { case id, name, command, node, cwd, status, op, startedAt = "started_at", endedAt = "ended_at" }
+    }
+    /// Detail endpoints may return a reference as an ID or with its display label.
+    public struct Ref: Decodable, Sendable {
+        public let id: String?, tag: String?, title: String?
+        enum CodingKeys: String, CodingKey { case id, tag, title }
+
+        public init(from decoder: Decoder) throws {
+            if let key = try? decoder.singleValueContainer().decode(String.self) {
+                id = key; tag = nil; title = nil
+            } else {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                id = try c.decodeIfPresent(String.self, forKey: .id)
+                tag = try c.decodeIfPresent(String.self, forKey: .tag)
+                title = try c.decodeIfPresent(String.self, forKey: .title)
+            }
+        }
+    }
+    public let id: String?, tag: String?, kind: String?, title: String?, root: String?, path: String?
+    public let span: Span?, blob: String?, op: String?, state: String?, made: Made?
+    public let src: [String]?, numbers: [Number]?, gaps: [String]?, note: String?, createdAt: String?
+    public let now: String?, then: String?, diff: String?, used: [Ref]?, history: [Ref]?
+    enum CodingKeys: String, CodingKey {
+        case id, tag, kind, title, root, path, span, blob, op, state, made, src, numbers, gaps, note, now, then, diff, used, history
+        case createdAt = "created_at"
+    }
+}
+
+public struct ProvOp: Decodable, Sendable, Identifiable {
+    public struct File: Decodable, Sendable {
+        public let path: String?, added: Int?, removed: Int?, diff: String?
+        enum CodingKeys: String, CodingKey { case path, added, removed, diff }
+    }
+    public let id: String?, short: String?, root: String?, ts: String?, trigger: String?, agent: String?, role: String?, who: String?, session: String?
+    public let basis: [String]?, fileCount: Int?, files: [File]?, added: Int?, removed: Int?, summary: String?
+    enum CodingKeys: String, CodingKey { case id, short, root, ts, trigger, agent, role, who, session, basis, files, added, removed, summary }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id)
+        short = try c.decodeIfPresent(String.self, forKey: .short)
+        root = try c.decodeIfPresent(String.self, forKey: .root)
+        ts = try c.decodeIfPresent(String.self, forKey: .ts)
+        trigger = try c.decodeIfPresent(String.self, forKey: .trigger)
+        agent = try c.decodeIfPresent(String.self, forKey: .agent)
+        role = try c.decodeIfPresent(String.self, forKey: .role)
+        who = try c.decodeIfPresent(String.self, forKey: .who)
+        session = try c.decodeIfPresent(String.self, forKey: .session)
+        basis = try c.decodeIfPresent([String].self, forKey: .basis)
+        // The summary has a count, the detail lists the files under the same key.
+        files = try? c.decode([File].self, forKey: .files)
+        fileCount = (try? c.decode(Int.self, forKey: .files)) ?? files?.count
+        added = try c.decodeIfPresent(Int.self, forKey: .added)
+        removed = try c.decodeIfPresent(Int.self, forKey: .removed)
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+    }
+}
+
+public struct ProvSnapshot: Decodable, Sendable {
+    public let code: String?, paper: String?
+}
+
+public struct ProvBlame: Decodable, Sendable {
+    public let start: Int?, end: Int?, op: String?, who: String?, role: String?, at: String?, node: String?
+    public let commit: String?, author: String?, date: String?
+    enum CodingKeys: String, CodingKey { case start, end, op, who, role, at, node, commit, author, date }
 }

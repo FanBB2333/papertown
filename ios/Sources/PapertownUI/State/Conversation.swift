@@ -27,8 +27,34 @@ public struct ChatEntry: Identifiable, Equatable, Sendable {
     public var arg: String? = nil
     public var status: String? = nil
     public var ts: String? = nil
-    /// An ask or act: its event id, the choices offered, and whether it still waits for you.
+    /// The original event, including authorship for a message that can be quoted.
     public var eventID: Int? = nil
+    public var origin: String? = nil
+    public var decided: String? = nil
+    public var userText: String? = nil
+    /// A delivered decision contains the already-saved original wrapped by the server for the agent.
+    static func deliveredDecision(_ text: String, origin: String?) -> (number: String, text: String)? {
+        guard origin == "papertown", text.hasPrefix("<decision "),
+              let match = delivery.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let number = Range(match.range(at: 1), in: text), let original = Range(match.range(at: 2), in: text) else { return nil }
+        let words = text[original].replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">").replacingOccurrences(of: "&amp;", with: "&")
+        return (String(text[number]), words)
+    }
+
+    private static let delivery = try! NSRegularExpression(pattern: #"\A<decision id="(D[1-9][0-9]*)" mod="[a-z]+">([^<]*)</decision>\z"#)
+    var deliveredDecision: (number: String, text: String)? { Self.deliveredDecision(text, origin: origin) }
+
+    static func authoredWords(_ raw: String, userText: String?, origin: String?) -> String? {
+        if let userText { return userText }
+        if origin == "web" || origin == "terminal" { return raw }
+        return deliveredDecision(raw, origin: origin)?.text
+    }
+
+    var canQuote: Bool {
+        kind == .user && eventID != nil && (origin == "web" || origin == "terminal")
+            && !(userText ?? text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     public var choices: [String] = []
     public var open: Bool = false
 }
@@ -36,6 +62,23 @@ public struct ChatEntry: Identifiable, Equatable, Sendable {
 public struct QueuedMessage: Identifiable, Equatable, Sendable {
     public let id: Int
     public let text: String
+    let authored: Bool
+
+    init(event: AgentEvent) {
+        let raw = event.data.field("text")?.stringValue ?? ""
+        let original = ChatEntry.authoredWords(ChatFiles.split(raw).text, userText: event.data.field("user_text")?.stringValue,
+                                               origin: event.data.field("origin")?.stringValue)?.nonEmpty
+        id = event.id
+        text = original ?? raw
+        authored = original != nil
+    }
+
+    init(terminal: TerminalQueueItem) {
+        let original = ChatFiles.split(terminal.text).text.nonEmpty
+        id = terminal.id
+        text = original ?? terminal.text
+        authored = original != nil
+    }
 }
 
 /// A message you sent from this device, shown at once and kept until the conversation itself shows it.
@@ -168,7 +211,7 @@ public struct ConversationState: Sendable {
         lastEventID = events.last?.id ?? lastEventID
         entries = ConversationState.entries(from: events)
         queued = events.filter { $0.kind == "user" && $0.data.field("queued")?.boolValue == true && $0.data.field("delivered")?.boolValue != true }
-            .map { QueuedMessage(id: $0.id, text: $0.data.field("text")?.stringValue ?? "") }
+            .map(QueuedMessage.init(event:))
     }
 
     /// pi events: a tool call and its end become one row; asks and acts carry their choices.
@@ -181,7 +224,9 @@ public struct ConversationState: Sendable {
             switch ev.kind {
             case "user":
                 if d.field("queued")?.boolValue == true && d.field("delivered")?.boolValue != true { continue }
-                out.append(ChatEntry(id: "e\(ev.id)", kind: .user, text: text, ts: ev.ts))
+                out.append(ChatEntry(id: "e\(ev.id)", kind: .user, text: text, ts: ev.ts, eventID: ev.id,
+                                     origin: d.field("origin")?.stringValue, decided: d.field("decided")?.stringValue,
+                                     userText: d.field("user_text")?.stringValue))
             case "assistant":
                 if let err = d.field("error")?.stringValue, !err.isEmpty, text.isEmpty {
                     out.append(ChatEntry(id: "e\(ev.id)", kind: .error, text: err, ts: ev.ts))
@@ -219,11 +264,22 @@ public struct ConversationState: Sendable {
     }
 
     /// A Paseo or terminal transcript, in the order it was written.
-    static func entries(from items: [TimelineItem]) -> [ChatEntry] {
-        items.enumerated().compactMap { i, item in
+    static func entries(from items: [TimelineItem], events: [AgentEvent] = []) -> [ChatEntry] {
+        let users = events.filter { $0.kind == "user" }
+        let byID = Dictionary(users.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        let byText = Dictionary(grouping: users, by: { $0.data.field("text")?.stringValue ?? "" })
+        return items.enumerated().compactMap { i, item in
             let id = "t\(i)"
             switch item.kind {
-            case "user": return ChatEntry(id: id, kind: .user, text: item.text ?? "", ts: item.ts)
+            case "user":
+                // A transcript index or a tool call ID is not an agent event ID.
+                let eventID = item.eventID ?? item.data?.eventID
+                let matches = (byText[item.text ?? ""] ?? []).filter { $0.ts == item.ts }
+                let event = eventID.flatMap { byID[$0] } ?? (matches.count == 1 && eventID == nil ? matches[0] : nil)
+                return ChatEntry(id: id, kind: .user, text: item.text ?? "", ts: item.ts, eventID: eventID ?? event?.id,
+                                 origin: item.origin ?? item.data?.origin ?? event?.data.field("origin")?.stringValue,
+                                 decided: item.decided ?? item.data?.decided ?? event?.data.field("decided")?.stringValue,
+                                 userText: event?.data.field("user_text")?.stringValue ?? item.userText ?? item.data?.userText)
             case "assistant": return ChatEntry(id: id, kind: .assistant, text: item.text ?? "", ts: item.ts)
             case "tool":
                 let name = item.name ?? "tool"

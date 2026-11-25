@@ -14,6 +14,7 @@ struct ProjectsView: View {
     @State private var filter: Filter = .all
     @State private var searchText = ""
     @State private var showNewIdea = false
+    @State private var freshPapers: [FreshPaper] = []
 
     private var filteredProjects: [ProjectSnapshot] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -86,7 +87,7 @@ struct ProjectsView: View {
                     }
                 }
                 if filter == .all && searchText.isEmpty && !store.projects.isEmpty {
-                    FreshPapersSection()
+                    FreshPapersSection(papers: freshPapers)
                 }
             }
             .papertownInsetGroupedList()
@@ -94,9 +95,13 @@ struct ProjectsView: View {
             .onAppear { store.currentProjectID = nil }  // back on the list: no project open
             .navigationTitle(lang.string("tab.projects"))
             .papertownSidebarButton()
+            .task(id: store.connectionStatus == .connected && !store.projects.isEmpty) {
+                guard store.connectionStatus == .connected, !store.projects.isEmpty else { return }
+                freshPapers = (try? await store.fetch { try await $0.freshPapers() }) ?? []
+            }
             .navigationDestination(for: ProjectRoute.self) { route in route.view }
             #if DEBUG
-            // -PTProject line_1 [-PTPage checks|overlap|method|exp|paper|reports|files|usage|loop|canvas|outline] opens that page
+            // -PTProject line_1 [-PTPage decided|prov|checks|overlap|method|exp|paper|reports|files|usage|loop|canvas|outline] opens that page
             // at launch, for screenshots in the simulator.
             .task {
                 guard !Self.linked, let id = UserDefaults.standard.string(forKey: "PTProject") else { return }
@@ -145,13 +150,14 @@ struct ProjectsView: View {
         let asksCount = decisions?.count ?? store.openAsks.filter { $0.lineID == project.id && $0.data.open != false }.count
         return VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("#\(project.seq) \(lang.server(project.title))")
+                EmText("#\(project.seq) \(project.title.isEmpty || project.title == project.idea ? project.idea : lang.server(project.title))", .matches([searchText]))
+                    .emBar(project.title.isEmpty || project.title == project.idea ? .info : nil)
                     .font(.body.weight(.medium))
                     .lineLimit(2)
                 Spacer(minLength: 6)
                 Text(TextFormatters.leadStateLabel(project.lead.state, language: lang))
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(TextFormatters.leadStateColor(project.lead.state))
+                    .emState(EmTone.issue(project.lead.state))
             }
 
             StageTrackView(
@@ -161,27 +167,23 @@ struct ProjectsView: View {
             )
 
             HStack {
-                Text(project.isDone
+                EmText(project.isDone
                      ? lang.string("stage.complete")
-                     : "\(TextFormatters.stageName(project.stage, language: lang)) · \(project.pct)%")
+                     : "\(TextFormatters.stageName(project.stage, language: lang)) · \(project.pct)%", .numbers(.info))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 if project.sample {
                     Text(lang.string("projects.sample"))
                         .font(.caption2.weight(.medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.14), in: Capsule())
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 if asksCount > 0 {
-                    Text(lang.format(decisions == nil ? "projects.waiting_count" : "projects.decide_count", asksCount))
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.orange)
+                    EmText(lang.format(decisions == nil ? "projects.waiting_count" : "projects.decide_count", asksCount), .numbers(.warn))
+                        .font(.caption.weight(.medium)).emBar(.warn)
                 }
             }
         }
@@ -210,6 +212,7 @@ struct NewIdeaSheet: View {
                         }
                         TextEditor(text: $ideaText)
                             .frame(minHeight: 140)
+                            .emBar(ideaText.isEmpty ? nil : .info, reserve: true)
                     }
                 } header: {
                     Text(lang.string("projects.new_idea.section"))
@@ -219,9 +222,7 @@ struct NewIdeaSheet: View {
 
                 if let errorMessage {
                     Section {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                        Text(errorMessage).font(.footnote).emState(.bad, detail: true)
                     }
                 }
             }
@@ -273,6 +274,8 @@ enum ProjectRoute: Hashable {
         case .project(let id): ProjectDetailView(projectID: id)
         case .page(let id, let page):
             switch page {
+            case "decided": DecidedPage(projectID: id)
+            case "prov": ProvPage(projectID: id)
             case "checks": ChecksPage(projectID: id)
             case "overlap": OverlapPage(projectID: id)
             case "method": MethodPage(projectID: id)

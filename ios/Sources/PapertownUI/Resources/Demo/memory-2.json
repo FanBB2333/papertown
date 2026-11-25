@@ -1,1 +1,1 @@
-{"items":[],"counts":{"sessions":0,"notes":0,"messages":0,"at":null}}
+{"items":[{"key":"claude:sample-review","source":"claude","kind":"session","repo":"code","title":"保留每位评审的原始评分。","cwd":"~/papertown/projects/line_2/code","started":"2026-11-25T17:39:10+00:00","ended":"2026-11-25T17:39:10+00:00","size":425,"mtime":1795628350.5659974,"id":"claude_sample-review","origin":"~/papertown/sample-review.jsonl","imported_at":"2026-11-25T17:39:10+00:00","n":2,"chars":33}],"counts":{"sessions":1,"notes":0,"messages":2,"at":"2026-11-25T17:39:10+00:00"}}

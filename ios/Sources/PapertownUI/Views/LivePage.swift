@@ -42,7 +42,7 @@ struct LivePage<Value, Content: View>: View {
             } else if let error {
                 List {
                     Section {
-                        Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.subheadline)
+                        Text(error).emState(.bad, detail: true).font(.subheadline)
                         Button(lang.string("action.retry")) { Task { await reload() } }
                     }
                     .papertownRowBackground(store.appearance)
@@ -123,6 +123,7 @@ struct SendField: View {
             TextField(placeholder, text: $text, axis: axis)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(axis == .vertical ? 1...6 : 1...1)
+                .emBar(trimmed.isEmpty ? nil : .info, reserve: true)
                 .onChange(of: text) { if $0.count > limit { text = String($0.prefix(limit)) } }
                 .onSubmit { if axis == .horizontal, !trimmed.isEmpty, !disabled { send(trimmed); text = "" } }
             Button(button) { send(trimmed); text = "" }

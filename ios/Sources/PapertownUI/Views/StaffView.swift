@@ -56,7 +56,7 @@ struct StaffView: View {
                                 } else {
                                     Text(TextFormatters.bucketLabel(assistant.effectiveBucket, offline: assistant.isOffline, language: lang))
                                         .font(.caption)
-                                        .foregroundStyle(TextFormatters.bucketColor(assistant.effectiveBucket))
+                                        .emState(EmTone.issue(assistant.effectiveBucket))
                                 }
                             }
                             .padding(.vertical, 2)
@@ -175,7 +175,7 @@ struct StaffView: View {
                             }
                             Spacer()
                             if let b = t.watch?.bucket {
-                                Text(TextFormatters.bucketLabel(b, language: lang)).font(.caption).foregroundStyle(TextFormatters.bucketColor(b))
+                                Text(TextFormatters.bucketLabel(b, language: lang)).font(.caption).emState(EmTone.issue(b))
                             }
                         }
                     }
@@ -190,8 +190,6 @@ struct StaffView: View {
         let roleName = agent.task?.title ?? TextFormatters.roleName(agent.role, language: lang)
         let title = entry.project.map { "#\($0.seq) · \(roleName)" } ?? roleName
         let subtitle = entry.project.map { "#\($0.seq) · \(TextFormatters.stageName($0.stage, language: lang))" } ?? lang.string("staff.town_wide")
-        let lastText = TextFormatters.stripMarkdown(agent.last?.data.field("text")?.stringValue)
-        let preview = lastText.isEmpty ? lang.string("staff.no_messages") : lang.server(lastText)
         let timeLabel = TextFormatters.relativeTime(from: agent.watch?.since ?? agent.updatedAt, language: lang)
 
         return NavigationLink {
@@ -204,16 +202,9 @@ struct StaffView: View {
                         Text(title)
                             .font(.body.weight(.medium))
                             .lineLimit(1)
-                        if agent.watch?.unread == true {
-                            Circle()
-                                .fill(store.appearance.tintColor)
-                                .frame(width: 7, height: 7)
-                        }
                     }
-                    Text(preview)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    StaffMessagePreview(event: agent.last, fallback: lang.string("staff.no_messages"), unread: agent.watch?.unread == true)
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 6)
                 VStack(alignment: .trailing, spacing: 3) {
@@ -222,12 +213,33 @@ struct StaffView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    Circle()
-                        .fill(TextFormatters.bucketColor(agent.effectiveBucket))
-                        .frame(width: 7, height: 7)
+                    if let issue = EmTone.issue(agent.effectiveBucket) {
+                        Text(TextFormatters.bucketLabel(agent.effectiveBucket, language: lang)).font(.caption).emState(issue)
+                    }
                 }
             }
+            .emBar(agent.effectiveBucket == "needs" ? .warn : nil)
             .padding(.vertical, 2)
+        }
+    }
+}
+
+struct StaffMessagePreview: View {
+    let event: AgentEvent?
+    let fallback: String
+    var unread = false
+    @EnvironmentObject private var store: TownStore
+
+    var body: some View {
+        let original = event?.data.field("user_text")?.stringValue
+        let origin = event?.data.field("origin")?.stringValue
+        let raw = event?.data.field("text")?.stringValue ?? ""
+        let words = event?.kind == "user" ? ChatEntry.authoredWords(raw, userText: original, origin: origin) : nil
+        if let words, !words.isEmpty {
+            Text(verbatim: words).emBar(.info)
+        } else {
+            EmText(raw.isEmpty ? fallback : store.language.server(raw))
+                .emMark(active: unread && event?.kind == "assistant" && !raw.isEmpty && !raw.contains("**"))
         }
     }
 }

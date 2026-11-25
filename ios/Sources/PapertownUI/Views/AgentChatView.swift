@@ -14,6 +14,7 @@ struct AgentChatView: View {
     let target: ChatTarget
     let role: String
     let subtitle: String
+    var focusEventID: Int? = nil
 
     init(target: ChatTarget, role: String, subtitle: String) {
         self.target = target
@@ -21,8 +22,9 @@ struct AgentChatView: View {
         self.subtitle = subtitle
     }
 
-    init(agentID: String, role: String, subtitle: String) {
+    init(agentID: String, role: String, subtitle: String, focusEventID: Int? = nil) {
         self.init(target: .agent(agentID), role: role, subtitle: subtitle)
+        self.focusEventID = focusEventID
     }
 
     @EnvironmentObject private var store: TownStore
@@ -34,6 +36,8 @@ struct AgentChatView: View {
     @State private var typingInTerminal = false
     @State private var busy = false
     @State private var showConversations = false
+    @State private var quoting: ChatEntry?
+    @State private var savedQuotes: [Int: String] = [:]
     @State private var showStart = false
     @State private var modelChoice: ModelChoice?
     @State private var files: [OutgoingFile] = []
@@ -164,6 +168,11 @@ struct AgentChatView: View {
                     .tint(store.appearance.tintColor)
             }
         }
+        .sheet(item: $quoting) { entry in
+            if let lineID {
+                WriteDecisionSheet(projectID: lineID, quote: entry) { savedQuotes[$0] = $1 }.papertownSheetFrame(height: 400)
+            }
+        }
         .sheet(isPresented: $showStart) {
             let targetID: String? = {
                 if case .agent(let id) = target { return id }
@@ -243,7 +252,7 @@ struct AgentChatView: View {
                 if let number { Text(number).monospacedDigit().fontWeight(.semibold).layoutPriority(2) }
                 if let p = project { Text(p.title).lineLimit(1).truncationMode(.tail) }
                 Text("·").layoutPriority(2)
-                Text(memberName).foregroundStyle(TextFormatters.roleTint(role)).lineLimit(1).layoutPriority(2)
+                Text(memberName).foregroundStyle(.secondary).lineLimit(1).layoutPriority(2)
                 if let p = project, !p.stage.isEmpty {
                     Text("·").layoutPriority(2)
                     Text(TextFormatters.stageName(p.stage, language: lang)).lineLimit(1).layoutPriority(2)
@@ -357,20 +366,44 @@ struct AgentChatView: View {
                 .scrollDismissesKeyboard(.interactively)
                 .simultaneousGesture(TapGesture().onEnded { typing = false })
                 .onChange(of: tailKey) { _ in
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("end", anchor: .bottom) }
+                    if focusEventID == nil {
+                        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("end", anchor: .bottom) }
+                    }
                 }
-                .onAppear { proxy.scrollTo("end", anchor: .bottom) }
+                .task(id: focusedRow) {
+                    if let focusedRow { proxy.scrollTo(focusedRow, anchor: .center) }
+                    else { proxy.scrollTo("end", anchor: .bottom) }
+                }
             }
         }
+    }
+
+    private var focusedRow: String? {
+        guard let focusEventID else { return nil }
+        return state.entries.first { $0.eventID == focusEventID || $0.id == "e\(focusEventID)" }?.id
     }
 
     @ViewBuilder
     private func row(_ e: ChatEntry, _ lang: AppLanguage) -> some View {
         switch e.kind {
         case .user:
+            let number = e.decided ?? e.deliveredDecision?.number ?? e.eventID.flatMap { savedQuotes[$0] }
             HStack {
                 Spacer(minLength: 48)
-                userBubble(e.text)
+                VStack(alignment: .trailing, spacing: 3) {
+                    AuthoredMessage(entry: e)
+                    if let number, let lineID {
+                        NavigationLink { DecidedDetailPage(projectID: lineID, recordID: number) } label: {
+                            Label(number, systemImage: "square.and.pencil").font(.caption.monospaced())
+                        }
+                    }
+                }
+                .contextMenu {
+                    if let number { Label(number, systemImage: "checkmark.circle") }
+                    else if e.canQuote, let lineID, store.cards[lineID]?.decided != nil {
+                        Button { quoting = e } label: { Label(lang.string("decided.quote"), systemImage: "square.and.pencil") }
+                    }
+                }
             }
         case .assistant:
             HStack(alignment: .top, spacing: 8) {
@@ -392,14 +425,13 @@ struct AgentChatView: View {
                     if e.status == "running" {
                         ProgressView().controlSize(.mini)
                     } else if let st = e.status {
-                        Image(systemName: Tone.symbol(st)).foregroundStyle(Tone.color(st)).imageScale(.small)
+                        if let issue = EmTone.issue(st) { Text(lang.string("job.status.\(st)")).font(.caption2).emState(issue) }
                     }
                 }
             }
             .padding(.leading, 32)
         case .error:
-            Label(lang.server(e.text), systemImage: "exclamationmark.triangle.fill")
-                .font(.footnote).foregroundStyle(.red)
+            Text(lang.server(e.text)).font(.footnote).emState(.bad, detail: true)
                 .padding(.leading, 32)
         case .note:
             Text(lang.server(e.text))
@@ -416,12 +448,12 @@ struct AgentChatView: View {
     private func userBubble(_ text: String, files: [(image: Bool, name: String)]? = nil, dim: Bool = false) -> some View {
         let split = files == nil ? ChatFiles.split(text) : (text: text, files: files ?? [])
         return VStack(alignment: .trailing, spacing: 6) {
-            if !split.text.isEmpty { ChatMarkdown(text: split.text, onTint: true) }
+            if !split.text.isEmpty { Text(verbatim: split.text).textSelection(.enabled) }
             if !split.files.isEmpty { AttachmentTags(files: split.files) }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        .foregroundStyle(.white)
-        .background(store.appearance.tintColor.opacity(dim ? 0.55 : 1), in: RoundedRectangle(cornerRadius: 16))
+        .emBar(.info)
+        .foregroundStyle(dim ? .secondary : .primary)
     }
 
     /// A message sent from here: shown at once, with how far it got and what can be done when it did not get through.
@@ -440,14 +472,12 @@ struct AgentChatView: View {
                     Image(systemName: "checkmark")
                     Text(lang.string(state.hasScreen ? "chat.pending.typed" : "chat.pending.sent"))
                 case .uncertain:
-                    Image(systemName: "questionmark.circle").foregroundStyle(.orange)
-                    Text(lang.string("chat.pending.uncertain"))
+                    Text(lang.string("chat.pending.uncertain")).emState(.warn, icon: "questionmark.circle", detail: true)
                     Button(lang.string("chat.uncertain.refresh")) { Task { await store.refreshChat(target) } }
                     Button(lang.string("chat.uncertain.resend")) { Task { await store.resendPending(p.id, in: target) } }
                     Button(lang.string("action.delete"), role: .destructive) { store.dropPending(p.id, in: target) }
                 case .failed(let why):
-                    Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
-                    Text(why).foregroundStyle(.red).lineLimit(3)
+                    Text(why).lineLimit(3).emState(.bad, detail: true)
                     Button(lang.string("chat.uncertain.resend")) { Task { await store.resendPending(p.id, in: target) } }
                     Button(lang.string("chat.pending.edit")) {
                         draft = p.text
@@ -525,8 +555,8 @@ struct AgentChatView: View {
     private func askCard(_ e: ChatEntry, _ lang: AppLanguage) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Label(lang.string("chat.ask"), systemImage: "questionmark.bubble.fill")
-                .font(.caption.weight(.semibold)).foregroundStyle(.orange)
-            Text(lang.server(e.text)).font(.subheadline)
+                .font(.caption).foregroundStyle(.secondary)
+            EmText(lang.server(e.text)).font(.subheadline)
             if e.open && !e.choices.isEmpty {
                 FlowButtons(labels: e.choices.map(lang.server)) { i in
                     Task { await store.sendMessage(e.choices[i], to: target, mode: nil) }
@@ -535,19 +565,19 @@ struct AgentChatView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .emBar(e.open ? .warn : nil)
     }
 
     private func actCard(_ e: ChatEntry, _ lang: AppLanguage) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Label(lang.string("chat.act"), systemImage: "hand.raised.fill")
-                    .font(.caption.weight(.semibold)).foregroundStyle(.purple)
+                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Pill(text: lang.string("act.status.\(e.status ?? "pending")"), color: Tone.color(e.status == "pending" ? "wait" : e.status))
+                Text(lang.string("act.status.\(e.status ?? "pending")")).font(.caption).emState(EmTone.issue(e.status))
             }
             Text(lang.server(e.text)).font(.subheadline.weight(.medium))
-            if let why = e.arg, !why.isEmpty { Text(lang.server(why)).font(.footnote).foregroundStyle(.secondary) }
+            if let why = e.arg, !why.isEmpty { EmText(lang.server(why)).font(.footnote).foregroundStyle(.secondary) }
             if e.open, let id = e.eventID {
                 HStack {
                     Button(lang.string("action.allow")) {
@@ -564,7 +594,7 @@ struct AgentChatView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.purple.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+        .emBar(e.open ? .warn : nil)
     }
 
     // MARK: Composer
@@ -578,7 +608,7 @@ struct AgentChatView: View {
             if !state.queued.isEmpty { queuedBar(lang) }
             if let notice {
                 HStack(alignment: .top) {
-                    Text(notice).font(.caption).foregroundStyle(.red)
+                    Text(notice).font(.caption).emState(.bad, detail: true)
                     Spacer()
                     Button { self.notice = nil } label: { Image(systemName: "xmark") }
                         .buttonStyle(.borderless).font(.caption)
@@ -588,7 +618,7 @@ struct AgentChatView: View {
                 offlineBar(agentID: id, lang)
             } else {
                 if state.isWorking && deliveryMode == .steer && !state.permissions.isEmpty {
-                    Text(lang.string("chat.permission.warning")).font(.caption2).foregroundStyle(.orange)
+                    Text(lang.string("chat.permission.warning")).font(.caption2).emState(.warn, detail: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 chipsRow(lang)
@@ -631,8 +661,8 @@ struct AgentChatView: View {
     @ViewBuilder
     private func modelSegment(_ m: (name: String, thinking: String?), _ lang: AppLanguage) -> some View {
         let label = HStack(spacing: 5) {
-            Text(m.name).fontWeight(.semibold).foregroundStyle(Color.teal)
-            if let t = m.thinking { Text(t).foregroundStyle(Color.pink) }
+            Text(m.name).foregroundStyle(.secondary)
+            if let t = m.thinking { Text(t).foregroundStyle(.secondary) }
             if canSwitchModel, models != nil {
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)).foregroundStyle(Self.muted)
             }
@@ -661,7 +691,7 @@ struct AgentChatView: View {
                 Text(TextFormatters.deliveryModeLabel(deliveryMode, language: lang))
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
             }
-            .foregroundStyle(Color.purple)
+            .foregroundStyle(.secondary)
             .lineLimit(1)
         }
         .accessibilityLabel(lang.string("chat.delivery"))
@@ -681,7 +711,7 @@ struct AgentChatView: View {
                 Text("ctx").foregroundStyle(Self.muted)
                 if let f = c.fraction {
                     CellBar(fraction: f, cells: 8, tint: Self.level(f))
-                    Text("\(Int((f * 100).rounded()))%").foregroundStyle(Self.level(f))
+                    Text("\(Int((f * 100).rounded()))%").emNum(EmTone.usage(f))
                 }
                 Text(c.window.map { "\(Self.tokens(c.used))/\(Self.tokens($0))" } ?? Self.tokens(c.used)).foregroundStyle(Self.muted)
             }
@@ -699,7 +729,7 @@ struct AgentChatView: View {
             Text(lang.string("chat.usage.hint"))
         } label: {
             Text(u.priced ? cost : Self.tokens(u.tokens) + " tok")
-                .foregroundStyle(u.priced ? Color.green : Self.muted)
+                .emNum()
                 .lineLimit(1)
         }
         .accessibilityLabel(lang.string("chat.usage"))
@@ -721,11 +751,11 @@ struct AgentChatView: View {
             HStack(spacing: 5) {
                 Image(systemName: "arrow.triangle.branch").font(.system(size: 9, weight: .bold))
                 Text(g.branch).truncationMode(.middle)
-                if let n = g.changed, n > 0 { Text("*\(n)") }
+                if let n = g.changed, n > 0 { Text("*\(n)").emMark(.warn) }
                 if let n = g.ahead, n > 0 { Text("↑\(n)").foregroundStyle(Self.muted) }
                 if let n = g.behind, n > 0 { Text("↓\(n)").foregroundStyle(Self.muted) }
             }
-            .foregroundStyle(Color.orange)
+            .foregroundStyle(.secondary)
             .lineLimit(1)
         }
         .accessibilityLabel(lang.string("chat.branch"))
@@ -742,8 +772,8 @@ struct AgentChatView: View {
             HStack(spacing: 5) {
                 Text(l.window).foregroundStyle(Self.muted)
                 CellBar(fraction: f, cells: 6, tint: Self.level(f))
-                Text("\(Int(l.used.rounded()))%").foregroundStyle(Self.level(f))
-                if let left { Text(left).foregroundStyle(Self.muted) }
+                Text("\(Int(l.used.rounded()))%").emNum(EmTone.usage(f))
+                if let left { Text(left).emState(.warn, icon: "clock", detail: true) }
             }
             .lineLimit(1)
         }
@@ -915,7 +945,7 @@ struct AgentChatView: View {
     private func heldCard(_ lang: AppLanguage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(lang.string("chat.held.title"), systemImage: "exclamationmark.bubble.fill")
-                .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                .font(.caption).foregroundStyle(.secondary)
             Text(lang.string("chat.held.desc")).font(.footnote).foregroundStyle(.secondary)
             let peek = (state.screen ?? "").split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.suffix(5)
             if !peek.isEmpty { MonoBlock(text: peek.joined(separator: "\n"), maxHeight: 90) }
@@ -925,7 +955,7 @@ struct AgentChatView: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .emBar(.warn)
     }
 
     private var canSend: Bool {
@@ -1009,7 +1039,7 @@ struct AgentChatView: View {
         VStack(alignment: .leading, spacing: 6) {
             Label(perm.name == "Bash" ? lang.string("chat.permission.command") : lang.format("chat.permission.tool", perm.name),
                   systemImage: "terminal.fill")
-                .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                .font(.caption).foregroundStyle(.secondary)
             if let t = perm.title, t != perm.name { Text(lang.server(t)).font(.footnote) }
             if !perm.arg.isEmpty { MonoBlock(text: perm.arg, maxHeight: 90) }
             HStack {
@@ -1020,7 +1050,7 @@ struct AgentChatView: View {
             .disabled(busy)
         }
         .padding(10)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .emBar(.warn)
     }
 
     private func permit(_ perm: PermissionPrompt, _ allow: Bool) async {
@@ -1033,7 +1063,7 @@ struct AgentChatView: View {
     private func promptCard(_ prompt: TermPrompt, _ lang: AppLanguage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Label(lang.server(prompt.title), systemImage: "rectangle.and.text.magnifyingglass")
-                .font(.caption.weight(.semibold)).foregroundStyle(.orange)
+                .font(.caption).foregroundStyle(.secondary)
             ForEach(Array((prompt.body ?? []).enumerated()), id: \.offset) { _, line in
                 Text(lang.server(line)).font(.footnote)
             }
@@ -1062,15 +1092,15 @@ struct AgentChatView: View {
             .disabled(busy)
         }
         .padding(10)
-        .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        .emBar(.warn)
     }
 
     private func queuedBar(_ lang: AppLanguage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(state.queued) { q in
                 HStack(spacing: 8) {
-                    Pill(text: lang.string("chat.queued"), color: .orange, symbol: "clock")
-                    Text(q.text).font(.footnote).lineLimit(2)
+                    Text(lang.string("chat.queued")).font(.caption).foregroundStyle(.secondary)
+                    Text(q.text).font(.footnote).lineLimit(2).emBar(q.authored ? .info : nil)
                     Spacer()
                     Menu {
                         Button(lang.string("chat.queue.send_now")) {
@@ -1096,6 +1126,28 @@ struct AgentChatView: View {
         thumbs = [:]
         notice = nil
         Task { await store.sendMessage(text, files: sending, to: target, mode: mode) }
+    }
+}
+
+/// Keep delivery context and attachment names outside the user's own words.
+struct AuthoredMessage: View {
+    let entry: ChatEntry
+
+    var body: some View {
+        let split = ChatFiles.split(entry.text)
+        let words = ChatEntry.authoredWords(split.text, userText: entry.userText, origin: entry.origin)
+        let original = words ?? split.text
+        VStack(alignment: .leading, spacing: 4) {
+            if !original.isEmpty { Text(verbatim: original).emBar(words == nil ? nil : .info) }
+            if entry.userText != nil && split.text != original {
+                let context = original.isEmpty ? split.text : split.text.range(of: original).map { split.text.replacingCharacters(in: $0, with: "") } ?? split.text
+                let rest = context.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !rest.isEmpty { Text(verbatim: rest).font(.caption).foregroundStyle(.secondary) }
+            }
+            if !split.files.isEmpty { AttachmentTags(files: split.files) }
+        }
+        .textSelection(.enabled)
+        .padding(.horizontal, 12).padding(.vertical, 8)
     }
 }
 

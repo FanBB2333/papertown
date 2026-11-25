@@ -702,12 +702,7 @@ struct LoopBlockHead: View {
                 .font(.system(size: size, weight: .semibold))
                 .fixedSize()
             ForEach(Array(pills.enumerated()), id: \.offset) { _, p in
-                Text(p.0)
-                    .font(.system(size: size * 0.72, weight: .semibold))
-                    .foregroundStyle(p.1)
-                    .padding(.horizontal, size * 0.4)
-                    .padding(.vertical, size * 0.12)
-                    .background(Capsule().fill(p.1.opacity(0.12)))
+                p.font(.system(size: size * 0.72))
                     .fixedSize()
             }
             if !part.isEmpty {

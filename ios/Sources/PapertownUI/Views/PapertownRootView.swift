@@ -61,6 +61,7 @@ public struct PapertownRootView: View {
                     .tint(store.appearance.tintColor)
                     .preferredColorScheme(store.appearance.colorScheme)
             }
+            .environment(\.emAppearance, store.appearance)
     }
 
     /// A sidebar or tabs, whichever fits (AppShell.swift).
@@ -96,14 +97,14 @@ struct StageTrackView: View {
 
     private func color(for stage: StageInfo) -> Color {
         switch stage.status {
-        case "done": return .green
+        case "done": return .secondary.opacity(0.55)
         case "run": return blocked ? .red : .accentColor
         default: return Color.secondary.opacity(0.22)
         }
     }
 
     private func colorForIndex(_ idx: Int) -> Color {
-        if idx < fallbackIndex { return .green }
+        if idx < fallbackIndex { return .secondary.opacity(0.55) }
         if idx == fallbackIndex { return blocked ? .red : .accentColor }
         return Color.secondary.opacity(0.22)
     }
@@ -114,7 +115,7 @@ struct RoleBadgeView: View {
     var size: CGFloat = 32
 
     var body: some View {
-        let tint = TextFormatters.roleTint(role)
+        let tint = Color.secondary
         ZStack {
             Circle()
                 .fill(tint.opacity(0.14))
@@ -146,11 +147,9 @@ struct ConnectionPillButton: View {
             }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(color)
-                Text(label(language: lang))
-                    .font(.subheadline)
+                if store.connectionIssue == nil { Image(systemName: symbol).font(.caption).foregroundStyle(.secondary) }
+                Text(label(language: lang)).font(.subheadline)
+                    .emState(store.connectionIssue, icon: symbol)
                     .lineLimit(1)
             }
         }
@@ -165,7 +164,6 @@ struct ConnectionPillButton: View {
         }
     }
 
-    private var color: Color { store.connectionColor }
 
     private func label(language: AppLanguage) -> String {
         switch store.connectionStatus {
@@ -184,10 +182,17 @@ struct ConnectionPillButton: View {
 }
 
 extension TownStore {
-    /// Green when connected, orange on the way or waiting for a sign-in, red when there is no server.
+    var connectionIssue: EmTone? {
+        switch connectionStatus {
+        case .authRequired, .reconnecting: return .warn
+        case .disconnected: return currentProfile == nil ? nil : .bad
+        default: return nil
+        }
+    }
+
     var connectionColor: Color {
         switch connectionStatus {
-        case .connected: return .green
+        case .connected: return .secondary
         case .connecting, .reconnecting: return .orange
         case .authRequired: return .orange
         case .disconnected: return .red

@@ -3,10 +3,10 @@ import SwiftUI
 
 struct ProjectDetailView: View {
     let projectID: String
+    var matterID: Int? = nil
     @EnvironmentObject private var store: TownStore
     @State private var ideaExpanded = false
     @State private var isUpdatingLead = false
-    @State private var answering: ReportItem?
     @State private var showHire = false
     @State private var hiringRole: String? = nil
 
@@ -24,37 +24,37 @@ struct ProjectDetailView: View {
         let lang = store.language
         Group {
             if let project {
-                List {
-                    // 待你决定 covers the lead's questions; servers before it list them on their own
-                    if store.cards[projectID]?.decisions != nil {
-                        DecisionsSection(projectID: projectID)
-                    } else {
-                        asksSection(lang: lang)
-                    }
-                    LoopPreviewSection(projectID: projectID)
-                    leadSection(project, lang: lang)
-                    progressSection(project, lang: lang)
-                    if let card = store.cards[projectID] { ProgressCardSection(card: card) }
-                    CardRequestSection(project: project)
-                    researchSection(project, lang: lang)
-                    teamSection(project, lang: lang)
+                ScrollViewReader { proxy in
+                    List {
+                        asksSection
+                        LoopPreviewSection(projectID: projectID)
+                        leadSection(project, lang: lang)
+                        progressSection(project, lang: lang)
+                        if let card = store.cards[projectID] { ProgressCardSection(card: card) }
+                        CardRequestSection(project: project)
+                        researchSection(project, lang: lang)
+                        teamSection(project, lang: lang)
 
-                    if let leadAgentID = project.leadAgentID {
-                        Section {
-                            NavigationLink {
-                                AgentChatView(
-                                    agentID: leadAgentID,
-                                    role: "lead",
-                                    subtitle: "#\(project.seq) · \(TextFormatters.stageName(project.stage, language: lang))"
-                                )
-                            } label: {
-                                Label(lang.string("detail.message_lead"), systemImage: "bubble.left.and.bubble.right")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(store.appearance.tintColor)
-                                    .frame(maxWidth: .infinity, alignment: .center)
+                        if let leadAgentID = project.leadAgentID {
+                            Section {
+                                NavigationLink {
+                                    AgentChatView(
+                                        agentID: leadAgentID,
+                                        role: "lead",
+                                        subtitle: "#\(project.seq) · \(TextFormatters.stageName(project.stage, language: lang))"
+                                    )
+                                } label: {
+                                    Label(lang.string("detail.message_lead"), systemImage: "bubble.left.and.bubble.right")
+                                        .font(.body.weight(.semibold))
+                                        .foregroundStyle(store.appearance.tintColor)
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                }
+                                .papertownRowBackground(store.appearance)
                             }
-                            .papertownRowBackground(store.appearance)
                         }
+                    }
+                    .task(id: matterKey) {
+                        if let key = matterKey { proxy.scrollTo(key, anchor: .top) }
                     }
                 }
                 .papertownInsetGroupedList()
@@ -107,9 +107,6 @@ struct ProjectDetailView: View {
         .task {
             await store.refreshProject(id: projectID)
         }
-        .sheet(item: $answering) { ask in
-            AnswerSheet(ask: ask).environmentObject(store).papertownSheetFrame(height: 460)
-        }
         .sheet(isPresented: $showHire) {
             HireSheet(projectID: projectID) { _ in
                 Task { await store.refreshProject(id: projectID) }
@@ -128,27 +125,12 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// The lead's open questions about this project, answered here without leaving the page.
-    @ViewBuilder
-    private func asksSection(lang: AppLanguage) -> some View {
-        let asks = store.openAsks.filter { $0.lineID == projectID && $0.data.open != false }
-        if !asks.isEmpty {
-            Section {
-                ForEach(asks) { ask in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(lang.server(ask.data.question ?? ask.data.text ?? "")).font(.subheadline)
-                        Button(lang.string("action.reply")) { answering = ask }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.small)
-                    }
-                    .padding(.vertical, 2)
-                    .papertownRowBackground(store.appearance)
-                }
-            } header: {
-                Label(lang.string("inbox.badge.waiting"), systemImage: "person.fill.questionmark").foregroundStyle(.orange)
-            }
-        }
+    private var matterKey: String? {
+        guard let matterID else { return nil }
+        return store.decisions(projectID).first { $0.kind == "matter" && $0.id == String(matterID) }?.key
     }
+
+    private var asksSection: some View { DecisionsSection(projectID: projectID) }
 
     /// What the project has produced, a page per stage group, plus its gates, files and spending.
     @ViewBuilder
@@ -216,7 +198,7 @@ struct ProjectDetailView: View {
                             language: lang
                         ))
                         .font(.caption)
-                        .foregroundStyle(project.lead.state == "blocked" ? .red : .secondary)
+                        .foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 8)
                     if project.lead.state != "ended" {
@@ -254,7 +236,24 @@ struct ProjectDetailView: View {
                     .padding(.leading, 40)
                 }
             }
+            .emBar(project.lead.state == "blocked" ? .warn : nil)
             .padding(.vertical, 2)
+            .papertownRowBackground(store.appearance)
+            NavigationLink { DecidedPage(projectID: projectID) } label: {
+                HStack(spacing: 8) {
+                    Text(lang.string("decided.nav")).fixedSize()
+                    Spacer(minLength: 0)
+                    DecidedStatsLine(stats: store.cards[projectID]?.decided, projectSummary: true)
+                }
+            }
+            .papertownRowBackground(store.appearance)
+            NavigationLink { ProvPage(projectID: projectID) } label: {
+                HStack(spacing: 8) {
+                    Text(lang.string("prov.nav")).fixedSize()
+                    Spacer(minLength: 0)
+                    ProvStatsLine(stats: store.cards[projectID]?.prov, projectSummary: true)
+                }
+            }
             .papertownRowBackground(store.appearance)
             if project.lead.state != "ended" {
                 LeadRoundsRows(projectID: projectID).papertownRowBackground(store.appearance)
@@ -264,7 +263,7 @@ struct ProjectDetailView: View {
                 Text(lang.string("detail.section.lead"))
                 Spacer()
                 Text(TextFormatters.leadStateLabel(project.lead.state, language: lang))
-                    .foregroundStyle(TextFormatters.leadStateColor(project.lead.state))
+                    .emState(EmTone.issue(project.lead.state))
             }
         } footer: {
             Text(lang.string("lead.footer"))
@@ -280,8 +279,7 @@ struct ProjectDetailView: View {
                         .font(.subheadline.weight(.semibold))
                     Spacer()
                     Text("\(project.pct)%")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(store.appearance.tintColor)
+                        .font(.subheadline).emNum()
                 }
                 StageTrackView(
                     stages: project.stages,
@@ -289,13 +287,12 @@ struct ProjectDetailView: View {
                     blocked: project.lead.state == "blocked"
                 )
                 Text(project.title)
-                    .font(.subheadline.weight(.medium))
+                    .font(.subheadline).emKey().emBar(project.title == project.idea && !project.idea.isEmpty ? .info : nil)
                     .padding(.top, 2)
 
                 if !project.idea.isEmpty && project.idea != project.title {
-                    Text(lang.server(project.idea))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    Text(project.idea)
+                        .font(.footnote).emBar(.info)
                         .lineLimit(ideaExpanded ? nil : 3)
                         .onTapGesture {
                             withAnimation { ideaExpanded.toggle() }
@@ -306,16 +303,15 @@ struct ProjectDetailView: View {
             .papertownRowBackground(store.appearance)
 
             if let note = project.note, !note.isEmpty {
-                Label(lang.server(note), systemImage: project.sample ? "info.circle" : "exclamationmark.triangle.fill")
-                    .font(.footnote)
-                    .foregroundStyle(project.lead.state == "blocked" ? Color.red : (project.sample ? Color.secondary : Color.orange))
+                EmText(lang.server(note)).font(.footnote)
+                    .emState(project.lead.state == "blocked" ? .bad : nil, detail: true)
                     .papertownRowBackground(store.appearance)
             }
         } header: {
             HStack {
                 Text(lang.string("detail.section.progress"))
                 Spacer()
-                Text("\(project.doneStageCount)/\(max(project.stages.count, 8))")
+                Text("\(project.doneStageCount)/\(max(project.stages.count, 8))").emNum()
             }
         }
     }
@@ -329,17 +325,15 @@ struct ProjectDetailView: View {
                     .foregroundStyle(.secondary)
                     .papertownRowBackground(store.appearance)
             } else {
-                let members: [(id: String, role: String, subtitle: String, statusLabel: String, statusColor: Color, unread: Bool)] =
+                let members: [(id: String, role: String, last: AgentEvent?, fallback: String, statusLabel: String, statusTone: EmTone?, unread: Bool)] =
                     !staffForProject.isEmpty
                     ? staffForProject.map { agent in
-                        let rawLast = agent.last?.data.field("text")?.stringValue
-                        let preview = TextFormatters.stripMarkdown(rawLast)
-                        return (
+                        (
                             agent.id,
                             agent.role,
-                            preview.isEmpty ? lang.string("detail.no_conversation") : preview,
+                            agent.last, lang.string("detail.no_conversation"),
                             TextFormatters.bucketLabel(agent.effectiveBucket, offline: agent.isOffline, language: lang),
-                            TextFormatters.bucketColor(agent.effectiveBucket),
+                            EmTone.issue(agent.effectiveBucket),
                             agent.watch?.unread == true
                         )
                     }
@@ -347,9 +341,9 @@ struct ProjectDetailView: View {
                         (
                             member.id,
                             member.role,
-                            member.model ?? lang.string("detail.no_conversation"),
+                            nil, member.model ?? lang.string("detail.no_conversation"),
                             TextFormatters.bucketLabel(member.status == "working" ? "working" : (member.status == "idle" ? "idle" : "off"), language: lang),
-                            .secondary,
+                            nil,
                             false
                         )
                     }
@@ -365,16 +359,9 @@ struct ProjectDetailView: View {
                         HStack(spacing: 11) {
                             RoleBadgeView(role: member.role, size: 32)
                             VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 6) {
-                                    Text(TextFormatters.roleName(member.role, language: lang))
-                                        .font(.body.weight(.medium))
-                                    if member.unread {
-                                        Circle()
-                                            .fill(store.appearance.tintColor)
-                                            .frame(width: 7, height: 7)
-                                    }
-                                }
-                                Text(member.subtitle)
+                                Text(TextFormatters.roleName(member.role, language: lang))
+                                    .font(.body.weight(.medium))
+                                StaffMessagePreview(event: member.last, fallback: member.fallback, unread: member.unread)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -382,7 +369,7 @@ struct ProjectDetailView: View {
                             Spacer(minLength: 6)
                             Text(member.statusLabel)
                                 .font(.caption)
-                                .foregroundStyle(member.statusColor)
+                                .emState(member.statusTone)
                         }
                         .padding(.vertical, 2)
                     }

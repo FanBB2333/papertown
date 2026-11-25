@@ -33,11 +33,7 @@ struct ServerPage: View {
                     Section {
                         LabeledContent(lang.string("server.live_feed")) {
                             HStack(spacing: 6) {
-                                Circle()
-                                    .fill(statusColor)
-                                    .frame(width: 8, height: 8)
-                                Text(statusText(lang: lang))
-                                    .foregroundStyle(statusColor)
+                                Text(statusText(lang: lang)).emState(store.connectionIssue)
                             }
                         }
                         .papertownRowBackground(store.appearance)

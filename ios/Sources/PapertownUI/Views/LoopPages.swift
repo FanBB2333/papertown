@@ -4,7 +4,7 @@ import SwiftUI
 // The research loop (研究回路) as lists: its gates and what they block, the tasks sent to the staff, what waits on your
 // say-so; with the same actions as the web's canvas, without drawing it. GET /api/lines/{id}/canvas and its routes.
 
-private let loopEvents: Set<String> = ["canvas", "checks", "line", "agent"]
+private let loopEvents: Set<String> = ["canvas", "checks", "line", "agent", "decided", "report"]
 
 struct LoopPage: View {
     let projectID: String
@@ -73,7 +73,7 @@ struct LoopPage: View {
         let tasks = v.nodes.filter { $0.kind == "task" }
         Section {
             InfoRow(label: lang.string("loop.round"), value: "\(v.rounds ?? 0)")
-            InfoRow(label: lang.string("loop.tasks"), value: lang.format("loop.tasks.count", tasks.filter { $0.status == "done" }.count, tasks.count))
+            InfoRow(label: lang.string("loop.tasks"), value: lang.format("loop.tasks.count", tasks.filter { $0.status == "done" }.count, tasks.count), number: .info)
             Toggle(isOn: Binding(get: { v.rules?.exclusive ?? true }, set: { on in act.run { try await $0.loopRules(projectID: projectID, exclusive: on) } })) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(lang.string("loop.exclusive"))
@@ -95,8 +95,14 @@ struct LoopPage: View {
             Section {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(lang.server(item.text)).font(.subheadline)
+                        EmText(lang.server(item.text)).font(.subheadline).emBar(.warn)
+                        if let basis = item.basis, !basis.isEmpty {
+                            Text(lang.format("decided.basis.refs", basis.joined(separator: " · "))).font(.caption.monospaced())
+                        }
                         HStack {
+                            if item.kind == "matter", let ask = item.ask {
+                                NavigationLink(lang.string("decided.write")) { ProjectDetailView(projectID: projectID, matterID: ask) }
+                            }
                             if item.kind == "escalated", let g = item.gate {
                                 Button(lang.string("loop.gate.more")) { act.run(lang.string("loop.gate.more.done")) { try await $0.gate(projectID: projectID, stage: g, "more") } }
                                     .buttonStyle(.borderedProminent)
@@ -114,7 +120,7 @@ struct LoopPage: View {
                     .padding(.vertical, 2)
                 }
             } header: {
-                Label(lang.format("loop.human", items.count), systemImage: "hand.raised.fill").foregroundStyle(.orange)
+                EmText(lang.format("loop.human", items.count), .numbers(.warn))
             }
             .papertownRowBackground(store.appearance)
         }
@@ -131,13 +137,13 @@ struct LoopPage: View {
                         LoopGatePage(projectID: projectID, stage: g.stage)
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: Tone.symbol(gateTone(g.state))).foregroundStyle(Tone.color(gateTone(g.state)))
+                            Image(systemName: "diamond").foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(lang.server(g.name ?? node.title ?? g.stage)).font(.subheadline.weight(.medium))
                                 Text(gateLine(g, lang)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                             }
                             Spacer()
-                            Text(lang.string("loop.gate.\(g.state)")).font(.caption).foregroundStyle(Tone.color(gateTone(g.state)))
+                            Text(lang.string("loop.gate.\(g.state)")).font(.caption).emState(EmTone.issue(gateTone(g.state)))
                         }
                     }
                 }
@@ -162,13 +168,13 @@ struct LoopPage: View {
                     HStack(alignment: .top, spacing: 10) {
                         RoleBadgeView(role: t.to ?? "lead", size: 26)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(lang.server(t.title ?? "")).font(.subheadline.weight(.medium)).lineLimit(2)
+                            Text(t.createdBy == "you" ? t.title ?? "" : lang.server(t.title)).font(.subheadline).emBar(t.createdBy == "you" ? .info : nil).lineLimit(2)
                             Text([TextFormatters.roleName(t.to ?? "lead", language: lang), t.waitNote.map(lang.server), t.stale.map { _ in lang.string("loop.task.stale") }]
                                 .compactMap { $0 }.joined(separator: " · "))
                                 .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         }
                         Spacer()
-                        Text(lang.string("loop.task.\(t.status ?? "draft")")).font(.caption).foregroundStyle(Tone.color(taskTone(t.status)))
+                        Text(lang.string("loop.task.\(t.status ?? "draft")")).font(.caption).emState(EmTone.issue(taskTone(t.status)))
                     }
                 }
             }
@@ -258,13 +264,13 @@ struct LoopGatePage: View {
                 if let g = node?.gate {
                     Section {
                         HStack {
-                            Pill(text: lang.string("loop.gate.\(g.state)"), color: Tone.color(gateTone(g.state)), symbol: Tone.symbol(gateTone(g.state)))
+                            Text(lang.string("loop.gate.\(g.state)")).font(.caption).emState(EmTone.issue(gateTone(g.state)))
                             Spacer()
-                            if let p = g.pass, let t = g.total { Text("\(p)/\(t)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+                            if let p = g.pass, let t = g.total { Text("\(p)/\(t)").font(.caption).emNum(p < t ? .warn : .good) }
                         }
                         if let b = g.blocking, !b.isEmpty {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(lang.string("loop.gate.blocking")).font(.caption.weight(.semibold)).foregroundStyle(.red)
+                                Text(lang.string("loop.gate.blocking")).font(.caption).emState(.bad)
                                 BulletList(items: b.map { lang.server($0.title) })
                             }
                         }
@@ -313,7 +319,7 @@ struct LoopGatePage: View {
                         Section(lang.string("checks.nav")) {
                             ForEach(checks) { c in
                                 NavigationLink { CheckDetailPage(projectID: projectID, checkID: c.id) } label: {
-                                    Label(lang.server(c.title), systemImage: Tone.symbol(c.status)).foregroundStyle(Tone.color(c.status))
+                                    Text(lang.server(c.title)).emState(EmTone.issue(c.status), detail: true)
                                 }
                             }
                         }
@@ -351,19 +357,26 @@ struct LoopTaskPage: View {
                 if let t {
                     Section {
                         HStack {
-                            Pill(text: lang.string("loop.task.\(t.status ?? "draft")"), color: Tone.color(taskTone(t.status)))
-                            Pill(text: TextFormatters.roleName(t.to ?? "lead", language: lang), color: TextFormatters.roleTint(t.to ?? "lead"))
-                            if let r = t.round, r > 0 { Pill(text: lang.format("loop.round.n", r), color: .secondary) }
+                            Text(lang.string("loop.task.\(t.status ?? "draft")")).font(.caption).emState(EmTone.issue(taskTone(t.status)))
+                            Text(TextFormatters.roleName(t.to ?? "lead", language: lang)).font(.caption).foregroundStyle(.secondary)
+                            if let r = t.round, r > 0 { Text(lang.format("loop.round.n", r)).font(.caption).foregroundStyle(.secondary) }
                         }
-                        if let text = t.text, !text.isEmpty { Text(lang.server(text)).font(.subheadline).textSelection(.enabled) }
-                        if let w = t.waitNote { Label(lang.server(w), systemImage: "hourglass").font(.caption).foregroundStyle(.orange) }
-                        if let s = t.stale { Label(lang.server(s), systemImage: "exclamationmark.arrow.triangle.2.circlepath").font(.caption).foregroundStyle(.orange) }
+                        if let text = t.text, !text.isEmpty {
+                            Group {
+                                if t.createdBy == "you" { Text(text).emBar(.info) }
+                                else { EmText(lang.server(text)) }
+                            }.font(.subheadline).textSelection(.enabled)
+                        } else if t.createdBy == "you", let title = t.title { Text(title).emBar(.info) }
+                        if let w = t.waitNote { Text(lang.server(w)).font(.caption).emState(.warn, icon: "hourglass", detail: true) }
+                        if let s = t.stale { Text(lang.server(s)).font(.caption).emState(.warn, icon: "arrow.clockwise", detail: true) }
                         if let at = t.sentAt { InfoRow(label: lang.string("loop.task.sent_at"), value: Stamp.short(at, lang)) }
                         if let at = t.doneAt { InfoRow(label: lang.string("loop.task.done_at"), value: Stamp.short(at, lang)) }
+                        if let by = t.createdBy { InfoRow(label: lang.string("decided.created_by"), value: lang.string("decided.author.\(by)")) }
                     }
+                    BasisSection(projectID: projectID, basis: t.basis)
                     sessionSection(t, there: there, lang)
                     if let r = t.result?.displayText, !r.isEmpty {
-                        Section(lang.string("loop.task.result")) { Text(lang.server(r)).font(.footnote).textSelection(.enabled) }
+                        Section(lang.string("loop.task.result")) { EmText(lang.server(r)).font(.footnote).textSelection(.enabled) }
                     }
                     actions(t, there: there, after: after, act, lang)
                     if let log = t.log, !log.isEmpty {
@@ -372,7 +385,12 @@ struct LoopTaskPage: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text([e.by.map(lang.server), e.ts.map { Stamp.short($0, lang) }].compactMap { $0 }.joined(separator: " · "))
                                         .font(.caption2).foregroundStyle(.secondary)
-                                    if let text = e.text { Text(lang.server(text)).font(.caption).lineLimit(6) }
+                                    if let text = e.text?.nonEmpty {
+                                        Group {
+                                            if e.by == "你" || e.by == "you" { Text(verbatim: text).emBar(.info) }
+                                            else { EmText(lang.server(text)) }
+                                        }.font(.caption).lineLimit(6)
+                                    }
                                 }
                             }
                         }
@@ -546,10 +564,11 @@ struct NewLoopNodeSheet: View {
                 }
                 if kind != "note" {
                     TextField(lang.string("loop.new.title"), text: $title)
+                        .emBar(kind == "task" && !title.isEmpty ? .info : nil, reserve: kind == "task")
                         .onChange(of: title) { if $0.count > (kind == "task" ? 60 : 20) { title = String($0.prefix(kind == "task" ? 60 : 20)) } }
                 }
                 TextField(lang.string("loop.new.text.\(kind)"), text: $text, axis: .vertical)
-                    .lineLimit(4...10)
+                    .lineLimit(4...10).emBar(kind == "task" && !text.isEmpty ? .info : nil, reserve: kind == "task")
                     .onChange(of: text) { if $0.count > 4000 { text = String($0.prefix(4000)) } }
             }
             .formStyle(.grouped)

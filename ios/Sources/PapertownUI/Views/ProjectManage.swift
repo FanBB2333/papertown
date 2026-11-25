@@ -1,13 +1,27 @@
 import PapertownCore
 import SwiftUI
 
-// On a project's page: what its agents wait on you for, each settled with one tap the way the agent asked (its question,
-// its permission request, the dialog on its terminal, a line of its card); asking its lead for a new card; how often
-// the lead looks in. In the project list: asking every lead at once, and the newest papers.
+// What waits on the user, requests for a new card and the lead's rounds.
+
+extension ReportItem {
+    var pendingDecision: Decision {
+        let m = data.matter
+        return Decision(kind: m == nil ? "ask" : "matter", id: String(id), agent: agentID, who: data.who ?? "",
+                        title: data.question ?? m?.question ?? data.text ?? "", detail: "",
+                        options: (data.choices ?? []).map { DecisionOption(label: $0, value: .string($0)) },
+                        free: true, since: ts, mod: m?.mod, facts: m?.facts, optionsText: m?.options,
+                        materials: m?.materials, write: m == nil ? nil : true)
+    }
+}
 
 extension TownStore {
-    /// What a project's agents wait on you for, from its card (empty on servers before 待你决定).
-    func decisions(_ projectID: String) -> [Decision] { cards[projectID]?.decisions ?? [] }
+    func decisions(_ projectID: String) -> [Decision] {
+        if let rows = cards[projectID]?.decisions { return rows }
+        let asks = openAsks.filter { $0.lineID == projectID && $0.data.open != false }.map(\.pendingDecision)
+        let titles = Set(asks.map(\.title))
+        let needs = (cards[projectID]?.card?.needYou ?? []).filter { !titles.contains($0) }
+        return asks + needs.map { Decision(kind: "need", id: $0, agent: nil, who: "", title: $0, detail: "", options: [], free: true) }
+    }
 }
 
 // MARK: - 待你决定
@@ -20,18 +34,14 @@ struct DecisionsSection: View {
         let lang = store.language
         let list = store.decisions(projectID)
         if !list.isEmpty {
-            Section {
-                ForEach(list, id: \.key) { d in
-                    DecisionRow(projectID: projectID, d: d).papertownRowBackground(store.appearance)
+            Section(lang.string("decide.title")) {
+                ForEach(["matter", "need", "permissions"], id: \.self) { group in
+                    ForEach(list.filter { $0.group == group }, id: \.key) { d in
+                        DecisionRow(projectID: projectID, d: d, showsGroup: true)
+                            .id(d.key)
+                            .papertownRowBackground(store.appearance)
+                    }
                 }
-            } header: {
-                HStack {
-                    Label(lang.string("decide.title"), systemImage: "bell.badge.fill").foregroundStyle(.orange)
-                    Spacer()
-                    Text("\(list.count)")
-                }
-            } footer: {
-                Text(lang.string("decide.footer"))
             }
         }
     }
@@ -40,34 +50,68 @@ struct DecisionsSection: View {
 struct DecisionRow: View {
     let projectID: String
     let d: Decision
+    var showsActionBar = true
+    var showsGroup = false
+    var onWritten: () -> Void = {}
     @EnvironmentObject private var store: TownStore
+    #if os(iOS)
+    @Environment(\.verticalSizeClass) private var heightClass
+    @Environment(\.dynamicTypeSize) private var typeSize
+    #endif
     @State private var busy = false
     @State private var writing = false
+    @State private var showingFacts = false
     @State private var error: String?
+    @State private var draft = ""
+    @State private var module: String?
 
     var body: some View {
         let lang = store.language
         VStack(alignment: .leading, spacing: 7) {
-            Label {
-                Text([lang.server(d.who), lang.string("decide.kind.\(d.kind)"), d.since.map { Stamp.ago($0, lang) }]
-                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-            } icon: {
-                Image(systemName: symbol)
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if showsGroup { Text(lang.string("decided.group.\(d.group)")).fontWeight(.medium) }
+                if !showsGroup || !d.writtenAnswer {
+                    Text([lang.server(d.who), lang.string("decide.kind.\(d.kind)"), d.since.map { Stamp.ago($0, lang) }]
+                        .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                if d.writtenAnswer, hasFacts {
+                    Button { showingFacts.toggle() } label: {
+                        HStack(spacing: 4) {
+                            Text(lang.string(showingFacts ? "decided.hide_facts" : "decided.view_facts"))
+                            Image(systemName: showingFacts ? "chevron.up" : "chevron.down").font(.caption2)
+                        }
+                    }
+                    .buttonStyle(.borderless).foregroundStyle(.secondary)
+                }
+                if d.kind == "need" {
+                    let project = store.projects.first { $0.id == projectID }
+                    let stageMod = project?.stages.first { $0.key == project?.stage }?.mod
+                    ModulePicker(selection: Binding(get: { module ?? d.mod ?? stageMod ?? "" }, set: { module = $0 }), allowStage: true)
+                        .labelsHidden().tint(.secondary).controlSize(.small)
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
 
-            Text(lang.server(d.title)).font(.subheadline.weight(.medium)).fixedSize(horizontal: false, vertical: true)
-            if !d.detail.isEmpty {
+            let question = Text(lang.server(d.title)).font(.subheadline.weight(.medium)).fixedSize(horizontal: false, vertical: true)
+            if inlineAnswer {
+                HStack(spacing: 20) {
+                    question.frame(maxWidth: .infinity, alignment: .leading)
+                    answerField(lang).frame(maxWidth: .infinity)
+                }
+            } else { question }
+            if !d.detail.isEmpty && (!d.writtenAnswer || showingFacts) {
                 Text(d.detail)
                     .font(.caption.monospaced())
                     .lineLimit(8)
-                    .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
             }
 
-            if d.kind == "prompt" {
+            if d.writtenAnswer {
+                writtenForm(lang).disabled(busy || d.ready == false)
+            } else if d.kind == "prompt" {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(d.options.enumerated()), id: \.offset) { i, o in
                         Button { pick(o.value) } label: { Text("\(i + 1). \(o.label)").multilineTextAlignment(.leading).frame(maxWidth: .infinity, alignment: .leading) }
@@ -95,27 +139,85 @@ struct DecisionRow: View {
                 }
                 .font(.subheadline)
             }
-            if writing {
+            if !d.writtenAnswer && (writing || (d.free && d.options.isEmpty)) {
                 SendField(placeholder: lang.string("decide.write"), button: lang.string("action.send"), disabled: busy) { text in
                     pick(nil, text: text)
                 }
             }
-            if d.later == true {
+            if d.later == true && !d.writtenAnswer {
                 Text(lang.string("decide.later")).font(.caption).foregroundStyle(.secondary)
             }
             if let error {
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).font(.caption).emState(.bad, detail: true)
             }
         }
+        .emBar(showsActionBar ? .warn : nil)
         .padding(.vertical, 3)
     }
 
-    private var symbol: String {
-        switch d.kind {
-        case "ask": return "questionmark.bubble"
-        case "permission": return "lock.shield"
-        case "prompt": return "terminal"
-        default: return "rectangle.stack"
+    private var inlineAnswer: Bool {
+        #if os(iOS)
+        showsGroup && d.writtenAnswer && !showingFacts && heightClass == .compact && !typeSize.isAccessibilitySize
+        #else
+        false
+        #endif
+    }
+
+    @ViewBuilder
+    private func writtenForm(_ lang: AppLanguage) -> some View {
+        if showingFacts {
+            VStack(alignment: .leading, spacing: 6) {
+                Text([lang.server(d.who), d.since.map { Stamp.compact($0) }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(.secondary)
+                MatterFields(projectID: projectID, facts: d.facts, options: d.optionsText, materials: d.materials) { draft = $0 }
+            }
+        }
+        if !inlineAnswer { answerField(lang) }
+    }
+
+    private func answerField(_ lang: AppLanguage) -> some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField(lang.string("decided.placeholder"), text: $draft, axis: .vertical)
+                .textFieldStyle(.roundedBorder).font(.subheadline).lineLimit(1...7)
+                .emBar(draft.isEmpty ? nil : .info, reserve: true)
+            if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button(lang.string("decided.settle")) { submitWritten() }
+                    .buttonStyle(.borderedProminent).controlSize(.small).fixedSize()
+            }
+        }
+        .disabled(busy || d.ready == false)
+    }
+
+    private var hasFacts: Bool {
+        d.facts?.isEmpty == false || d.optionsText?.isEmpty == false || d.materials?.isEmpty == false || !d.detail.isEmpty
+    }
+
+    private func submitWritten() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !busy, !text.isEmpty else { return }
+        busy = true
+        error = nil
+        Task {
+            defer { busy = false }
+            do {
+                let matterID = d.kind == "matter" ? Int(d.id) : nil
+                if d.kind == "matter", matterID == nil { throw ClientError.invalidResponse }
+                do {
+                    _ = try await store.fetch {
+                        try await $0.writeDecision(projectID: projectID, text: text, mod: (module ?? d.mod)?.nonEmpty,
+                                                   matter: matterID, need: d.kind == "need" ? d.title : nil)
+                    }
+                } catch ClientError.http(let status, _) where [404, 405].contains(status) && d.kind == "need" && d.write == nil && store.cards[projectID]?.decided == nil {
+                    // Older servers accept a card line's written answer through /decide.
+                    let card = try await store.fetch { try await $0.decide(projectID: projectID, d, value: nil, text: text) }
+                    store.cards[projectID] = card
+                }
+                draft = ""
+                await store.decisionChanged(projectID)
+                onWritten()
+            } catch {
+                self.error = store.message(for: error)
+            }
         }
     }
 
@@ -146,8 +248,13 @@ struct DecisionRow: View {
         error = nil
         Task {
             do {
-                let row = try await store.fetch { try await $0.decide(projectID: projectID, d, value: value, text: text) }
-                store.cards[projectID] = row
+                if d.kind == "ask", store.cards[projectID]?.decisions == nil, let id = Int(d.id) {
+                    try await store.fetch { try await $0.answerReport(id: id, text: text ?? value?.stringValue ?? "") }
+                    await store.refreshAll()
+                } else {
+                    let row = try await store.fetch { try await $0.decide(projectID: projectID, d, value: value, text: text) }
+                    store.cards[projectID] = row
+                }
                 writing = false
             } catch {
                 self.error = store.message(for: error)
@@ -184,7 +291,7 @@ struct CardRequestSection: View {
                             .disabled(busy)
                     }
                     if let n = pending.note, !n.isEmpty {
-                        Text(lang.format("card.request.note", n)).font(.caption).foregroundStyle(.secondary)
+                        Text(lang.format("card.request.note", n)).font(.caption).emBar(.info)
                     }
                 } else if started && project.lead.state == "running" {
                     HStack(spacing: 8) {
@@ -202,7 +309,7 @@ struct CardRequestSection: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
-                if let error { Text(error).font(.caption).foregroundStyle(.red) }
+                if let error { Text(error).font(.caption).emState(.bad, detail: true) }
             } footer: {
                 if card?.pending == nil && started && project.lead.state == "running" {
                     Text(lang.string("card.request.footer"))
@@ -264,7 +371,7 @@ struct LeadRoundsRows: View {
                 .disabled(s.supervise == false)
             }
             .disabled(settings == nil)
-            if let error { Text(error).font(.caption).foregroundStyle(.red) }
+            if let error { Text(error).font(.caption).emState(.bad, detail: true) }
         }
         .task { await load() }
     }
@@ -316,36 +423,38 @@ struct UpdateAllButton: View {
 struct FreshPapersSection: View {
     @EnvironmentObject private var store: TownStore
     @Environment(\.openURL) private var openURL
-    @State private var papers: [FreshPaper] = []
+    let papers: [FreshPaper]
 
     var body: some View {
         let lang = store.language
-        Group {
-            if !papers.isEmpty {
-                Section {
-                    ForEach(papers) { p in
-                        Button {
-                            if let s = p.url, let url = URL(string: s) { openURL(url) }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(p.title).font(.subheadline).foregroundStyle(.primary).lineLimit(2)
-                                Text([p.year, p.authors, p.relevance.flatMap { $0 > 0 ? lang.format("papers.relevance", $0) : nil }]
-                                    .compactMap { $0 }.joined(separator: " · "))
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        if !papers.isEmpty {
+            Section {
+                ForEach(papers) { p in
+                    Button {
+                        if let s = p.url, let url = URL(string: s) { openURL(url) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(p.title).font(.subheadline).foregroundStyle(.primary).lineLimit(2)
+                            HStack(spacing: 0) {
+                                let meta = [p.year, p.authors].compactMap { $0 }.joined(separator: " · ")
+                                Text(meta)
+                                if let score = p.relevance, score > 0 {
+                                    if !meta.isEmpty { Text(" · ") }
+                                    EmText(lang.format("papers.relevance", score), .numbers(.info))
+                                        .fixedSize(horizontal: true, vertical: false)
+                                }
                             }
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
-                        .papertownRowBackground(store.appearance)
                     }
-                } header: {
-                    Text(lang.string("papers.fresh"))
-                } footer: {
-                    Text(lang.string("papers.fresh.footer"))
+                    .buttonStyle(.plain)
+                    .papertownRowBackground(store.appearance)
                 }
+            } header: {
+                Text(lang.string("papers.fresh"))
+            } footer: {
+                Text(lang.string("papers.fresh.footer"))
             }
-        }
-        .task(id: store.connectionStatus == .connected) {
-            guard store.connectionStatus == .connected else { return }
-            papers = (try? await store.fetch { try await $0.freshPapers() }) ?? []
         }
     }
 }

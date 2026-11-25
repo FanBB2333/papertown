@@ -89,6 +89,7 @@ public struct MacSettingsView: View {
         .frame(width: 560)
         .fixedSize(horizontal: false, vertical: true)
         .environment(\.locale, store.language.locale)
+        .environment(\.emAppearance, store.appearance)
     }
 }
 
