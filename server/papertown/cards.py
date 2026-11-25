@@ -11,11 +11,12 @@ from __future__ import annotations
 import json
 import threading
 import time
+import uuid
 from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .agents import AgentError
+from .agents import EMPHASIS_GUIDE, AgentError
 from .db import now, read_json, write_json
 from .decisions import Decisions
 from .linked import _git
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from .town import Town
 
 HEALTH = {"ok": "顺利", "risk": "有风险", "blocked": "卡住了"}
-LISTS = {"done": "最近完成的", "next": "接下来要做的", "blockers": "卡点和风险", "need_you": "要用户决定或去做的"}
+LISTS = {"done": "最近完成的", "next": "接下来要做的", "blockers": "卡点和风险", "need_you": "待定的事"}
 STATES = {"todo": "还没开始", "doing": "在做", "done": "完成"}
 LIST_MAX = 6
 SUMMARY_MAX, ITEM_MAX = 200, 160
@@ -42,16 +43,17 @@ FIELDS = f"""- summary：一两句话，项目现在的样子（必填，{SUMMAR
 - done：最近完成的事
 - next：接下来要做的
 - blockers：卡点和风险
-- need_you：要用户决定或去做的
+- need_you：等用户定的事，只写事情本身。用户将用文字写下决定。
 - metrics：关键数字，每个写成 {{"name": "…", "value": "…", "note": "…"}}（note 可以不写）
 - plans：规划中、还没提交的实验，每个写成 {{"name": "…", "goal": "…", "when": "…"}}（goal 是想验证什么，when 是打算什么时候跑，都可以不写）
 - outputs：预期产出（论文、主表、图、模型、数据集…），每个写成 {{"name": "…", "due": "…", "state": "todo|doing|done"}}（due 可以不写）
 done、next、blockers、need_you、metrics、plans、outputs 各最多 {LIST_MAX} 条，每条一句话（{ITEM_MAX} 字以内），没有就写空列表。
+{EMPHASIS_GUIDE}
 在跑的实验不用写：Papertown 自己从任务队列里读。"""
 
-EXAMPLE = {"summary": "主实验在 4 张卡上跑到第 3 轮，消融还没开始。", "health": "ok", "progress": 45,
+EXAMPLE = {"summary": "主实验已完成**三轮中的两轮**，消融实验尚未开始。", "health": "ok", "progress": 45,
            "milestone": "周五前拿到主表的三组结果", "done": ["baseline 复现，和论文差 0.3 以内"], "next": ["跑完主实验", "写方法一节"],
-           "blockers": [], "need_you": ["要不要加第四个数据集"], "metrics": [{"name": "主指标", "value": "71.2", "note": "baseline 68.9"}],
+           "blockers": [], "need_you": ["跨领域评测应覆盖哪些数据集？"], "metrics": [{"name": "主指标", "value": "71.2", "note": "baseline 68.9"}],
            "plans": [{"name": "消融：去掉记忆模块", "goal": "看记忆模块贡献多少", "when": "主实验跑完后"}],
            "outputs": [{"name": "主表（三个数据集）", "due": "周五", "state": "doing"}, {"name": "方法框图", "state": "todo"}]}
 
@@ -145,7 +147,7 @@ class Cards:
         self.town = town
         self.db = town.db
         self.s = town.s
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._repos: dict[str, tuple[float, dict]] = {}
         self.decisions = Decisions(town)
 
@@ -162,6 +164,14 @@ class Cards:
 
     def _lead(self, line_id: str) -> dict | None:
         return self.town.leads.agent(line_id, "lead")
+
+    def answered(self, line_id: str, doc: dict) -> set[str]:
+        done = {x["item"] for x in doc.get("decided") or []}
+        keys = doc.get("need_keys") or {}
+        for row in self.town.db.q("select item, card_key from decided_needs where line_id = ?", line_id):
+            if row["card_key"] == keys.get(row["item"], ""):
+                done.add(row["item"])
+        return done
 
     def row(self, line: dict) -> dict:
         """One project on the 进展 page: Papertown's own facts, its lead, and the card."""
@@ -186,15 +196,18 @@ class Cards:
             "repos": self.repos(lid),
             "memory": self.town.history.counts(lid),
             "asks": len(self.town.leads.asks(lid)),
-            "decisions": self.decisions.gather(lid, card, d.get("decided") or []),
+            "decisions": self.decisions.gather(lid, card, self.answered(lid, d)),
+            "decided": self.town.decided.card(lid),
+            "prov": self.town.prov.card(lid),
             "checks": self.town.checks.summary(lid),
         }
 
-    def decide(self, line_id: str, kind: str, id_: str, agent: str | None, value: object, text: str | None) -> dict:
+    def decide(self, line_id: str, kind: str, id_: str, agent: str | None, value: object, text: str | None, mod: str | None = None) -> dict:
         """One of the card's decisions answered from the 进展 page; the card as it is now."""
         if not self.db.one("select 1 from lines where id = ?", line_id):
             raise CardError("没有这个项目")
-        self.decisions.decide(line_id, kind, id_, agent, value, text)
+        if self.decisions.decide(line_id, kind, id_, agent, value, text, mod):
+            return self.one(line_id)
         return self._publish(line_id)
 
     @staticmethod
@@ -360,6 +373,9 @@ class Cards:
             if not d.get("pending"):
                 raise CardError("现在没有人让你更新卡片：只在收到 <card> 消息时更新")
             card |= {"at": now(), "by": a.get("model") or "项目负责人"}
+            previous = (d.get("card") or {}).get("need_you") or []
+            keys = d.get("need_keys") or {}
+            d["need_keys"] = {item: keys.get(item, "") if item in previous else uuid.uuid4().hex for item in card["need_you"]}
             d |= {"prev": d.get("card"), "card": card, "pending": None,
                   # what you decided from the old card, while the new one still lists it unchanged
                   "decided": [x for x in d.get("decided") or [] if x.get("item") in card.get("need_you", [])]}

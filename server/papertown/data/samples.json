@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 2,
  "samples": [
   {
    "idea": "仓库级代码 Agent：先用检索增强在整个代码仓库里定位相关文件和调用链，再让 agent 分步修改并跑测试回归，减少跨文件修改时漏改、改错接口的情况",
@@ -290,6 +290,9 @@
          "generation"
         ]
        }
+      ],
+      "basis": [
+       "D1"
       ]
      }
     },
@@ -310,38 +313,52 @@
      "title": "Repository · Agent · Retrieval-Augmented Generation · Code Repository",
      "body": {
       "title": "Repository · Agent · Retrieval-Augmented Generation · Code Repository",
-      "problem": "Idea（原文）：仓库级代码 Agent：先用检索增强在整个代码仓库里定位相关文件和调用链，再让 agent 分步修改并跑测试回归，减少跨文件修改时漏改、改错接口的情况。目标是解决撞车报告里的空白点：关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。",
+      "problem": "仓库级代码 Agent：先用检索增强在整个代码仓库里定位相关文件和调用链，再让 agent 分步修改并跑测试回归，减少跨文件修改时漏改、改错接口的情况",
       "mechanism": [
-       "针对 repository 设计专门的模块（样例占位，机制等负责人接手后写）",
-       "针对 Agent 设计专门的模块（样例占位，机制等负责人接手后写）",
-       "针对 retrieval-augmented generation 设计专门的模块（样例占位，机制等负责人接手后写）"
+       "先按报错检索文件，再沿调用边扩展上下文。每次修复保存检索到的文件清单。"
       ],
       "baselines": [
        {
-        "name": "Retrieval-Augmented Code Generation",
-        "source": "arxiv:2510.04905"
+        "name": "BM25",
+        "source": ""
        },
        {
-        "name": "GraphCodeAgent",
-        "source": "arxiv:2504.10046"
+        "name": "Dense retrieval",
+        "source": ""
        },
        {
-        "name": "SpecAgent",
-        "source": "arxiv:2510.17925"
+        "name": "Call graph only",
+        "source": ""
        }
       ],
       "datasets": [
-       "sample-lab/sg-kit",
-       "sample-lab/paper-tpl"
+       "跨文件接口修改的修复提交"
       ],
       "metrics": [
-       "Task success rate (%)",
-       "Average completed subtasks (%)",
-       "Error recovery rate after perturbations (%)"
+       "Patch test pass rate (%)",
+       "Changed-file recall (%)",
+       "Interface regression rate (%)"
       ],
       "risks": [
        "样例占位内容，机制部分等负责人接手后重写"
-      ]
+      ],
+      "basis": {
+       "problem": [
+        "D1"
+       ],
+       "mechanism": [
+        "D3"
+       ],
+       "baselines": [
+        "D2"
+       ],
+       "datasets": [
+        "D5"
+       ],
+       "metrics": [
+        "D5"
+       ]
+      }
      }
     },
     {
@@ -351,13 +368,13 @@
      "title": "结果表（样例）",
      "body": {
       "metrics": [
-       "Task success rate (%)",
-       "Average completed subtasks (%)",
-       "Error recovery rate after perturbations (%)"
+       "Patch test pass rate (%)",
+       "Changed-file recall (%)",
+       "Interface regression rate (%)"
       ],
       "rows": [
        {
-        "method": "Retrieval-Augmented Code Generation",
+        "method": "BM25",
         "values": [
          55.7,
          47.9,
@@ -366,7 +383,7 @@
         "ours": false
        },
        {
-        "method": "GraphCodeAgent",
+        "method": "Dense retrieval",
         "values": [
          46.5,
          54.7,
@@ -375,7 +392,7 @@
         "ours": false
        },
        {
-        "method": "SpecAgent",
+        "method": "Call graph only",
         "values": [
          43.2,
          36.9,
@@ -394,12 +411,16 @@
        }
       ],
       "seeds": 3,
-      "analysis": "以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 58.8 vs 55.7，Average completed subtasks (%) 55.8 vs 54.7，Error recovery rate after perturbations (%) 60.1 vs 58.1。",
+      "analysis": "样例结果按三个种子取平均，表中数值仅用于展示。",
       "concerns": [
        "需要补消融实验"
       ],
       "job_id": null,
-      "sample": true
+      "sample": true,
+      "basis": [
+       "D5",
+       "D8"
+      ]
      }
     },
     {
@@ -437,7 +458,10 @@
        "compiled": false,
        "pages": null,
        "summary": "已排版，未编译"
-      }
+      },
+      "basis": [
+       "D6"
+      ]
      }
     },
     {
@@ -494,6 +518,9 @@
        "Method：和最相近的工作「Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches」的区别需要单独一段讨论",
        "Experiments：结果是样例占位数字，需要真实实验",
        "Experiments：需要补消融实验"
+      ],
+      "basis": [
+       "D6"
       ]
      }
     },
@@ -513,7 +540,7 @@
     }
    ],
    "press": {
-    "main.tex": "\\documentclass[11pt]{article}\n\\usepackage[margin=1in]{geometry}\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage{amsmath,amssymb}\n\\usepackage{booktabs}\n\\usepackage{hyperref}\n\\title{Repository · Agent · Retrieval-Augmented Generation · Code Repository}\n\\author{Anonymous Authors}\n\\date{}\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nRepository · Agent · Retrieval-Augmented Generation · Code Repository. We target a gap left by prior work. This is a sample draft with placeholder content. Every section is to be rewritten once a lead takes the project over.\n\\end{abstract}\n\n\\section{Introduction}\nPrior work leaves an open problem. Closest to us are \\cite{arxiv251004905,arxiv250410046,arxiv251017925}.\n\\begin{itemize}\n\\item  repository \n\\item  Agent \n\\item  retrieval-augmented generation \n\\end{itemize}\n\n\\section{Related Work}\nRetrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches~\\cite{arxiv251004905} is closely related to our setting. GraphCodeAgent: Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation~\\cite{arxiv250410046} is closely related to our setting. SpecAgent: A Speculative Retrieval and Forecasting Agent for Code Completion~\\cite{arxiv251017925} is closely related to our setting. Other relevant lines of work include TDD-Agent: Test-Driven Reasoning for Code Generation~\\cite{arxiv260816742}, MASS-RAG: Multi-Agent Synthesis Retrieval-Augmented Generation~\\cite{arxiv260418509}, ProjAgent: Procedural Similarity Retrieval for Repository-Level Code Generation~\\cite{arxiv260708691}, GraphSearch: An Agentic Deep Searching Workflow for Graph Retrieval-Augmented Generation~\\cite{arxiv250922009}, DuetRAG: Collaborative Retrieval-Augmented Generation~\\cite{arxiv240513002}.\n\n\\section{Method}\n\\subsection{Component 1}\nThis component addresses:  repository .\n\\subsection{Component 2}\nThis component addresses:  Agent .\n\\subsection{Component 3}\nThis component addresses:  retrieval-augmented generation .\n\n\\section{Experiments}\nWe compare against Retrieval-Augmented Code Generation, GraphCodeAgent, SpecAgent on Task success rate (\\%), Average completed subtasks (\\%), Error recovery rate after perturbations (\\%). The numbers in Table~\\ref{tab:main} are sample placeholders.\n\n\\begin{table}[t]\n\\centering\n\\begin{tabular}{lccc}\n\\toprule\nMethod & Task success rate (\\%) & Average completed subtasks (\\%) & Error recovery rate after perturbations (\\%) \\\\\n\\midrule\nRetrieval-Augmented Code Generation & 55.7 & 47.9 & 42.9 \\\\\nGraphCodeAgent & 46.5 & 54.7 & 58.1 \\\\\nSpecAgent & 43.2 & 36.9 & 46.8 \\\\\nOurs & \\textbf{58.8} & \\textbf{55.8} & \\textbf{60.1} \\\\\n\\bottomrule\n\\end{tabular}\n\\caption{Main results (mean over 3 seeds). Numbers are sample placeholders until real experiments finish.}\n\\label{tab:main}\n\\end{table}\n\n\n\\section{Conclusion}\nThis sample draft fixes the structure of the paper; the claims above are placeholders until the method is written and real experiments are run.\n\n\\bibliographystyle{plain}\n\\bibliography{refs}\n\\end{document}\n",
+    "main.tex": "\\documentclass[11pt]{article}\n\\usepackage[margin=1in]{geometry}\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage{amsmath,amssymb}\n\\usepackage{booktabs}\n\\usepackage{hyperref}\n\\title{Repository · Agent · Retrieval-Augmented Generation · Code Repository}\n\\author{Anonymous Authors}\n\\date{}\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nRepository · Agent · Retrieval-Augmented Generation · Code Repository. We target a gap left by prior work. This is a sample draft with placeholder content. Every section is to be rewritten once a lead takes the project over.\n\\end{abstract}\n\n\\section{Introduction}\nPrior work leaves an open problem. Closest to us are \\cite{arxiv251004905,arxiv250410046,arxiv251017925}.\n\\begin{itemize}\n\\item  repository \n\\item  Agent \n\\item  retrieval-augmented generation \n\\end{itemize}\n\n\\section{Related Work}\nRetrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches~\\cite{arxiv251004905} is closely related to our setting. GraphCodeAgent: Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation~\\cite{arxiv250410046} is closely related to our setting. SpecAgent: A Speculative Retrieval and Forecasting Agent for Code Completion~\\cite{arxiv251017925} is closely related to our setting. Other relevant lines of work include TDD-Agent: Test-Driven Reasoning for Code Generation~\\cite{arxiv260816742}, MASS-RAG: Multi-Agent Synthesis Retrieval-Augmented Generation~\\cite{arxiv260418509}, ProjAgent: Procedural Similarity Retrieval for Repository-Level Code Generation~\\cite{arxiv260708691}, GraphSearch: An Agentic Deep Searching Workflow for Graph Retrieval-Augmented Generation~\\cite{arxiv250922009}, DuetRAG: Collaborative Retrieval-Augmented Generation~\\cite{arxiv240513002}.\n\n\\section{Method}\n\\subsection{Component 1}\nThis component addresses:  repository .\n\\subsection{Component 2}\nThis component addresses:  Agent .\n\\subsection{Component 3}\nThis component addresses:  retrieval-augmented generation .\n\n\\section{Experiments}\nWe compare against Retrieval-Augmented Code Generation, GraphCodeAgent, SpecAgent on Patch test pass rate (\\%), Changed-file recall (\\%), Interface regression rate (\\%). The numbers in Table~\\ref{tab:main} are sample placeholders.\n\n\\begin{table}[t]\n\\centering\n\\begin{tabular}{lccc}\n\\toprule\nMethod & Patch test pass rate (\\%) & Changed-file recall (\\%) & Interface regression rate (\\%) \\\\\n\\midrule\nBM25 & 55.7 & 47.9 & 42.9 \\\\\nDense retrieval & 46.5 & 54.7 & 58.1 \\\\\nCall graph only & 43.2 & 36.9 & 46.8 \\\\\nOurs & \\textbf{58.8} & \\textbf{55.8} & \\textbf{60.1} \\\\\n\\bottomrule\n\\end{tabular}\n\\caption{Main results (mean over 3 seeds). Numbers are sample placeholders until real experiments finish.}\n\\label{tab:main}\n\\end{table}\n\n\n\\section{Conclusion}\nThis sample draft fixes the structure of the paper; the claims above are placeholders until the method is written and real experiments are run.\n\n\\bibliographystyle{plain}\n\\bibliography{refs}\n\\end{document}\n",
     "refs.bib": "@article{arxiv251004905,\n  title = {Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches},\n  author = {Yicheng Tao and Yuante Li and Yao Qin and Yepang Liu},\n  journal = {arXiv preprint arXiv:2510.04905},\n  year = {2025},\n  url = {https://arxiv.org/abs/2510.04905}\n}\n\n@article{arxiv250410046,\n  title = {GraphCodeAgent: Dual Graph-Guided LLM Agent for Retrieval-Augmented Repo-Level Code Generation},\n  author = {Jia Li and Xianjie Shi and Kechi Zhang and Ge Li and Zhi Jin and Lei Li and Huangzhao Zhang and Jia Li and Fang Liu and Yuwei Zhang and Zhengwei Tao and Yihong Dong and Yuqi Zhu and Chongyang Tao},\n  journal = {arXiv preprint arXiv:2504.10046},\n  year = {2025},\n  url = {https://arxiv.org/abs/2504.10046}\n}\n\n@article{arxiv251017925,\n  title = {SpecAgent: A Speculative Retrieval and Forecasting Agent for Code Completion},\n  author = {George Ma and Anurag Koul and Qi Chen and Yawen Wu and Sachit Kuhar and Yu Yu and Aritra Sengupta and Varun Kumar and Murali Krishna Ramanathan},\n  journal = {arXiv preprint arXiv:2510.17925},\n  year = {2025},\n  url = {https://arxiv.org/abs/2510.17925}\n}\n\n@article{arxiv260816742,\n  title = {TDD-Agent: Test-Driven Reasoning for Code Generation},\n  author = {Hongyue Yu and Kefan Li and Jiakun Li and Hongzheng Chai and Yuan Yuan and Rui He and Junyi Wei},\n  journal = {arXiv preprint arXiv:2608.16742},\n  year = {2026},\n  url = {https://arxiv.org/abs/2608.16742}\n}\n\n@article{arxiv260418509,\n  title = {MASS-RAG: Multi-Agent Synthesis Retrieval-Augmented Generation},\n  author = {Xingchen Xiao and Heyan Huang and Runheng Liu and Jincheng Xie},\n  journal = {arXiv preprint arXiv:2604.18509},\n  year = {2026},\n  url = {https://arxiv.org/abs/2604.18509}\n}\n\n@article{arxiv260708691,\n  title = {ProjAgent: Procedural Similarity Retrieval for Repository-Level Code Generation},\n  author = {QiHong Chen and Aaron Imani and Iftekhar Ahmed},\n  journal = {arXiv preprint arXiv:2607.08691},\n  year = {2026},\n  url = {https://arxiv.org/abs/2607.08691}\n}\n\n@article{arxiv250922009,\n  title = {GraphSearch: An Agentic Deep Searching Workflow for Graph Retrieval-Augmented Generation},\n  author = {Cehao Yang and Xiaojun Wu and Xueyuan Lin and Chengjin Xu and Xuhui Jiang and Yuanliang Sun and Jia Li and Hui Xiong and Jian Guo},\n  journal = {arXiv preprint arXiv:2509.22009},\n  year = {2025},\n  url = {https://arxiv.org/abs/2509.22009}\n}\n\n@article{arxiv240513002,\n  title = {DuetRAG: Collaborative Retrieval-Augmented Generation},\n  author = {Dian Jiao and Li Cai and Jingsheng Huang and Wenqiao Zhang and Siliang Tang and Yueting Zhuang},\n  journal = {arXiv preprint arXiv:2405.13002},\n  year = {2024},\n  url = {https://arxiv.org/abs/2405.13002}\n}\n"
    },
    "chat": [
@@ -535,11 +562,11 @@
     },
     {
      "kind": "assistant",
-     "text": "方法草案写好了：Repository · Agent · Retrieval-Augmented Generation · Code Repository。baseline：Retrieval-Augmented Code Generation、GraphCodeAgent、SpecAgent。"
+     "text": "已按用户的决定整理方法草案。基线为 BM25、Dense retrieval、Call graph only。"
     },
     {
      "kind": "assistant",
-     "text": "实验结果表已交。以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 58.8 vs 55.7，Average completed subtasks (%) 55.8 vs 54.7，Error recovery rate af"
+     "text": "样例结果按三个种子取平均，表中数值仅用于展示。"
     },
     {
      "kind": "assistant",
@@ -557,14 +584,83 @@
    "reports": [
     {
      "kind": "report",
-     "text": "样例项目：八道工序都已完成，论文已出厂。质检平均 4.0 分，带意见放行。",
+     "text": "八道工序已完成，论文已出厂。**质检平均 4.0 分**，审稿意见随论文存档。",
      "key": false
     }
-   ]
+   ],
+   "card": {"summary": "**八道工序已完成**，论文和审稿意见已归档。", "progress": 100},
+   "decided": [
+    {
+     "mod": "survey",
+     "text": "用 BM25、Dense retrieval、Call graph only 作对照。逐组核对输入条件与评测预算。",
+     "materials": [
+      {
+       "kind": "paper",
+       "ref": "arxiv:2510.04905",
+       "title": "Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches"
+      }
+     ]
+    },
+    {
+     "mod": "code",
+     "text": "先按报错检索文件，再沿调用边扩展上下文。每次修复保存检索到的文件清单。"
+    },
+    {
+     "mod": "exp",
+     "text": "先在一个仓库抽查十次修复，只记录最终测试结果。"
+    },
+    {
+     "mod": "data",
+     "text": "按仓库划分修复提交。同一接口的迁移只进一个集合。主指标是补丁测试通过率，另记修改文件召回率和接口回归率。"
+    },
+    {
+     "mod": "paper",
+     "text": "先用一次漏改调用方的案例说明问题，再呈现按仓库分组的主表。把误检文件和漏检文件分开讨论。"
+    },
+    {
+     "mod": "agents",
+     "text": "代码员工复现检索和回归测试，写作员工核对案例中的文件和调用关系。"
+    },
+    {
+     "mod": "exp",
+     "text": "同一批跨文件修复分别运行三组检索基线和完整方法，每组用相同的三个种子，单独统计接口变更。",
+     "replaces": "D4"
+    }
+   ],
+   "matter": {
+    "mod": "exp",
+    "question": "后续评测怎样处理一次修改涉及多个仓库的提交？",
+    "facts": [
+     "现有评测按仓库划分，跨仓库提交同时涉及两个集合。",
+     "当前方法草案只定义了仓库内的调用边。"
+    ],
+    "options": [
+     "把关联仓库放入同一测试组",
+     "单列跨仓库测试集"
+    ],
+    "materials": [
+     {
+      "kind": "paper",
+      "ref": "arxiv:2510.04905",
+      "title": "Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches"
+     }
+    ]
+   }
   },
   {
    "idea": "大语言模型审稿：把 peer review 拆成查新颖性、核对方法、核对实验三个 agent，先检索相近工作再评新颖性，和单个模型直接审稿比打分的一致性与可解释性",
    "title": "Large Language Model · Peer Review · Peer · Review",
+   "prov": {
+    "label": "tab:main",
+    "table": "盲审评测主结果",
+    "job": "样例盲审评测",
+    "how": "按评审方法汇总三个种子的均值。",
+    "cite": "arxiv:2601.08003",
+    "result": "outputs/review.json",
+    "artifact": "results/main_table.csv",
+    "values": [[47.7, 46.2, 46.1], [49.7, 48.0, 55.7], [36.7, 59.9, 42.5], [53.4, 64.2, 62.8]],
+    "revised": [53.4, 64.1, 62.8]
+   },
    "verdict": "需调整",
    "status": "running",
    "note": "样例项目，内容是占位的",
@@ -830,6 +926,9 @@
          "retrieval"
         ]
        }
+      ],
+      "basis": [
+       "D1"
       ]
      }
     },
@@ -850,38 +949,52 @@
      "title": "Large Language Model · Peer Review · Peer · Review",
      "body": {
       "title": "Large Language Model · Peer Review · Peer · Review",
-      "problem": "Idea（原文）：大语言模型审稿：把 peer review 拆成查新颖性、核对方法、核对实验三个 agent，先检索相近工作再评新颖性，和单个模型直接审稿比打分的一致性与可解释性。目标是解决撞车报告里的空白点：最相近的工作里没有出现：retrieval。",
+      "problem": "大语言模型审稿：把 peer review 拆成查新颖性、核对方法、核对实验三个 agent，先检索相近工作再评新颖性，和单个模型直接审稿比打分的一致性与可解释性",
       "mechanism": [
-       "针对 large language model 设计专门的模块（样例占位，机制等负责人接手后写）",
-       "针对 peer review 设计专门的模块（样例占位，机制等负责人接手后写）",
-       "针对 peer 设计专门的模块（样例占位，机制等负责人接手后写）"
+       "把查新、方法核实和实验核实分成三个岗位，每条意见保留段落出处，再汇总评分。"
       ],
       "baselines": [
        {
-        "name": "LLM Review",
-        "source": "arxiv:2601.08003"
+        "name": "Single reviewer",
+        "source": ""
        },
        {
-        "name": "AlphaIdeaBench",
-        "source": "arxiv:2610.33644"
+        "name": "Retrieval then review",
+        "source": ""
        },
        {
-        "name": "Can AI Be a Good Peer Reviewer? A Survey",
-        "source": "arxiv:2604.27924"
+        "name": "Three independent reviewers",
+        "source": ""
        }
       ],
       "datasets": [
-       "sample-lab/sg-kit",
-       "sample-lab/paper-tpl"
+       "附有终稿和公开评审意见的论文"
       ],
       "metrics": [
-       "Task success rate (%)",
-       "Average completed subtasks (%)",
-       "Error recovery rate after perturbations (%)"
+       "Score agreement (%)",
+       "Evidence precision (%)",
+       "Unsupported criticism rate (%)"
       ],
       "risks": [
        "样例占位内容，机制部分等负责人接手后重写"
-      ]
+      ],
+      "basis": {
+       "problem": [
+        "D1"
+       ],
+       "mechanism": [
+        "D3"
+       ],
+       "baselines": [
+        "D2"
+       ],
+       "datasets": [
+        "D5"
+       ],
+       "metrics": [
+        "D5"
+       ]
+      }
      }
     },
     {
@@ -891,13 +1004,13 @@
      "title": "结果表（样例）",
      "body": {
       "metrics": [
-       "Task success rate (%)",
-       "Average completed subtasks (%)",
-       "Error recovery rate after perturbations (%)"
+       "Score agreement (%)",
+       "Evidence precision (%)",
+       "Unsupported criticism rate (%)"
       ],
       "rows": [
        {
-        "method": "LLM Review",
+        "method": "Single reviewer",
         "values": [
          47.7,
          46.2,
@@ -906,7 +1019,7 @@
         "ours": false
        },
        {
-        "method": "AlphaIdeaBench",
+        "method": "Retrieval then review",
         "values": [
          49.7,
          48.0,
@@ -915,7 +1028,7 @@
         "ours": false
        },
        {
-        "method": "Can AI Be a Good Peer Reviewer? A Survey",
+        "method": "Three independent reviewers",
         "values": [
          36.7,
          59.9,
@@ -934,12 +1047,16 @@
        }
       ],
       "seeds": 3,
-      "analysis": "以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 53.4 vs 49.7，Average completed subtasks (%) 64.2 vs 59.9，Error recovery rate after perturbations (%) 62.7 vs 55.7。",
+      "analysis": "样例结果按三个种子取平均，表中数值仅用于展示。",
       "concerns": [
        "需要补消融实验"
       ],
       "job_id": null,
-      "sample": true
+      "sample": true,
+      "basis": [
+       "D5",
+       "D8"
+      ]
      }
     },
     {
@@ -977,12 +1094,15 @@
        "compiled": false,
        "pages": null,
        "summary": "已排版，未编译"
-      }
+      },
+      "basis": [
+       "D6"
+      ]
      }
     }
    ],
    "press": {
-    "main.tex": "\\documentclass[11pt]{article}\n\\usepackage[margin=1in]{geometry}\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage{amsmath,amssymb}\n\\usepackage{booktabs}\n\\usepackage{hyperref}\n\\title{Large Language Model · Peer Review · Peer · Review}\n\\author{Anonymous Authors}\n\\date{}\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nLarge Language Model · Peer Review · Peer · Review. We target a gap left by prior work. This is a sample draft with placeholder content. Every section is to be rewritten once a lead takes the project over.\n\\end{abstract}\n\n\\section{Introduction}\nPrior work leaves an open problem. Closest to us are \\cite{arxiv260108003,arxiv261033644,arxiv260427924}.\n\\begin{itemize}\n\\item  large language model \n\\item  peer review \n\\item  peer \n\\end{itemize}\n\n\\section{Related Work}\nLLM Review: Enhancing Creative Writing via Blind Peer Review Feedback~\\cite{arxiv260108003} is closely related to our setting. AlphaIdeaBench: Benchmarking Automated Research Idea Generation under Feasibility Constraints with Peer Review Alignment~\\cite{arxiv261033644} is closely related to our setting. Can AI Be a Good Peer Reviewer? A Survey of Peer Review Process, Evaluation, and the Future~\\cite{arxiv260427924} is closely related to our setting. Other relevant lines of work include AgentReview: Exploring Peer Review Dynamics with LLM Agents~\\cite{arxiv240612708}, A Vision for Auto Research with LLM Agents~\\cite{arxiv250418765}, LitReview Arena: Evaluating Literature Review Agents with Battle-Style Peer Review Platform~\\cite{arxiv260821374}, Agentic Tool Use in Large Language Models~\\cite{arxiv260400835}, Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches~\\cite{arxiv251004905}.\n\n\\section{Method}\n\\subsection{Component 1}\nThis component addresses:  large language model .\n\\subsection{Component 2}\nThis component addresses:  peer review .\n\\subsection{Component 3}\nThis component addresses:  peer .\n\n\\section{Experiments}\nWe compare against LLM Review, AlphaIdeaBench, Can AI Be a Good Peer Reviewer? A Survey on Task success rate (\\%), Average completed subtasks (\\%), Error recovery rate after perturbations (\\%). The numbers in Table~\\ref{tab:main} are sample placeholders.\n\n\\begin{table}[t]\n\\centering\n\\begin{tabular}{lccc}\n\\toprule\nMethod & Task success rate (\\%) & Average completed subtasks (\\%) & Error recovery rate after perturbations (\\%) \\\\\n\\midrule\nLLM Review & 47.7 & 46.2 & 46.1 \\\\\nAlphaIdeaBench & 49.7 & 48.0 & 55.7 \\\\\nCan AI Be a Good Peer Reviewer? A Survey & 36.7 & 59.9 & 42.5 \\\\\nOurs & \\textbf{53.4} & \\textbf{64.2} & \\textbf{62.7} \\\\\n\\bottomrule\n\\end{tabular}\n\\caption{Main results (mean over 3 seeds). Numbers are sample placeholders until real experiments finish.}\n\\label{tab:main}\n\\end{table}\n\n\n\\section{Conclusion}\nThis sample draft fixes the structure of the paper; the claims above are placeholders until the method is written and real experiments are run.\n\n\\bibliographystyle{plain}\n\\bibliography{refs}\n\\end{document}\n",
+    "main.tex": "\\documentclass[11pt]{article}\n\\usepackage[margin=1in]{geometry}\n\\usepackage[T1]{fontenc}\n\\usepackage{lmodern}\n\\usepackage{amsmath,amssymb}\n\\usepackage{booktabs}\n\\usepackage{hyperref}\n\\title{Large Language Model · Peer Review · Peer · Review}\n\\author{Anonymous Authors}\n\\date{}\n\\begin{document}\n\\maketitle\n\n\\begin{abstract}\nLarge Language Model · Peer Review · Peer · Review. We target a gap left by prior work. This is a sample draft with placeholder content. Every section is to be rewritten once a lead takes the project over.\n\\end{abstract}\n\n\\section{Introduction}\nPrior work leaves an open problem. Closest to us are \\cite{arxiv260108003,arxiv261033644,arxiv260427924}.\n\\begin{itemize}\n\\item  large language model \n\\item  peer review \n\\item  peer \n\\end{itemize}\n\n\\section{Related Work}\nLLM Review: Enhancing Creative Writing via Blind Peer Review Feedback~\\cite{arxiv260108003} is closely related to our setting. AlphaIdeaBench: Benchmarking Automated Research Idea Generation under Feasibility Constraints with Peer Review Alignment~\\cite{arxiv261033644} is closely related to our setting. Can AI Be a Good Peer Reviewer? A Survey of Peer Review Process, Evaluation, and the Future~\\cite{arxiv260427924} is closely related to our setting. Other relevant lines of work include AgentReview: Exploring Peer Review Dynamics with LLM Agents~\\cite{arxiv240612708}, A Vision for Auto Research with LLM Agents~\\cite{arxiv250418765}, LitReview Arena: Evaluating Literature Review Agents with Battle-Style Peer Review Platform~\\cite{arxiv260821374}, Agentic Tool Use in Large Language Models~\\cite{arxiv260400835}, Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches~\\cite{arxiv251004905}.\n\n\\section{Method}\n\\subsection{Component 1}\nThis component addresses:  large language model .\n\\subsection{Component 2}\nThis component addresses:  peer review .\n\\subsection{Component 3}\nThis component addresses:  peer .\n\n\\section{Experiments}\nWe compare against LLM Review, AlphaIdeaBench, Can AI Be a Good Peer Reviewer? A Survey on Score agreement (\\%), Evidence precision (\\%), Unsupported criticism rate (\\%). The numbers in Table~\\ref{tab:main} are sample placeholders.\n\n\\begin{table}[t]\n\\centering\n\\begin{tabular}{lccc}\n\\toprule\nMethod & Score agreement (\\%) & Evidence precision (\\%) & Unsupported criticism rate (\\%) \\\\\n\\midrule\nSingle reviewer & 47.7 & 46.2 & 46.1 \\\\\nRetrieval then review & 49.7 & 48.0 & 55.7 \\\\\nThree independent reviewers & 36.7 & 59.9 & 42.5 \\\\\nOurs & \\textbf{53.4} & \\textbf{64.2} & \\textbf{62.7} \\\\\n\\bottomrule\n\\end{tabular}\n\\caption{Main results (mean over 3 seeds). Numbers are sample placeholders until real experiments finish.}\n\\label{tab:main}\n\\end{table}\n\n\n\\section{Conclusion}\nThis sample draft fixes the structure of the paper; the claims above are placeholders until the method is written and real experiments are run.\n\n\\bibliographystyle{plain}\n\\bibliography{refs}\n\\end{document}\n",
     "refs.bib": "@article{arxiv260108003,\n  title = {LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback},\n  author = {Weiyue Li and Mingxiao Song and Zhenda Shen and Dachuan Zhao and Yunfan Long and Yi Li and Yongce Li and Ruyi Yang and Mengyu Wang},\n  journal = {arXiv preprint arXiv:2601.08003},\n  year = {2026},\n  url = {https://arxiv.org/abs/2601.08003}\n}\n\n@article{arxiv261033644,\n  title = {AlphaIdeaBench: Benchmarking Automated Research Idea Generation under Feasibility Constraints with Peer Review Alignment},\n  author = {Shunchao Zhou and Chang Yang and Jingrui Wang and Shuxin Zhuang and Rundong Wang and Runsheng Yu and Xinrun Wang},\n  journal = {arXiv preprint arXiv:2610.33644},\n  year = {2026},\n  url = {https://arxiv.org/abs/2610.33644}\n}\n\n@article{arxiv260427924,\n  title = {Can AI Be a Good Peer Reviewer? A Survey of Peer Review Process, Evaluation, and the Future},\n  author = {Sihong Wu and Owen Jiang and Yilun Zhao and Tiansheng Hu and Yiling Ma and Kaiyan Zhang and Manasi Patwardhan and Arman Cohan},\n  journal = {arXiv preprint arXiv:2604.27924},\n  year = {2026},\n  url = {https://arxiv.org/abs/2604.27924}\n}\n\n@article{arxiv240612708,\n  title = {AgentReview: Exploring Peer Review Dynamics with LLM Agents},\n  author = {Yiqiao Jin and Qinlin Zhao and Yiyang Wang and Hao Chen and Kaijie Zhu and Yijia Xiao and Jindong Wang},\n  journal = {arXiv preprint arXiv:2406.12708},\n  year = {2024},\n  url = {https://arxiv.org/abs/2406.12708}\n}\n\n@article{arxiv250418765,\n  title = {A Vision for Auto Research with LLM Agents},\n  author = {Chengwei Liu and Chong Wang and Jiayue Cao and Jingquan Ge and Kun Wang and Lyuye Zhang and Ming-Ming Cheng and Penghai Zhao and Tianlin Li and Xiaojun Jia and Xiang Li and Xingshuai Li and Yang Liu and Yebo Feng and Yihao Huang and Yijia Xu and Yuqiang Sun and Zhenhong Zhou and Zhengzi Xu},\n  journal = {arXiv preprint arXiv:2504.18765},\n  year = {2025},\n  url = {https://arxiv.org/abs/2504.18765}\n}\n\n@article{arxiv260821374,\n  title = {LitReview Arena: Evaluating Literature Review Agents with Battle-Style Peer Review Platform},\n  author = {Ruotong Zhao and Zhiyu Chen and Xurui Liu and Haidong Xue and Dong Liang and Jigao Fu and Wu YanBiao and Yuanyi Zhen and Fengli Xu and Yong Li},\n  journal = {arXiv preprint arXiv:2608.21374},\n  year = {2026},\n  url = {https://arxiv.org/abs/2608.21374}\n}\n\n@article{arxiv260400835,\n  title = {Agentic Tool Use in Large Language Models},\n  author = {Jinchao Hu and Meizhi Zhong and Kehai Chen and Xuefeng Bai and Min Zhang},\n  journal = {arXiv preprint arXiv:2604.00835},\n  year = {2026},\n  url = {https://arxiv.org/abs/2604.00835}\n}\n\n@article{arxiv251004905,\n  title = {Retrieval-Augmented Code Generation: A Survey with Focus on Repository-Level Approaches},\n  author = {Yicheng Tao and Yuante Li and Yao Qin and Yepang Liu},\n  journal = {arXiv preprint arXiv:2510.04905},\n  year = {2025},\n  url = {https://arxiv.org/abs/2510.04905}\n}\n"
    },
    "chat": [
@@ -1004,11 +1124,17 @@
     },
     {
      "kind": "assistant",
-     "text": "方法草案写好了：Large Language Model · Peer Review · Peer · Review。baseline：LLM Review、AlphaIdeaBench、Can AI Be a Good Peer Reviewer? A Survey。"
+     "text": "已按用户的决定整理方法草案。基线为 Single reviewer、Retrieval then review、Three independent reviewers。"
+    },
+    {
+     "kind": "sent",
+     "to": "writer",
+     "basis": ["D6"],
+     "text": "请从盲审主表选一条评审意见，核对原文并注明段落。"
     },
     {
      "kind": "assistant",
-     "text": "实验结果表已交。以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 53.4 vs 49.7，Average completed subtasks (%) 64.2 vs 59.9，Error recovery rate af"
+     "text": "样例结果按三个种子取平均，表中数值仅用于展示。"
     },
     {
      "kind": "assistant",
@@ -1022,10 +1148,68 @@
    "reports": [
     {
      "kind": "report",
-     "text": "样例项目：已完成到「写作排版」，当前工序是「质检」。",
+     "text": "盲审评测已完成写作排版，**初稿已进入质检**。",
      "key": false
     }
-   ]
+   ],
+   "card": {"summary": "盲审评测的**主结果表已登记来源**，可逐层核对汇总表和运行结果。", "need_you": ["人工分歧案例应放在正文还是附录？"]},
+   "decided": [
+    {
+     "mod": "survey",
+     "text": "用 Single reviewer、Retrieval then review、Three independent reviewers 作对照。逐组核对输入条件与评测预算。",
+     "materials": [
+      {
+       "kind": "paper",
+       "ref": "arxiv:2601.08003",
+       "title": "LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback"
+      }
+     ]
+    },
+    {
+     "mod": "code",
+     "text": "把查新、方法核实和实验核实分成三个岗位，每条意见保留段落出处，再汇总评分。"
+    },
+    {
+     "mod": "exp",
+     "text": "先在公开评审中随机抽取意见作为测试样本。"
+    },
+    {
+     "mod": "data",
+     "text": "按论文划分公开评审记录，同一稿件的各轮评审放在一起。记录评分一致率、证据准确率和缺乏依据的批评比例。"
+    },
+    {
+     "mod": "paper",
+     "text": "结果按评分一致性和意见依据分成两节。展示一条模型意见怎样对应到原文，再讨论核对失败的情况。"
+    },
+    {
+     "mod": "agents",
+     "text": "负责人整理匿名材料，代码员工复现实验并隐藏作者信息，写作员工核对引文。"
+    },
+    {
+     "mod": "exp",
+     "text": "改为按整篇论文抽样，同一论文在各组使用相同上下文预算，以三个种子重复盲审。",
+     "replaces": "D4"
+    }
+   ],
+   "matter": {
+    "mod": "exp",
+    "question": "两位人工评审意见相反的论文，应如何计入一致性统计？",
+    "facts": [
+     "样例评测表按论文保存每位评审的独立评分。",
+     "现有指标把每篇论文归到一个参考分数。"
+    ],
+    "options": [
+     "按评审分别配对计分",
+     "单列人工分歧组并报告区间"
+    ],
+    "materials": [
+     {
+      "kind": "paper",
+      "ref": "arxiv:2601.08003",
+      "title": "LLM Review: Enhancing Creative Writing via Blind Peer Review Feedback"
+     }
+    ]
+   }
   },
   {
    "idea": "长上下文推理加速：用稀疏注意力挑出关键 token，再对 KV cache 做分层压缩，显存减半时保持长文档问答的精度",
@@ -1328,6 +1512,9 @@
          "memory"
         ]
        }
+      ],
+      "basis": [
+       "D1"
       ]
      }
     },
@@ -1348,38 +1535,52 @@
      "title": "Long Context · Inference Acceleration · Sparse Attention · Token",
      "body": {
       "title": "Long Context · Inference Acceleration · Sparse Attention · Token",
-      "problem": "Idea（原文）：长上下文推理加速：用稀疏注意力挑出关键 token，再对 KV cache 做分层压缩，显存减半时保持长文档问答的精度。目标是解决撞车报告里的空白点：关键词都被已有工作覆盖了，差异要从问题设定或验证方式上找。",
+      "problem": "长上下文推理加速：用稀疏注意力挑出关键 token，再对 KV cache 做分层压缩，显存减半时保持长文档问答的精度",
       "mechanism": [
-       "针对 long context 设计专门的模块（样例占位，机制等负责人接手后写）",
-       "针对 inference acceleration 设计专门的模块（样例占位，机制等负责人接手后写）",
-       "针对 sparse attention 设计专门的模块（样例占位，机制等负责人接手后写）"
+       "保留问题词和高注意力位置的缓存，其余位置量化保存。记录每个被保留位置的层号和文档偏移。"
       ],
       "baselines": [
        {
-        "name": "Hierarchical Vla",
-        "source": "sample-lab/vla-bench/baselines/hierarchical_vla.py"
+        "name": "Full cache",
+        "source": ""
        },
        {
-        "name": "Simplified Sparse Attention via Gist Tok",
-        "source": "arxiv:2604.20920"
+        "name": "Sliding window",
+        "source": ""
        },
        {
-        "name": "RIFT",
-        "source": "arxiv:2610.31098"
+        "name": "Uniform cache quantization",
+        "source": ""
        }
       ],
       "datasets": [
-       "sample-lab/vla-bench",
-       "sample-lab/vla-bench"
+       "按证据位置分层的长文档问答集"
       ],
       "metrics": [
-       "Task success rate (%)",
-       "Average completed subtasks (%)",
-       "Error recovery rate after perturbations (%)"
+       "Answer exact match (%)",
+       "Evidence recall (%)",
+       "Peak cache reduction (%)"
       ],
       "risks": [
        "样例占位内容，机制部分等负责人接手后重写"
-      ]
+      ],
+      "basis": {
+       "problem": [
+        "D1"
+       ],
+       "mechanism": [
+        "D3"
+       ],
+       "baselines": [
+        "D2"
+       ],
+       "datasets": [
+        "D5"
+       ],
+       "metrics": [
+        "D5"
+       ]
+      }
      }
     },
     {
@@ -1389,13 +1590,13 @@
      "title": "结果表（样例）",
      "body": {
       "metrics": [
-       "Task success rate (%)",
-       "Average completed subtasks (%)",
-       "Error recovery rate after perturbations (%)"
+       "Answer exact match (%)",
+       "Evidence recall (%)",
+       "Peak cache reduction (%)"
       ],
       "rows": [
        {
-        "method": "Hierarchical Vla",
+        "method": "Full cache",
         "values": [
          46.4,
          56.0,
@@ -1404,7 +1605,7 @@
         "ours": false
        },
        {
-        "method": "Simplified Sparse Attention via Gist Tok",
+        "method": "Sliding window",
         "values": [
          51.3,
          38.2,
@@ -1413,7 +1614,7 @@
         "ours": false
        },
        {
-        "method": "RIFT",
+        "method": "Uniform cache quantization",
         "values": [
          39.9,
          62.0,
@@ -1432,12 +1633,16 @@
        }
       ],
       "seeds": 3,
-      "analysis": "以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 58.9 vs 51.3，Average completed subtasks (%) 63.7 vs 62.0，Error recovery rate after perturbations (%) 65.5 vs 55.5。",
+      "analysis": "样例结果按三个种子取平均，表中数值仅用于展示。",
       "concerns": [
        "需要补消融实验"
       ],
       "job_id": null,
-      "sample": true
+      "sample": true,
+      "basis": [
+       "D5",
+       "D8"
+      ]
      }
     }
    ],
@@ -1461,11 +1666,11 @@
     },
     {
      "kind": "assistant",
-     "text": "方法草案写好了：Long Context · Inference Acceleration · Sparse Attention · Token。baseline：Hierarchical Vla、Simplified Sparse Attention via Gist Tok、RIFT。"
+     "text": "已按用户的决定整理方法草案。基线为 Full cache、Sliding window、Uniform cache quantization。"
     },
     {
      "kind": "assistant",
-     "text": "实验结果表已交。以下是样例占位数字，不是真实实验的结果。3 个种子取平均。Ours 在 3/3 项指标上超过最好的 baseline：Task success rate (%) 58.9 vs 51.3，Average completed subtasks (%) 63.7 vs 62.0，Error recovery rate af"
+     "text": "样例结果按三个种子取平均，表中数值仅用于展示。"
     },
     {
      "kind": "assistant",
@@ -1475,10 +1680,68 @@
    "reports": [
     {
      "kind": "report",
-     "text": "样例项目：已完成到「实验」，当前工序是「写作排版」。",
+     "text": "长文档评测的实验已完成，**已进入写作排版**。",
      "key": false
     }
-   ]
+   ],
+   "card": {"summary": "**实验结果已汇总**，正在整理论文中的缓存预算与答案精度对比。"},
+   "decided": [
+    {
+     "mod": "survey",
+     "text": "用 Full cache、Sliding window、Uniform cache quantization 作对照。逐组核对输入条件与评测预算。",
+     "materials": [
+      {
+       "kind": "paper",
+       "ref": "arxiv:2604.20920",
+       "title": "Simplified Sparse Attention via Gist Tokens"
+      }
+     ]
+    },
+    {
+     "mod": "code",
+     "text": "保留问题词和高注意力位置的缓存，其余位置量化保存。记录每个被保留位置的层号和文档偏移。"
+    },
+    {
+     "mod": "exp",
+     "text": "先固定文档长度，只比较两种缓存精度。"
+    },
+    {
+     "mod": "data",
+     "text": "按证据所在的文首、中部和文末分层抽取长文档。记录答案精确匹配率、证据召回率和峰值缓存降幅。"
+    },
+    {
+     "mod": "paper",
+     "text": "先画缓存预算与答案精度的关系，再展示证据位置分组。速度结论只采用同一批次下的测量。"
+    },
+    {
+     "mod": "agents",
+     "text": "代码员工记录缓存峰值和吞吐，负责人复核测量条件，写作员工按证据位置整理图注。"
+    },
+    {
+     "mod": "exp",
+     "text": "用相同的三个种子在三个文档长度上比较各组。显存预算减半时单列文档中部证据的问答结果。",
+     "replaces": "D4"
+    }
+   ],
+   "matter": {
+    "mod": "exp",
+    "question": "下一轮应如何设置生成阶段的批大小？",
+    "facts": [
+     "方法草案固定了缓存预算和文档长度。",
+     "现有样例结果表按准确率与缓存降幅汇总，尚未区分批大小。"
+    ],
+    "options": [
+     "固定批大小比较单次延迟",
+     "在相同缓存上限下分别测量吞吐"
+    ],
+    "materials": [
+     {
+      "kind": "paper",
+      "ref": "arxiv:2604.20920",
+      "title": "Simplified Sparse Attention via Gist Tokens"
+     }
+    ]
+   }
   },
   {
    "idea": "机器人长程操作：用场景图记录物体关系和状态变化，视觉语言动作模型按子目标执行，失败时沿场景图回退重新规划，减少多步任务里的误差累积",
@@ -1791,6 +2054,9 @@
          "action"
         ]
        }
+      ],
+      "basis": [
+       "D1"
       ]
      }
     },
@@ -1811,29 +2077,26 @@
      "title": "Robot · Long-Horizon · Manipulation · Scene Graph",
      "body": {
       "title": "Robot · Long-Horizon · Manipulation · Scene Graph",
-      "problem": "Idea（原文）：机器人长程操作：用场景图记录物体关系和状态变化，视觉语言动作模型按子目标执行，失败时沿场景图回退重新规划，减少多步任务里的误差累积。目标是解决撞车报告里的空白点：最相近的工作里没有出现：accumulation。",
+      "problem": "机器人长程操作：用场景图记录物体关系和状态变化，视觉语言动作模型按子目标执行，失败时沿场景图回退重新规划，减少多步任务里的误差累积",
       "mechanism": [
-       "针对 robot 设计专门的模块（样例占位，机制等负责人接手后写）",
-       "针对 long-horizon 设计专门的模块（样例占位，机制等负责人接手后写）",
-       "针对 manipulation 设计专门的模块（样例占位，机制等负责人接手后写）"
+       "每次抓放后更新物体关系，子目标失败时回到最近一次满足前置条件的图状态。"
       ],
       "baselines": [
        {
-        "name": "Hierarchical Vla",
-        "source": "sample-lab/vla-bench/baselines/hierarchical_vla.py"
+        "name": "Reactive policy",
+        "source": ""
        },
        {
-        "name": "Vela",
-        "source": "arxiv:2610.05230"
+        "name": "Static scene graph",
+        "source": ""
        },
        {
-        "name": "Cortex 2.0",
-        "source": "arxiv:2604.20246"
+        "name": "Replan without rollback",
+        "source": ""
        }
       ],
       "datasets": [
-       "sample-lab/vla-bench",
-       "sample-lab/vla-bench"
+       "含物体遮挡与移动的多步操作轨迹"
       ],
       "metrics": [
        "Task success rate (%)",
@@ -1842,7 +2105,24 @@
       ],
       "risks": [
        "样例占位内容，机制部分等负责人接手后重写"
-      ]
+      ],
+      "basis": {
+       "problem": [
+        "D1"
+       ],
+       "mechanism": [
+        "D3"
+       ],
+       "baselines": [
+        "D2"
+       ],
+       "datasets": [
+        "D5"
+       ],
+       "metrics": [
+        "D5"
+       ]
+      }
      }
     }
    ],
@@ -1866,7 +2146,7 @@
     },
     {
      "kind": "assistant",
-     "text": "方法草案写好了：Robot · Long-Horizon · Manipulation · Scene Graph。baseline：Hierarchical Vla、Vela、Cortex 2.0。"
+     "text": "已按用户的决定整理方法草案。基线为 Reactive policy、Static scene graph、Replan without rollback。"
     },
     {
      "kind": "assistant",
@@ -1876,10 +2156,68 @@
    "reports": [
     {
      "kind": "report",
-     "text": "样例项目：已完成到「方法设计」，当前工序是「实验」。",
+     "text": "长程操作的方法草案已完成，**下一项工作是遮挡实验**。",
      "key": false
     }
-   ]
+   ],
+   "card": {"summary": "**方法设计已完成**，实验将比较不同遮挡条件下的恢复率。"},
+   "decided": [
+    {
+     "mod": "survey",
+     "text": "用 Reactive policy、Static scene graph、Replan without rollback 作对照。逐组核对输入条件与评测预算。",
+     "materials": [
+      {
+       "kind": "paper",
+       "ref": "arxiv:2610.05230",
+       "title": "Vela: Scaling Vision-Language-Action Models with Adaptive Action Curve Parametrization"
+      }
+     ]
+    },
+    {
+     "mod": "code",
+     "text": "每次抓放后更新物体关系，子目标失败时回到最近一次满足前置条件的图状态。"
+    },
+    {
+     "mod": "exp",
+     "text": "每个任务只在初始状态加入遮挡。"
+    },
+    {
+     "mod": "data",
+     "text": "同一场景的轨迹只属于一个集合。记录整段成功率、完成子目标的比例和扰动后的恢复率。"
+    },
+    {
+     "mod": "paper",
+     "text": "先用一次物体被移走的轨迹解释回退条件，再分开呈现长程成功率和扰动恢复率。"
+    },
+    {
+     "mod": "agents",
+     "text": "代码员工实现状态记录和回退重放，写作员工核对每个轨迹图里的子目标时间。"
+    },
+    {
+     "mod": "exp",
+     "text": "在抓取前和放置后分别施加遮挡，完整方法及各基线使用相同轨迹和三个种子。单列回退消融。",
+     "replaces": "D4"
+    }
+   ],
+   "matter": {
+    "mod": "exp",
+    "question": "连续两次回退都失败的轨迹，应在哪一步结束评测？",
+    "facts": [
+     "现有方法草案记录每次回退前后的场景图。",
+     "恢复率按整段轨迹计分，目前未设专门的回退次数上限。"
+    ],
+    "options": [
+     "按统一的总步数结束",
+     "达到两次回退后停止并记录失败"
+    ],
+    "materials": [
+     {
+      "kind": "paper",
+      "ref": "arxiv:2610.05230",
+      "title": "Vela: Scaling Vision-Language-Action Models with Adaptive Action Curve Parametrization"
+     }
+    ]
+   }
   },
   {
    "idea": "多智能体通过 model context protocol 共享工具：研究工具调用的分工与交接，谁来调用、何时交给别人、怎样避免重复调用",
@@ -1896,7 +2234,7 @@
     "hatch": {
      "status": "run",
      "pct": 80,
-     "note": "撞车报告已交，等你决定是否立项"
+     "note": "已提交查重报告，待确定交接完成的判定条件。"
     },
     "team": {
      "status": "todo",
@@ -2155,6 +2493,9 @@
          "protocol"
         ]
        }
+      ],
+      "basis": [
+       "D1"
       ]
      }
     }
@@ -2175,24 +2516,74 @@
     },
     {
      "kind": "assistant",
-     "text": "撞车报告已交。是否立项需要你决定，问题已经发给你，在这段对话下面。"
+     "text": "已提交查重报告。工具返回和接收方确认各有时间记录，交接完成的判定条件已列为待定的事。"
     }
    ],
    "reports": [
     {
      "kind": "report",
-     "text": "样例项目：查重完成，结论是「已被做过」，最接近的工作相似度 0.85。立项前等你决定。",
+     "text": "样例查重报告中，最接近的工作相似度为 **0.85**。后续比较按你的决定记录交接次数和重试情况。",
      "key": false
+    }
+   ],
+   "card": {"summary": "查重报告已提交，**交接完成的判定条件待确定**。"},
+   "decided": [
+    {
+     "mod": "survey",
+     "text": "用 Single agent、Static tool routing、Shared tool registry 作对照。逐组核对输入条件与评测预算。",
+     "materials": [
+      {
+       "kind": "paper",
+       "ref": "arxiv:2606.10322",
+       "title": "Game-Theoretic Multi-Agent Control for Robust Contextual Reasoning in LLMs"
+      }
+     ]
     },
     {
-     "kind": "ask",
-     "question": "查重结论是「已被做过」，最接近的工作相似度 0.85。照原 idea 立项，还是先调整 idea？",
-     "choices": [
-      "照原 idea 立项",
-      "先调整 idea"
-     ]
+     "mod": "code",
+     "text": "工具交接时传递请求编号、参数摘要及上次调用的状态，接收方按编号查重。"
+    },
+    {
+     "mod": "exp",
+     "text": "先只用顺序交接验证是否能识别重复调用。"
+    },
+    {
+     "mod": "data",
+     "text": "用同一组带请求编号的多步任务，按工具类型分层。统计完成率、重复调用比例和交接恢复率。"
+    },
+    {
+     "mod": "paper",
+     "text": "从一次超时重试引出的重复调用写起，再按交接方式列出失败类型。"
+    },
+    {
+     "mod": "agents",
+     "text": "代码员工维护工具调用日志，负责人核对请求编号，写作员工整理交接案例。"
+    },
+    {
+     "mod": "exp",
+     "text": "增加并发交接组，以相同任务比较单员工、固定路由和共享工具目录。单独统计超时重试。",
+     "replaces": "D4"
     }
-   ]
+   ],
+   "matter": {
+    "mod": "exp",
+    "question": "工具已返回结果、接收方尚未收到时，怎样认定交接完成？",
+    "facts": [
+     "样例任务分别记录工具返回和接收方确认的时间。",
+     "同一请求的两项记录可能分属不同员工。"
+    ],
+    "options": [
+     "以工具返回时间为准",
+     "以接收方确认时间为准"
+    ],
+    "materials": [
+     {
+      "kind": "paper",
+      "ref": "arxiv:2606.10322",
+      "title": "Game-Theoretic Multi-Agent Control for Robust Contextual Reasoning in LLMs"
+     }
+    ]
+   }
   }
  ]
 }

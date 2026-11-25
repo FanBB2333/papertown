@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Group
+from rich.markup import escape
 from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
@@ -19,7 +20,7 @@ from textual.widgets import ContentSwitcher, DataTable, Static
 from ..anim import bar, clock, dur, gleam, mix, seconds_since
 from ..client import ApiError
 from ..look import JOB, LEAD, LINE, STAGE, clip, job_mark, job_state, line_mark, stage_mark
-from ..widgets import Bar, Confirm, Pane, Place, Prompt, row_key, sync_rows
+from ..widgets import Bar, Confirm, Form, Pane, Place, Prompt, row_key, sync_rows
 from . import cycle, tabs
 from .ide import Editor, Ide
 
@@ -39,6 +40,7 @@ class Projects(Place):
         Binding("left_square_bracket", "tab(-1)", "上一页", show=False), Binding("right_square_bracket", "tab(1)", "下一页", show=False),
         Binding("f", "filter", "筛选"), Binding("slash", "search", "搜索"), Binding("n", "idea", "新 idea"),
         Binding("l", "lead", "负责人开关"), Binding("a", "ask", "问"),
+        Binding("r", "decide", "写下决定"),
         Binding("d", "diff", "看改动", show=False), Binding("E", "edit", "改文件", show=False), Binding("C", "compile", "编译", show=False),
         Binding("P", "pdf", "看 PDF", show=False), Binding("o", "open", "打开", show=False), Binding("z", "focus_mode", "专注", show=False),
     ]
@@ -55,6 +57,7 @@ class Projects(Place):
         self.data: dict = {}
         self.jobs: list[dict] = []
         self.agents: list[dict] = []
+        self.pending: list[dict] = []
 
     def compose(self) -> ComposeResult:
         with Horizontal():
@@ -155,6 +158,11 @@ class Projects(Place):
             self.paint_overview(layout=False)
 
     def on_town_event(self, ev: dict) -> None:
+        if ev.get("type") == "card" and self.line and ev["card"]["line"]["id"] == self.sel == self.line["id"]:
+            self.pending = [d for d in ev["card"]["decisions"] if d.get("write")]
+            if self.is_mounted and self.tab == "overview":
+                self.paint_overview()
+                self.town.paint_hints()
         if ev.get("type") == "line" and self.is_mounted:
             self.paint_list()
             if ev["line"]["id"] == self.sel:
@@ -167,6 +175,7 @@ class Projects(Place):
         key = e.row_key.value
         if key and key != self.sel:
             self.sel = key
+            self.pending = []
             self.fetch(key)
 
     @work(exclusive=True, group="pj-line")
@@ -214,6 +223,11 @@ class Projects(Place):
         try:
             if self.tab == "overview":
                 self.ws = await api.get(f"/api/lines/{lid}/ws")
+                card = await api.get(f"/api/lines/{lid}/card")
+                if lid != self.sel:
+                    return
+                self.pending = [d for d in card.get("decisions", []) if d.get("write")]
+                self.town.paint_hints()
                 self.paint_overview()
             elif self.tab == "survey":
                 self.papers = (await api.get(f"/api/lines/{lid}/papers")).get("survey", [])
@@ -257,6 +271,8 @@ class Projects(Place):
             parts.append(Text("l  切换负责人开关", style=p["brand"]))
         if ln.get("sample"):
             parts.append(Text("样例项目 · 预制状态", style=p["muted"]))
+        if self.pending:
+            parts += [Text("待定的事", style=p["brand"]), *[Text(d["title"], style=p["ink"]) for d in self.pending]]
         stages = ln.get("stages") or []
         done = sum(s["status"] == "done" for s in stages)
         prog = Text("进度  ", style=p["muted"])
@@ -496,6 +512,8 @@ class Projects(Place):
             out.append(("a", "问"))
             if self.line["status"] in ACTIVE:
                 out.append(("l", "关闭负责人" if (self.line.get("lead") or {}).get("on") else "开启负责人"))
+            if self.tab == "overview" and self.pending:
+                out.append(("r", "写下决定"))
         if self.tab in ("survey", "files"):
             out.append(("Enter", "打开" if self.tab == "survey" else "下载"))
         return out
@@ -526,6 +544,30 @@ class Projects(Place):
 
     def action_ask(self) -> None:
         self.town.aim("ask")
+
+    @work(group="pj-decide", exclusive=True)
+    async def action_decide(self) -> None:
+        if self.tab != "overview" or not self.pending or not self.line:
+            return
+        lid, items = self.line["id"], list(self.pending)
+        d = items[0]
+        if len(items) > 1:
+            picked = await self.app.push_screen_wait(Form("选择事项", [("item", "待定的事", 0, [(Text(x["title"]), i) for i, x in enumerate(items)])]))
+            if not picked:
+                return
+            d = items[picked["item"]]
+        details = [*d.get("facts", []), *d.get("options_text", []), *(m["title"] for m in d.get("materials", []))]
+        text = await self.app.push_screen_wait(Prompt(escape(d["title"]), escape("\n".join(details)), placeholder="写下决定"))
+        if text:
+            try:
+                card = await self.town.api.post(f"/api/lines/{lid}/decide", {"kind": d["kind"], "id": d["id"], "text": text})
+            except ApiError as e:
+                self.town.notify(str(e), severity="error")
+                return
+            if self.sel == lid:
+                self.pending = [x for x in card["decisions"] if x.get("write")]
+                self.paint_overview()
+                self.town.paint_hints()
 
     async def action_lead(self) -> None:
         if not self.line or self.line["status"] not in ACTIVE:

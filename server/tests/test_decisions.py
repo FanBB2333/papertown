@@ -22,31 +22,30 @@ def test_permissions_and_questions_are_answered_from_the_card(flow):
     conv["permissions"] = [{"id": "req-1", "name": "Bash", "title": "Run the ablation", "arg": "python ablate.py --gpu 1", "kind": "tool"}]
     town.agents._feed_line({"t": "agent", "agent": dict(conv)})
     ask = town.leads.ask(a["id"], "用哪张卡重跑消融？", ["72G 那张", "32G 那张"])
-    town.cards._write(lid, {"card": CARD | {"need_you": ["用哪张卡重跑消融", "要不要加数据集"]}})
+    town.cards._write(lid, {"card": CARD | {"need_you": ["要不要加数据集"]}})
 
     ds = decisions(c, lid)
-    assert [d["kind"] for d in ds] == ["permission", "ask", "need"]
-    perm, q, need = ds
+    assert [d["kind"] for d in ds] == ["need", "permission", "ask"]
+    need, perm, q = ds
     assert perm["title"] == "Run the ablation" and perm["detail"] == "python ablate.py --gpu 1" and perm["agent"] == a["id"]
     assert [(o["label"], o["value"]) for o in perm["options"]] == [("允许", True), ("拒绝", False)]
     assert q["id"] == str(ask["id"]) and [o["value"] for o in q["options"]] == ["72G 那张", "32G 那张"] and q["free"]
-    # the card's line that the question already asks is not listed twice; the other one waits for a lead to hear it
+    # A card entry waits for a written decision even when its lead is offline.
     assert need["title"] == "要不要加数据集" and need["ready"] is True and need["later"] is True
 
     assert c.post(f"/api/lines/{lid}/decide", json={"kind": "permission", "id": "req-1", "agent": "lead-x", "value": True}).status_code == 404
     assert c.post(f"/api/lines/{lid}/decide", json={"kind": "permission", "id": "req-1", "agent": a["id"], "value": "yes"}).status_code == 400
     row = c.post(f"/api/lines/{lid}/decide", json={"kind": "permission", "id": "req-1", "agent": a["id"], "value": True}).json()
     assert link.permits == [(a["ext_id"], "req-1", True)]
-    assert [d["kind"] for d in row["decisions"]] == ["ask", "need"]  # hidden while Paseo catches up
+    assert [d["kind"] for d in row["decisions"]] == ["need", "ask"]  # hidden while Paseo catches up
 
     row = c.post(f"/api/lines/{lid}/decide", json={"kind": "ask", "id": q["id"], "value": "72G 那张"}).json()
     assert town.db.one("select * from reports where id = ?", ask["id"])["data"]["answer"] == "72G 那张"
     assert [d["kind"] for d in row["decisions"]] == ["need"]
     assert c.post(f"/api/lines/{lid}/decide", json={"kind": "ask", "id": q["id"], "value": "32G 那张"}).status_code == 400
 
-    row = c.post(f"/api/lines/{lid}/decide", json={"kind": "need", "id": "要不要加数据集", "value": "同意"}).json()
-    assert row["decisions"] == [] and [(x["item"], x["sent"]) for x in town.cards._read(lid)["decided"]] == [
-        ("用哪张卡重跑消融", True), ("要不要加数据集", False)]
+    row = c.post(f"/api/lines/{lid}/decide", json={"kind": "need", "id": "要不要加数据集", "text": "加入跨域测试集"}).json()
+    assert row["decisions"] == [] and row["decided"]["latest"][-1]["text"] == "加入跨域测试集"
     assert c.post(f"/api/lines/{lid}/decide", json={"kind": "other", "id": "x", "value": 1}).status_code == 422
 
 
@@ -58,17 +57,16 @@ def test_a_line_of_the_card_goes_to_the_lead_and_stays_decided(tmp_path):
         # a sample's card, no lead yet: the choice is kept for the lead
         town.cards._write(lid, {"card": CARD | {"need_you": ["批准用 72G 那张卡重跑消融", "换个 batch size"]}})
         first, second = decisions(c, lid)
-        assert first["later"] is True and [o["label"] for o in first["options"]] == ["同意", "不同意"]
-        assert c.post(f"/api/lines/{lid}/decide", json={"kind": "need", "id": first["id"], "value": "同意"}).json()["decisions"][0]["id"] == second["id"]
+        assert first["later"] is True and first["options"] == [] and first["write"]
+        assert c.post(f"/api/lines/{lid}/decide", json={"kind": "need", "id": first["id"], "text": "在 72G 卡上重跑消融"}).json()["decisions"][0]["id"] == second["id"]
 
-        # it reaches the lead with the next request to update the card, once
+        # The decision reaches the lead when it starts, independently of card refreshes.
         lead = c.post("/api/agents", json={"line_id": lid, "role": "lead"}).json()
         c.post(f"/api/agents/{lead['id']}/start", json={"runtime": "paseo", "provider": "codex"})
         h = {"x-papertown-token": town.agents.get(lead["id"])["token"]}
         c.post(f"/api/lines/{lid}/card", json={})
-        msg = [e for e in town.agents.events(lead["id"]) if e["kind"] == "user"][-1]["data"]["text"]
-        assert "用户已经决定了" in msg and "- 「批准用 72G 那张卡重跑消融」：同意" in msg
-        assert all(x["sent"] for x in town.cards._read(lid)["decided"])
+        messages = [e["data"]["text"] for e in town.agents.events(lead["id"]) if e["kind"] == "user"]
+        assert messages.count('<decision id="D2" mod="survey">在 72G 卡上重跑消融</decision>') == 1
         c.post(f"/api/bridge/{lead['id']}/card", json={"card": CARD | {"need_you": ["批准用 72G 那张卡重跑消融", "换个 batch size"]}}, headers=h)
         c.post(f"/api/lines/{lid}/card/cancel")
         c.post(f"/api/lines/{lid}/card", json={})
@@ -80,12 +78,15 @@ def test_a_line_of_the_card_goes_to_the_lead_and_stays_decided(tmp_path):
         assert need["title"] == "换个 batch size" and need["later"] is False
         row = c.post(f"/api/lines/{lid}/decide", json={"kind": "need", "id": need["id"], "value": "同意", "text": "先试 64"}).json()
         said = [e for e in town.agents.events(lead["id"]) if e["kind"] == "user"][-1]["data"]["text"]
-        assert said == "关于卡片上要我决定的「换个 batch size」：先试 64"
+        assert said == '<decision id="D3" mod="survey">先试 64</decision>'
         assert row["decisions"] == [] and row["card"]["need_you"] == ["批准用 72G 那张卡重跑消融", "换个 batch size"]
-        assert c.post(f"/api/lines/{lid}/decide", json={"kind": "need", "id": "别的事", "value": "同意"}).status_code == 409
+        assert c.post(f"/api/lines/{lid}/decide", json={"kind": "need", "id": "别的事", "text": "先试 64"}).status_code == 409
         c.post(f"/api/lines/{lid}/card", json={})
         c.post(f"/api/bridge/{lead['id']}/card", json={"card": CARD | {"need_you": []}}, headers=h)
         assert town.cards._read(lid)["decided"] == []
+        c.post(f"/api/lines/{lid}/card", json={})
+        c.post(f"/api/bridge/{lead['id']}/card", json={"card": CARD | {"need_you": [second["id"]]}}, headers=h)
+        assert [d["id"] for d in decisions(c, lid)] == [second["id"]]
 
 
 def test_a_terminal_dialog_is_answered_with_its_own_keys(tmp_path, monkeypatch):

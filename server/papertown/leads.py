@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 
 from .agents import AgentError, ROLES
 from .db import now, read_json
+from .decided import DecisionError
 from .hosted import RUNTIMES
 from .nvidb import as_farm_job
 from .pipeline import LIVE, NAMES as STAGES, LineError
@@ -304,35 +305,42 @@ class Leads:
             return f"「{STAGES[key]}」收尾了。{tail}"
         return f"「{STAGES[key]}」{'开工了' if act['status'] == 'run' else '放回去了'}" + (f"（{snap['stages'][list(STAGES).index(key)]['pct']}%）。" if act["status"] == "run" else "。")
 
-    def tell(self, sender_id: str, to: str, text: str, now_: bool = False, line: str | None = None) -> str:
+    def tell(self, sender_id: str, to: str, text: str, now_: bool = False, line: str | None = None, basis: list[str] | None = None) -> str:
         """`pt tell`: a message to another agent, if the sender's boundaries allow it."""
         s = self.town.agents.get(sender_id)
         text = str(text or "").strip()
         if not text:
             raise LeadError("消息是空的")
         t = self.target(s, to, line)
+        basis = self.town.decided.basis(t["line_id"], basis)
         kind, rule = self.town.bounds.policy(s["role"], s["line_id"], "tell")
         if kind == "never":
             raise LeadError(f"你的工作边界不让你给别的 agent 发消息：{rule['text']}")
         if kind == "ask":
             q = self.ask(sender_id, f"{self._who(s)}想给{self._who(t)}发：「{clip(text, 300)}」，可以吗？", ["可以", "不可以"],
-                         act={"action": "tell", "to": t["id"], "text": text, "now": now_})
+                         act={"action": "tell", "to": t["id"], "text": text, "now": now_, "basis": basis})
             return f"按你的工作边界（{rule['text']}），这条要先问用户。已经问了（问题 {q['id']}），他同意后会替你发出去，结果会告诉你。"
-        self.deliver(s, t, text, now_)
+        self.deliver(s, t, text, now_, basis)
         return f"已发给{self._who(t)}" + ("。" if now_ or t["status"] != "working" else "，它在忙，等它做完手上的事再交给它。")
 
-    def deliver(self, sender: dict, target: dict, text: str, now_: bool = False) -> None:
+    def deliver(self, sender: dict, target: dict, text: str, now_: bool = False, basis: list[str] | None = None) -> None:
+        refs = self.town.decided.references(target["line_id"], basis)
         body = f'<msg from="{self._who(sender)}">\n{text.strip()}\n</msg>'
+        if refs:
+            body += "\n依据：" + "、".join(f"{ref}「{title[:40]}」" for ref, title in refs.items())
         try:
-            self.town.agents.say(target["id"], body, None if now_ else "queue", origin=sender["id"])
+            event = self.town.agents.say(target["id"], body, None if now_ else "queue", origin=sender["id"])
+            if event:
+                self.town.agents.amend(event["id"], {"basis": list(refs)})
         except AgentError as e:
             raise LeadError(str(e)) from e
-        self.town.agents.record(sender["id"], "sent", {"to": target["id"], "who": self._who(target), "text": text})
+        self.town.agents.record(sender["id"], "sent", {"to": target["id"], "who": self._who(target), "text": text,
+                                                       "line_id": target["line_id"], "basis": list(refs)})
 
     def _row(self, agent_id: str, line_id: str, kind: str, data: dict) -> dict:
         row = {"line_id": line_id, "agent_id": agent_id, "ts": now(), "kind": kind, "data": data}
         row["id"] = self.db.insert("reports", row)
-        self.town.bus.publish("report", report=row)
+        self.db.after_commit(self.town.bus.publish, "report", report=row)
         return row
 
     def report(self, agent_id: str, text: str, key: bool = False) -> dict:
@@ -362,14 +370,21 @@ class Leads:
         return self.db.q("select * from reports where kind = 'ask' and json_extract(data, '$.open') = 1"
                          + (" and line_id = ?" if line_id else "") + " order by id", *([line_id] if line_id else []))
 
-    def answer(self, report_id: int, text: str, by: str = "you") -> dict:
+    def answer(self, report_id: int, text: str, by: str = "you", mod: str | None = None) -> dict:
         """Your answer to a question, sent back to the agent that asked; what it asked to do is done if you allowed it."""
         r = self.db.one("select * from reports where id = ? and kind = 'ask'", report_id)
         if not r:
             raise LeadError("没有这个问题")
         d = r["data"]
+        if d.get("matter"):
+            if by != "you":
+                raise LeadError("请在项目中亲自写下决定")
+            self.town.decided.write(r["line_id"], text, mod, matter=report_id)
+            return self.db.one("select * from reports where id = ?", report_id)
         if not d.get("open"):
             raise LeadError("这个问题已经回答过了")
+        if len(text) > 2000:
+            raise DecisionError("事务性回答最多可写 2000 字", 422)
         text = str(text or "").strip()
         if not text:
             raise LeadError("回答是空的")
@@ -405,10 +420,11 @@ class Leads:
             target = self.town.agents.get(act["to"])
             if not target:
                 raise LeadError("收消息的 agent 不在了")
-            self.deliver(asker, target, act["text"], bool(act.get("now")))
+            self.deliver(asker, target, act["text"], bool(act.get("now")), act.get("basis"))
             return f"已经替它发给{self._who(target)}。"
         if act.get("action") == "job.submit":
-            j = self.town.farm.submit(asker["line_id"], act["name"], act["command"], act.get("backend") or "local", asker["id"], asker["cwd"])
+            j = self.town.farm.submit(asker["line_id"], act["name"], act["command"], act.get("backend") or "local", asker["id"], asker["cwd"],
+                                      act.get("basis"), act.get("outs"))
             return f"已经提交了 {j['id']}。"
         if act.get("action") == "agent.start":
             return self._hire(asker, act)
@@ -602,6 +618,7 @@ class Leads:
     def _loop(self) -> None:
         first = True  # the town has just started: bring the leads up before the first check-in round is due
         while not self._halt.wait(1 if first else self.s.lead_tick):
+            self.town.decided.deliver()
             for ln in self.db.q("select id from lines where status in ('running', 'linked') order by seq"):
                 try:  # one project's trouble must not stop the others' leads
                     self.ensure(ln["id"])

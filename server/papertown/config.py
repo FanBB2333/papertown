@@ -171,6 +171,9 @@ class Settings:
     terminal_settle: float = opt("terminal", "terminal_settle", 2.0, "after Papertown sends Esc, a screen still this long means the agent has stopped")
 
     # [history]
+    prov: bool = opt("history", "prov", True, "record project file history and output provenance in Papertown's private store")
+    prov_file_bytes: int = opt("history", "prov_file_bytes", 1048576, "store the size and content hash alone above this file size")
+    prov_max_files: int = opt("history", "prov_max_files", 50000, "maximum files per root snapshot, with registered paths taking priority")
     claude_home: str = opt("history", "claude_home", "~/.claude", "where Claude Code keeps its conversations, for importing (history.py)")
     codex_home: str = opt("history", "codex_home", "~/.codex", "where Codex keeps them")
     antigravity_home: str = opt("history", "antigravity_home", "~/.gemini/antigravity-cli", "where Antigravity keeps them")

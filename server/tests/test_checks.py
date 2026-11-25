@@ -120,8 +120,9 @@ def test_the_research_loop_gates_its_stages_and_sends_rework_back(tmp_path):
         # the human gate, each in its block; a gate stands for its stage's hard checks, which have no nodes of their own
         v = c.get(f"/api/lines/{lid}/canvas").json()
         ids = {n["id"]: n for n in v["nodes"]}
-        assert {"stage:idea", "stage:ship", "gate:hatch", "gate:exp", "gate:write", "gate:review", "gate:ship", "check:design",
-                "spec", "clamp", "human"} <= ids.keys() and "check:words" not in ids and "gate:method" not in ids
+        assert {"stage:idea", "stage:ship", "gate:hatch", "gate:method", "gate:exp", "gate:write", "gate:review", "gate:ship",
+                "check:design", "spec", "clamp", "human"} <= ids.keys() and "check:words" not in ids
+        assert ids["gate:method"]["gate"]["checks"] == ["basis"]
         assert ids["check:design"]["kind"] == "soft" and [x["key"] for x in v["blocks"]] == ["overview", "survey", "code", "exp", "data", "paper", "agents"]
         assert [ids[k]["mod"] for k in ("gate:write", "check:design", "stage:team", "human")] == ["paper", "exp", "agents", "overview"]
         g = ids["gate:write"]["gate"]

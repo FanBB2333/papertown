@@ -86,6 +86,9 @@ class Hosted:
             return
         status = {'done': 'idle', 'blocked': 'working', 'exited': 'stopped'}.get(term['status'], term['status'])
         self.a._set(a['id'], term=term, status=status)
+        old = a.get('term') or {}
+        if term.get('seq', 0) > old.get('seq', 0) or (term['status'] == 'idle' and old.get('status') in ('working', 'blocked')):
+            self.town.prov.employee(self.a.get(a['id']), 'turn')
 
     @staticmethod
     def transition(term, status, reason=None):
@@ -199,6 +202,8 @@ class Hosted:
         try:
             if old.get('handle') and a.get('runtime') in RUNTIMES:
                 self.backends[a['runtime']].close(old['handle'])
+            if not quiet:
+                self.a.before(a)
             handle = self.backends[runtime].open({'session': 'pt-' + seq, 'name': name, 'cwd': a['cwd'], 'kind': kind,
                 'workspace': f"Papertown #{seq} {line['title']}" if line else 'Papertown', 'argv': argv, 'env': env})
         except (BackendError, HerdrError, OSError) as e:
@@ -456,6 +461,7 @@ class Hosted:
         if term['status'] == 'exited':
             raise self.error('终端会话已退出，请先启动')
         try:
+            self.a.before(a)
             self.backends[a['runtime']].submit(term['handle'], text)
         except (HerdrError, BackendError) as e:
             raise self.error(e) from e
@@ -465,7 +471,7 @@ class Hosted:
         self.transition(term, 'working')
         self.save(a, term)
 
-    def say(self, id, text, mode=None, origin='web'):
+    def say(self, id, text, mode=None, origin='web', user_text=None):
         text = text.strip()
         if not text or mode not in (None, 'queue', 'steer', 'interrupt'):
             raise self.error('请输入消息并选择有效的发送方式')
@@ -479,16 +485,16 @@ class Hosted:
                 self.interrupt(id)
                 interrupted = True
                 with self.lock:
-                    return self._say(id, text, mode, origin, interrupted)
+                    return self._say(id, text, mode, origin, interrupted, user_text)
             finally:
                 with self.lock:
                     self._interrupting.discard(id)
         with self.lock:
             if id in self._interrupting:
                 raise self.error('终端正在等待打断完成')
-            return self._say(id, text, mode, origin, interrupted)
+            return self._say(id, text, mode, origin, interrupted, user_text)
 
-    def _say(self, id, text, mode, origin, interrupted):
+    def _say(self, id, text, mode, origin, interrupted, user_text):
         a = self.require(id)
         held = mode == 'queue'
         # A dialog holds the screen (a hook review, a menu): typed text and Enter would answer it, not reach the agent.
@@ -496,7 +502,8 @@ class Hosted:
             raise self.error('终端停在一个需要你处理的界面上，消息没有发送。请先在终端中处理')
         if not held:
             self.submit(a, text)
-        event = self.a.record(id, 'user', {'text': text, 'origin': origin, 'held': held, 'queued': held,
+        event = self.a.record(id, 'user', {'text': text, 'origin': origin, **({'user_text': user_text} if user_text is not None else {}),
+            'held': held, 'queued': held,
             'delivered': not held, 'generation': a['term']['generation'],
             'steered': not held and not interrupted and a['term']['status'] == 'working', 'interrupted': interrupted})
         self.a._publish(id)

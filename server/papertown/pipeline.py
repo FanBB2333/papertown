@@ -45,9 +45,10 @@ OUTPUTS = {
     "hatch": ("notes", "撞车报告", ("gap",),
               '{"gap": "和最相近的工作差在哪", "summary": "一两句结论", "suggestions": ["…"], "similar": [{"paper_id": "arxiv:2401.01234", "note": "它做了什么、和 idea 的差别"}]}'),
     "method": ("draft", "方法草案", ("title", "problem"),
-               '{"title": "英文题目", "problem": "要解决的问题", "mechanism": ["…"], "baselines": [{"name": "…", "source": "arxiv:…"}], "datasets": ["…"], "metrics": ["…"], "risks": ["…"]}'),
+               '{"title": "英文题目", "problem": "要解决的问题", "mechanism": ["…"], "baselines": [{"name": "…", "source": "arxiv:…"}], "datasets": ["…"], "metrics": ["…"], "risks": ["…"], '
+               '"basis": {"problem": ["D2"], "mechanism": ["D3"], "baselines": ["D4"], "datasets": ["D4"], "metrics": ["D5"]}}'),
     "exp": ("table", "结果表", ("metrics", "rows"),
-            '{"metrics": ["指标名"], "rows": [{"method": "方法名", "values": [数字], "ours": true}], "seeds": 3, "analysis": "结果说明了什么", "concerns": ["…"], "job_id": "任务 id"}'),
+             '{"metrics": ["指标名"], "rows": [{"method": "方法名", "values": [数字], "ours": true, "from": ["来源标签或路径"]}], "seeds": 3, "analysis": "结果说明了什么", "how": "汇总方法", "concerns": ["…"], "job_id": "任务 id"}'),
     "write": ("tex", "论文稿", ("title",), '{"title": "论文题目", "abstract": "摘要", "cite_ids": ["arxiv:2401.01234"], "summary": "这一版改了什么"}'),
     "review": ("pdf", "审稿意见", ("verdict",),
                '{"verdict": "放行 | 退回修改", "mean": 6.5, "reviews": [{"persona": "方法", "overall": 6, "strengths": ["…"], "weaknesses": ["…"], "decision": "accept | revise"}], "feedback": ["要改的事"]}'),
@@ -108,7 +109,7 @@ class Pipeline:
             self.town.linked.overlay(line_id, out_stages)
         done = sum(1 for r in out_stages if r["status"] == "done")
         cur = next((r for r in out_stages if r["status"] == "run"), None)
-        items = self.db.q("select id, kind, stage, building, title, created_at from items where line_id = ? order by created_at", line_id)
+        items = self.db.q("select id, kind, stage, building, title, agent_id, created_at from items where line_id = ? order by created_at", line_id)
         files = [f for f in ("main.tex", "refs.bib", "main.pdf", "paper.zip") if (self.town.press.root / line_id / f).exists()]
         return {**{k: ln[k] for k in ("id", "seq", "title", "idea", "status", "stage", "mill_id", "verdict", "note", "created_at", "updated_at")},
                 "sample": bool(ln["sample"]), "pct": round(100 * done / len(STAGES)), "current": cur, "stages": out_stages, "team": team,
@@ -156,13 +157,14 @@ class Pipeline:
         text = text.strip()
         if len(text) < 4:
             raise LineError("idea 太短了，多写几句：想解决什么问题、打算怎么做")
-        with self.db.lock:
+        with self.db.transaction():
             seq = (self.db.val("select max(seq) from lines") or 0) + 1
             line_id = f"line_{seq}"
             self.db.insert("lines", {"id": line_id, "seq": seq, "title": _short(text), "idea": text, "status": "running", "stage": "idea",
                                      "mill_id": "mill", "created_at": now(), "updated_at": now()})
             for i, (key, _, b, _) in enumerate(STAGES):
                 self.db.insert("stages", {"line_id": line_id, "idx": i, "key": key, "status": "todo", "building": b, "pct": 0})
+            self.town.decided.idea(line_id)
         self.town.save_item(line_id, "egg", "idea", "cityhall", f"idea #{seq}", {"text": text})
         self._stage(line_id, "idea", "done")
         self._stage(line_id, "hatch", "run")
@@ -228,7 +230,7 @@ class Pipeline:
             "candidates": [{"id": h["paper_id"], "title": h["title"], "similarity": h["similarity"]} for h in sc["hits"]], "method": sc["method"]})
         return {"verdict": v.get("verdict", "可孵化"), "summary": v.get("summary", ""), "method": sc["method"], "terms": sc["terms"], "hits": sc["hits"][:8]}
 
-    def output(self, line_id: str, stage: str, body: object) -> dict:
+    def output(self, line_id: str, stage: str, body: object, agent_id: str | None = None) -> dict:
         """What an agent hands in for a stage. Numbers a check reads (how close the nearest paper is, the verdict)
         come from code, whatever the agent wrote."""
         ln = self.line(line_id)
@@ -246,8 +248,21 @@ class Pipeline:
         for key in {"hatch": ("similar",), "method": ("baselines",), "exp": ("metrics", "rows"), "review": ("reviews",)}.get(stage, ()):
             if key in body and not isinstance(body[key], list):
                 raise LineError(f"{key} 应为列表。格式：{how}")
-        out = getattr(self, f"_out_{stage}")(ln, body)
-        self.town.save_item(line_id, kind, stage, STAGES[INDEX[stage]][2], _text(out.get("title"), 120) if stage in ("method", "write") else title, out)
+        prepared = None
+        if stage == "exp":
+            exp = self._out_exp(ln, body)
+            self.town.prov.job(line_id, exp["job_id"])
+            if self.town.s.prov:
+                agent = self.town.agents.get(agent_id)
+                prepared = self.town.prov.output_sources(line_id, agent, exp["rows"], exp["job_id"])
+        with self.db.transaction():
+            basis = self.town.decided.output_basis(line_id, stage, body.get("basis"))
+            out = (exp if stage == "exp" else getattr(self, f"_out_{stage}")(ln, body)) | {"basis": basis}
+            item = self.town.save_item(line_id, kind, stage, STAGES[INDEX[stage]][2],
+                                       _text(out.get("title"), 120) if stage in ("method", "write") else title, out, agent_id)
+            if prepared is not None:
+                node = self.town.prov.output(item, agent, prepared)
+                out = out | {"prov": {"id": node["id"], "tag": node["tag"]}}
         self._publish(line_id)
         return out
 
@@ -277,7 +292,6 @@ class Pipeline:
         out = {"title": _text(body["title"], 160), "problem": _text(body["problem"]), "mechanism": _list(body.get("mechanism"), 800),
                "baselines": [b for b in base if b["name"]], "datasets": _list(body.get("datasets"), 160), "metrics": _list(body.get("metrics"), 160),
                "risks": _list(body.get("risks"))}
-        self._set_line(ln["id"], title=out["title"][:80])
         return out
 
     def _out_exp(self, ln: dict, body: dict) -> dict:
@@ -288,12 +302,16 @@ class Pipeline:
                     or not isinstance(values, list) or len(values) != len(metrics)
                     or any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values)):
                 raise LineError("结果表每行应有方法名，与指标数量一致的有限数值。")
+            if "from" in row and (not isinstance(row["from"], list) or not all(isinstance(v, str) and v.strip() for v in row["from"])):
+                raise LineError("结果表每行的 from 应为来源列表")
         rows = [{"method": _text(r.get("method"), 120), "values": [v for v in (r.get("values") or [])[:len(metrics)] if isinstance(v, (int, float))],
-                 "ours": bool(r.get("ours"))} for r in (body.get("rows") or [])[:40] if isinstance(r, dict) and r.get("method")]
+                 "ours": bool(r.get("ours")), **({"from": r["from"]} if "from" in r else {})}
+                for r in (body.get("rows") or [])[:40] if isinstance(r, dict) and r.get("method")]
         if not metrics or not rows:
             raise LineError("结果表要有指标名（metrics）和至少一行（rows：method、values）")
         return {"metrics": metrics, "rows": rows, "seeds": body.get("seeds") if isinstance(body.get("seeds"), int) else None,
-                "analysis": _text(body.get("analysis")), "concerns": _list(body.get("concerns")), "job_id": _text(body.get("job_id"), 80) or None}
+                "analysis": _text(body.get("analysis")), "concerns": _list(body.get("concerns")), "job_id": _text(body.get("job_id"), 80) or None,
+                **({"how": _text(body["how"])} if body.get("how") else {})}
 
     def _out_write(self, ln: dict, body: dict) -> dict:
         cites = body.get("cite_ids") if isinstance(body.get("cite_ids"), list) else []
@@ -332,7 +350,8 @@ class Pipeline:
                 "收尾时 Papertown 会再跑一遍硬检查：阻断级的没过就收不了，改完再来。一道工序收尾后，下一道自动开工。", "",
                 "产出：`pt output <工序> '<JSON>'`（也可以写成文件：`pt output <工序> @文件.json`）。格式："]
         out += [f"- {k}：{how}" for k, (_, _, _, how) in OUTPUTS.items()]
-        out += ["查重孵化的相似度和结论由 Papertown 用代码算（`pt survey` 看），你写的是差别在哪、建议怎么调。"]
+        out += ["各工序产出用 basis 列出依据编号。方法草案按项引用用户决定。",
+                "查重报告写明相近工作、差异及出处。需要调整方向时，用 pt raise 请用户决定。"]
         return "\n".join(out)
 
     def survey_text(self, line_id: str) -> str:

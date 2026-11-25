@@ -86,6 +86,12 @@
 # terminal_settle = 2.0
 
 [history]
+# record project file history and output provenance in Papertown's private store (PAPERTOWN_PROV)
+# prov = true
+# store the size and content hash alone above this file size (PAPERTOWN_PROV_FILE_BYTES)
+# prov_file_bytes = 1048576
+# maximum files per root snapshot, with registered paths taking priority (PAPERTOWN_PROV_MAX_FILES)
+# prov_max_files = 50000
 # where Claude Code keeps its conversations, for importing (history.py) (PAPERTOWN_CLAUDE_HOME)
 # claude_home = "~/.claude"
 # where Codex keeps them (PAPERTOWN_CODEX_HOME)

@@ -7,7 +7,9 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -87,6 +89,28 @@ create index if not exists terminal_queue_terminal on terminal_queue(terminal_id
 -- reports from a project's agents, and the questions they ask you (leads.py)
 create table if not exists reports(id integer primary key autoincrement, line_id text, agent_id text, ts text, kind text, data text);
 
+create table if not exists decided(
+  id text primary key, line_id text not null, n integer not null, mod text not null, text text not null,
+  source text not null, ref text, state text not null, replaces text unique, materials text, matter text,
+  created_at text not null, ended_at text, unique(line_id, n));
+create unique index if not exists decided_chat on decided(line_id, ref) where source = 'chat';
+create table if not exists decided_delivery(
+  decision_id text, agent_id text, primary key(decision_id, agent_id));
+create table if not exists decided_needs(
+  line_id text, item text, card_key text, decision_id text, primary key(line_id, item, card_key));
+
+create table if not exists prov_ops(
+  id text not null, line_id text not null, root text not null, ts text not null, trigger text,
+  agent_id text, role text, session_id text, who text, basis text, files integer, added integer, removed integer,
+  tree text, project_head text, primary key(line_id, id));
+create index if not exists prov_ops_head on prov_ops(line_id, root, ts desc);
+create table if not exists prov(
+  id text primary key, line_id text not null, tag text not null, kind text, title text, root text, path text,
+  location text, span text, blob text, op text, made text, src text, note text, replaced_by text, created_at text,
+  stored text, unique(line_id, tag));
+create index if not exists prov_location on prov(line_id, location, replaced_by);
+create table if not exists prov_job_pending(job_id text primary key);
+
 -- what each check on a project found, a row each time it changes (checks.py)
 create table if not exists checks(id integer primary key autoincrement, line_id text, check_id text, ts text, seen text,
   status text, value real, data text, by text);
@@ -124,8 +148,11 @@ ADDED += [("lines", "usage_budget", "real"), ("agents", "session_id", "text")]
 
 ADDED += [("agents", "term", "text")]
 ADDED += [("lines", "sample", "integer")]
+ADDED += [("items", "agent_id", "text"), ("jobs", "basis", "text default '[]'")]
+ADDED += [("jobs", "op", "text"), ("jobs", "outs", "text default '[]'")]
 
 JSON_COLS = {"term", "team", "plan", "workers", "body", "history", "authors", "categories", "tags", "data", "config", "result", "linked"}
+JSON_COLS.update(("basis", "materials", "matter", "outs", "span", "made", "src"))
 
 
 JSONValue = TypeVar("JSONValue", dict, list)
@@ -149,8 +176,8 @@ def write_json(path: Path, data: dict | list, *, mode: int | None = None) -> Non
     tmp.replace(path)
 
 
-def now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+def now(timespec: str = "seconds") -> str:
+    return datetime.now(timezone.utc).isoformat(timespec=timespec)
 
 
 def week_ago() -> str:
@@ -231,9 +258,41 @@ class DB:
 
     def x(self, sql: str, *args: Any) -> int:
         with self.lock:
-            cur = self.conn.execute(sql, [json.dumps(a, ensure_ascii=False) if isinstance(a, (dict, list)) else a for a in args])
-            self.conn.commit()
+            nested = self.conn.in_transaction
+            try:
+                cur = self.conn.execute(sql, [json.dumps(a, ensure_ascii=False) if isinstance(a, (dict, list)) else a for a in args])
+            except sqlite3.Error:
+                if not nested:
+                    self.conn.rollback()
+                raise
+            if not nested:
+                self.conn.commit()
             return cur.lastrowid
+
+    @contextmanager
+    def transaction(self):
+        """Serialize a read followed by dependent writes, including across connections."""
+        with self.lock:
+            if self.conn.in_transaction:
+                yield
+                return
+            callbacks = self._local.after_commit = []
+            try:
+                with self.conn:
+                    self.conn.execute("begin immediate")
+                    yield
+            finally:
+                del self._local.after_commit
+        for callback in callbacks:
+            callback()
+
+    def after_commit(self, fn, *args, **kwargs) -> None:
+        """Readers of an event must already be able to query its committed data."""
+        callbacks = getattr(self._local, "after_commit", None)
+        if callbacks is None:
+            fn(*args, **kwargs)
+        else:
+            callbacks.append(partial(fn, *args, **kwargs))
 
     def insert(self, table: str, row: dict) -> int:
         cols = ", ".join(row)

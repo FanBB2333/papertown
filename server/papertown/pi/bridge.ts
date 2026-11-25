@@ -267,6 +267,7 @@ export default function papertownBridge(pi: ExtensionAPI) {
 			send({ t: "queued", ids: [m.id] });
 			return;
 		}
+		send({ t: "before" });
 		void pi.sendUserMessage(m.text, idle ? undefined : { deliverAs: steer ? "steer" : "followUp" });
 		send({ t: "delivered", ids: [m.id], queued: !idle && !steer, steered: !idle && steer });
 	}
@@ -507,10 +508,12 @@ export default function papertownBridge(pi: ExtensionAPI) {
 			name: Type.String({ description: "Short job name, e.g. main or ablation-no-graph" }),
 			command: Type.String({ description: "Shell command to run, e.g. python run.py --seed 0" }),
 			backend: Type.Optional(Type.String({ description: "local (default). nvidb is not connected yet." })),
+			basis: Type.Optional(Type.Array(Type.String({ description: "Project decision or user task, e.g. D5 or #t4" }))),
+			outs: Type.Optional(Type.Array(Type.String({ description: "Result file paths relative to the job's working directory" }))),
 		}),
 		async execute(_id, params) {
 			const j = await post("/jobs", params);
-			return text(`Submitted ${j.id} (${j.name}) to ${j.backend}; status ${j.status}. Check it with papertown_job_status.`, j);
+			return text(j.text || `Submitted ${j.id} (${j.name}) to ${j.backend}; status ${j.status}. Check it with papertown_job_status.`, j);
 		},
 	});
 

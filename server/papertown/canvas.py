@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .agents import ROLES, AgentError
+from .decided import flat_basis
 from .checks import BAD, GATE, HARD_IDS, STATUS as CHECK_STATUS, CheckError, clip
 from .db import now, write_json
 from .hosted import RUNTIMES
@@ -330,7 +331,22 @@ class Canvas:
             raise CanvasError(f"读取画布失败，原文件已保留：{e}") from e
         if not isinstance(data, dict) or not isinstance(data.get("nodes"), list):
             raise CanvasError("画布数据格式无效，原文件已保留")
+        tasks = [n for n in data["nodes"] if n.get("kind") == "task"]
+        if any("created_by" not in n for n in tasks):
+            # Before tasks stored their creator, assistant additions were recorded in its action history.
+            seq = self.town.db.val("select seq from lines where id = ?", line_id)
+            actions = self.town.db.q("""select data from agent_events where agent_id = 'assistant' and kind = 'act'
+                and json_extract(data, '$.action') = 'canvas.add' and json_extract(data, '$.status') = 'done'
+                and json_extract(data, '$.args.line') in (?, ?, ?)""", line_id, str(seq), f"#{seq}")
+            added = {a["data"]["result"].removeprefix("加上了，编号 ").split("，")[0] for a in actions}
+            for n in tasks:
+                n.setdefault("created_by", "papertown" if n.get("loop") == "hard" else "assistant" if n["id"] in added else "you")
+        for n in tasks:
+            n.setdefault("basis", [])
         return data
+
+    def task_nodes(self, line_id: str) -> list[dict]:
+        return [n for n in (self._read(line_id) or {}).get("nodes", []) if n.get("kind") == "task"]
 
     def _save(self, line_id: str, d: dict) -> None:
         """Written with the blocks fitted round their nodes as they now are."""
@@ -733,6 +749,8 @@ class Canvas:
         locked = {g["next"]: g for g in gates.values() if g["state"] == "block" and g["next"] and not g["waived"]}
         bounds = self._bounds(line_id)
         stage_of = {c["id"]: c.get("stage") or "" for c in cv["checks"]}
+        stage_basis = {r["stage"]: flat_basis(r["basis"]) for r in self.town.db.q(
+            "select stage, json_extract(body, '$.basis') as basis from items where line_id = ? order by created_at, rowid", line_id)}
         nodes = []
         for n in d["nodes"]:
             out = {"id": n["id"], "kind": n["kind"], "x": n["x"], "y": n["y"], "mod": _mod(n, stage_of)}
@@ -741,7 +759,7 @@ class Canvas:
                 if not s:
                     continue
                 g = locked.get(n["ref"])
-                out |= {"ref": n["ref"], "title": s["name"], "status": s["status"], "pct": s["pct"], "note": s.get("note") or "",
+                out |= {"ref": n["ref"], "basis": stage_basis.get(n["ref"], []), "title": s["name"], "status": s["status"], "pct": s["pct"], "note": s.get("note") or "",
                         "role": STATION.get(n["ref"]), "locked": {"gate": g["stage"], "title": g["name"]} if g else None}
             elif n["kind"] == "gate":
                 out |= {"ref": n["ref"], "title": gates[n["ref"]]["name"], "gate": gates[n["ref"]]}
@@ -759,6 +777,7 @@ class Canvas:
                     continue
                 out |= {"ref": n["ref"], "title": INFO[n["ref"]], "w": _size(n)[0], "h": _size(n)[1]}
             elif n["kind"] == "task":
+                out |= {"created_by": n["created_by"], "basis": n["basis"]}
                 out |= {k: n.get(k) for k in ("title", "text", "to", "status", "sent_at", "done_at", "result", "by", "created_at", "dispatch")}
                 out["agent_id"] = n.get("agent_id")
                 out["agent"] = self.town.agents.public(self.assignee(line_id, n))
@@ -772,7 +791,10 @@ class Canvas:
         ids = {n["id"] for n in nodes}
         on = [n for n in nodes if n["kind"] == "task"]
         gone = [{"id": g, "title": self._gone_title(g, cv)} for g in d["gone"]]
-        return {"line_id": line_id, "seq": ln["seq"], "title": ln["title"], "nodes": nodes,
+        decided = dict.fromkeys((m for m, _ in MODULES), 0)
+        for choice in self.town.decided.active(line_id):
+            decided[choice["mod"]] += 1
+        return {"line_id": line_id, "seq": ln["seq"], "title": ln["title"], "nodes": nodes, "decided": decided,
                 "edges": [e for e in d["edges"] if e["source"] in ids and e["target"] in ids], "gone": gone,
                 "spare": [{"id": f"info:{k}", "title": t} for k, t in INFO.items() if f"info:{k}" not in ids],
                 "blocks": [{"key": m, "title": t, **d["blocks"][m]} for m, t in MODULES], "rows": BLOCK_ROWS, "checks": cv["checks"], "summary": cv["summary"], "tasks": {k: sum(1 for t in on if t["status"] == k) for k in TASK},
@@ -841,13 +863,15 @@ class Canvas:
             if c["kind"] == "soft" and c["on"] and (c["last"] or {}).get("status") == "fail":
                 out.append({"kind": "fail", "id": f"check:{c['id']}", "text": f"软巡检「{c['title']}」判为偏离：{clip(c['last']['note'], 80)}"})
         for q in self.town.leads.asks(line_id):
-            out.append({"kind": "ask", "id": str(q["id"]), "text": f"{q['data'].get('who') or 'agent'}问你：{clip(q['data'].get('question'), 100)}"})
+            kind = "matter" if q["data"].get("matter") else "ask"
+            out.append({"kind": kind, "id": str(q["id"]), "ask": q["id"], "text": f"{q['data'].get('who') or 'agent'}问你：{clip(q['data'].get('question'), 100)}"})
         return out
 
     # editing
 
     def add(self, line_id: str, kind: str, x: float, y: float, title: str = "", text: str = "", to: str = "lead",
-            prio: str = "P1", link: str | None = None, send: bool = False, mod: str | None = None) -> dict:
+            prio: str = "P1", link: str | None = None, send: bool = False, mod: str | None = None,
+            created_by: str = "you", basis: list[str] | None = None) -> dict:
         """A new node where the user put it, wired to the node it was drawn from: a task (sent at once when asked),
         a check of the user's own, or a note. A task drawn from a sentinel is a correction: it goes back to the
         stage the sentinel watches. A task or a note joins the block whose frame it lands in, or the nearest (`mod`
@@ -865,10 +889,11 @@ class Canvas:
                 if to not in TO:
                     raise CanvasError("任务交给 lead（项目负责人）、coder（代码员工）或 writer（写作员工）")
                 node = {"id": self._id(d, "t"), "kind": "task", "title": title, "text": text[:4000], "to": to, "status": "draft",
-                        "created_at": now(), "sent_at": None, "done_at": None, "result": "", "by": "", "log": []}
+                        "created_by": created_by, "basis": self.town.decided.basis(line_id, basis),
+                        "created_at": now("microseconds"), "sent_at": None, "done_at": None, "result": "", "by": "", "log": []}
                 if src and src["kind"] == "soft":
                     node |= {"loop": "soft", "from": src["ref"]}
-                _log(node, "made")
+                _log(node, "made", by="小助手" if created_by == "assistant" else "你")
             elif kind == "note":
                 if not text:
                     raise CanvasError("备注是空的")
@@ -908,13 +933,15 @@ class Canvas:
         return {**self.view(line_id), "added": node["id"]}
 
     def set(self, line_id: str, node_id: str, title: str | None = None, text: str | None = None, to: str | None = None,
-            status: str | None = None, stale: bool | None = None) -> dict:
+            status: str | None = None, stale: bool | None = None, basis: list[str] | None = None) -> dict:
         """Edit a task or a note. (A check's own settings are the checks' to change.) A task marked done lets what
         waits for it go; one opened again marks what ran after it; `stale` False says its result still stands."""
         with self._lock:
             d = self._load(line_id)
             n = self._node(d, node_id)
             if n["kind"] == "task":
+                if basis is not None:
+                    n["basis"] = self.town.decided.basis(line_id, basis)
                 if title is not None:
                     if not title.strip():
                         raise CanvasError("给任务写个名字")
@@ -1215,7 +1242,8 @@ class Canvas:
                 title, text = self._rework_text(g, [checks[c] for c in g["checks"] if c in checks and _bad(checks[c])])
                 if not t or t.get("converged"):  # a new ticket, under the gate
                     t = {"id": self._id(d, "t"), "kind": "task", "loop": "hard", "gate": stage, "round": 1, "trail": [g["now"]],
-                         "title": title, "text": text, "to": REWORK.get(stage, "lead"), "status": "draft", "created_at": now(),
+                         "created_by": "papertown", "basis": [],
+                         "title": title, "text": text, "to": REWORK.get(stage, "lead"), "status": "draft", "created_at": now("microseconds"),
                          "sent_at": None, "done_at": None, "result": "", "by": "", "log": [],
                          **dict(zip("xy", self._place(d, self._stage_of(line_id), STAGE_MOD.get(stage, "overview"), "task", gn)))}
                     _log(t, "made", f"「{g['name']}」硬卡口阻断，Papertown 写了第 1 轮修补单", by="Papertown")
@@ -1408,6 +1436,8 @@ class Canvas:
         else:
             if n.get("loop") == "hard":
                 head = f"Papertown 的研究回路把这件事打回给你（第 {n.get('round') or 1} 轮修补单）：「{n['title']}」"
+            elif n.get("created_by") == "assistant":
+                head = f"小助手在研究回路上派发了任务「{n['title']}」。"
             elif n.get("loop") == "soft":
                 head = ("用户改了研究回路上这件事，按新的来：" if again else "研究回路上的软巡检发现了偏差，用户派你纠偏：") + f"「{n['title']}」"
             else:
@@ -1419,6 +1449,10 @@ class Canvas:
             if around:
                 body += ["", "它在回路上连着这些（连着检查或卡口的，做完要让它通过）：", *[f"- {x}" for x in around]]
         dispatch = secrets.token_hex(8)
+        if n["basis"]:
+            body += ["", "依据：" + "、".join(n["basis"])]
+        if n["created_by"] == "you":
+            body.append(f"引用此任务时使用 #{n['id']}。")
         body += ["", self._reply_instructions(a, n, dispatch), "</task>"]
         self.town.agents.say(a["id"], "\n".join(body), "queue", origin="papertown")
         n |= {"status": "sent", "sent_at": now(), "done_at": None, "by": "", "dispatch": dispatch}

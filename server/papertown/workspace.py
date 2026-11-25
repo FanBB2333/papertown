@@ -287,12 +287,14 @@ class Workspace:
         root = self.root(line_id, "code")
         listed = list_files(root)["files"] if root else []
         paths = {f["path"] for f in listed}
+        run_nodes = self.town.prov.analysis(line_id).run_nodes
         for j in self.town.linked.jobs(line_id) + self.town.farm.list(line_id):
             nv = j if "gpu_ids" in j else None
             state = j.get("state") or j.get("status")
             if state not in ("completed", "done", "failed", "lost", "timeout"):
                 continue
-            runs.append({"id": f"nvidb-{j['id']}" if nv else j["id"], "name": j["name"], "state": state,
+            jid = f"nvidb-{j['id']}" if nv else j["id"]
+            runs.append({"id": jid, "name": j["name"], "state": state, "prov": run_nodes.get(jid, []),
                          "where": f"{j['node']}:{','.join(map(str, j['gpu_ids']))}" if nv and j.get("node") else j.get("backend"),
                          "started_at": j.get("started_at"), "finished_at": j.get("finished_at") or j.get("ended_at"),
                          "elapsed_s": j.get("elapsed_s"), "exit_code": j.get("exit_code"), "vram_mb": j.get("vram_mb"),

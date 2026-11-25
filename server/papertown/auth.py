@@ -286,6 +286,13 @@ class Gate:
                                                     and path.endswith("/hook") and len(path.split("/")) == 5)
 
     async def __call__(self, scope, receive, send):
+        if (scope["type"] == "http" and scope.get("method") in ("POST", "PUT", "PATCH", "DELETE")
+                and scope["path"].startswith("/api/") and not self.agents_own(scope)
+                and any(k == b"x-papertown-token" for k, _ in scope.get("headers", []))):
+            body = json.dumps({"detail": "此操作仅限用户接口"}).encode()
+            await send({"type": "http.response.start", "status": 403, "headers": [(b"content-type", b"application/json")]})
+            await send({"type": "http.response.body", "body": body})
+            return
         if scope["type"] in ("http", "websocket") and not self.agents_own(scope) and not self.auth.net.admits(scope):
             src = self.auth.net.source(scope) or "?"
             if scope["type"] == "websocket":

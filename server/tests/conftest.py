@@ -11,7 +11,9 @@ from papertown.town import Town
 
 # tests never read your papertown.toml: the settings come from defaults, and each test's network settings are
 # written to its own file under tmp (make_settings)
-os.environ["PAPERTOWN_CONFIG"] = str(Path(tempfile.mkdtemp()) / "papertown.toml")
+_config = Path(tempfile.mkdtemp()) / "papertown.toml"
+_config.write_text('[server]\ndata_dir = "data"\nport = 0\n[agents]\nlead_resident = false\n')
+os.environ["PAPERTOWN_CONFIG"] = str(_config)
 
 
 def make_settings(tmp: Path, **kw) -> Settings:

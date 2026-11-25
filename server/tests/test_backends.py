@@ -600,7 +600,7 @@ def test_screen_with_its_colours_comes_styled_and_packed(tmp_path):
 def test_files_go_with_a_message_by_path(tmp_path, monkeypatch):
     t, h, b, aid = memory_employee(tmp_path)
     said = []
-    monkeypatch.setattr(t.agents, 'say', lambda agent_id, text, mode=None: said.append(text) or {'ok': True})
+    monkeypatch.setattr(t.agents, 'say', lambda agent_id, text, mode, origin, user_text: said.append((text, origin, user_text)) or {'ok': True})
     with patch('papertown.api.Town', return_value=t):
         c = TestClient(create_app())
     url = f'/api/agents/{aid}'
@@ -610,9 +610,9 @@ def test_files_go_with_a_message_by_path(tmp_path, monkeypatch):
     doc = c.post(url + '/uploads?name=notes.pdf', content=b'%PDF').json()
     assert doc['kind'] == 'file'
     assert c.post(url + '/say', json={'text': 'look ', 'attachments': [up['id'], doc['id']]}).status_code == 200
-    assert said[-1] == f"look\n\n附件：\n- 图片 {up['path']}\n- 文件 {doc['path']}"
+    assert said[-1] == (f"look\n\n附件：\n- 图片 {up['path']}\n- 文件 {doc['path']}", "web", "look ")
     assert c.post(url + '/say', json={'attachments': [up['id']]}).status_code == 200
-    assert said[-1] == f"附件：\n- 图片 {up['path']}"
+    assert said[-1] == (f"附件：\n- 图片 {up['path']}", "web", "")
     assert c.post(url + '/say', json={'text': 'x', 'attachments': ['../../etc/passwd']}).status_code == 400
     assert c.post(url + '/say', json={'text': ' '}).status_code == 422
     assert c.post(url + '/uploads?name=empty', content=b'').status_code == 400

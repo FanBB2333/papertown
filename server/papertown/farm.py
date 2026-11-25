@@ -76,7 +76,7 @@ class Farm:
         return out
 
     def submit(self, line_id: str | None, name: str, command: str, backend: str = "local", submitted_by: str | None = None,
-               cwd: str | None = None) -> dict:
+               cwd: str | None = None, basis: list[str] | None = None, outs: list[str] | None = None) -> dict:
         if backend not in BACKENDS:
             raise FarmError(f"没有这个后端：{backend}")
         if backend == "nvidb":
@@ -84,13 +84,20 @@ class Farm:
         command = (command or "").strip()
         if not command:
             raise FarmError("command 不能为空")
+        if (self.town.agents.get(submitted_by) or {}).get("role") == "lead":
+            cwd = None
+        basis = self.town.decided.basis(line_id, basis)
         workdir = Path(cwd) if cwd else (self.town.linked.workdir(line_id, "coder") or self.town.s.projects_dir / line_id / "code" if line_id else self.dir)
         workdir.mkdir(parents=True, exist_ok=True)
         job_id = f"job_{uuid.uuid4().hex[:8]}"
         row = {"id": job_id, "line_id": line_id, "name": (name or "job")[:60], "backend": backend, "status": "queued", "progress": 0,
                "command": command, "cwd": str(workdir), "config": {}, "result": None, "note": None, "submitted_by": submitted_by,
-               "created_at": now(), "started_at": None, "ended_at": None}
-        self.db.insert("jobs", row)
+               "created_at": now("microseconds"), "started_at": None, "ended_at": None, "outs": list(dict.fromkeys(outs or []))}
+        self.town.prov.request(line_id, "paper", "submit")
+        row["op"] = self.town.prov.request(line_id, "code", "submit").result()
+        with self.db.transaction():
+            row["basis"] = self.town.decided.basis(line_id, basis)
+            self.db.insert("jobs", row)
         self._changed(job_id)
         threading.Thread(target=self._run_local, args=(job_id,), daemon=True, name=f"job-{job_id}").start()
         return self.get(job_id)
@@ -163,8 +170,14 @@ class Farm:
                 self._set(job_id, status="failed", result=result, ended_at=now(), note=f"退出码 {code}")
 
     def _set(self, job_id: str, **fields) -> None:
-        before = self.db.one("select status, progress from jobs where id = ?", job_id)
-        self.db.update("jobs", {"id": job_id}, **fields)
+        with self.db.transaction():
+            before = self.db.one("select line_id, status, progress from jobs where id = ?", job_id)
+            self.db.update("jobs", {"id": job_id}, **fields)
+            finish = before["line_id"] and self.town.s.prov and fields.get("status") in ("done", "failed", "cancelled") and fields["status"] != before["status"]
+            if finish and fields["status"] == "done":
+                self.db.x("insert or ignore into prov_job_pending values (?)", job_id)
+        if finish:
+            self.town.prov.finish_job(self.get(job_id))
         self._changed(job_id, before)
 
     def _changed(self, job_id: str, before: dict | None = None) -> None:

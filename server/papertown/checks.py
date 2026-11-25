@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 from .db import now, read_json, write_json
+from .decided import METHOD
 from .pipeline import INDEX
 
 if TYPE_CHECKING:
@@ -261,7 +262,9 @@ class Inputs:
             parts.append(f"pdf:{pdf.stat().st_mtime_ns if pdf else 0}")
         jobs = self.town.linked.jobs(self.line_id) + self.town.farm.list(self.line_id, 200)
         parts += sorted(f"{j['id']}:{j.get('state') or j.get('status')}:{bool(j.get('result'))}" for j in jobs)
-        parts.append(str(self.town.db.val("select max(created_at) from items where line_id = ? and stage = 'hatch'", self.line_id)))
+        parts.append(str(self.town.db.q("select stage, max(rowid) as last from items where line_id = ? and stage in ('hatch','method') group by stage", self.line_id)))
+        parts.append(str(self.town.db.val("select status from stages where line_id = ? and key = 'method'", self.line_id)))
+        parts.append(str([d["n"] for d in self.town.decided.active(self.line_id)]))
         return str(hash("|".join(parts)))
 
 
@@ -446,6 +449,19 @@ def check_novelty(x: Inputs, params: dict) -> Found:
     return len(out), out, f"最接近的一篇相似度 {top:.2f}，上限 {cap:.2f}"
 
 
+def check_basis(x: Inputs, _: dict) -> Found:
+    draft = x.town.pipeline.item(x.line_id, "method")
+    if not draft:
+        return None, [], "尚无方法草案"
+    if "basis" not in draft and x.town.db.val("select status from stages where line_id = ? and key = 'method'", x.line_id) == "done":
+        return None, [], "旧项目的方法设计已完成"
+    active = {f"D{d['n']}" for d in x.town.decided.active(x.line_id)}
+    basis = draft.get("basis") or {}
+    missing = [{"file": "", "line": 0, "text": label, "hit": key, "hint": "请引用本项目仍然有效的用户决定"}
+               for key, label in METHOD.items() if not draft.get(key) or not active.intersection(basis.get(key, []))]
+    return len(missing), missing, f"{len(METHOD) - len(missing)}/{len(METHOD)} 项有据"
+
+
 def check_results(x: Inputs, _: dict) -> Found:
     runs = x.runs
     if not runs:
@@ -494,6 +510,7 @@ class Hard:
 
 
 HARD = [
+    Hard("basis", "方法有据", "method", "P0", "Papertown", "问题、机制、基线、数据集和指标各须引用至少一条有效的用户决定。", check_basis, unit="项"),
     Hard("novelty", "查重相似度", "hatch", "P0", "Papertown", "最接近的已有工作和 idea 的相似度不超过上限。", check_novelty, unit="篇",
          params=(("sim", 0.85, "相似度上限"),)),
     Hard("results", "交回结果", "exp", "P1", "Papertown", "跑完的实验任务都交回了 result.json（或打印了 RESULT）。", check_results, unit="个"),
@@ -518,9 +535,9 @@ SOFT = [
     {"id": "method", "stage": "method", "title": "方法对题", "rule": "",
      "prompt": "方法草案有没有回答 idea 要解决的核心问题？哪一步和 idea 对不上？"},
     {"id": "direction", "stage": "exp", "title": "实验方向", "rule": "",
-     "prompt": "现在在跑和计划中的实验，是不是在回答论文的核心问题？有没有偏到别的方向上？偏了就说偏在哪。"},
+     "prompt": "对照用户的有效决定，运行中和计划中的实验分别回答哪个研究问题？请列出偏离决定的实验及其依据。"},
     {"id": "design", "stage": "exp", "title": "实验设计", "rule": "",
-     "prompt": "实验设计满足要求吗：数据集、baseline、指标和消融齐不齐，比得公不公平？对照用户在卡片和工作边界里提的要求，缺什么就列出来。"},
+     "prompt": "对照用户的有效决定，核对数据集、基线、指标、消融和实验顺序。请列出缺项、比较条件的差异和待定的事。"},
     {"id": "claims", "stage": "write", "title": "主张有据", "rule": "",
      "prompt": "论文的每条贡献和结论，各由哪张表或哪张图支撑？没有支撑的列出来。"},
     {"id": "defensive", "stage": "review", "title": "防御性表达", "rule": "lastcheck 3.1",
@@ -568,8 +585,14 @@ class Checks:
 
     def config(self, line_id: str) -> dict:
         d = read_json(self._path(line_id), {})
+        soft = d.get("soft") if isinstance(d.get("soft"), list) else [dict(x, every=SOFT_EVERY) for x in SOFT]
+        old_prompts = {"direction": "现在在跑和计划中的实验，是不是在回答论文的核心问题？有没有偏到别的方向上？偏了就说偏在哪。",
+                       "design": "实验设计满足要求吗：数据集、baseline、指标和消融齐不齐，比得公不公平？对照用户在卡片和工作边界里提的要求，缺什么就列出来。"}
+        for s in soft:
+            if s["id"] in old_prompts and s["prompt"] == old_prompts[s["id"]]:
+                s["prompt"] = next(x["prompt"] for x in SOFT if x["id"] == s["id"])
         return {"off": list(d.get("off") or []), "params": dict(d.get("params") or {}),
-                "soft": d.get("soft") if isinstance(d.get("soft"), list) else [dict(x, every=SOFT_EVERY) for x in SOFT],
+                "soft": soft,
                 "rules": list(d.get("rules") or []), "asked": dict(d.get("asked") or {}),
                 "gates": {k: v for k, v in dict(d.get("gates") or {}).items() if v in GATE}, "loops": dict(d.get("loops") or {})}
 
@@ -1004,6 +1027,7 @@ class Checks:
                 if self._halt.is_set():
                     return
                 try:
+                    self.town.prov.tick(r["id"])
                     self.run(r["id"])
                 except Exception:  # noqa: BLE001 - one project's trouble must not stop the others
                     continue

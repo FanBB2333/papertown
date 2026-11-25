@@ -13,13 +13,13 @@ from papertown.tui.app import PLACES, Main, Papertown
 from papertown.tui.client import Api
 from papertown.tui.views.projects import TABS
 from papertown.tui.views.setup import PAGES
-from papertown.tui.widgets import Confirm, Form
+from papertown.tui.widgets import Confirm, Form, Prompt
 
 from .conftest import make_settings
 
 
 @contextlib.contextmanager
-def serving(s, monkeypatch):
+def serving(s, monkeypatch, app=None):
     """Serve the app for `s` on a free port and yield its URL; what the TUI reads itself (nvidb, skim, the skills) follows `s` too."""
     for k, v in {"PAPERTOWN_DATA_DIR": s.data_dir, "PAPERTOWN_SKILLS_DIR": s.skills_dir, "PAPERTOWN_NVIDB_BIN": s.nvidb_bin,
                  "PAPERTOWN_SKIM_BIN": s.skim_bin, "PAPERTOWN_LEAD_RESIDENT": "0"}.items():
@@ -27,15 +27,17 @@ def serving(s, monkeypatch):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    srv = uvicorn.Server(uvicorn.Config(create_app(s), host="127.0.0.1", port=port, log_level="warning"))
+    srv = uvicorn.Server(uvicorn.Config(app or create_app(s), host="127.0.0.1", port=port, log_level="warning"))
     th = threading.Thread(target=srv.run, daemon=True)
     th.start()
     t0 = time.time()
     while not srv.started and time.time() - t0 < 30:
         time.sleep(0.05)
-    yield f"http://127.0.0.1:{port}"
-    srv.should_exit = True
-    th.join(10)
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        srv.should_exit = True
+        th.join(10)
 
 
 @pytest.fixture
@@ -50,6 +52,47 @@ async def until(pilot, ok, timeout: float = 20) -> None:
         if time.time() - t0 > timeout:
             raise TimeoutError
         await pilot.pause(0.1)
+
+
+def test_tui_writes_a_research_decision(tmp_path, monkeypatch):
+    s = make_settings(tmp_path)
+    service = create_app(s)
+
+    async def go(server):
+        api = Api(server)
+        lid = (await api.post("/api/samples"))["added"][-1]
+        service.state.town.cards._write(lid, {"card": {"need_you": ["怎样报告 [A] 组的失败？"]}})
+        app = Papertown(api, start_server=False, events=False)
+        async with app.run_test(size=(150, 45)) as pilot:
+            await until(pilot, lambda: isinstance(app.screen, Main) and app.place == "projects" and app.current.pending)
+            projects = app.current
+            item = projects.pending[0]
+            assert projects.line["id"] == lid and len(projects.pending) == 2
+            assert item["kind"] == "matter" and item["facts"] and item["options"] == []
+            app.screen.query_one("#pj-table", DataTable).focus()
+            await pilot.press("r")
+            await until(pilot, lambda: isinstance(app.screen, Form))
+            await pilot.press("ctrl+s")
+            await until(pilot, lambda: isinstance(app.screen, Prompt))
+            assert item["facts"][0] in app.screen.hint
+            text = "以接收方确认时间为准，单列超时记录。"
+            app.screen.query_one(Input).value = text
+            await pilot.press("enter")
+            await until(pilot, lambda: isinstance(app.screen, Main) and len(projects.pending) == 1)
+            latest = (await api.get(f"/api/lines/{lid}/decided"))["decisions"][0]
+            assert latest["text"] == text and latest["mod"] == item["mod"] and latest["source"] == "answer"
+            need, = projects.pending
+            assert need["kind"] == "need"
+            app.screen.query_one("#pj-table", DataTable).focus()
+            await pilot.press("r")
+            await until(pilot, lambda: isinstance(app.screen, Prompt))
+            app.screen.query_one(Input).value = "按超时和参数错误分别报告。"
+            await pilot.press("enter")
+            await until(pilot, lambda: isinstance(app.screen, Main) and not projects.pending)
+            latest = (await api.get(f"/api/lines/{lid}/decided"))["decisions"][0]
+            assert latest["ref"] == need["title"] and latest["text"] == "按超时和参数错误分别报告。"
+    with serving(s, monkeypatch, service) as url:
+        asyncio.run(go(url))
 
 
 def test_tui_places_idea_and_job(server):

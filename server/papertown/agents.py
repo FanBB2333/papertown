@@ -50,16 +50,15 @@ PASEO_STATUS = {"initializing": "starting", "running": "working", "idle": "idle"
 # how an agent reaches the town, by runtime
 TOOLS = {
     "pi": {"brief": "用 `papertown_project` 工具读项目简报",
-           "submit": "用 `papertown_submit_job` 提交到实验农场",
+           "submit": "用 `papertown_submit_job` 提交到实验农场，在 basis 中列出本次实验的依据",
            "status": "用 `papertown_job_status` 查看任务进度、结果和日志",
-           "lead": "这个项目由项目负责人推进，它给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
-                   "做完或卡住时在回复里说清楚，它会读你的对话。"},
+           "lead": "照用户的决定执行。需要定方向、方法、实验安排或文档设计时，把事实和出处交给负责人，由它用 pt raise 请用户决定。"
+                   "做完或卡住时在回复里说明情况。"},
     "paseo": {"brief": "运行 `.papertown/pt brief` 读项目简报",
-              "submit": "用 `.papertown/pt submit <名字> -- <命令>` 提交到实验农场",
+              "submit": "用 `.papertown/pt submit <名字> --by D5 -- <命令>` 提交到实验农场，D5 换成本次实验的依据",
               "status": "用 `.papertown/pt jobs [任务 id]` 查看任务进度、结果和日志",
-              "lead": "这个项目由项目负责人推进，它给你派活、提醒你（消息开头是 `<msg from=\"…项目负责人\">`），照它说的做；"
-                      "做完、卡住或要它拍板时，用 `.papertown/pt tell lead \"…\"` 告诉它。它让你交工序产出时用 `.papertown/pt output <工序> '<JSON>'`"
-                      "（`.papertown/pt stage` 写着格式）。"},
+              "lead": "用 `.papertown/pt decided` 查用户的决定，按决定和负责人派的任务执行。研究取舍交给负责人，用 pt tell lead 告诉它事实和出处，"
+                      "由它用 pt raise 请用户决定。提交工序产出时在 basis 列出依据编号。"},
 }
 CHECKS = {
     "pi": "论文还要过一组用代码查的硬检查（禁用词、连字符、括号、分号、图表标题、方括号区间），结果在用户的研究回路上。阻断级的规则没过时，Papertown 会给你发一张修补单（`<task>`，写着第几轮、哪条规则、哪个文件哪一行），改完用 `pt checks run` 确认清零再 `pt task <编号> done`。",
@@ -67,13 +66,15 @@ CHECKS = {
              "改完用 `.papertown/pt checks run` 再跑一遍，直到都通过。",
 }
 
+EMPHASIS_GUIDE = "汇报、卡片摘要、巡检说明和任务结果中，用 **…** 标出结论或关键数字，每条最多一处。"
+
 GUIDE = {
     "coder": """# Papertown · 代码员工
 
 你是 Papertown 里项目 #{seq}「{title}」的代码 agent，工作目录就是这个项目的代码仓库。
 
 - 先{brief}（idea、方法草案、已有实验）。
-- 按方法草案实现一个最小可运行的版本，写测试并在本地跑通。
+- 按用户决定的方法实现，写测试并在本地跑通。实验和消融的范围、先后及指标照用户的决定。
 - 正式实验不要在前台跑：{submit}，命令在本目录用 bash 执行。
   实验脚本打印 `PROGRESS <0-100>` 汇报进度，结束时打印 `RESULT {{json}}`，或写入 `$PAPERTOWN_JOB_DIR/result.json`。
 - {status}。
@@ -85,7 +86,7 @@ GUIDE = {
 你是 Papertown 里项目 #{seq}「{title}」的写作 agent，工作目录是印刷厂里这篇论文的目录。
 
 - 先{brief}：idea、方法草案、实验结果和审稿意见。
-- 论文写在 `main.tex`，参考文献在 `refs.bib`；目录里已有初稿时在它的基础上改。
+- 文章的论点、结构和采用的结论照用户的决定。论文写在 `main.tex`，参考文献在 `refs.bib`，有初稿时在原稿上改。
 - 只写有依据的内容：数字来自实验农场里跑完的任务，没有跑出来的结果不写。
 - 改完用 `latexmk -pdf -interaction=nonstopmode main.tex` 编译，修掉报错。
 - {checks}
@@ -96,7 +97,7 @@ GUIDE = {
 
 LEAD_GUIDE = """# Papertown · 项目负责人
 
-你是 Papertown 里项目 #{seq}「{title}」的负责人。这个项目由你推进：从查重、立项、方法、实验、写作、质检到出厂，八道工序都是你的事。代码由代码员工写，论文由写作员工写，你不动手改项目里的文件；员工由你启动、由你派活。Papertown 自己不调用任何模型，项目里的每一步都是你和你启动的员工做的。
+你是 Papertown 里项目 #{seq}「{title}」的负责人。用户决定方向、方法、实验安排和文档设计。你负责调研、读文献、核实事实和组织执行。代码交给代码员工，论文交给写作员工。用 `pt decided` 查看有效决定。
 
 ## 工具（都是 `.papertown/pt`）
 
@@ -105,13 +106,15 @@ LEAD_GUIDE = """# Papertown · 项目负责人
 - `pt worker coder|writer [条数]`：员工最近的对话。
 - `pt jobs [任务 id]`：实验农场里的任务和日志。
 - `pt hire coder|writer`：启动代码员工或写作员工（已经在运行的不会重复启动）。它启动后先读项目简报，再用 `pt tell` 给它派活。
-- `pt tell coder|writer "…" [--now]`：给员工派活或提醒它。默认等它做完手上的事再交给它，`--now` 插进它正在做的事。
+- `pt tell coder|writer "…" --by D5 [--now]`：按决定派活，D5 换成实际依据。用户在研究回路上亲手创建的任务也能作为依据，例如 `--by '#t4'`。
 - `pt stage`：八道工序的状态、归谁做、产出交没交、哪道硬卡口在阻断，以及各工序产出的格式。
 - `pt stage run|done|todo <工序> ["说明"] [--pct N]`：开工或写进度、收尾、放回去重做。工序的名字是 idea、hatch、team、method、exp、write、review、ship。
 - `pt output <工序> '<JSON>'`（或 `@文件.json`）：交一道工序的产出，用户在项目页和中控屏里看的就是它。
 - `pt survey`：Papertown 用代码做的查重：图书馆里最接近的论文、相似度和结论。`pt library "英文关键词"`：检索图书馆。
-- `pt report "…" [--key]`：给用户写一条汇报；要紧的（结论、卡住了、要他拍板的取舍）加 `--key`。
-- `pt ask "问题" [--choice 选项]…`：问用户，他的回答会作为 `<answer>` 消息发给你。
+- `pt report "…" [--key]`：给用户汇报进展、结论和困难，重要汇报加 `--key`。要用户决定的取舍用 `pt raise`。
+- `pt raise "问题" --mod 分项 --fact "事实和出处" [--option "一种做法"] [--material 种类:引用]`：摆出需要用户决定的问题、已核实的事实和各种可能的做法，平等呈现。等用户写下决定，收到 `<decision>` 后执行。
+- `pt said "用户原话"`：用户在项目对话中已经说过怎么做时，用原话片段定位整条消息，照录为决定。
+- `pt ask "问题" [--choice 选项]…`：询问机器、账号、权限等事务。
 - `pt rules`：你的工作边界。
 - `pt card`、`pt card set '<JSON>'`：项目在「进展」页上的卡片，用户按了更新才写（见下面）。
 - `pt recall "…"`：在项目里检索：卡片、汇报、实验、代码和论文，还有用户导入的以前的 agent 对话和记忆。
@@ -123,20 +126,20 @@ LEAD_GUIDE = """# Papertown · 项目负责人
 ## 怎么干活
 
 - 八道工序按顺序推进，每道做完用 `pt stage done <工序>` 收尾，下一道自动开工。收尾时 Papertown 会再跑一遍这道工序的硬检查，阻断级的没过就收不了：看 `pt checks`，让员工改完再收尾。做到一半时用 `pt stage run <工序> --pct 40 "做到哪了"` 写进度，用户在小镇和项目页上看得到。
-  - **查重孵化（hatch）**：先 `pt survey` 看代码算出的最接近的工作，再用 `pt library` 和你自己的检索换几个说法找一找、读一读，然后 `pt output hatch` 交撞车报告（差别在哪、建议怎么调、最相近的几篇各一句说明）。相似度和结论由 Papertown 用代码算，你写的是理解。交完用 `pt report --key` 告诉用户结论。结论是「已被做过」或「需调整」时，先用 `pt ask` 问用户是调整 idea 还是照做，再收尾。
+  - **查重孵化（hatch）**：先用 `pt survey` 和 `pt library` 查找并阅读相近工作，用 `pt output hatch` 交出处、差异和可研究的问题。用 `pt report --key` 汇报结论。涉及方向取舍时用 `pt raise`，等待用户决定。
   - **立项编队（team）**：想清楚这个项目要谁，用 `pt hire coder`、`pt hire writer` 启动（写作员工可以等到要写的时候再启动），然后 `pt stage done team "为什么这样编队"`。
-  - **方法设计（method）**：自己定方法，`pt output method` 交草案（题目、问题、机制、baseline、数据、指标、风险）。需要读代码或找 baseline 实现时派给代码员工。
-  - **实验（exp）**：派给代码员工：写代码、用 `pt submit` 把实验提交到实验农场、结束时交回结果。跑完后你或它用 `pt output exp` 交结果表。只写真的跑出来的数字。
-  - **写作排版（write）**：派给写作员工，它在论文目录里写 `main.tex` 和 `refs.bib`。
+  - **方法设计（method）**：查清问题、机制、baseline、数据集、指标各有哪些做法和证据，未定的逐项 `pt raise`。用户写下决定后，把已定内容整理为草案，`pt output method` 的 basis 按五项分别引用决定。需要核实代码时派给代码员工。
+  - **实验（exp）**：实验、消融及先后顺序照用户的决定。派活和 `pt submit` 都带 `--by`。用 `pt output exp` 交实测结果，汇报观测到的事实，后续实验由用户定。
+  - **写作排版（write）**：按用户决定的故事、结构和结论派给写作员工，在论文目录里写 `main.tex` 和 `refs.bib`。
   - **质检（review）**：你来审：读稿子、对照结果表，`pt output review` 交审稿意见。要改就 `pt stage todo write "按审稿意见修改"` 放回去，再派给写作员工。
   - **出厂投稿（ship）**：`pt stage done ship` 打包，项目结束。
 - 你不会一直在线。项目里有动静时（实验结束或失败、员工结束一轮、工序变了、用户回答了问题），Papertown 会发一条 `<checkin>` 给你，写着这段时间变了什么和项目现在的样子；项目停着不动时也会隔一阵来一条。收到后看一眼，需要时读员工的对话或任务日志，该催的催、该派的派、该报的报，然后结束这一轮。
-- 派活时说清楚做什么、做到什么程度算完、做完用 `pt tell lead` 告诉你。员工卡住了先看它卡在哪，你能定的直接定；超出你工作边界的问用户。
-- 汇报只写用户该知道的：进展的结论、出了什么问题、要他决定什么，三五句话。没有新东西就不写，不要每次巡检都汇报。要用表格、图或对比才说得清的（一批实验的结果、方案之间的取舍），写成一页 HTML 用 `pt publish 页面.html --kind report` 发布，再用 `pt report` 说一句结论，提一下页面的标题。
+- 派活时写清依据、任务和验收条件。实现步骤和排错由你安排。拿不准是否属于执行细节时，整理事实并交给用户决定。
+- 用三五句话汇报进展、结论和困难。有新的研究取舍时，用 `pt raise` 列出事实和可能的做法。需要表格、图或对比来说明的实验结果，写成一页 HTML 用 `pt publish 页面.html --kind report` 发布，再用 `pt report` 写一句结论和页面标题。
 - 项目有一张研究回路（在「进展」的项目页上打开）：工序、硬卡口、软巡检、用户派的任务和备注都是上面的节点，用线连着，用户随时会加、会改。硬检查是 Papertown 用代码查的：论文里的禁用词和格式、查重相似度、实验交没交结果、PDF 是不是最新。一道工序的硬检查合成它的硬卡口：阻断级（默认 P0）的没过，卡口锁住下一道工序，Papertown 给这道工序的员工写一张修补单打回去，员工说做完而卡口还没放行就再打回一轮，超过轮数交给用户拍板；告警级（默认 P1）的只提醒。结果有变化会写在 `<checkin>` 里，`pt status` 写着哪道卡口在锁着；告警的你看情况派给员工去改，让它用 `pt checks` 看位置，改完再跑。软检查是要你判断的问题（实验方向、实验设计、主张有没有依据……）：到期时随 `<checkin>` 发给你，用户点了「让负责人现在查」时你会收到 `<check>`。读完项目后用 `pt check <编号> pass|warn|fail "理由"` 记下判断；不是 pass 的会自动成为一条给用户的汇报，不用再 `pt report` 一遍。用户在画布上派给你的事会作为 `<task id="…">` 发来，写着它连着哪些节点：照做（该派给员工的派出去），做完用 `pt task <编号> done "结果"` 回一句，卡住用 `blocked`，这句话也会成为给用户的汇报；直接派给员工的任务，完成或卡住时会写在你的 `<checkin>` 里。
 - 项目卡片只在收到 `<card>` 消息时写：那是用户在「进展」页上按了更新。照消息里的字段写，只写读到的事实，写完这一轮就结束；平时巡检不要动卡片。
 - 用户会在「进展」里这个项目的对话、或者中控屏里直接和你说话（不带标签的消息就是他说的）：是问题就读项目回答（需要时 `pt recall`），要用表格、图或对比才说得清的，写成一页 HTML 用 `pt publish 页面.html --kind explain` 发布，再在回复里说一句结论和页面的标题；是要你办的事，在工作边界内办或派出去，再告诉他做了什么。不要动卡片。
-- 小助手是用户的代理人，它发来的消息（开头是 `<msg from="小助手">`）就是用户的意思：照办，办完用 `pt report` 回一句。员工发来的消息开头是 `<msg from="…代码员工">` 这样。
+- 小助手可以转述用户的话。研究取舍以可核对的用户原话或有效决定为依据。员工的消息带有岗位标记。
 - 回复用中文，短。
 {pages}"""
 PAGE_GUIDE = """
@@ -164,7 +167,7 @@ LINKED_GUIDE = {
 
 你是 Papertown 里项目 #{seq}「{title}」的代码 agent。这个项目是从本机接入的：工作目录 `{code}` 就是用户自己的代码仓库，改动都是真的。
 
-- 项目简报附在这份说明后面，里面有仓库现状和最近的提交；以后想看最新的，{brief}。
+- 项目简报列出有效决定、仓库现状和最近的提交。按用户定下的实验安排和消融执行。以后想看最新的，{brief}。
 - 动手前先看 `git status` 和最近的提交，弄清楚做到哪一步了。只改和任务有关的文件，不要动用户还没提交的改动；commit、push 之前先问用户。
 - 要 GPU 或要跑很久的实验，用用户的 nvidb 队列提交（`nvidb job submit`，写清 `--vram` 和 `--note`），不要用 ssh 直接起任务。实验农场按工作目录和任务名认出这个项目的任务。
 - {lead}
@@ -174,7 +177,7 @@ LINKED_GUIDE = {
 
 你是 Papertown 里项目 #{seq}「{title}」的写作 agent。这个项目是从本机接入的：工作目录 `{paper}` 就是用户自己的论文仓库（LaTeX），改动都是真的。
 
-- 项目简报附在这份说明后面，里面有论文的章节和仓库现状；以后想看最新的，{brief}。
+- 项目简报列出有效决定、论文章节和仓库现状。文章的结构、叙述和结论照用户的决定。以后想看最新的，{brief}。
 - 主文件是 `{main}`，章节可能在它 `\\input` 的文件里，参考文献在仓库里的 .bib 文件。在已有内容上改，不要换模板、不要重排结构。
 - 动手前先看 `git status`。只改和任务有关的文件，不要动用户还没提交的改动；commit、push 之前先问用户。
 - 只写有依据的内容：数字和结论来自代码仓库 `{code}` 里的实验结果，找不到依据的地方留 TODO，不要编。
@@ -532,8 +535,12 @@ class Agents:
         return row
 
     def amend(self, event_id: int, data: dict) -> dict:
-        self.db.update("agent_events", {"id": event_id}, data=data)
-        row = self.db.one("select * from agent_events where id = ?", event_id)
+        with self.db.transaction():
+            current = self.db.one("select data from agent_events where id = ?", event_id)
+            if data.get("delivered") and not current["data"].get("delivered"):
+                data = data | {"delivered_at": now("microseconds")}
+            self.db.update("agent_events", {"id": event_id}, data=current["data"] | data)
+            row = self.db.one("select * from agent_events where id = ?", event_id)
         self.town.bus.publish("agent_event", event=row)
         return row
 
@@ -624,7 +631,7 @@ class Agents:
                 return self._start_paseo(a | {"ext_id": None}, provider or None, model or None, (conv or {}).get("thinking"))
             self.detach(agent_id)
         elif a.get("runtime") == "pi" and self.alive(a):
-            self.say(agent_id, "/new")
+            self.say(agent_id, "/new", origin="papertown")
         return self.public(self.get(agent_id))
 
     @_session_change
@@ -672,8 +679,8 @@ class Agents:
         text = self._guide_text(a, runtime)
         home = self.home(a)
         (home / "AGENTS.md").write_text(text, encoding="utf-8")
-        if runtime == "paseo":
-            if home == cwd:
+        if runtime in ("paseo", "pi"):
+            if runtime == "paseo" and home == cwd:
                 (cwd / "CLAUDE.md").write_text(text, encoding="utf-8")
             self._tools(a)
         return text
@@ -684,6 +691,10 @@ class Agents:
         bounds = self.town.bounds.section(a["role"], a["line_id"], ".papertown/pt" if runtime == "paseo" else None)
         if a["role"] == "assistant":
             return self.town.assistant.guide(runtime) + bounds
+        pt = str(self.pt(a)) if runtime == "pi" else ".papertown/pt"
+        bounds = (f"\n{EMPHASIS_GUIDE}\n"
+                  f"写完每张表、每张图、每句带数字的结论，用 `{pt} prov add` 登记来源。"
+                  f"用 `{pt} submit --out` 报上实验将生成的结果文件。\n" + bounds)
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
         info = self.town.linked.summary(a["line_id"])
         code, paper = ((info or {}).get("code") or {}), ((info or {}).get("paper") or {})
@@ -710,7 +721,7 @@ class Agents:
         guide = self._guide_text(a, runtime)
         if runtime == "paseo":
             guide = guide.replace(".papertown/pt", str(self._tools(a)))
-        return guide + "\n\n这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + self.town.brief(a["line_id"], a["role"], a)
+        return guide + "\n\n先读用户的决定和项目简报，再按收到的任务执行。\n\n" + self.town.brief(a["line_id"], a["role"], a)
 
     def _tools(self, a: dict) -> Path:
         """Write `.papertown/pt` and its link.json (who it speaks for, for a shell without PAPERTOWN_* env); returns pt."""
@@ -738,8 +749,11 @@ class Agents:
         if a and a["role"] in CHAT_ROLES and (runtime or a.get("runtime")) == "paseo" and not a.get("ext_id") and a.get("runtime") not in RUNTIMES:
             intro = self._paseo_intro(a)
             with self._delivery_lock:
-                return self._start_paseo(self.get(agent_id), provider, model, thinking, intro)
-        return self._start_held(agent_id, runtime, provider, model, thinking)
+                result = self._start_paseo(self.get(agent_id), provider, model, thinking, intro)
+        else:
+            result = self._start_held(agent_id, runtime, provider, model, thinking)
+        self.town.decided.deliver(agent_id)
+        return result
 
     def models(self, agent_id: str) -> dict:
         """What the conversation open now can switch to: a terminal CLI resumes its session on another model of the
@@ -802,8 +816,6 @@ class Agents:
         if self.alive(a):
             return self.public(a)
         self._guide(a, "pi")
-        if a["role"] == "assistant":
-            self._tools(a)
         cwd = Path(a["cwd"])
         sessions = self.s.data_dir / "agents" / agent_id
         sessions.mkdir(parents=True, exist_ok=True)
@@ -876,7 +888,7 @@ class Agents:
         title = f"Papertown #{line['seq']} {ROLES[a['role']]['name']}：{line['title']}"
         if self.town.linked.of(a["line_id"]):
             return title, self._linked_intro(a, "paseo")
-        return title, ("这是项目简报，先读一遍（工作目录里的 AGENTS.md 说明了怎么用 Papertown），再说说你打算怎么开始：\n\n"
+        return title, ("先读用户的决定和项目简报，再按收到的任务执行。工具说明在工作目录的 AGENTS.md。\n\n"
                        + self.town.brief(a["line_id"], a["role"], a))
 
     def _start_paseo(self, a: dict, provider: str | None, model: str | None, thinking: str | None,
@@ -893,6 +905,7 @@ class Agents:
         if not st["ok"]:
             raise AgentError(st["note"])
         title, prompt = intro or self._paseo_intro(a)
+        self.before(a)
         try:
             r = self.paseo.create(
                 title=title, provider=provider, model=model,
@@ -1098,6 +1111,8 @@ class Agents:
         model = model_label(snap["provider"], snap.get("model")) if "provider" in snap else a["model"]
         if status != a["status"] or model != a["model"]:
             self._set(a["id"], status=status, model=model)
+            if snap["status"] == "idle" and a["status"] == "working":
+                self.town.prov.employee(self.get(a["id"]), "turn")
             if status == "stopped" and a["status"] != "stopped":
                 self.record(a["id"], "note", {"text": "Paseo 里找不到这个 agent 了（可能被删除或归档）。"})
         elif merged != previous:
@@ -1168,7 +1183,7 @@ class Agents:
             self.amend(row["id"], row["data"] | {"held": False, "error": "目标会话已改变，消息未发送"})
             return
         try:
-            self.paseo.send(a["ext_id"], row["data"]["text"])
+            self._send_paseo(a, row["data"]["text"])
         except PaseoError as e:
             self.amend(row["id"], row["data"] | {"error": str(e)})
             return
@@ -1197,7 +1212,7 @@ class Agents:
         if not a.get("ext_id") or row["data"].get("ext_id") != a["ext_id"]:
             raise AgentError("目标会话已改变，消息未发送")
         try:
-            self.paseo.send(a["ext_id"], row["data"]["text"])
+            self._send_paseo(a, row["data"]["text"])
         except PaseoError as e:
             self.amend(event_id, row["data"] | {"error": str(e)})
             raise AgentError(str(e)) from e
@@ -1238,35 +1253,42 @@ class Agents:
                 self.db.update("agents", {"id": a["id"]}, status="stopped", updated_at=now())
         self.watch()
 
-    def say(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
+    def before(self, a):
+        self.town.prov.employee(a, "before")
+
+    def _send_paseo(self, a, text, **options):
+        self.before(a)
+        self.paseo.send(a["ext_id"], text, **options)
+
+    def say(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web", user_text: str | None = None) -> dict:
         """A message to the agent. While it works, `mode` "steer" puts it into the current turn and "queue"
         holds it until the turn ends. The default is steer. A message to a Paseo session holds
         only the delivery lock; one that may have to start pi also holds the canvas lock, taken first."""
         if (self.get(agent_id) or {}).get("runtime") in RUNTIMES:
-            event = self.hosted.say(agent_id, text, mode, origin)
+            event = self.hosted.say(agent_id, text, mode, origin, user_text)
             if origin == "web":
                 self.seen(agent_id)
             return event
         if (self.get(agent_id) or {}).get("runtime") == "paseo":
             with self._delivery_lock:
                 if (self.get(agent_id) or {}).get("runtime") == "paseo":  # still, now that the order is ours
-                    event = self._say(agent_id, text, mode, origin)
+                    event = self._say(agent_id, text, mode, origin, user_text)
                 else:
                     event = None
             if event is not None:
                 if origin == "web":
                     self.seen(agent_id)
                 return event
-        event = self._say_held(agent_id, text, mode, origin)
+        event = self._say_held(agent_id, text, mode, origin, user_text)
         if origin == "web":
             self.seen(agent_id)
         return event
 
     @_session_change
-    def _say_held(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web") -> dict:
-        return self._say(agent_id, text, mode, origin)
+    def _say_held(self, agent_id: str, text: str, mode: str | None = None, origin: str = "web", user_text: str | None = None) -> dict:
+        return self._say(agent_id, text, mode, origin, user_text)
 
-    def _say(self, agent_id: str, text: str, mode: str | None, origin: str) -> dict:
+    def _say(self, agent_id: str, text: str, mode: str | None, origin: str, user_text: str | None = None) -> dict:
         a = self.get(agent_id)
         if not a or a["role"] not in CHAT_ROLES:
             raise AgentError("这个员工不能对话")
@@ -1276,7 +1298,10 @@ class Agents:
         if mode not in (None, "queue", "steer", "interrupt"):
             raise AgentError("发送模式只能是 steer、queue 或 interrupt")
         if a.get("runtime") in RUNTIMES:
-            return self.hosted.say(agent_id, text, mode, origin)
+            return self.hosted.say(agent_id, text, mode, origin, user_text)
+        message = {"text": text, "origin": origin}
+        if user_text is not None:
+            message["user_text"] = user_text
         if a.get("runtime") == "paseo":
             if not self.s.paseo_chat:
                 raise AgentError(PASEO_OFF)
@@ -1286,21 +1311,18 @@ class Agents:
                 self.title(agent_id, text)
             busy = a["status"] == "working"
             if busy and mode == "queue":  # Paseo has no queue of its own: the watcher sends it once the agent is idle
-                event = self.record(agent_id, "user", {"text": text, "origin": origin, "ext_id": a["ext_id"], "delivered": False, "queued": True, "held": True})
+                event = self.record(agent_id, "user", {**message, "ext_id": a["ext_id"], "delivered": False, "queued": True, "held": True})
                 self._publish(agent_id)
                 return event
             try:
-                if mode == "interrupt":
-                    self.paseo.send(a["ext_id"], text, behavior="interrupt")
-                else:
-                    self.paseo.send(a["ext_id"], text)
+                self._send_paseo(a, text, **({"behavior": "interrupt"} if mode == "interrupt" else {}))
             except PaseoError as e:
                 raise AgentError(str(e)) from e
             self._set(agent_id, status="working")
-            return self.record(agent_id, "user", {"text": text, "origin": origin, "ext_id": a["ext_id"], "delivered": True,
+            return self.record(agent_id, "user", {**message, "ext_id": a["ext_id"], "delivered": True,
                                                    "steered": busy and mode != "interrupt", **({"interrupted": True} if busy and mode == "interrupt" else {})})
         if text.startswith("/") and len(text) > 1 and not text[1:2].isspace():
-            return self._command(a, text)
+            return self._command(a, message)
         running = self.alive(a)
         if not running and not (self.pi and self.tmux):
             raise AgentError(self.available()["note"])
@@ -1308,7 +1330,7 @@ class Agents:
         if cut:
             self.abort(agent_id)
         mid = self._queue(agent_id, {"text": text, "mode": "queue" if mode == "interrupt" else mode or "steer"})
-        ev = self.record(agent_id, "user", {"text": text, "origin": origin, "mid": mid, "delivered": False,
+        ev = self.record(agent_id, "user", {**message, "mid": mid, "delivered": False,
                                            "held": a["status"] == "working" and mode in ("queue", "interrupt"),
                                            **({"interrupted": True} if cut else {})})
         if not running:
@@ -1316,23 +1338,24 @@ class Agents:
         self._publish(agent_id)
         return ev
 
-    def _command(self, a: dict, text: str) -> dict:
+    def _command(self, a: dict, message: dict) -> dict:
         """A slash command for pi: typed into tmux when it needs pi's terminal UI, otherwise run by the bridge."""
+        text = message["text"]
         name, _, args = text[1:].partition(" ")
         if name == "quit":
             self.stop(a["id"])
-            return self.record(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "delivered": True})
+            return self.record(a["id"], "user", {**message, "cmd": True, "delivered": True})
         if not self.alive(a):
             raise AgentError("pi 没在运行，先启动它")
         if name in TUI_COMMANDS:
             self._tmux("send-keys", "-t", a["tmux"], "-l", text)
             self._tmux("send-keys", "-t", a["tmux"], "Enter")
-            ev = self.record(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "delivered": True})
+            ev = self.record(a["id"], "user", {**message, "cmd": True, "delivered": True})
             attach = _attach(a["tmux"], self.s.tmux_socket)
             self.record(a["id"], "note", {"text": f"{text} 要用 pi 的终端界面，已经在终端里执行了，接上终端操作：{attach}", "attach": attach})
             return ev
         mid = self._queue(a["id"], {"kind": "cmd", "name": name, "args": args.strip()})
-        return self.record(a["id"], "user", {"text": text, "origin": "web", "cmd": True, "mid": mid, "delivered": False})
+        return self.record(a["id"], "user", {**message, "cmd": True, "mid": mid, "delivered": False})
 
     def abort(self, agent_id: str) -> None:
         a = self.get(agent_id)
@@ -1371,26 +1394,25 @@ class Agents:
             raise AgentError("小助手不跟着某个项目，没有项目简报")
         if a["role"] == "lead":
             line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
-            return (f"你现在是项目 #{line['seq']}「{line['title']}」的负责人，这个项目由你推进。工作目录里的 AGENTS.md 说明了你的职责和工具，先读一遍，"
-                    f"再读下面项目现在的样子和简报，然后从当前工序做起（`{self._tools(a)} stage` 看每道工序的状态和要交的产出）："
-                    "该你做的现在就做，要员工动手的先 `pt hire` 启动它、再用 `pt tell` 派下去。"
-                    "这一轮做完用 `pt report` 写一条汇报：项目到哪了、接下来怎么推进、有什么要用户定的。然后结束这一轮，等巡检消息。\n\n"
+            return (f"你是项目 #{line['seq']}「{line['title']}」的负责人。用户决定方向、方法、实验安排和文档设计。"
+                    f"先读 AGENTS.md 和项目简报，用 `{self._tools(a)} decided` 核对决定，从当前工序开始调研或执行。"
+                    "研究取舍用 pt raise 摆出事实、出处和可能的做法，等用户写下决定。派活时标明依据。用 pt report 汇报进展、结果和困难。\n\n"
                     + self.town.leads.status(a["line_id"]) + "\n\n## 项目简报\n\n" + self.town.brief(a["line_id"], "lead", a))
         if self.town.linked.of(a["line_id"]):
             return self._linked_intro(a, "paseo" if a.get("runtime") in ("paseo", *RUNTIMES) else "pi")
         text = self.town.brief(a["line_id"], a["role"], a)
         if a.get("runtime") not in ("paseo", *RUNTIMES):
-            return "这是项目简报，先读一遍，再说说你打算怎么开始：\n\n" + text
+            return "先读用户的决定和项目简报，再按收到的任务执行。\n\n" + text
         pt = self._tools(a)
         line = self.db.one("select seq, title from lines where id = ?", a["line_id"])
-        return (f"你现在是 Papertown 里项目 #{line['seq']}「{line['title']}」的{ROLES[a['role']]['name']}。先读一遍下面的简报，再说说你打算怎么开始。\n\n"
+        return (f"你是 Papertown 里项目 #{line['seq']}「{line['title']}」的{ROLES[a['role']]['name']}。先读用户的决定和项目简报，再按收到的任务执行。\n\n"
                 f"Papertown 的工具（在终端里直接用这个路径运行）：\n"
                 f"- `{pt} brief` 读最新的项目简报\n"
-                f"- `{pt} submit <名字> -- <命令>` 把实验提交到实验农场，命令在当前目录用 bash 执行；"
+                f"- `{pt} submit <名字> --by D5 -- <命令>` 按决定提交实验，D5 换成实际依据。"
                 f"脚本打印 `PROGRESS <0-100>` 汇报进度，结束时打印 `RESULT {{json}}`\n"
                 f"- `{pt} jobs [任务 id]` 查看任务进度、结果和日志\n"
-                f"- `{pt} tell lead \"…\"` 告诉项目负责人你做完了、卡住了或要它拍板\n"
-                f"- `{pt} ask \"问题\" [--choice 选项]…` 问用户；`{pt} rules` 看你的工作边界\n\n" + text)
+                f"- `{pt} tell lead \"…\"` 汇报结果或困难。研究取舍交给负责人用 pt raise 请用户决定。\n"
+                f"- `{pt} ask \"问题\"` 询问机器、账号和权限。`{pt} rules` 查看工作边界。\n\n" + text)
 
     def check(self, agent_id: str, token: str | None) -> dict:
         a = self.get(agent_id)
@@ -1411,7 +1433,11 @@ class Agents:
                 if before in ("starting", "stopped", "error"):  # the bridge also says hello after a reconnect
                     self.record(agent_id, "note", {"text": f"pi 已连上（{e.get('model') or '默认模型'}）。"})
             elif t == "input":
-                self.record(agent_id, "user", {"text": e.get("text", ""), "origin": "terminal" if e.get("source") == "interactive" else e.get("source")})
+                if e.get("source") == "interactive":
+                    self.before(self.get(agent_id))
+                self.record(agent_id, "user", {"text": e.get("text", ""), "origin": "terminal" if e.get("source") == "interactive" else "pi"})
+            elif t == "before":
+                self.before(self.get(agent_id))
             elif t == "start":
                 self._turns[agent_id] = now()
                 self._set(agent_id, status="working")
@@ -1428,6 +1454,8 @@ class Agents:
                 self.record(agent_id, "tool_end", {k: e.get(k) for k in ("id", "name", "error", "result", "ms")})
             elif t == "settled":
                 self._turns.pop(agent_id, None)
+                if (a := self.get(agent_id))["status"] == "working":
+                    self.town.prov.employee(a, "turn")
                 self._set(agent_id, status="idle")
             elif t in ("queued", "delivered"):
                 for mid in e.get("ids") or []:
@@ -1446,6 +1474,10 @@ class Agents:
                 cur = {k: v for k, v in e.items() if k != "t"}
                 self._state[agent_id] = self._state.get(agent_id, {}) | cur  # the model list and commands come only now and then
                 m = cur.get("model")
+                session = cur.get("session")
+                sid = session.get("id") if isinstance(session, dict) else None
+                if isinstance(sid, str) and sid and (a := self.get(agent_id)).get("session_id") != sid:
+                    self._remember_session(a, {"session_id": sid, "provider": (m or {}).get("provider") or "pi"})
                 self._set(agent_id, **({"model": f"{m['provider']}/{m['id']}"} if m else {}))
             elif t == "bye":
                 self._turns.pop(agent_id, None)

@@ -18,6 +18,7 @@ from .pages import Pages
 from .cards import Cards
 from .config import Settings
 from .db import DB, now
+from .decided import Decided
 from .depots import Depots
 from .events import EventBus
 from .farm import Farm, summarize
@@ -36,6 +37,7 @@ from .skim import Skim
 from .pipeline import NAMES, Pipeline
 from .relay import Relay
 from .press import Press
+from .prov import Prov
 from .skills import SkillRegistry
 from .world import World
 from .workspace import Workspace
@@ -69,6 +71,7 @@ class Town:
         self.leads = Leads(self)
         self.checks = Checks(self)
         self.canvas = Canvas(self)
+        self.decided = Decided(self)
         self.relay = Relay(self)
         self.paseo_models = PaseoModels(self)
         self.cards = Cards(self)
@@ -81,13 +84,16 @@ class Town:
         self.linked = Linked(self)
         self.usage = Usage(self)
         self.workspace = Workspace(self)
+        self.prov = Prov(self)
         self.skim = Skim(self)
         self.accounts = Accounts(self)
         if not self.library.count():
             self.ingest(seed_papers(), "seed")
 
     def start(self) -> None:
+        self.prov.start()
         self.pipeline.migrate()
+        self.decided.migrate()
         self.farm.recover()
         self.agents.reconcile()
         self.mcp.start()
@@ -115,6 +121,7 @@ class Town:
         self.relay.stop()
         self.nvidb.stop()
         self.mcp.stop()
+        self.prov.stop()
 
     def trace(self, kind: str, label: str, detail: str = "", ms: int = 0, run_id: str | None = None, line_id: str | None = None) -> None:
         row = {"ts": now(), "run_id": run_id, "line_id": line_id, "kind": kind, "label": label, "detail": detail, "ms": ms}
@@ -127,11 +134,11 @@ class Town:
         self.bus.publish("message", message=row)
         return row
 
-    def save_item(self, line_id: str, kind: str, stage: str, building: str, title: str, body: dict) -> dict:
+    def save_item(self, line_id: str, kind: str, stage: str, building: str, title: str, body: dict, agent_id: str | None = None) -> dict:
         row = {"id": f"it_{uuid.uuid4().hex[:10]}", "line_id": line_id, "kind": kind, "stage": stage, "building": building,
-               "title": title, "body": body, "created_at": now()}
+               "title": title, "body": body, "agent_id": agent_id, "created_at": now("microseconds")}
         self.db.insert("items", row)
-        self.bus.publish("item", item={k: v for k, v in row.items() if k != "body"})
+        self.db.after_commit(self.bus.publish, "item", item={k: v for k, v in row.items() if k != "body"})
         return row
 
     def tag_papers(self, papers: list[dict]) -> list[list[str]]:
@@ -155,6 +162,8 @@ class Town:
         the role) gets its skills listed."""
         ln = self.pipeline.line(line_id)
         out = [f"项目 #{ln['seq']}：{ln['title']}", f"状态：{ln['status']}，当前工序：{NAMES.get(ln['stage'], ln['stage'])}", "", "## idea", ln["idea"]]
+        out += ["", "## 用户的决定", self.decided.text(line_id)]
+        out += ["", "用 pt prov 查看产出溯源及尚未登记来源的表和图。"]
         report = self.pipeline.item(line_id, "hatch") or {}
         if report.get("gap"):
             out += ["", "## 查重结论", f"{report.get('verdict', '')}：{report['gap']}"]
@@ -168,7 +177,7 @@ class Town:
             if draft.get("metrics"):
                 out.append(f"- 指标：{', '.join(draft['metrics'])}")
         elif not ln["linked"]:
-            out += ["", "## 方法草案", "还没有，由项目负责人在「方法设计」工序里写。"]
+            out += ["", "## 方法草案", "负责人将在方法设计工序中整理用户逐项写下的决定。"]
         jobs = self.farm.list(line_id, 20)
         if jobs:
             out += ["", "## 实验农场里的任务"]

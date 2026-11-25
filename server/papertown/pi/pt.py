@@ -5,11 +5,17 @@ PAPERTOWN_URL, PAPERTOWN_AGENT and PAPERTOWN_AGENT_TOKEN in the agent's environm
 conversation imported from Paseo has none of them and reads link.json next to this file.
 
     .papertown/pt brief
-    .papertown/pt submit main -- python run.py --seed 0
+    .papertown/pt submit main --by D5 --out outputs/main.json -- python run.py --seed 0
+    .papertown/pt prov                       summary and paper tables or figures still lacking sources
+    .papertown/pt prov add <target> [--from <source>]... [--how <method>] [--job <id>] [--by D5] [--title <title>] [--note <note>]
+    .papertown/pt prov show <tag>
     .papertown/pt jobs [job_id]
     .papertown/pt rules                      your work boundaries: must, never, ask first
     .papertown/pt ask "question" [--choice X]...   ask the user, in the project
-    .papertown/pt tell lead "..." [--now]    a worker to its project's lead
+    .papertown/pt tell lead "..." [--by D5] [--now]    a worker to its project's lead
+    .papertown/pt decided                    the user's active decisions, by module
+    .papertown/pt raise "question" --mod exp --fact "fact and source" [--option "approach"] [--material kind:ref]
+    .papertown/pt said "user's exact words" [--mod exp]    record the full original user message
 
 A project's lead also has:
 
@@ -226,15 +232,52 @@ def main(a):
         return
     if not a or a[0] in ("-h", "--help"):
         print(__doc__)
-    elif a[0] in ("brief", "status", "reports"):
+    elif a[0] in ("brief", "status", "reports", "decided"):
         print(call(f"/{a[0]}" + (f"?line={quote(a[1])}" if len(a) > 1 else ""))["text"])
+    elif a[0] == "raise":
+        opts, rest = options(a[1:], many=("--fact", "--option", "--material"), flags=())
+        if not rest or not opts.get("mod") or not opts.get("fact"):
+            sys.exit('用法：pt raise "问题" --mod 分项 --fact "事实" [--option "做法"] [--material 种类:引用]')
+        materials = []
+        for value in opts.get("material", []):
+            kind, _, ref = value.partition(":")
+            if not kind or not ref:
+                sys.exit("材料须包含种类和引用")
+            materials.append({"kind": kind, "ref": ref})
+        print(call("/raise", {"question": " ".join(rest), "mod": opts["mod"], "facts": opts["fact"],
+                              "options": opts.get("option", []), "materials": materials})["text"])
+    elif a[0] == "prov":
+        if len(a) == 1:
+            view = call("/prov")
+            stats = view["stats"]
+            print(f"表和图 {stats['floats']['tagged']}/{stats['floats']['total']} · "
+                  f"数字 {stats['numbers']['ok']}/{stats['numbers']['total']} · 改过 {stats['changed']} · 操作 {stats['ops']}")
+            for f in view["unregistered"]:
+                print(f"未登记来源  paper/{f['path']}:{f['start']}-{f['end']}")
+        elif a[1] == "show" and len(a) == 3:
+            print(json.dumps(call("/prov/" + quote(a[2], safe="")), indent=2, ensure_ascii=False))
+        elif a[1] == "add":
+            opts, rest = options(a[2:], many=("--from", "--by"), flags=())
+            if len(rest) != 1 or opts.keys() - {"from", "by", "how", "job", "title", "note"}:
+                sys.exit("用法：pt prov add <目标> [--from 来源] [--by 依据] [--how 做法] [--job 任务] [--title 标题] [--note 备注]")
+            node = call("/prov", {"target": rest[0], "basis": opts.pop("by", []), **opts})
+            print(f"{node['tag']}  {node['title']}")
+        else:
+            sys.exit("用法：pt prov | pt prov add <目标> | pt prov show <标签>")
+    elif a[0] == "said":
+        opts, rest = options(a[1:], many=(), flags=())
+        if not rest:
+            sys.exit('用法：pt said "用户原话" [--mod 分项]')
+        print(call("/said", {"text": " ".join(rest), **opts})["text"])
     elif a[0] == "submit":
         if "--" not in a or a.index("--") < 2:
-            sys.exit("用法：pt submit <name> [--backend local] -- <command>")
+            sys.exit("用法：pt submit <名字> [--by D5] [--out 文件] [--backend local] -- <命令>")
         i = a.index("--")
-        opts = a[2:i]
-        backend = opts[opts.index("--backend") + 1] if "--backend" in opts else "local"
-        j = call("/jobs", {"name": a[1], "command": " ".join(a[i + 1:]), "backend": backend})
+        opts, rest = options(a[2:i], many=("--by", "--out"), flags=())
+        if rest:
+            sys.exit("用法：pt submit <名字> [--by D5] [--out 文件] [--backend local] -- <命令>")
+        j = call("/jobs", {"name": a[1], "command": " ".join(a[i + 1:]), "backend": opts.get("backend", "local"), "basis": opts.get("by", []),
+                           **({"outs": opts["out"]} if "out" in opts else {})})
         print(j.get("text") or f"已提交 {j['id']}（{j['name']}，{j['backend']}），状态 {j['status']}。用 pt jobs {j['id']} 查看。")
     elif a[0] == "jobs":
         print(call(f"/jobs/{a[1]}" if len(a) > 1 else "/jobs")["text"])
@@ -251,10 +294,10 @@ def main(a):
             sys.exit('用法：pt answer <问题编号> "回答"')
         print(call("/answer", {"id": a[1], "text": " ".join(a[2:])})["text"])
     elif a[0] == "tell":
-        opts, rest = options(a[1:], many=(), flags=("--now",))
+        opts, rest = options(a[1:], many=("--by",), flags=("--now",))
         if len(rest) < 2:
-            sys.exit('用法：pt tell <收件人> "消息" [--now]')
-        print(call("/tell", {"to": rest[0], "text": " ".join(rest[1:]), "now": bool(opts.get("now"))})["text"])
+            sys.exit('用法：pt tell <收件人> "消息" [--by D5] [--now]')
+        print(call("/tell", {"to": rest[0], "text": " ".join(rest[1:]), "now": bool(opts.get("now")), "basis": opts.get("by", [])})["text"])
     elif a[0] == "report":
         opts, rest = options(a[1:], many=(), flags=("--key",))
         if not rest:

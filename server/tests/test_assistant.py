@@ -101,7 +101,10 @@ def test_the_assistant_reads_the_page_and_asks_before_it_acts(tmp_path):
         assert ("assistant_show", {"target": {"line": lid, "ref": "node:check:design"}}) in shown
         town.assistant.set_page({"mod": "canvas", "line": {"id": lid, "seq": line["seq"], "title": "x"}})
         assert "canvas/outline" in town.assistant.page_text() and "面板：研究回路" in town.assistant.page_text()
-        r = c.post("/api/bridge/assistant/act", json={"action": "idea.submit", "args": {"text": "另一个想法"}}, headers=h).json()
+        action = {"action": "idea.submit", "args": {"text": "另一个想法"}}
+        assert c.post("/api/bridge/assistant/act", json=action, headers=h).status_code == 400
+        c.post("/api/assistant/say", json={"text": "用我的原话立项：另一个想法"})
+        r = c.post("/api/bridge/assistant/act", json=action, headers=h).json()
         assert c.post(f"/api/assistant/acts/{r['id']}", json={"allow": False}).json()["data"]["status"] == "denied"
         assert len(town.pipeline.lines()) == 1
 

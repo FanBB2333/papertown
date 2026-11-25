@@ -202,6 +202,7 @@ class Linked:
                 st = "done" if key in done else "run" if key == "write" and paper else "todo"
                 self.db.insert("stages", {"line_id": line_id, "idx": i, "key": key, "status": st, "building": b,
                                           "pct": 100 if st == "done" else 0, "note": notes.get(key)})
+            self.town.decided.idea(line_id)
         self.town.bus.publish("line", line=self.town.pipeline.snapshot(line_id))
         return line_id
 

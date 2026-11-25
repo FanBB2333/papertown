@@ -11,7 +11,7 @@ from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -26,7 +26,8 @@ from .auth import COOKIE, Auth, AuthError, Gate
 from .bounds import BoundsError
 from .canvas import CanvasError
 from .cards import CardError
-from .decisions import DecisionError
+from .decided import DecisionError
+from .prov import ProvError
 from .network import Network, NetworkError
 from .checks import CheckError
 from .paseo_models import ModelError
@@ -110,7 +111,36 @@ class UsageSettingsIn(BaseModel):
 
 
 class AnswerIn(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
+    text: str = Field(min_length=1)
+    mod: str | None = None
+
+
+class WrittenIn(BaseModel):
+    text: str = Field(min_length=1)
+    mod: str | None = None
+    replaces: str | None = None
+    matter: int | None = None
+    need: str | None = None
+    materials: list[dict] = []
+
+
+class QuoteIn(BaseModel):
+    event_id: int
+    mod: str
+
+
+class SaidIn(BaseModel):
+    text: str = Field(min_length=1)
+    mod: str | None = None
+    line: str | None = None
+
+
+class MatterIn(BaseModel):
+    question: str = Field(min_length=1, max_length=2000)
+    mod: str
+    facts: list[str] = Field(min_length=1)
+    options: list[str] = []
+    materials: list[dict] = []
 
 
 class TellIn(BaseModel):
@@ -118,6 +148,7 @@ class TellIn(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
     now: bool = False
     line: str | None = None
+    basis: list[str] = []
 
 
 class AnswerByIn(BaseModel):
@@ -130,11 +161,12 @@ class LoginIn(BaseModel):
 
 
 class DecideCardIn(BaseModel):
-    kind: Literal["ask", "permission", "prompt", "need"]
+    kind: Literal["ask", "permission", "prompt", "need", "matter"]
+    mod: str | None = None
     id: str = Field(min_length=1, max_length=400)
     agent: str | None = Field(default=None, max_length=100)
     value: bool | int | str | None = None
-    text: str | None = Field(default=None, max_length=2000)
+    text: str | None = None
 
 
 class KeyIn(BaseModel):
@@ -221,6 +253,7 @@ class NodeIn(BaseModel):
     prio: str = "P1"
     link: str | None = None
     send: bool = False
+    basis: list[str] = []
 
 
 class NodeSetIn(BaseModel):
@@ -229,6 +262,7 @@ class NodeSetIn(BaseModel):
     to: str | None = None
     status: str | None = None
     stale: bool | None = None  # False: its result still stands
+    basis: list[str] | None = None
 
 
 class SendIn(BaseModel):
@@ -369,6 +403,18 @@ class JobIn(BaseModel):
     command: str = Field(min_length=1, max_length=4000)
     backend: str = "local"
     line_id: str | None = None
+    basis: list[str] = []
+    outs: list[str] = []
+
+
+class ProvIn(BaseModel):
+    target: str = Field(min_length=1)
+    sources: list[str] = Field(default_factory=list, alias="from")
+    how: str | None = None
+    job: str | None = None
+    basis: list[str] = []
+    title: str | None = None
+    note: str | None = None
 
 
 class BridgeIn(BaseModel):
@@ -513,6 +559,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Papertown", lifespan=lifespan)
     app.state.town = town
+
+    @app.exception_handler(ProvError)
+    @app.exception_handler(DecisionError)
+    async def decision_error(request: Request, exc: DecisionError):
+        return JSONResponse({"detail": str(exc)}, status_code=exc.status)
     net = Network(town.s.config_file)
     auth = Auth(town.s.data_dir, net)
     app.add_middleware(Gate, auth=auth)
@@ -783,7 +834,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/jobs")
     def job_submit(body: JobIn):
-        return farm(town.farm.submit, body.line_id, body.name, body.command, body.backend, "you")
+        return farm(town.farm.submit, body.line_id, body.name, body.command, body.backend, "you", None, body.basis, body.outs)
 
     @app.post("/api/jobs/{job_id}/cancel")
     def job_cancel(job_id: str):
@@ -999,8 +1050,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/agents/{agent_id}/say")
     def agent_say(agent_id: str, body: SayIn):
-        text = files(lambda: uploads.mention(body.text, uploads.resolve(town.agents.uploads(agent_id), body.attachments))) if body.attachments else body.text
-        return agents(town.agents.say, agent_id, text, body.mode)
+        text = body.text
+        if body.attachments:
+            text = files(lambda: uploads.mention(body.text, uploads.resolve(town.agents.uploads(agent_id), body.attachments)))
+        return agents(town.agents.say, agent_id, text, body.mode, "web", body.text)
 
     @app.post("/api/agents/{agent_id}/uploads")
     async def agent_upload(agent_id: str, request: Request, name: str = "file"):
@@ -1052,6 +1105,50 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def card_one(line_id: str):
         return leads(town.cards.one, line_id)
 
+    @app.get("/api/lines/{line_id}/decided")
+    def decided(line_id: str):
+        return town.decided.view(line_id)
+
+    @app.get("/api/lines/{line_id}/prov")
+    def prov_tree(line_id: str):
+        return town.prov.analysis(line_id, baseline=True).view
+
+    @app.get("/api/lines/{line_id}/prov/nodes/{nid}")
+    def prov_node(line_id: str, nid: str):
+        return town.prov.analysis(line_id).detail(nid)
+
+    @app.get("/api/lines/{line_id}/prov/ops")
+    def prov_ops(line_id: str, root: str | None = None, before: str | None = None, limit: int = 50):
+        return town.prov.ops(line_id, root, before, limit)
+
+    @app.get("/api/lines/{line_id}/prov/ops/{op}")
+    def prov_op(line_id: str, op: str):
+        return town.prov.op(line_id, op)
+
+    @app.get("/api/lines/{line_id}/prov/blame")
+    def prov_blame(line_id: str, path: str, root: str = "paper"):
+        return town.prov.analysis(line_id, baseline=True).blame(root, path)
+
+    @app.post("/api/lines/{line_id}/prov/snap")
+    def prov_snap(line_id: str):
+        return town.prov.snap(line_id)
+
+    @app.get("/api/lines/{line_id}/decided/{did}")
+    def decided_one(line_id: str, did: str):
+        return town.decided.detail(line_id, did)
+
+    @app.post("/api/lines/{line_id}/decided")
+    def decided_write(line_id: str, body: WrittenIn):
+        return town.decided.write(line_id, **body.model_dump())
+
+    @app.post("/api/lines/{line_id}/decided/quote")
+    def decided_quote(line_id: str, body: QuoteIn):
+        return town.decided.quote(line_id, body.mod, event_id=body.event_id)
+
+    @app.post("/api/lines/{line_id}/decided/{did}/withdraw")
+    def decided_withdraw(line_id: str, did: str):
+        return town.decided.withdraw(line_id, did)
+
     @app.post("/api/cards/layout")
     def cards_layout(body: LayoutIn):
         return leads(town.cards.set_layout, body.panes)
@@ -1068,7 +1165,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # or tells the lead what you decided about a line of its card (decisions.py)
     @app.post("/api/lines/{line_id}/decide")
     def card_decide(line_id: str, body: DecideCardIn):
-        return mapped(CardError, DecisionError)(town.cards.decide, line_id, body.kind, body.id, body.agent, body.value, body.text)
+        return mapped(CardError, DecisionError)(town.cards.decide, line_id, body.kind, body.id, body.agent, body.value, body.text, body.mod)
 
     @app.post("/api/lines/{line_id}/card/cancel")
     def card_cancel(line_id: str):
@@ -1164,11 +1261,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/lines/{line_id}/canvas/nodes")
     def canvas_add(line_id: str, body: NodeIn):
-        return canvas(town.canvas.add, line_id, body.kind, body.x, body.y, body.title, body.text, body.to, body.prio, body.link, body.send)
+        return canvas(town.canvas.add, line_id, body.kind, body.x, body.y, body.title, body.text, body.to, body.prio, body.link, body.send,
+                      None, "you", body.basis)
 
     @app.put("/api/lines/{line_id}/canvas/nodes/{node_id}")
     def canvas_set(line_id: str, node_id: str, body: NodeSetIn):
-        return canvas(town.canvas.set, line_id, node_id, body.title, body.text, body.to, body.status, body.stale)
+        return canvas(town.canvas.set, line_id, node_id, body.title, body.text, body.to, body.status, body.stale, body.basis)
 
     @app.delete("/api/lines/{line_id}/canvas/nodes/{node_id}")
     def canvas_remove(line_id: str, node_id: str):
@@ -1256,7 +1354,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/reports/{report_id}/answer")
     def report_answer(report_id: int, body: AnswerIn):
-        return leads(town.leads.answer, report_id, body.text)
+        return leads(town.leads.answer, report_id, body.text, "you", body.mod)
 
     # the console's assistant, in the sidebar
     @app.get("/api/assistant")
@@ -1361,6 +1459,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         a = bridged(agent_id, x_papertown_token)
         return {"text": leads(town.leads.status, own_line(a, line))}
 
+    @app.get("/api/bridge/{agent_id}/decided")
+    def bridge_decided(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        lid = own_line(bridged(agent_id, x_papertown_token), line)
+        return {"text": town.decided.text(lid)}
+
+    @app.get("/api/bridge/{agent_id}/prov")
+    def bridge_prov(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        lid = own_line(bridged(agent_id, x_papertown_token), line)
+        analysis = town.prov.analysis(lid, baseline=True)
+        return {"stats": analysis.view["stats"], "unregistered": analysis.unregistered}
+
+    @app.post("/api/bridge/{agent_id}/prov")
+    def bridge_prov_add(agent_id: str, body: ProvIn, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        lid = own_line(a, None)
+        row = town.prov.add(lid, a, **body.model_dump())
+        return town.prov.analysis(lid).nodes[row["id"]]
+
+    @app.get("/api/bridge/{agent_id}/prov/{tag}")
+    def bridge_prov_show(agent_id: str, tag: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
+        lid = own_line(bridged(agent_id, x_papertown_token), line)
+        return town.prov.analysis(lid).detail(tag)
+
+    @app.post("/api/bridge/{agent_id}/raise")
+    def bridge_raise(agent_id: str, body: MatterIn, x_papertown_token: str | None = Header(default=None)):
+        a = bridged(agent_id, x_papertown_token)
+        row = town.decided.raise_matter(a, **body.model_dump())
+        return {"id": row["id"], "text": f"已记录待定的事（{row['id']}）。用户写下决定后将送达。"}
+
+    @app.post("/api/bridge/{agent_id}/said")
+    def bridge_said(agent_id: str, body: SaidIn, x_papertown_token: str | None = Header(default=None)):
+        lid = own_line(bridged(agent_id, x_papertown_token), body.line)
+        d = town.decided.quote(lid, body.mod or town.decided.current_mod(lid), fragment=body.text)
+        return {"id": d["id"], "n": d["n"], "text": f"D{d['n']} {d['text']}"}
+
     @app.get("/api/bridge/{agent_id}/worker/{role}")
     def bridge_worker(agent_id: str, role: str, n: int = 6, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
         a = bridged(agent_id, x_papertown_token)
@@ -1387,8 +1520,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             line = next((w for w in words if w.lstrip("#").isdigit() or w.startswith("line_")), body.line)
             role = next((w for w in words if w != line), None)
             return acted(town.assistant.act, "tell", {"line": line or town.assistant.line_id(None), "role": role,
-                                                       "text": body.text, "now": body.now}, "")
-        return {"text": leads(town.leads.tell, agent_id, body.to, body.text, body.now)}
+                                                       "text": body.text, "now": body.now, "basis": body.basis}, "")
+        return {"text": leads(town.leads.tell, agent_id, body.to, body.text, body.now, None, body.basis)}
 
     @app.post("/api/bridge/{agent_id}/answer")
     def bridge_answer(agent_id: str, body: AnswerByIn, x_papertown_token: str | None = Header(default=None)):
@@ -1427,11 +1560,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if a["role"] != "lead" and owner != a["role"]:
             who = "项目负责人" if owner == "lead" else f"{ROLES[owner]['name']}或项目负责人"
             raise HTTPException(403, f"「{name}」的产出由{who}交")
-        out = guard(town.pipeline.output, a["line_id"], body.stage, body.body)
+        out = guard(town.pipeline.output, a["line_id"], body.stage, body.body, agent_id)
         tail = f"查重结论（用代码算）：{out['verdict']}，最接近的一篇相似度 {max((x['similarity'] for x in out['similar']), default=0):.2f}。" if body.stage == "hatch" else ""
+        if "prov" in out:
+            tail += f"溯源标签 {out['prov']['tag']}。"
         then = (f"这道工序做完了就用 `pt stage done {body.stage}` 收尾。" if a["role"] == "lead"
                 else "收尾由项目负责人来做，用 `pt tell lead \"…\"` 告诉它产出已交。")
-        return {"text": f"「{name}」的产出记下了，用户在项目页和中控屏里能看到。{tail}{then}"}
+        return {"text": f"「{name}」的产出记下了，用户在项目页和中控屏里能看到。{tail}{then}",
+                **({"prov": out["prov"]} if "prov" in out else {})}
 
     @app.get("/api/bridge/{agent_id}/survey")
     def bridge_survey(agent_id: str, line: str | None = None, x_papertown_token: str | None = Header(default=None)):
@@ -1529,12 +1665,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if kind == "never":
             raise HTTPException(403, f"你的工作边界不让你提交实验任务：{rule['text']}")
         backend = body.backend or "local"
+        basis = town.decided.basis(a["line_id"], body.basis)
         if kind == "ask":
             q = leads(town.leads.ask, agent_id, f"{town.leads._who(a)}想提交实验任务「{body.name}」：{body.command[:300]}，可以吗？", ["可以", "不可以"],
-                      {"action": "job.submit", "name": body.name, "command": body.command, "backend": backend})
+                      {"action": "job.submit", "name": body.name, "command": body.command, "backend": backend, "basis": basis, "outs": body.outs})
             return {"id": None, "name": body.name, "backend": backend, "status": "asking",
                     "text": f"按你的工作边界（{rule['text']}），提交前要先问用户。已经问了（问题 {q['id']}），他同意后会替你提交，结果会告诉你。"}
-        return farm(town.farm.submit, a["line_id"], body.name, body.command, backend, agent_id, a["cwd"])
+        return farm(town.farm.submit, a["line_id"], body.name, body.command, backend, agent_id, a["cwd"], basis, body.outs)
 
     @app.get("/api/bridge/{agent_id}/jobs")
     def bridge_jobs(agent_id: str, x_papertown_token: str | None = Header(default=None)):

@@ -47,3 +47,19 @@ def test_output_survey_and_library_arguments(pt, tmp_path):
     path, body = calls.pop()
     assert urlsplit(path).path == "/library" and body is None
     assert parse_qs(urlsplit(path).query) == {"q": ["sparse attention"], "top": ["3"]}
+
+
+def test_decided_raise_said_and_basis_arguments(pt):
+    cli, calls = pt
+    cli.main(["decided"])
+    assert calls.pop() == ("/decided", None)
+    cli.main(["raise", "按什么分组？", "--mod", "exp", "--fact", "甲", "--fact", "乙", "--option", "按时间",
+              "--material", "paper:arxiv:1234", "--material", "file:code/a.csv"])
+    assert calls.pop() == ("/raise", {"question": "按什么分组？", "mod": "exp", "facts": ["甲", "乙"], "options": ["按时间"],
+                                     "materials": [{"kind": "paper", "ref": "arxiv:1234"}, {"kind": "file", "ref": "code/a.csv"}]})
+    cli.main(["said", "保留原文", "--mod", "data"])
+    assert calls.pop() == ("/said", {"text": "保留原文", "mod": "data"})
+    cli.main(["submit", "实验", "--by", "D5", "--by", "#t4", "--", "run", "--by", "cli"])
+    assert calls.pop() == ("/jobs", {"name": "实验", "command": "run --by cli", "backend": "local", "basis": ["D5", "#t4"]})
+    cli.main(["tell", "coder", "运行评测", "--by", "D5", "--now"])
+    assert calls.pop() == ("/tell", {"to": "coder", "text": "运行评测", "now": True, "basis": ["D5"]})

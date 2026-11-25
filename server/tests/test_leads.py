@@ -152,7 +152,7 @@ def test_the_assistant_speaks_for_you_to_the_projects(tmp_path):
         home = town.assistant.dir
         assert "也是用户的代理人" in (home / "AGENTS.md").read_text() and "## 你和项目" in (home / "AGENTS.md").read_text()
         h = {"x-papertown-token": town.agents.get("assistant")["token"]}
-        assert "tell（line text [role] [now]）" in (home / ".papertown" / "actions.md").read_text()
+        assert "tell（line text [role] [now] [basis]）" in (home / ".papertown" / "actions.md").read_text()
         assert "〔直接做〕" in town.assistant.actions_text() and "job.cancel（job）：" in town.assistant.actions_text()
 
         c.post("/api/assistant/say", json={"text": f"#{line['seq']} 现在怎么样了？"})

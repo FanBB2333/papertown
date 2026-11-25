@@ -31,8 +31,8 @@ REFS_MAX = 80
 # name -> (what it does, its arguments with the optional ones in brackets); DIRECT ones run at once, the rest wait for your yes
 ACTIONS: dict[str, tuple[str, str]] = {
     "tell": ("给项目发消息、派活：发给项目负责人；用户明确要求时，role 写 coder 或 writer 直接发给员工；now=true 插进它正在做的事",
-             "line text [role] [now]"),
-    "answer": ("把用户对项目里某个问题的回答转给在等的 agent：id 是问题编号，text 是用户的回答", "id text"),
+             "line text [role] [now] [basis]"),
+    "answer": ("转达用户对事务性问题的回答。待定的事由用户在项目中亲自写下决定。", "id text"),
     "job.submit": ("在实验农场提交一个任务：本地执行器在项目的代码目录里用 bash 跑这条命令", "line name command"),
     "job.cancel": ("取消实验农场里排着或在跑的任务（nvidb 的任务不行，Papertown 对 nvidb 只读）", "job"),
     "lead.switch": ("打开或关掉一个项目的负责人：on=true 让它常驻运行、接着推进项目，on=false 让它停下", "line on"),
@@ -85,11 +85,11 @@ GUIDE = """# Papertown · 小助手
 
 ## 你和项目
 
-- 每个项目有一位项目负责人（agent）：盯进度、催员工、给用户写汇报。员工（代码员工、写作员工）在它手下干活。你不盯某一个项目，你管项目之间的事：比较、取舍、协调（两个项目抢同一批卡、一个项目的结论另一个要用）。
+- 每个项目有一位负责人负责调研、核实、派活和汇报。你可以比较各项目的事实，并按用户的决定协调资源。研究方向、方法、实验安排和文档设计由用户决定。
 - 用户不发话时你不做事，也不要自己去巡检项目，那是负责人的事。
 - 用户提到某个项目，先弄清它现在的样子再回答。他用 #编号 提到的，Papertown 会把那个项目刚读的进展附在消息里（`<projects>`）；没附上的（他说的是名字，或者说「这个项目」），用 {status} 读。要更细的：{reports} 看汇报和问题，{worker} 看员工的对话。
 - 给项目的命令发给它的负责人：{tell}。说清楚要什么结果、什么时候要；负责人会派给员工，办完写汇报。用户明确说「直接让代码员工……」时才发给员工本人。
-- 项目里有 agent 在等用户回答（汇报里标着「等回答」）：用户跟你说话时给了答案，用 {answer} 转过去；他没说的，不要替他拿主意，把问题转述给他。
+- 对机器、账号等事务性问题，可以用 {answer} 转达用户已经给出的回答。遇到待定的事，转述问题、事实和出处，请用户在项目中亲自写下决定。转达用户原话时保持原文。
 
 ## 用户在看什么
 
@@ -110,7 +110,7 @@ GUIDE = """# Papertown · 小助手
 
 ## 替用户办事
 
-- 能做的事用 {actions} 看，每件后面写着现在是直接做、要他先点「允许」，还是不能做（取决于他给你设的工作边界）：给项目发消息、转达回答、提交或取消实验农场的任务、立项、继续、调整方向、放入新 idea、编译论文、开关 skill 和 MCP server。
+- 能做的事用 {actions} 看，按工作边界执行。你可以传话、转达事务性回答、代办实验任务、转交用户亲自写的 idea、编译论文和管理工具。
 - 办事用 {do}（发消息和转达回答也可以用上面的写法）。直接做的会马上执行并告诉你结果；要他允许的，侧边栏会弹出一张卡片写着你要做什么、为什么，他点了才执行，结果会作为一条 `<event>…</event>` 消息发给你。提完这种请求就结束这一轮，告诉他你请求了什么、在等他点。
 - 只用这个办法改小镇里的东西，不要直接调用会改东西的接口。要改代码或论文，告诉那个项目的负责人（tell）。
 
@@ -381,7 +381,7 @@ class Assistant:
         self._close_asks(text)
         self.town.agents.title(ID, text)
         head = [x for x in (self.header(p) if p else "", self.projects(text)) if x]
-        return self.town.agents.say(ID, "\n\n".join([*head, text.strip()]))
+        return self.town.agents.say(ID, "\n\n".join([*head, text.strip()]), user_text=text)
 
     def projects(self, text: str) -> str:
         """Where the projects you name by number stand, read just now, to go with your message."""
@@ -471,7 +471,7 @@ class Assistant:
                 note = f"用户允许了你请求的「{d['title']}」，但执行失败：{ex}"
         e = self.town.agents.amend(event_id, d)
         try:
-            self.town.agents.say(ID, f"<event>\n{note}\n</event>")
+            self.town.agents.say(ID, f"<event>\n{note}\n</event>", origin="papertown")
         except AgentError:
             pass  # it is not running any more; the card says what happened
         return e
@@ -499,6 +499,8 @@ class Assistant:
                 q = None
             if not q or not q["data"].get("open"):
                 raise ActError(f"没有在等回答的问题 {a['id']}")
+            if q["data"].get("matter"):
+                raise ActError("请在项目中亲自写下决定")
             seq, text = self.db.val("select seq from lines where id = ?", q["line_id"]), str(a["text"]).strip()
             return (f"替你回答 #{seq} 的{q['data'].get('who') or ''}「{clip(q['data']['question'], 60)}」：{clip(text, 120)}",
                     lambda: (t.leads.answer(q["id"], text, "assistant"), "已经转给它")[1])
@@ -512,11 +514,16 @@ class Assistant:
             now_, who = _bool(a["now"]) if a.get("now") not in (None, "") else False, t.leads._who(target)
 
             def tell() -> str:
-                t.leads.deliver(self.row(), target, text, now_)
+                t.leads.deliver(self.row(), target, text, now_, a.get("basis"))
                 return f"已发给{who}" + ("" if now_ or target["status"] != "working" else "，它在忙，等它做完手上的事再交给它")
             return f"给{who}发消息：{clip(text, 160)}", tell
         if name == "idea.submit":
             text = str(a["text"]).strip()
+            if not text or not self.db.val("""select 1 from agent_events where agent_id = 'assistant' and kind = 'user'
+                    and json_extract(data, '$.origin') in ('web','terminal')
+                    and instr(case json_extract(data, '$.origin') when 'terminal' then json_extract(data, '$.text')
+                              else json_extract(data, '$.user_text') end, ?) > 0 limit 1""", text):
+                raise ActError("请引用你亲自写下的项目想法")
             return f"放入一颗新 idea：{clip(text, 80)}", lambda: f"已放入，成了项目 #{t.pipeline.create(text)['seq']}，它的负责人在启动"
         if name in ("mcp.toggle", "mcp.restart"):
             n = str(a["name"])
@@ -607,7 +614,8 @@ class Assistant:
             def add() -> str:
                 home = near["mod"] if near else TO_MOD[to] if kind == "task" else "overview"  # with nothing to go by: whom it is for
                 x, y = cv.spot(lid, home, kind if kind in ("task", "note") else "soft", near["id"] if near else None)
-                v = cv.add(lid, kind, x, y, title, text, to, str(a.get("prio") or "P1"), near["id"] if near else None, send, home)
+                v = cv.add(lid, kind, x, y, title, text, to, str(a.get("prio") or "P1"), near["id"] if near else None, send, home,
+                           created_by="assistant", basis=a.get("basis"))
                 return f"加上了，编号 {v['added']}" + ("，也发给它了" if send else "")
             return (f"在{where}上加{what}「{title or clip(text, 40)}」" + (f"，连着「{near['label']}」" if near else "") + ("，并发出去" if send else ""), safely(add))
         if name == "canvas.link":

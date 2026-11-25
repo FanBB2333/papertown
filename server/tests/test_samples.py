@@ -1,4 +1,5 @@
 from papertown import samples
+from papertown.pipeline import MODULES
 
 
 def test_prebuilt_samples_and_idempotence(town, monkeypatch):
@@ -10,8 +11,22 @@ def test_prebuilt_samples_and_idempotence(town, monkeypatch):
         snap = town.pipeline.snapshot(lid)
         assert snap["sample"] and not snap["lead"]["on"] and snap["team"] == []
         assert {s["key"]: {k: s[k] for k in ("status", "pct", "note")} for s in snap["stages"]} == fixture["stages"]
-        assert [e["data"]["text"] for e in town.agents.events(f"lead-{lid}")] == [e["text"] for e in fixture["chat"]]
+        events = town.agents.events(f"lead-{lid}")
+        assert [e["data"]["text"] for e in events] == [e["text"] for e in fixture["chat"]]
+        for event in events:
+            if event["kind"] == "user":
+                assert event["data"]["origin"] == "web" and event["data"]["user_text"] == event["data"]["text"]
+            if event["kind"] == "sent":
+                [ref] = event["data"]["basis"]
+                assert any(row["id"] == str(event["id"]) for row in town.decided.detail(lid, ref)["work"]["tells"])
         assert town.agents.get(f"lead-{lid}")["runtime"] is None
+        summary = town.cards._read(lid)["card"]["summary"]
+        assert summary == fixture["card"]["summary"] and summary.count("**") == 2
+        assert all(r["text"].count("**") == 2 for r in fixture["reports"] if r["kind"] == "report")
+        v = town.decided.view(lid)
+        assert set(d["mod"] for d in v["decisions"] if d["state"] == "active") == {m for m, _ in MODULES}
+        assert len(v["matters"]) == 1 and any(d["state"] == "replaced" for d in v["decisions"])
+        assert len(v["decisions"]) == 1 + len(fixture["decided"])
         items = town.db.q("select created_at from items where line_id = ? order by created_at", lid)
         assert len({i["created_at"] for i in items}) == len(items)
         for name, text in fixture["press"].items():
