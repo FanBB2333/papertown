@@ -46,6 +46,12 @@ Papertown manages research projects. An idea goes through eight stages: novelty 
 - **Hard gates in code.** Hard gates are checked in code, not by the agent: a stage closes only after its required output is handed in and its hard gate passes (for example the novelty similarity, returned experiment results, paper style rules, and PDF freshness). The novelty verdict and similarity scores are computed by code.
 - **Runtimes and CLI.** Agents run in [Paseo](https://paseo.sh), a [herdr](https://github.com/herdrdev/herdr) tab, a [tmux](https://github.com/tmux/tmux) window, or a headless terminal that Papertown keeps in the background, and talk to Papertown through the `pt` command in their working directory. In herdr, tmux and headless the CLI runs its real terminal interface, and everything you do on the page reaches it as keystrokes. There is no proxy and no SDK in between.
 
+### Three core designs
+
+- **Checkpoints.** A failed required check holds the next stage and sends the work back for revision. Questions about the method or the strength of the evidence are listed separately for review.
+- **You direct the research.** You write down the direction, key methods, experiment plan, and paper outline. Agents bring you facts and possible approaches, then cite your decisions when they run experiments or hand in work. If you change your mind, the earlier decision and the work based on it remain visible.
+- **Traceable outputs.** Open a recorded passage or table to follow its source files, calculation, run, and code version where available. Papertown shows the content as registered alongside later changes and flags numbers it cannot find in the recorded sources. A matching number is a place to check, not proof that the claim is correct.
+
 ### What you can do
 
 - **Start a project from one idea.** The project is created at once and its lead begins with the novelty check.
