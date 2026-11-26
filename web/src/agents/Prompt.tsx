@@ -56,7 +56,7 @@ export function PromptDialog({ id, who, title, body = [], code, choices, hint, c
       </div>}
       {hint && <p className="aw-prompt-hint">{hint}</p>}
       {children}
-      {error && <p role="alert" className="em-state" data-tone="bad">{error}</p>}
+      {error && <p role="alert" className="warn-box" data-tone="bad">{error}</p>}
       <div className="st-btns"><Button disabled={busy >= 0} onClick={close}>{tr('稍后处理')}</Button></div>
     </Dialog>
   </Dialog.Root>;

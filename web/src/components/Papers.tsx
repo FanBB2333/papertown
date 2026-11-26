@@ -57,7 +57,7 @@ export function LibraryShelf({ tick }: { tick: number }) {
           </button>
         ))}
       </div>
-      {err && <p className="small em-state" data-tone="bad">{err}</p>}
+      {err && <p className="warn-box small" data-tone="bad">{err}</p>}
       <div className="pcards">
         {shelf?.papers.map((p, i) => <Card key={p.paper_id} p={p} i={Math.min(i, 12)} />)}
         {shelf && !shelf.papers.length && <p className="muted">{tr('此处为空。')}</p>}

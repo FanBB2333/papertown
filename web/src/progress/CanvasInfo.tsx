@@ -4,7 +4,7 @@
 // it), the datasets, the paper. On the canvas a card is brief and as big as the server says (canvas.py INFO_SIZE);
 // opened in the inspector (CanvasSide.tsx) it says everything, with the way to the console panel behind it.
 
-import { Deadline, figures, modelText, StateWord } from '../emphasis';
+import { Deadline, figures, modelText } from '../emphasis';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api, type CanvasNode, type CanvasView, type CardRepo, type Health, type Line, type LineData, type PaperCard, type ProjectCard, type TaskTo } from '../api';
 import { AGENT_STATUS } from '../components/MillRoom';
@@ -45,20 +45,23 @@ const roleOf = (n: CanvasNode) => (n.ref ?? '').split(':')[1] as TaskTo;
 const tasksOf = (v: CanvasView, role: TaskTo) => v.nodes.filter(x => x.kind === 'task' && x.to === role);
 
 // the few words in a card's header: how the thing stands
+// the verdict arrives in the page's language
+const verdictTone = (verdict: string) => ({ [tr('可孵化')]: 'pass', [tr('需调整')]: 'warn', [tr('已被做过')]: 'fail' } as Record<string, string>)[verdict] ?? 'warn';
+
 export function InfoState({ n, r, v }: { n: CanvasNode; r: ProjectCard; v: CanvasView }) {
   const k = infoKind(n), m = useContext(MoreCtx);
-  if (k === 'survey') { const h = m.line?.outputs?.hatch; return h?.verdict ? <span className="em-key">{h.verdict}</span> : null; }
+  if (k === 'survey') { const h = m.line?.outputs?.hatch; return h?.verdict ? <span className={`cg-pill s-${verdictTone(h.verdict)}`}>{h.verdict}</span> : null; }
   if (k === 'results') { const runs = m.data?.runs ?? []; return runs.length ? <span className="ci-st">{tr('{0} 次运行', runs.length)}</span> : null; }
   if (k === 'datasets') { const sets = uniq(m.data?.meta.datasets ?? []); return sets.length ? <span className="ci-st">{sets.length}</span> : null; }
-  if (k === 'card') return r.card ? <StateWord state={r.card.health}>{HEALTH[r.card.health]}</StateWord> : null;
+  if (k === 'card') return r.card ? <span className={`cg-pill h-${r.card.health}`}>{HEALTH[r.card.health]}</span> : null;
   if (k === 'agent') {
     const a = v.agents[roleOf(n)];
     return <span className="ci-st"><i className={`dot s-${a.there ? a.status : 'stopped'}`} />{a.there ? AGENT_STATUS[a.status ?? ''] ?? a.status : tr('尚未启动')}</span>;
   }
-  if (k === 'runs') return r.jobs.running ? <span className="muted">{tr('{0} 个运行中', r.jobs.running)}</span> : null;
+  if (k === 'runs') return r.jobs.running ? <span className="cg-pill st-run">{tr('{0} 个运行中', r.jobs.running)}</span> : null;
   if (k === 'code' || k === 'paper') {
     const x = r.repos[k];
-    return x && !x.missing && x.dirty ? <span className="em-mark" data-tone="warn">{tr('{0} 处改动', x.dirty)}</span> : null;
+    return x && !x.missing && x.dirty ? <span className="cg-pill s-warn">{tr('{0} 处改动', x.dirty)}</span> : null;
   }
   if (k === 'outputs') {
     const o = r.card?.outputs ?? [];

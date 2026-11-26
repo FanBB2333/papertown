@@ -109,7 +109,7 @@ export function Experiments(p: Props) {
         <div className="tile gh" title={tr('此时间段内该项目任务的占卡时长，按卡数累加')} data-ref="count:gpu-hours"
           data-ref-label={`${tr('GPU 小时')} ${gh}`}><b>{gh}</b><span><Icon n="gpu" size={13} />{tr('GPU 小时')}</span></div>
       </div>
-      {board.err && <p className="small em-state" data-tone="bad">{board.err}</p>}
+      {board.err && <p className="warn-box small" data-tone="bad">{board.err}</p>}
 
       <Focus jobs={inRange} onOpen={openAt} />
 

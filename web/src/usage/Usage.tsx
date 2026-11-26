@@ -112,15 +112,15 @@ export function UsageStrip({ active }: { active: boolean }) {
         <small>{tr('读取于 {0}', p.fetched_at ? date(p.fetched_at) : tr('尚未读取'))}</small>
         {[...p.windows].sort((a, b) => order(a) - order(b)).map(w => <Window w={w} key={w.key} />)}
         {!p.windows.length && <small>{tr('尚无用量读数')}</small>}
-        {p.status === 'stale' && <p className="small em-state" data-tone="warn">{tr('显示最近成功读数')}</p>}
-        {p.error && <p className="small em-state" data-tone="warn">{tr(p.error)}</p>}
+        {p.status === 'stale' && <p className="usage-warn">{tr('显示最近成功读数')}</p>}
+        {p.error && <p className="usage-warn">{tr(p.error)}</p>}
         {p.balances.map(b => <p className="usage-balance" key={b.id}><span className="usage-chip">{tr(b.label)}</span>{rich(tr('额外余额：{0} {1}'), <b className="em-num">{b.remaining ?? '—'}</b>, b.unit)}</p>)}
         {view.logs && <div className="usage-stats">
           <Stat label={tr('本周本机折合')} value={money(p.week.cost)} />
           <Stat label={tr('其中项目')} value={money(p.week.projects)} />
         </div>}
         {view.logs && !!p.week.unpriced.length && <small>{tr('以下模型缺价格，未计入金额：{0}', p.week.unpriced.join('、'))}</small>}
-        {p.notes.map(n => <p className="small em-state" data-tone="warn" key={n}>{tr('另有一个登录读取失败：{0}', tr(n))}</p>)}
+        {p.notes.map(n => <p className="usage-warn" key={n}>{tr('另有一个登录读取失败：{0}', tr(n))}</p>)}
       </div>)}
       <p>{view?.logs ? tr('按 API 价格折算。本周从周一零点起算。') : tr('本机会话日志读取已关闭，项目用量统计已暂停。')}</p>
       {view?.log_error && <p className="usage-error em-state" data-tone="bad">{tr(view.log_error)}</p>}
@@ -202,7 +202,7 @@ export function ProjectUsage({ lineId }: { lineId: string }) {
         <div className="usage-between usage-head"><b className="usage-name">{providerName(p.id)}</b><span className="em-num usage-cost">{money(p.cost)}</span></div>
         <Tokens tokens={p.tokens} />
         {value.models.filter(m => m.provider === p.id).map(m => <div className="usage-model" key={m.model}>
-          <div className="usage-between usage-head"><code className="usage-code">{m.model}</code>{m.priced ? <span className="em-num usage-cost sm">{money(m.cost)}</span> : <span className="em-state" data-tone="warn">{tr('缺价格')}</span>}</div>
+          <div className="usage-between usage-head"><code className="usage-code">{m.model}</code>{m.priced ? <span className="em-num usage-cost sm">{money(m.cost)}</span> : <span className="usage-chip warn">{tr('缺价格')}</span>}</div>
           <Tokens tokens={m.tokens} />
         </div>)}
       </div>)}

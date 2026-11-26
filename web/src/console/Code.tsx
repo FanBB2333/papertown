@@ -80,7 +80,7 @@ function Repo(p: Props) {
           {place.git && <span className="ide-br"><Icon n="branch" size={13} />{place.branch ?? 'HEAD'}</span>}
         </div>
         <input className="ide-filter" placeholder={tr('筛选文件')} value={q} onChange={e => setQ(e.target.value)} />
-        {f.tree.err && <p className="small em-state" data-tone="bad">{f.tree.err}</p>}
+        {f.tree.err && <p className="warn-box small" data-tone="bad">{f.tree.err}</p>}
         {changed.length > 0 && !q && (
           <div className="ide-changes">
             <span className="ide-t">{tr('改动 · {0}', changed.length)}</span>

@@ -120,7 +120,7 @@ export function HireDialog({ lineId, initialPost, lockLine, onClose, onStarted, 
               items={Object.fromEntries(chosen.thinking.map(t => [t, t]))} onValueChange={v => setThinking(String(v))} />}
           </div>}
           {terminal && !current?.models.length && <p className="aw-hire-note">{tr('暂无模型列表，将使用 CLI 默认模型。')}</p>}
-          {error && <p className="em-state" data-tone="bad" role="alert">{error}</p>}
+          {error && <p className="warn-box" data-tone="bad" role="alert">{error}</p>}
           <div className="st-btns">
             <Button type="button" disabled={busy} onClick={onClose}>{tr('取消')}</Button>
             <Button type="submit" variant="primary" loading={busy} disabled={!line || !!why || (runtime !== 'pi' && !provider)}>{tr('启动员工')}</Button>

@@ -71,7 +71,7 @@ export function Cluster({ mine, onOpen }: Props) {
   }, [hover, byId]);
 
   const head = <span className="cs-ic"><Icon n="gpu" size={15} /></span>;
-  if (!g || !g.ok) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className={g ? 'small em-state' : 'muted small'} data-tone="bad">{g ? g.note : tr('读取 nvidb 中…')}</p></section>;
+  if (!g || !g.ok) return <section className="cs"><div className="cs-h">{head}<h3>{tr('GPU 与队列')}</h3></div><p className={g ? 'warn-box small' : 'muted small'}>{g ? g.note : tr('读取 nvidb 中…')}</p></section>;
 
   const up = g.nodes.filter(n => n.state === 'up');
   const probed = Math.max(...up.map(n => t(n.probed_at ?? n.last_seen)).filter(Number.isFinite), 0);
@@ -95,7 +95,7 @@ export function Cluster({ mine, onOpen }: Props) {
       </div>
       <p className="cl-sum muted small">
         <span>{figures(tr('{0} 张卡 · {1} 张有余量 · {2} 个运行中 · {3} 个排队', g.summary?.gpus ?? 0, g.summary?.room ?? 0, running, pending))}</span>
-        {g.alerts ? <span className="em-bar" data-tone="warn"> · {tr('{0} 条告警未确认', g.alerts)}</span> : null}
+        {g.alerts ? <> · <span className="em-state" data-tone="warn">{tr('{0} 条告警未确认', g.alerts)}</span></> : null}
         <label className={`qb-mine${mine.size ? '' : ' off'}`} title={mine.size ? '' : tr('该项目当前暂无队列任务')}>
           <input type="checkbox" checked={onlyMine} disabled={!mine.size} onChange={e => setOnlyMine(e.target.checked)} />{tr('仅看本项目')}
         </label>

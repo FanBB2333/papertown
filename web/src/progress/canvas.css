@@ -627,7 +627,7 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .lr-t td { padding: 7px 8px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); vertical-align: top; }
 .lr-t tr.l-block td:not(.lr-g) { background: color-mix(in srgb, var(--lp-hard) 5%, transparent); }
 .lr-g { display: table-cell; border-right: 1px solid color-mix(in srgb, var(--line) 60%, transparent); white-space: nowrap; }
-.lr-g small { display: block; font-size: 11px; color: var(--muted); }
+.lr-g small { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); }
 .lr-g small.g-block { color: var(--lp-hard); } .lr-g small.g-pass { color: var(--lp-pass); } .lr-g small.g-warn { color: color-mix(in srgb, var(--lp-amber) 85%, var(--ink)); }
 .lr-note { max-width: 560px; line-height: 1.5; }
 
@@ -716,7 +716,7 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .lp-rep-s li > p.said { color: var(--ink); }
 .lp-pill { --c: var(--muted); flex: none; display: inline-block; padding: 1px 8px; border-radius: 6px; font-style: normal; font-size: 11px; font-weight: 600; white-space: nowrap;
   color: color-mix(in srgb, var(--c) 85%, var(--ink)); background: color-mix(in srgb, var(--c) 13%, transparent); }
-.lp-pill:is(.ok, .v-pass) { --c: var(--lp-pass); } .lp-pill:is(.warn, .v-warn) { --c: var(--lp-amber); } .lp-pill:is(.bad, .v-fail) { --c: var(--lp-hard); }
+.lp-pill:is(.ok, .v-pass, .l-pass) { --c: var(--lp-pass); } .lp-pill:is(.warn, .v-warn, .l-warn) { --c: var(--lp-amber); } .lp-pill:is(.bad, .v-fail, .l-block) { --c: var(--lp-hard); }
 
 /* ---------- how much a node says follows the zoom ----------
    Canvas.tsx puts the zoom on the flow as --z, and which of three whole faces the nodes show as data-lod. Type is a

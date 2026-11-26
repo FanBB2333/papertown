@@ -141,7 +141,7 @@ export function FarmRoom(p: Props) {
         <div className="backends">
           {(board?.backends ?? []).map(b => (
             <div key={b.id} className={`backend${b.ready ? '' : ' off'}`}>
-              <div className="proj-top"><b>{b.name}</b><span className={b.ready ? 'muted small' : 'small em-state'} data-tone="warn">{b.ready ? tr('{0} 个运行中', b.id === 'nvidb' ? b.active : active(b.id)) : tr('未接入')}</span></div>
+              <div className="proj-top"><b>{b.name}</b><span className={`pst ${b.ready ? 'pst-running' : 'pst-paused'}`}>{b.ready ? tr('{0} 个运行中', b.id === 'nvidb' ? b.active : active(b.id)) : tr('未接入')}</span></div>
               <p className="muted small">{modelText(b.note)}</p>
             </div>
           ))}

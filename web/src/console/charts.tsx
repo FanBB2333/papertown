@@ -1,7 +1,6 @@
 // The console's charts: a pointer tooltip, job-state marks, a GPU timeline of jobs, bars for one
 // measure across rows, a thin meter, and a card's last hour as a sparkline.
 
-import { StateWord } from '../emphasis';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { tr } from '../i18n';
@@ -57,7 +56,7 @@ export const stOf = (s: string | null | undefined): St =>
     : s === 'cancelled' ? 'cancelled' : 'failed';
 
 export function StateTag({ s }: { s: St }) {
-  return <StateWord state={s}>{ST[s].label}</StateWord>;
+  return <span className={`stag s-${s}`}><i style={{ ['--c' as string]: ST[s].c }}>{ST[s].sign}</i>{ST[s].label}</span>;
 }
 
 export function Legend({ states }: { states: St[] }) {

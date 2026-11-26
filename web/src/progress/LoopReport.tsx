@@ -1,7 +1,7 @@
 // 前后对比 on the research loop (Canvas.tsx): every hard gate's rules from the first round to now and every sentinel's
 // latest verdict, as one report over the canvas, to copy as Markdown or publish as one of the project's pages.
 
-import { modelText, StateWord, stateTone } from '../emphasis';
+import { modelText, stateTone } from '../emphasis';
 import { useState } from 'react';
 import { api, type CanvasView } from '../api';
 import { Icon } from '../console/icons';
@@ -52,12 +52,12 @@ export function LoopReport({ v, onPick, onClose, toast }: { v: CanvasView; onPic
                 const lv = level(c);
                 return (
                   <tr key={c.id} className={`l-${lv}`}>
-                    {i === 0 && <td rowSpan={cs.length} className="lr-g"><button className="lnk" onClick={() => onPick(n.id)}>{g.name}</button><small><StateWord state={gateLook(g)}>{GATE_ST[gateLook(g)]}</StateWord></small></td>}
+                    {i === 0 && <td rowSpan={cs.length} className="lr-g"><button className="lnk" onClick={() => onPick(n.id)}>{g.name}</button><small><em className={`lp-pill l-${gateLook(g)}`}>{GATE_ST[gateLook(g)]}</em></small></td>}
                     <td>{trx(c.title)}<small className="muted"> · {trx(c.rule)}</small></td>
                     <td>{c.prio} · ≤{c.max ?? 0}</td>
                     <td>{c.first?.value ?? '—'}</td>
                     <td><b className={c.first?.value != null && c.last?.value != null && c.first.value !== c.last.value ? 'em-mark' : 'em-num'} data-tone={stateTone(lv)}>{c.last?.value ?? '—'}</b></td>
-                    <td><StateWord state={lv}>{lv === 'pass' ? tr('放行 ✓') : lv === 'none' ? tr('尚未检查') : LEVEL[lv]}</StateWord></td>
+                    <td><em className={`lp-pill l-${lv}`}>{lv === 'pass' ? tr('放行 ✓') : lv === 'none' ? tr('尚未检查') : `${LEVEL[lv]}${lv === 'block' ? ' ✗' : ' !'}`}</em></td>
                     <td>{i === 0 && g.ticket ? <button className="lnk" onClick={() => onPick(g.ticket!)}>{g.ticket} · {tr('第 {0} 轮', g.round)}</button> : ''}</td>
                   </tr>
                 );
@@ -76,7 +76,7 @@ export function LoopReport({ v, onPick, onClose, toast }: { v: CanvasView; onPic
               return (
                 <tr key={c.id}>
                   <td><button className="lnk" onClick={() => onPick(`check:${c.id}`)}>{trx(c.title)}</button></td>
-                  <td><StateWord state={k}>{VERDICT[k]}</StateWord></td>
+                  <td><em className={`lp-pill v-${k}`}>{VERDICT[k]}{k === 'pass' ? ' ✓' : k === 'warn' || k === 'fail' ? ' !' : ''}</em></td>
                   <td className="lr-note">{modelText(c.last?.note) || <span className="muted">{trx(c.text)}</span>}</td>
                   <td className="muted">{c.last ? ago(c.last.ts) : ''}</td>
                 </tr>

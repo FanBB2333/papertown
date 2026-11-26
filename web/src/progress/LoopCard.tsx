@@ -325,7 +325,7 @@ function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast
 export function LoopCard({ r, toast }: { r: ProjectCard; toast: (t: string, error?: boolean) => void }) {
   const [v, , reload, error] = useCanvas(r.line.id);
   const to = loopPath(r.line.seq);
-  if (error) return <p role="alert" className="em-state" data-tone="bad">{error} <button className="lnk" onClick={reload}>{tr('重试')}</button></p>;
+  if (error) return <p role="alert" className="warn-box" data-tone="bad">{error} <button className="lnk" onClick={reload}>{tr('重试')}</button></p>;
   if (!v) return null;
   return (
     <section className="psec lp-card" id="loop" aria-label={tr('研究回路')}>

@@ -34,9 +34,9 @@ const STAGE_TOOLS: Record<string, string[]> = {
 
 const STAGE_WORD: Record<Stage['status'], string> = { done: tr('完成'), run: tr('进行中'), todo: tr('排队') };
 
-const chip = (st: string, pct?: number) => st === 'done' ? <span className="muted">{STAGE_WORD.done}</span>
-  : st === 'run' ? <span className="muted">{STAGE_WORD.run}{pct ? <> <span className="em-num">{pct}%</span></> : ''}</span>
-    : <span className="muted">{STAGE_WORD.todo}</span>;
+const chip = (st: string, pct?: number) => st === 'done' ? <span className="chip ok">{STAGE_WORD.done}</span>
+  : st === 'run' ? <span className="chip pri">{STAGE_WORD.run}{pct ? ` ${pct}%` : ''}</span>
+    : <span className="chip">{STAGE_WORD.todo}</span>;
 
 const chips = (xs: string[]) => xs.length ? xs.map(x => <span key={x} className="chip">{x}</span>) : <span className="muted">—</span>;
 
@@ -72,7 +72,7 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   if (stage === 'idea') return <p className="user-words em-bar">{body.text}</p>;
   if (stage === 'hatch') return (
     <>
-      <p className="verdict"><span className="em-key">{body.verdict}</span>{modelText(body.gap)}</p>
+      <p className="verdict"><span className="chip">{body.verdict}</span>{modelText(body.gap)}</p>
       <ul className="sim">{(body.similar ?? []).map((x: any) => (
         <li key={x.paper_id}><a href={x.url} target="_blank" rel="noreferrer">{x.title}</a><i style={{ ['--v' as any]: x.similarity }} /><b className="em-num">{Number(x.similarity).toFixed(2)}</b></li>
       ))}</ul>
@@ -90,7 +90,7 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   );
   if (stage === 'exp') return (
     <>
-      {body.simulated && <p><span className="em-state" data-tone="warn">{tr('样例结果（占位内容）')}</span></p>}
+      {body.simulated && <p><span className="chip warn">{tr('样例结果（占位内容）')}</span></p>}
       <table className="rtab"><thead><tr><th>{tr('方法')}</th>{body.metrics?.map((m: string) => <th key={m}>{m}</th>)}</tr></thead>
         <tbody>{body.rows?.map((r: any) => <tr key={r.method}><td>{r.method}</td>{r.values.map((v: number, i: number) => <td key={i}><span className={r.ours || v === Math.max(...body.rows.filter((row: { ours?: boolean }) => !row.ours).map((row: { values: number[] }) => row.values[i])) ? 'em-num' : undefined}>{v}</span></td>)}</tr>)}</tbody>
       </table>
@@ -110,7 +110,7 @@ function Output({ stage, body, lineId }: { stage: string; body: any; lineId: str
   }
   if (stage === 'review') return (
     <>
-      <p><span className="em-key">{body.verdict}</span> {tr('平均')} <span className="em-num">{body.mean}</span> {tr('分 ·')} {modelText(body.format?.summary)}</p>
+      <p><span className="chip">{body.verdict}</span> {tr('平均')} <span className="em-num">{body.mean}</span> {tr('分 ·')} {modelText(body.format?.summary)}</p>
       {(body.reviews ?? []).map((r: any) => (
         <div key={r.worker} className="rv"><b>{r.persona} {r.worker}</b>{tr('：总分')} <span className="em-num">{r.overall}</span>{tr('（新颖')} {r.scores?.novelty} {tr('· 可靠')} {r.scores?.soundness} {tr('· 清晰')} {r.scores?.clarity}{tr('）')}
           {r.weaknesses?.[0] && <div className="muted small">{modelText(r.weaknesses[0])}</div>}</div>
@@ -211,7 +211,7 @@ export function Sheet(p: Props) {
           <p className={line ? 'em-bar user-words' : undefined}>{line ? line.idea : s.rep}</p>
           <div className="sh-chips">
             <span className="chip">{s.tech}</span>
-            {!s.live && <span className={s.later ? 'muted small' : 'em-state small'} data-tone="warn">{s.later ? tr('后续推出') : tr('未接入')}</span>}
+            {!s.live && <span className="chip warn">{s.later ? tr('后续推出') : tr('未接入')}</span>}
             {line && <span className="chip pri">{line.current?.name ?? (line.status === 'done' ? tr('已出厂') : line.status)} · {line.pct}%</span>}
             {cur && <span className="chip pri">{cur.name}</span>}
           </div>

@@ -79,7 +79,7 @@ export function AgentRoom(p: Props) {
             <span className="muted small">{STATUS[line.status] ?? line.status}{agent ? ` · ${AGENT_STATUS[agent.status]}` : ''}</span>
           </button>
         ))}
-        {roster && !roster.available.ok && <p className="small em-state" data-tone="bad">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
+        {roster && !roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
       </aside>
       {cur && <Seat {...p} row={cur} ok={!!roster?.available.ok} onDone={refresh} />}
     </div>
@@ -104,7 +104,7 @@ export function AgentDesk(p: Props & { lineId: string }) {
   if (!roster) return <p className="muted">{tr('加载中…')}</p>;
   return (
     <div className="room room-agents desk">
-      {!roster.available.ok && <p className="small em-state" data-tone="bad">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
+      {!roster.available.ok && <p className="warn-box small">{roster.available.note}{tr('，无法启动 pi。安装后重启服务即可。')}</p>}
       {row ? <Seat {...p} row={row} ok={roster.available.ok} onDone={refresh} /> : <p className="muted">{tr('该项目暂无法配置员工。')}</p>}
     </div>
   );
@@ -197,8 +197,8 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
 
   const pv = info?.providers.find(x => x.id === prov), m = pv?.models.find(x => x.id === model);
   if (!info) return <p className="muted small">{tr('正在连接本机 Paseo…')}</p>;
-  if (info.chat === false) return <p className="small em-state" data-tone="bad">{tr('Paseo 接入正在调试，暂时停用。请使用终端启动。')}</p>;
-  if (!info.status.ok) return <p className="small em-state" data-tone="bad">{info.status.note}</p>;
+  if (info.chat === false) return <p className="warn-box small">{tr('Paseo 接入正在调试，暂时停用。请使用终端启动。')}</p>;
+  if (!info.status.ok) return <p className="warn-box small">{info.status.note}</p>;
   const d = role ? info.defaults?.[role] : undefined;
   return (
     <>
@@ -206,7 +206,7 @@ export function PaseoPick({ busy, onStart, onReady, role }: {
       <label className="field">{tr('供应商')}
         <Select value={prov} options={info.providers.map(x => ({ value: x.id, label: x.error ? tr('{0}（模型列表读取失败）', x.label) : x.label }))} onChange={id => pick(info, id)} />
       </label>
-      {pv?.error && <p className="small em-state" data-tone="bad">{tr('{0} 的模型列表读取失败：{1}。可使用默认模型启动，或选择其他供应商。', pv.label, pv.error)}</p>}
+      {pv?.error && <p className="warn-box small">{tr('{0} 的模型列表读取失败：{1}。可使用默认模型启动，或选择其他供应商。', pv.label, pv.error)}</p>}
       {!!pv?.models.length && (
         <label className="field">{tr('模型')}
           <Select value={model} options={pv.models.map(x => ({ value: x.id, label: x.name }))} onChange={id => pick(info, prov, id)} />
@@ -259,7 +259,7 @@ export function ImportCard({ busy, onPick }: { busy: boolean; onPick: (id: strin
     <div className="hire-card import-card">
       <h3>{tr('导入 Paseo 中的已有对话')}</h3>
       <p className="muted small">{tr('选择本机 Paseo 对话关联至该项目，随后可在此继续对话，工作目录保持不变。')}</p>
-      {err ? <p className="small em-state" data-tone="bad">{err}</p> : !list ? <p className="muted small">{tr('正在读取 Paseo 的对话…')}</p> : !list.length ? <p className="muted small">{tr('Paseo 中暂无对话。')}</p> : (
+      {err ? <p className="warn-box small" data-tone="bad">{err}</p> : !list ? <p className="muted small">{tr('正在读取 Paseo 的对话…')}</p> : !list.length ? <p className="muted small">{tr('Paseo 中暂无对话。')}</p> : (
         <>
           {list.length > 5 && <input className="conv-q" value={q} placeholder={tr('按标题、供应商或目录筛选')} onChange={e => setQ(e.target.value)} />}
           <div className="conv-list">

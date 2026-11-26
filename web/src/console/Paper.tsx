@@ -124,7 +124,7 @@ function Tex(p: Props) {
           {!phone && <button className={layout === 'split' ? 'on' : ''} onClick={() => setLayout('split')}>{tr('对照')}</button>}
           <button className={layout === 'pdf' ? 'on' : ''} onClick={() => setLayout('pdf')}>PDF</button>
         </div>
-        {run && <span className={run.ok ? 'tex-run muted' : 'tex-run em-state'} data-tone="bad" onClick={() => setLogOpen(o => !o)} title={tr('查看编译日志')}>
+        {run && <span className={`tex-run ${run.ok ? 'ok' : 'bad'}`} onClick={() => setLogOpen(o => !o)} title={tr('查看编译日志')}>
           {run.ok ? tr('编译完成 · {0} 秒', run.seconds.toFixed(1)) + (run.pages ? tr(' · {0} 页', run.pages) : '') : tr('编译失败 · 查看日志')}
         </span>}
         {hasPdf && <a className="ib" href={paperPdfUrl(p.lineId, v)} target="_blank" rel="noreferrer" title={tr('在新标签页打开 PDF')}><Icon n="ext" size={15} /></a>}

@@ -152,7 +152,7 @@ function SoftNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
     <div className={`cv-n cv-sen v-${k}${c.on ? '' : ' off'}${selected ? ' on' : ''}`} {...refOf(n)}>
       <header>
         <i className="cv-ring2" /><span>SOFT · {stage ? tr('监测{0}', stage.title ?? '') : tr('持续询问')} · {tr('每 {0}h', c.every ?? 24)}</span>
-        {c.due && <em className="em-state" data-tone="warn" data-icon="clock">{tr('到期')}</em>}
+        {c.due && <em className="cv-chip due">{tr('到期')}</em>}
         <em className="cv-chip"><StateWord state={k}>{c.on ? VERDICT[k] : tr('已关闭')}</StateWord></em>
       </header>
       <p className="cv-sen-t"><b>{trx(c.title)}</b><span className="cv-dots">{c.history.slice(-4).map((h, i) => <i key={i} className={`s-${h.status}`} />)}</span></p>

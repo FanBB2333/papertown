@@ -47,3 +47,13 @@ strong.em-mark { font-weight: 600; }
 .em-bar[data-tone=good] { border-inline-start-color: var(--ok, var(--em-green)); }
 .em-bar[data-tone=warn] { border-inline-start-color: var(--warn, var(--em-orange)); }
 .em-bar[data-tone=bad] { border-inline-start-color: var(--bad, var(--em-red)); }
+
+/* A short tag at the end of a row or beside a name: a tinted ground in the tone's colour, no icon. With no tone it is grey. */
+html body .em-tag {
+  --em-color: var(--muted); flex: none; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 6px; white-space: nowrap;
+  font: 600 11px/18px var(--font, inherit); font-style: normal; text-decoration: none;
+  color: var(--em-color); background: color-mix(in srgb, var(--em-color) 13%, transparent);
+}
+html body .em-tag[data-tone=good] { --em-color: var(--em-green); }
+html body .em-tag[data-tone=warn] { --em-color: var(--em-orange); }
+html body .em-tag[data-tone=bad] { --em-color: var(--em-red); }

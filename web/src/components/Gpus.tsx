@@ -1,10 +1,10 @@
 // The GPUs on your own machines, read only from nvidb: a card per machine, a tile per GPU,
 // and one machine in full with the lanes that feed each card.
 
-import { figures, modelText, StateWord } from '../emphasis';
+import { figures, modelText } from '../emphasis';
 import { useEffect, useRef, useState } from 'react';
 import { api, type Gpu, type GpuNode, type GpuStatus, type NvJob, type NvLane } from '../api';
-import { stOf, type St } from '../console/charts';
+import { ST, stOf, type St } from '../console/charts';
 import { dur } from '../console/util';
 import '../gpus.css';
 import { tr } from '../i18n';
@@ -108,7 +108,7 @@ export function GpuBoard({ focus }: { focus?: string | null }) {
   const want = /^node:(.+?)(?:\/(\d+))?$/.exec(focus ?? '');
   const [open, setOpen] = useState<{ name: string; gpu: number | null } | null>(want ? { name: want[1], gpu: want[2] ? +want[2] : null } : null);
   if (!g) return <section className="gpus"><p className="muted small">{tr('读取 nvidb 中…')}</p></section>;
-  if (!g.ok) return <section className="gpus off"><h4>{tr('显卡 · nvidb')}</h4><p className="small em-state" data-tone="bad">{g.note}</p></section>;
+  if (!g.ok) return <section className="gpus off"><h4>{tr('显卡 · nvidb')}</h4><p className="warn-box small">{g.note}</p></section>;
   const node = open && g.nodes.find(n => n.name === open.name);
   if (node) return <section className="gpus"><NodeDetail g={g} n={node} gpu={open.gpu} onBack={() => setOpen(null)} /></section>;
   return (
@@ -121,10 +121,10 @@ export function GpuBoard({ focus }: { focus?: string | null }) {
             <div className="proj-top">
               <b>{n.name}</b>
               <span className="node-q muted small">{figures(nodeLine(g, n))}</span>
-              <span className={n.state === 'up' ? 'muted small' : 'em-state small'} data-tone="bad">{n.state === 'up' ? tr('{0} 张卡', n.gpus.length) : n.state}</span>
+              <span className={`pst ${n.state === 'up' ? 'pst-done' : 'pst-failed'}`}>{n.state === 'up' ? tr('{0} 张卡', n.gpus.length) : n.state}</span>
               <button className="lnk" onClick={() => setOpen({ name: n.name, gpu: null })}>{tr('详情')} →</button>
             </div>
-            {n.last_error && n.state !== 'up' && <p className="small em-state" data-tone="bad">{n.last_error}</p>}
+            {n.last_error && n.state !== 'up' && <p className="warn-box small" data-tone="bad">{n.last_error}</p>}
             <div className="gpu-grid">{n.gpus.map((x, i) => <GpuTile key={x.index} g={x} i={i} />)}</div>
           </div>
         ))}
@@ -140,7 +140,7 @@ export function GpuBoard({ focus }: { focus?: string | null }) {
 export function GpuStrip() {
   const g = useGpus();
   if (!g) return null;
-  if (!g.ok) return <div className="gstrip off"><b>{tr('显卡')}</b><span className="small em-state" data-tone="bad">{g.note}</span></div>;
+  if (!g.ok) return <div className="gstrip off"><b>{tr('显卡')}</b><span className="small em-state" data-tone="warn">{g.note}</span></div>;
   const s = g.summary!;
   return (
     <div className="gstrip" title={tr('来自 nvidb 的 GPU 队列，在「明细」查看每张卡')}>
@@ -217,7 +217,7 @@ function JobRow({ j, pos, on, pre = '', quiet }: { j: NvJob; pos?: number; on?: 
           <span className="nd-id">#{j.id}</span>
         </div>
         <div className="nd-l2">
-          {st !== quiet && <StateWord state={j.held ? 'held' : j.state}>{word}</StateWord>}
+          {st !== quiet && <span className={`stag s-${st}`}><i style={{ ['--c' as string]: ST[st].c }}>{ST[st].sign}</i>{word}</span>}
           {on && <span className={fit ? 'muted' : 'em-state'} data-tone="warn">{fit ? tr('当前可容纳') : tr('尚缺 {0}', gb(j.vram_mb - on.free_mb))}</span>}
           <span className={j.vram_mb ? 'em-num' : 'muted'} title={tr('预留显存')}>{j.vram_mb ? gb(j.vram_mb) : tr('未预留显存')}</span>
           {cards > 1 && <span>{figures(tr('{0} 张卡', cards))}</span>}
@@ -283,9 +283,9 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
           <h4>{n.name}</h4>
           <p className="muted small">{tr('{0} 张卡', n.gpus.length)} · {figures(tr('平均利用率 {0}%', util))} · {figures(tr('可排 {0} / {1}', gb(free), gb(total)))}{n.last_seen && <> · {tr('{0}更新', ago(n.last_seen))}</>}</p>
         </div>
-        <span className={n.state === 'up' ? 'muted small' : 'em-state small'} data-tone="bad">{n.state === 'up' ? tr('在线') : n.state}{n.enabled ? '' : tr(' · 不再派新任务')}</span>
+        <span className={`pst ${n.state === 'up' ? 'pst-done' : 'pst-failed'}`}>{n.state === 'up' ? tr('在线') : n.state}{n.enabled ? '' : tr(' · 不再派新任务')}</span>
       </div>
-      {n.last_error && n.state !== 'up' && <p className="small em-state" data-tone="bad">{n.last_error}</p>}
+      {n.last_error && n.state !== 'up' && <p className="warn-box small" data-tone="bad">{n.last_error}</p>}
       <div className="gpus-sum">
         <div><b className="em-num">{running.length}</b><span>{tr('运行中')}</span></div>
         <div><b className="em-num">{queued(lanes)}</b><span>{tr('队列里')}</span></div>
@@ -300,7 +300,7 @@ function NodeDetail({ g, n, gpu, onBack }: { g: GpuStatus; n: GpuNode; gpu: numb
             const next = jobsOf(l.queued)[0];
             return (
               <div key={l.name} className="nd-lane">
-                <b>{l.name}</b><StateWord state={l.paused ? 'held' : l.blocked ? 'blocked' : undefined}>{laneState(l)}</StateWord>
+                <b>{l.name}</b><span className={`pst ${l.paused ? 'pst-paused' : l.blocked ? 'pst-failed' : 'pst-running'}`}>{laneState(l)}</span>
                 <span className="nd-lnum">{tr('卡 {0}', l.gpu_ids.join(', '))}{l.concurrency > 1 ? figures(tr('· 并发 {0} 个', l.concurrency)) : ''} · {figures(tr('运行 {0} · 排队 {1}', l.running.length, l.queued.length))}</span>
                 {next && <span className="nd-next" title={next.name}><em>{tr('下一个')}</em><span>{next.name}</span><i>#{next.id}</i></span>}
                 {l.blocked && !l.paused && <span className="nd-why small">{modelText(l.blocked)}</span>}

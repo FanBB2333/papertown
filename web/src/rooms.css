@@ -54,7 +54,9 @@
 .room-empty p { margin: 0 0 16px; line-height: 1.6; }
 .small-empty { padding: 28px 12px; }
 .small-empty p { margin: 0; }
-.warn-box { margin-top: 8px; padding: 10px 12px; border-radius: 8px; color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+/* a notice that stands on its own line: a state that limits what can be done (orange), or an error (red) */
+.warn-box { margin: 8px 0 0; padding: 9px 12px; border-radius: 8px; line-height: 1.5; overflow-wrap: anywhere; color: var(--em-orange, var(--warn)); background: color-mix(in srgb, var(--warn) 11%, transparent); }
+.warn-box[data-tone=bad] { color: var(--em-red, var(--bad)); background: color-mix(in srgb, var(--bad) 9%, transparent); }
 
 /* list entries shared by the rooms */
 .proj, .mon {

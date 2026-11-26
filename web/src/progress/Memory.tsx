@@ -113,7 +113,7 @@ function ImportDialog({ lineId, toast, onClose, onDone }: { lineId: string; toas
       </header>
       <div className="pd-body">
         <p className="small muted">{tr('仅导入对话内容（你的提问与 agent 的回复），跳过工具调用、思考过程与自动注入的上下文，密钥和 token 将脱敏，原文件保持不变。')}</p>
-        {err && <p className="small em-state" data-tone="bad">{err}</p>}
+        {err && <p className="warn-box small" data-tone="bad">{err}</p>}
         {!scan && !err && <p className="muted">{tr('查找中…')}</p>}
         {scan && !scan.roots.length && <p className="muted">{tr('该项目暂无代码或论文仓库。')}</p>}
         {groups.map(g => (
@@ -162,7 +162,7 @@ function Found({ x, on, toggle }: { x: MemoryFound; on: boolean; toggle: (on: bo
             {x.cwd && x.kind === 'session' && <> · <code>{x.cwd}</code></>}
           </span>
         </span>
-        {x.imported && <span className={x.changed ? 'em-mark' : 'mem-tag'}>{x.changed ? tr('有更新') : tr('已导入')}</span>}
+        {x.imported && <span className={`mem-tag${x.changed ? ' new' : ''}`}>{x.changed ? tr('有更新') : tr('已导入')}</span>}
       </label>
     </li>
   );
@@ -191,7 +191,7 @@ export function MemoryViewer({ lineId, id, msg, onClose }: { lineId: string; id:
         </p>
       )}
       <div className="pd-body" ref={body}>
-        {err && <p className="small em-state" data-tone="bad">{err}</p>}
+        {err && <p className="warn-box small" data-tone="bad">{err}</p>}
         {!m && !err && <p className="muted">{tr('加载中…')}</p>}
         {m?.text != null && <div className="mem-note">{m.text}</div>}
         {m?.messages && (

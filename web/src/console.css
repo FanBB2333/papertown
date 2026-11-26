@@ -317,9 +317,11 @@ html body .ov-part .ov-tag { padding: 0 9px; font-size: 13px; line-height: 23px;
 /* ---------- survey ---------- */
 .sv-tldr {
   display: flex; align-items: center; gap: 18px; padding: 18px 20px; border-radius: 16px; border: 1px solid; animation: ask-in .7s var(--spring-pop) both;
-  border-color: var(--line); background: var(--panel);
+  --t: var(--warn); border-color: color-mix(in srgb, var(--t) 35%, transparent); background: color-mix(in srgb, var(--t) 8%, var(--panel));
 }
-.sv-verdict { flex: none; padding: 6px 14px; border-radius: 10px; font: 600 16px var(--font); color: var(--ink); }
+.sv-tldr.t-ok { --t: var(--ok); } .sv-tldr.t-bad { --t: var(--bad); }
+/* the page's one verdict: a filled tag in its colour, the card behind it washed in the same */
+.sv-verdict { flex: none; padding: 5px 14px; border-radius: 10px; font: 600 16px var(--font); color: #fff; background: var(--t); }
 .sv-tldr > div:nth-child(2) { flex: 1; min-width: 0; }
 .sv-line { margin: 0 0 3px; font: 400 17px/1.45 var(--head); }
 .sv-act { display: flex; gap: 8px; flex: none; }
@@ -447,6 +449,8 @@ li.more:hover { color: var(--brand); }
 .tex-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tex-seg button { font-size: 14px; }
 .tex-run { font-size: 12px; padding: 2px 10px; border-radius: 99px; cursor: pointer; white-space: nowrap; animation: pop .5s var(--spring-pop) both; }
+.tex-run.ok { color: var(--em-green, var(--ok)); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.tex-run.bad { color: var(--em-red, var(--bad)); background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .tex-go { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; font-size: 13.5px; }
 .tex-go.busy .ic { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -1071,7 +1075,8 @@ button.jgr-c.s-running { animation: pop .4s var(--spring-pop) both, beat-op 1.8s
 .rc[class*='s-'] { box-shadow: inset 0 3px 0 var(--sc); }
 .rc[class*='s-']:hover { box-shadow: inset 0 3px 0 var(--sc), var(--soft); }
 .rc-open { display: flex; flex: 1; flex-direction: column; align-items: stretch; gap: 6px; padding: 0; border: 0; background: none; color: inherit; text-align: start; font: inherit; cursor: pointer; }
-.rc-prov { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding-top: 5px; border-top: 1px solid var(--line); font-size: 12px; }
+.rc-prov { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 5px; border-top: 1px solid var(--line); font-size: 12px; text-decoration: none; }
+.rc-prov > span:last-child { text-decoration: underline; text-underline-offset: 3px; }
 .rc-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rc-n { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-m { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }

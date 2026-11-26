@@ -4,7 +4,7 @@
 // log; the spec and the clamp the work boundaries behind them; the human gate what waits for you; every node the
 // list of what it is wired to.
 
-import { figures, hitText, modelText, StateWord, stateTone } from '../emphasis';
+import { figures, hitText, modelText, stateTone } from '../emphasis';
 import { useMemo, useState } from 'react';
 import { api, type CanvasEdge, type CanvasNode, type CanvasView, type Check, type NewNode, type ProjectCard, type TaskLog, type TaskStatus, type TaskTo } from '../api';
 import { AGENT_STATUS } from '../components/MillRoom';
@@ -70,20 +70,20 @@ export function Mark({ n }: { n: CanvasNode }) {
 }
 
 function Pill({ n }: { n: CanvasNode }) {
-  if (n.check?.kind === 'soft') return <StateWord state={n.check.on ? status(n.check) : undefined}>{n.check.on ? VERDICT[status(n.check)] : tr('已关闭')}</StateWord>;
+  if (n.check?.kind === 'soft') return <span className={`cg-pill s-${n.check.on ? status(n.check) : 'none'}`}>{n.check.on ? VERDICT[status(n.check)] : tr('已关闭')}</span>;
   if (n.check) {
     const lv = level(n.check);
-    return <StateWord state={lv}>{lv === 'off' ? tr('已关闭') : lv === 'pass' ? tr('放行') : lv === 'none' ? ST.none : LEVEL[lv]}</StateWord>;
+    return <span className={`cg-pill g-${lv}`}>{lv === 'off' ? tr('已关闭') : lv === 'pass' ? tr('放行') : lv === 'none' ? ST.none : LEVEL[lv]}</span>;
   }
   if (n.gate) {
     const look = gateLook(n.gate);
-    return <StateWord state={look}>{n.gate.waived && n.gate.state === 'block' ? tr('已放行') : GATE_ST[look]}</StateWord>;
+    return <span className={`cg-pill g-${look}`}>{look === 'block' && <Icon n="lock" size={11} />}{n.gate.waived && n.gate.state === 'block' ? tr('已放行') : GATE_ST[look]}</span>;
   }
-  if (n.kind === 'human' && n.items?.length) return <span className="em-bar" data-tone="warn">{tr('{0} 待定', n.items.length)}</span>;
-  if (n.kind === 'task' && n.converged) return <span className="muted">{tr('已收敛')}</span>;
-  if (n.kind === 'task' && n.escalated) return <span className="em-bar" data-tone="warn">{tr('待你拍板')}</span>;
-  if (n.kind === 'stage') return <span className="muted">{n.status === 'run' ? <>{STAGE.run} · <span className="em-num">{n.pct ?? 0}%</span></> : <StateWord state={n.status}>{STAGE[n.status ?? 'todo']}</StateWord>}</span>;
-  if (n.kind === 'task') return <span className={stateTone(n.status) ? 'em-state' : 'muted'} data-tone={stateTone(n.status)}>{TASK[(n.status ?? 'draft') as TaskStatus]}</span>;
+  if (n.kind === 'human' && n.items?.length) return <span className="cg-pill g-warn">{tr('{0} 待定', n.items.length)}</span>;
+  if (n.kind === 'task' && n.converged) return <span className="cg-pill t-done">{tr('已收敛')}</span>;
+  if (n.kind === 'task' && n.escalated) return <span className="cg-pill g-warn">{tr('待你拍板')}</span>;
+  if (n.kind === 'stage') return <span className={`cg-pill st-${n.status}`}>{n.status === 'run' ? `${STAGE.run} · ${n.pct ?? 0}%` : STAGE[n.status ?? 'todo']}</span>;
+  if (n.kind === 'task') return <span className={`cg-pill t-${n.status}`}>{TASK[(n.status ?? 'draft') as TaskStatus]}</span>;
   return null;
 }
 
@@ -215,7 +215,7 @@ function GateDetail({ n, v, busy, act, lineId, onConsole, onPick }: {
                 <td><button className="lnk" onClick={() => onPick(`check:${c.id}`)} disabled={!v.nodes.some(x => x.id === `check:${c.id}`)}>{ruleNo(c.rule)} {trx(c.title)}</button></td>
                 <td>{c.first?.value ?? '—'}</td>
                 <td><b className={c.last?.value != null && c.first?.value != null && c.first.value !== c.last.value ? 'em-mark' : 'em-num'} data-tone={stateTone(level(c))}>{c.last?.value ?? '—'}</b></td>
-                <td><StateWord state={level(c)}>{c.prio} · {levelText(c)}</StateWord></td>
+                <td><em className={`lp-pill l-${level(c)}`}>{c.prio} · {levelText(c)}</em></td>
               </tr>
             ))}
           </tbody>
@@ -406,7 +406,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
   const { before, after, drafts } = orderOf(v, n.id), waits = n.waits ?? [], dirWait = waits.some(w => w.kind === 'dir');
   const near = (x: CanvasNode) => (
     <button key={x.id} className="cv-near" onClick={() => onPick(x.id)} title={x.title}>
-      <span>{x.id}「{clip(x.title, 14)}」</span><StateWord state={x.stale ? 'stale' : x.status}>{x.stale ? tr('待复核') : TASK[(x.status ?? 'draft') as TaskStatus]}</StateWord>
+      <span>{x.id}「{clip(x.title, 14)}」</span><i className={`cg-pill ${x.stale ? 'g-warn' : `t-${x.status}`}`}>{x.stale ? tr('待复核') : TASK[(x.status ?? 'draft') as TaskStatus]}</i>
     </button>
   );
   const gate = n.loop === 'hard' ? v.nodes.find(x => x.id === `gate:${n.stage}`) : null, from = n.loop === 'soft' ? v.nodes.find(x => x.id === `check:${n.from}`) : null;
@@ -453,7 +453,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
               </li>
             ))}</ul>
           )}
-          {n.wait_note && <p className="small em-state" data-tone="bad">{tr('轮到时派发失败：{0}', trx(n.wait_note))}</p>}
+          {n.wait_note && <p className="warn-box small" data-tone="bad">{tr('轮到时派发失败：{0}', trx(n.wait_note))}</p>}
           <div className="cv-row">
             <button className="btn" disabled={busy} onClick={() => act(() => api.setNode(line.id, n.id, { status: 'draft' }), tr('已取消排队'))}>{tr('取消排队')}</button>
             {n.wait_note && <button className="btn" disabled={busy} onClick={() => act(() => api.sendNode(line.id, n.id), sentWord(n.id, to))}>{tr('重试')}</button>}

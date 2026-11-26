@@ -54,7 +54,7 @@ export function Survey(p: Props) {
     <div className="cm-page survey">
       {h ? (
         <section className={`sv-tldr t-${tone(h.verdict)}`}>
-          <span className="sv-verdict em-key">{h.verdict}</span>
+          <span className="sv-verdict">{h.verdict}</span>
           <div>
             <p className="sv-line">{modelText(besides(h.summary, h.verdict) || h.gap, 70)}</p>
             <span className="muted small">{[h.sources?.library != null && tr('图书馆 {0}', h.sources.library), h.sources?.arxiv != null && `arXiv ${h.sources.arxiv}`].filter(Boolean).join(' · ')}</span>

@@ -151,7 +151,7 @@ export function SkillRoom(p: Props) {
               <button key={v} className={show === v ? 'on' : ''} onClick={() => setShow(v)}>{t}</button>)}
           </div>
         </div>
-        {err && <p className="small em-state" data-tone="bad">{err}</p>}
+        {err && <p className="warn-box small" data-tone="bad">{err}</p>}
         <div className="sk-list">
           {skills.map((s, i) => {
             const key = `skill.${s.name}.enabled`;

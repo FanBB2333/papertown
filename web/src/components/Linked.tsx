@@ -25,7 +25,7 @@ function Commits({ list }: { list?: Commit[] }) {
 }
 
 function Dirty({ n }: { n?: number }) {
-  return n ? <span className="em-mark" data-tone="warn" title={tr('git status 中未提交的改动')}>{n} {tr('处未提交')}</span> : <span className="muted small">{tr('工作区干净')}</span>;
+  return n ? <span className="chip warn" title={tr('git status 中未提交的改动')}>{n} {tr('处未提交')}</span> : <span className="chip ok">{tr('工作区干净')}</span>;
 }
 
 function CodeCard({ c, onGo }: { c: LinkedCode; onGo: () => void }) {
@@ -36,7 +36,7 @@ function CodeCard({ c, onGo }: { c: LinkedCode; onGo: () => void }) {
         <button className="btn" onClick={onGo}>{tr('前往仓库')}</button>
       </div>
       <p className="muted small lk-path">{c.path}</p>
-      {c.missing ? <p className="small em-state" data-tone="bad">{tr('此目录不存在，请检查 projects.json 中的路径。')}</p> : (
+      {c.missing ? <p className="warn-box small" data-tone="bad">{tr('此目录不存在，请检查 projects.json 中的路径。')}</p> : (
         <>
           <div className="lk-chips">
             <span className="chip">{c.branch}</span>
@@ -67,7 +67,7 @@ function PaperCard({ p, lineId, onGo }: { p: LinkedPaper; lineId: string; onGo: 
         </div>
       </div>
       <p className="muted small lk-path">{p.path}{p.main ? ` · ${p.main}` : ''}</p>
-      {p.missing ? <p className="small em-state" data-tone="bad">{tr('此目录不存在，请检查 projects.json 中的路径。')}</p>
+      {p.missing ? <p className="warn-box small" data-tone="bad">{tr('此目录不存在，请检查 projects.json 中的路径。')}</p>
         : !p.main ? <p className="muted small">{tr('未找到含 \\documentclass 的 .tex 文件。')}</p> : (
           <>
             <div className="lk-chips">

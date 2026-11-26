@@ -1,7 +1,7 @@
 // The data panel: the experiments' setup, a chart per result metric, what each nvidb run handed
 // back, and the repository's result files, with same-named files in sibling folders lined up as one table.
 
-import { figures, modelText, StateWord } from '../emphasis';
+import { figures, modelText } from '../emphasis';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type DataRun, type LineData } from '../api';
@@ -104,7 +104,7 @@ function RunResults({ runs, seq, onOpen }: { runs: DataRun[]; seq: number; onOpe
                   : <span className="muted small rc-s">{r.result == null ? tr('暂无结果') : JSON.stringify(r.result).slice(0, 120)}</span>}
               </button>
               {r.prov?.map(n => <RecordLink key={n.id} className="rc-prov" to={provPath(seq, { node: n.id })} title={n.path}>
-                <code>{n.tag}</code>{n.state && ['changed', 'missing', 'moved'].includes(n.state) && <StateWord state={n.state}>{n.state === 'changed' ? tr('改过') : n.state === 'missing' ? tr('缺失') : tr('行号变了')}</StateWord>}<span>{figures(tr('用在文章 {0} 处', n.used ?? '—'))}</span></RecordLink>)}
+                <code>{n.tag}</code>{n.state && ['changed', 'missing', 'moved'].includes(n.state) && <span className="em-tag" data-tone={n.state === 'missing' ? 'bad' : 'warn'}>{n.state === 'changed' ? tr('改过') : n.state === 'missing' ? tr('缺失') : tr('行号变了')}</span>}<span>{figures(tr('用在文章 {0} 处', n.used ?? '—'))}</span></RecordLink>)}
             </article>
           );
         })}
@@ -370,7 +370,7 @@ function FileSheet({ lineId, path, onClose, onCode }: { lineId: string; path: st
           </div>
         </header>
         <div className="jd-body">
-          {f.err ? <p className="small em-state" data-tone="bad">{f.err}</p>
+          {f.err ? <p className="warn-box small" data-tone="bad">{f.err}</p>
             : !f.data ? <p className="muted small">{tr('读取中…')}</p>
               : f.data.binary || f.data.too_big ? <p className="muted small">{f.data.binary ? tr('二进制文件（{0}），此处无法打开。', bytes(f.data.size)) : tr('文件过大（{0}），请在本地打开。', bytes(f.data.size))}</p>
                 : grid ? <Sheet {...grid} /> : <pre className="json">{(f.data.text ?? '').slice(0, 40000)}</pre>}

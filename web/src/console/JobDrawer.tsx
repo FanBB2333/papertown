@@ -1,7 +1,7 @@
 // One job in full, as a sheet over the right of the console: what its state makes most worth
 // reading first, then where and how long it ran, its result, command and events. Read only.
 
-import { figures, modelText, StateWord } from '../emphasis';
+import { figures, modelText } from '../emphasis';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type Job, type NvJobFull } from '../api';
@@ -85,7 +85,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
         <header className="jd-h">
           <div className="jd-t">
             <span className="jd-id">
-              <StateWord state={st}>{ST[st].label}</StateWord>
+              <span className={`jd-pill${ST[st].hollow ? ' hollow' : ''}`}><i>{ST[st].sign}</i>{ST[st].label}</span>
               <span className="muted small">{[nvId != null ? `nvidb #${nvId}` : id, nv?.submitter, ended && ago(ended)].filter(Boolean).join(' · ')}</span>
             </span>
             <h3 title={name}>{name}</h3>
@@ -97,7 +97,7 @@ export function JobDrawer({ id, onClose, onJob, nav }: Props) {
           </div>
         </header>
         <div className="jd-body" key={id}>
-          {err && <p className="small em-state" data-tone="bad">{err}</p>}
+          {err && <p className="warn-box small" data-tone="bad">{err}</p>}
           {!loaded && !err && <p className="muted">{tr('读取中…')}</p>}
 
           {loaded && st === 'failed' && (

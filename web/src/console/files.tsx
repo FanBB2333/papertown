@@ -195,7 +195,7 @@ export function FileView({ f, onRun, onCursor, goto, empty }: {
   const doc: Doc | null = o && o.text != null ? { id: o.path, path: o.path, text: o.text, rev: o.rev } : null;
   const note = !o ? empty
     : o.loading ? <p className="muted">{tr('读取中…')}</p>
-      : o.err ? <p className="small em-state" data-tone="bad">{o.err}</p>
+      : o.err ? <p className="warn-box small" data-tone="bad">{o.err}</p>
         : o.binary ? <div className="fv-note"><Icon n="file" size={30} /><b>{base(o.path)}</b><p className="muted small">{tr('二进制文件（{0}），此处无法打开。', bytes(o.size))}</p></div>
           : o.tooBig ? <div className="fv-note"><Icon n="file" size={30} /><b>{base(o.path)}</b><p className="muted small">{tr('文件过大（{0}），请在本地打开。', bytes(o.size))}</p></div>
             : null;

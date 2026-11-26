@@ -1,7 +1,6 @@
 // The MCP exchange: every MCP server the town is wired to, as lines on a switchboard, with where each
 // is configured, whether it is connected and the tools it gives the agents.
 
-import { StateWord } from '../emphasis';
 import { useEffect, useState } from 'react';
 import { api, type McpServer, type McpView } from '../api';
 import type { RoomActions } from './Interior';
@@ -71,7 +70,7 @@ export function McpRoom(p: Props) {
         {v.servers.map((s, i) => (
           <button key={s.name} className={`scope-btn line-btn${cur?.name === s.name && !draft ? ' on' : ''}`} style={{ ['--i' as string]: i }}
             onClick={() => { setSel(s.name); setDraft(null); }}>
-            <div className="proj-top"><b>{s.name}</b><StateWord state={s.state}>{STATE[s.state]}</StateWord></div>
+            <div className="proj-top"><b>{s.name}</b><span className={`mcp-st st-${s.state}`}>{STATE[s.state]}</span></div>
             <span className="muted small">{SOURCE[s.source]} · {tr('{0} 个工具', s.tools.length)}</span>
           </button>
         ))}
@@ -100,7 +99,7 @@ export function McpRoom(p: Props) {
           <div className="mcp-detail">
             <div className="mcp-head">
               <div>
-                <StateWord state={cur.state}>{STATE[cur.state]}</StateWord>
+                <span className={`mcp-st st-${cur.state}`}>{STATE[cur.state]}</span>
                 <h2 className="cr-title">{cur.name}</h2>
                 <p className="muted small">{SOURCE[cur.source]}{cur.source === 'town' ? ` · ${v.town_file}` : cur.source === 'file' ? ` · ${v.config_file}` : ' · papertown.ports'}</p>
               </div>
@@ -115,7 +114,7 @@ export function McpRoom(p: Props) {
             </div>
             <pre className="code">{[cur.command, ...cur.args].map(a => /\s/.test(a) ? JSON.stringify(a) : a).join(' ')}</pre>
             {cur.env.length > 0 && <p className="muted small">{tr('环境变量：')}{cur.env.map(k => <code key={k}>{k}</code>)}{tr('（值不显示）')}</p>}
-            {cur.error && <p className="small em-state" data-tone="bad">{cur.error}</p>}
+            {cur.error && <p className="warn-box small" data-tone="bad">{cur.error}</p>}
             <h4 className="cr-sub">{tr('工具')} <span className="muted">{cur.tools.length}</span></h4>
             {cur.tools.length ? (
               <div className="tool-grid">

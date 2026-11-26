@@ -237,7 +237,7 @@ function LaneRow({ lane, i, onPick }: { lane: Lane; i: number; onPick: (id: stri
   return (
     <button className={`lane ls-${lane.status}${lane.moving ? ' moving' : ''}`} style={{ ['--i' as string]: i }} onClick={() => onPick(lane.id)} title={tr('查看该项目明细')}>
       <div className="ln-tag">
-        <div className="proj-top"><b>#{lane.seq}</b><StateWord state={lane.status}>{lane.tag}</StateWord></div>
+        <div className="proj-top"><b>#{lane.seq}</b><span className={`pst pst-${lane.status}`}>{lane.tag}</span></div>
         <h4>{lane.title}</h4>
         {lane.note && <small>{lane.note}</small>}
       </div>
