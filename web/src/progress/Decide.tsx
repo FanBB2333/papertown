@@ -156,7 +156,7 @@ function Item({ d, r, kumo, onDone }: { d: CardDecision; r: ProjectCard; kumo: b
       {writing && (
         <form className="dc-free" onSubmit={e => { e.preventDefault(); if (text.trim()) pick(null, text.trim()); }}>
           {kumo ? <Input className={text ? 'em-bar' : undefined} autoFocus size="sm" aria-label={tr('写给它的回答')} value={text} maxLength={2000} disabled={busy} placeholder={tr('写给它的回答')} onChange={e => setText(e.target.value)} />
-            : <input className={text ? 'em-bar' : undefined} autoFocus value={text} maxLength={2000} disabled={busy} placeholder={tr('写给它的回答')} onChange={e => setText(e.target.value)} />}
+            : <input autoFocus value={text} maxLength={2000} disabled={busy} placeholder={tr('写给它的回答')} onChange={e => setText(e.target.value)} />}
           <Btn kumo={kumo} main={kumo} type="submit" disabled={busy || !text.trim()}>{tr('发送')}</Btn>
         </form>
       )}

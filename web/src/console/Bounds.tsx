@@ -113,7 +113,7 @@ export function Bounds({ line, toast }: { line: Line | null; toast: (t: string, 
               <li key={r.k} className={`bd-row k-${r.kind}`}>
                 <Select className="bd-kind" value={r.kind} label={tr('类别')} options={KINDS.map(k => ({ value: k, label: KIND[k] }))}
                   onChange={k => set({ kind: k, action: k === 'must' ? null : r.action })} />
-                <input className={r.text ? 'bd-text em-bar' : 'bd-text'} value={r.text} maxLength={300} placeholder={HINT[r.kind]} autoFocus={!r.id && !r.text}
+                <input className="bd-text" value={r.text} maxLength={300} placeholder={HINT[r.kind]} autoFocus={!r.id && !r.text}
                   onChange={e => set({ text: e.target.value })} aria-label={tr('条目内容')} />
                 {!isWorker(l) && <Select className="bd-inh" value={r.inherit} label={tr('继承方式')} title={tr('下级是否遵循此规则')}
                   options={(['yes', 'no', 'force'] as BoundInherit[]).map(k => ({ value: k, label: INHERIT[k] }))} onChange={k => set({ inherit: k })} />}

@@ -484,7 +484,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
         </div>
       ) : (
         <div className="cv-form">
-          <textarea className={back ? 'em-bar' : undefined} autoFocus rows={3} value={back} maxLength={4000} placeholder={st === 'done' ? tr('哪里不行、要怎么改') : tr('解答受阻问题')} onChange={e => setBack(e.target.value)} />
+          <textarea autoFocus rows={3} value={back} maxLength={4000} placeholder={st === 'done' ? tr('哪里不行、要怎么改') : tr('解答受阻问题')} onChange={e => setBack(e.target.value)} />
           <div className="cv-row">
             <button className="btn pri" disabled={busy || !back.trim()} onClick={() => act(() => api.backNode(line.id, n.id, back.trim()), tr('已重新发送')).then(() => setBack(null))}>
               <Icon n="send" size={13} />{tr('重新发送')}
@@ -504,7 +504,7 @@ function TaskDetail({ n, v, busy, act, line, onAgents, onChat, onPick }: {
         </label>
         <label className="field">{tr('名字')}<input value={title} maxLength={60} onChange={e => setTitle(e.target.value)} /></label>
         <label className="field">{tr('任务内容')}
-          <textarea className={n.created_by === 'you' ? 'em-bar' : undefined} rows={wideRows(text)} value={text} maxLength={4000} placeholder={tr('写明任务内容与完成标准，派发时将连同该节点关联的检查与工序一并发送')} onChange={e => setText(e.target.value)} />
+          <textarea rows={wideRows(text)} value={text} maxLength={4000} placeholder={tr('写明任务内容与完成标准，派发时将连同该节点关联的检查与工序一并发送')} onChange={e => setText(e.target.value)} />
         </label>
       </div>
       <div className="cv-row">
@@ -546,7 +546,7 @@ function NoteDetail({ n, busy, act, lineId }: { n: CanvasNode; busy: boolean; ac
   return (
     <>
       <div className="cv-form">
-        <textarea className={n.created_by === 'you' ? 'em-bar' : undefined} rows={8} value={text} maxLength={2000} onChange={e => setText(e.target.value)} />
+        <textarea rows={8} value={text} maxLength={2000} onChange={e => setText(e.target.value)} />
       </div>
       {text.trim() !== (n.text ?? '') && (
         <div className="cv-row"><button className="btn pri" disabled={busy || !text.trim()} onClick={() => act(() => api.setNode(lineId, n.id, { text: text.trim() }), tr('已保存'))}>{tr('保存')}</button></div>
@@ -638,7 +638,7 @@ export function NewForm({ d, v, busy, onKind, onAdd, onCancel }: {
               {d.kind === 'task' ? tr('任务内容') : d.kind === 'soft' ? tr('向负责人提问') : d.kind === 'hard' ? tr('论文禁用内容（正则表达式，不区分大小写）') : tr('备注')}
               {d.kind === 'hard'
                 ? <input value={text} maxLength={500} placeholder={'\\bnovel\\b'} onChange={e => setText(e.target.value)} />
-                : <textarea className={text ? 'em-bar' : undefined} autoFocus={d.kind === 'note'} rows={d.kind === 'task' ? wideRows(text) : 4} value={text} maxLength={d.kind === 'task' ? 4000 : 2000} onChange={e => setText(e.target.value)}
+                : <textarea autoFocus={d.kind === 'note'} rows={d.kind === 'task' ? wideRows(text) : 4} value={text} maxLength={d.kind === 'task' ? 4000 : 2000} onChange={e => setText(e.target.value)}
                   placeholder={d.kind === 'task' ? tr('写明任务内容与完成标准，派发时将连同该节点关联的检查与工序一并发送')
                     : d.kind === 'soft' ? tr('例如「每个模块都有消融实验吗？请列出缺失项」') : ''} />}
             </label>

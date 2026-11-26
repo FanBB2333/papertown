@@ -95,7 +95,7 @@ function Head({ g }: { g: GpuStatus }) {
         <div><b className="em-num">{wait}</b><span>{tr('排队')}</span></div>
       </div>
       <p className="muted small">
-        nvidb · <span className="em-num" data-tone={s.up < s.nodes ? 'warn' : 'info'}>{s.up}/{s.nodes}</span> {tr('台在线 ·')} {ago(g.ticked ?? g.at)}{tr('更新')}{g.alerts ? <span className="em-bar" data-tone="warn">{tr('· {0} 条告警未确认', g.alerts)}</span> : ''} {tr('· 只读，提交任务：')} <code>nvidb job submit</code>
+        nvidb · <span className="em-num" data-tone={s.up < s.nodes ? 'warn' : 'info'}>{s.up}/{s.nodes}</span> {tr('台在线 ·')} {ago(g.ticked ?? g.at)}{tr('更新')}{g.alerts ? <span className="em-state" data-tone="warn">{tr('· {0} 条告警未确认', g.alerts)}</span> : ''} {tr('· 只读，提交任务：')} <code>nvidb job submit</code>
         <button className="lnk" onClick={refreshGpus}>{tr('刷新')}</button>
       </p>
     </div>

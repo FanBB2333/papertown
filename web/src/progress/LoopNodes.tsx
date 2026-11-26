@@ -202,7 +202,7 @@ function HumanNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
         <b className={items.length ? 'em-bar' : undefined} data-tone="warn">{items.length ? tr('{0} 件待你拍板', items.length) : tr('暂无待你拍板事项')}</b>
         <small>{to && matter ? <a className="nodrag nopan" href={href(to)} onClick={e => { e.stopPropagation(); follow(e, to); }}>{modelText(matter.text, 40)} ↗</a>
           : items.length ? modelText(items[0].text, 40) : tr('超轮次卡口、偏离巡检及 agent 提问将汇集在此处')}</small>
-        <Far t={tr('人类拍板')} x={items.length ? <span className="em-bar" data-tone="warn">{tr('{0} 件', items.length)}</span> : ''} />
+        <Far t={tr('人类拍板')} x={items.length ? <span className="em-num" data-tone="warn">{tr('{0} 件', items.length)}</span> : ''} />
       </div>
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
@@ -225,7 +225,7 @@ function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
       <header>
         {n.loop === 'hard' ? <Icon n="refresh" size={11} /> : n.loop === 'soft' ? <Icon n="spark" size={11} /> : <i className={`dot s-${who?.there ? who.status : 'stopped'}`} />}
         <span>{head} · {n.id} · {WHO[n.to ?? 'lead']}</span>
-        <em className={n.escalated ? 'em-bar' : st === 'blocked' ? 'em-state' : undefined} data-tone={n.escalated ? 'warn' : 'bad'}>{n.converged ? tr('已收敛') : n.escalated ? tr('待你拍板') : TASK[st]}</em>
+        <em className={n.escalated ? 'warn' : st === 'blocked' ? 'bad' : undefined}>{n.converged ? tr('已收敛') : n.escalated ? tr('待你拍板') : TASK[st]}</em>
       </header>
       <b>{n.title}</b>
       {st === 'queued' && <p className="turn"><Icon n="clock" size={11} />{n.wait_note ? tr('派发失败，将自动重试') : wait?.kind === 'dir' ? tr('等待 {0} 释放工作目录', wait.id) : wait ? tr('等待 {0} {1}', (n.waits ?? []).map(w => w.id).join('、'), wait.stale ? tr('复核') : tr('完成')) : tr('轮到时自动派发')}</p>}
@@ -235,7 +235,7 @@ function TaskNode({ data: { n }, selected, dragging }: NodeProps<FNode>) {
         : n.text && <p className={n.created_by === 'you' ? 'two user-words em-bar' : 'two'}>{nodeText(n, 96)}</p>}
       {n.result && <p className="res">{modelText(n.result, 60)}</p>}
       {when && <small>{st === 'sent' ? tr('{0}派发', ago(when)) : ago(when)}{(n.log?.length ?? 0) > 2 && ` · ${tr('{0} 条记录', n.log?.length ?? 0)}`}</small>}
-      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated || n.stale ? <span className="em-bar" data-tone="warn">{n.escalated ? tr('待你拍板') : tr('待复核')}</span> : <StateWord state={st}>{TASK[st]}</StateWord>} />
+      <Far t={n.title} x={n.converged ? tr('已收敛') : n.escalated || n.stale ? <span className="em-state" data-tone="warn">{n.escalated ? tr('待你拍板') : tr('待复核')}</span> : <StateWord state={st}>{TASK[st]}</StateWord>} />
       <Ports /><Tools n={n} on={selected && !dragging} />
     </div>
   );

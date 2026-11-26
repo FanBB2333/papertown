@@ -54,9 +54,12 @@
 .fb-r { display: flex; align-items: center; gap: 10px; flex: none; }
 .fb-wait {
   display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px; border: 0; border-radius: 99px; cursor: pointer;
-  font: 12.5px var(--font); color: var(--ink); background: none; transition: transform .45s var(--spring);
+  font: 12.5px var(--font); color: var(--em-orange, var(--warn)); background: color-mix(in srgb, var(--warn) 13%, transparent); white-space: nowrap; transition: transform .45s var(--spring);
 }
-.fb-wait:hover { transform: translateY(-1px); }
+/* the projects that wait on you: a capsule in the warning colour, a dot that beats, the count in bold */
+.fb-wait:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--warn) 20%, transparent); }
+.fb-wait i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); animation: beat 2s var(--in-out) infinite; }
+html body .fb-wait :is(.em-num, .fb-wn) { color: inherit; font-weight: 700; }
 .fb-wn { display: none; font-weight: 600; }
 @keyframes beat { 50% { transform: scale(1.5); opacity: .55; } }
 .fb-q {

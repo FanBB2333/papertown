@@ -49,7 +49,7 @@ export function LeadAside({ lineId, seq, toast }: { lineId: string; seq?: number
         <div className="pnl-s">
           <h4>{tr('汇报和提问')}</h4>
           <p className="muted small">{tr('负责人的汇报、向你的提问，以及你在「进展」中发送的消息，均在此项目对话中。')}</p>
-          <a className={v.asks.length ? 'btn em-bar' : 'btn'} data-tone="warn" href={href(talk)} onClick={e => follow(e, talk)}>
+          <a className={v.asks.length ? 'btn pri' : 'btn'} href={href(talk)} onClick={e => follow(e, talk)}>
             {v.asks.length ? tr('{0} 项待你回复', v.asks.length) : tr('打开对话')}
           </a>
         </div>

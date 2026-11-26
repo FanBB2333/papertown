@@ -143,6 +143,9 @@ div.cv-mi { cursor: default; } div.cv-mi .lnk { margin: 0; font-size: 12.5px; }
 .cv-task { --c: var(--cv-task); display: flex; flex-direction: column; gap: 3px; width: 216px; min-height: 64px; padding: 8px 11px 9px; border-radius: 12px; border-left: 4px solid var(--c); }
 .cv-task header { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
 .cv-task header em { margin-left: auto; padding: 0 6px; border-radius: 99px; font-style: normal; color: var(--muted); }
+/* a task that waits on you, or is blocked: its state as a tinted capsule */
+.cv-task header em.warn { color: var(--em-orange, var(--warn)); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+.cv-task header em.bad { color: var(--em-red, var(--bad)); background: color-mix(in srgb, var(--bad) 13%, transparent); }
 .cv-task b { font-size: 13.5px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .cv-task p { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-task p.two { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; overflow-wrap: anywhere; }

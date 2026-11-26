@@ -169,7 +169,7 @@ export function AskCard({ q, seq, toast, onDone }: { q: Report; seq?: number; to
         </div>
       )}
       <div className="lc-reply">
-        <input className={text ? 'em-bar' : undefined} value={text} disabled={busy} placeholder={choices.length ? tr('或输入内容') : tr('输入你的回答')}
+        <input value={text} disabled={busy} placeholder={choices.length ? tr('或输入内容') : tr('输入你的回答')}
           onChange={e => setText(e.target.value)} onKeyDown={enterSends(() => answer(text))} />
         <button className={matter && !busy && text.trim() ? 'btn pri' : 'btn'} disabled={busy || !text.trim()} onClick={() => answer(text)}>{matter ? tr('定下来') : tr('回答')}</button>
       </div>

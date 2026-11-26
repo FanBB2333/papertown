@@ -4,6 +4,7 @@
 
 import { Tooltip } from '@cloudflare/kumo';
 import { typing } from '../components/walk';
+import { figures } from '../emphasis';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, listen, type Line, type Placement, type Report, type ShowTarget } from '../api';
 import { AgentDesk } from '../components/AgentRoom';
@@ -284,8 +285,8 @@ export function Console(p: Props) {
         </nav>
         <div className="fb-r">
           {waiting > 0 && (
-            <button className="fb-wait em-bar" data-tone="warn" onClick={() => { setRailTab('projects'); setFilter('you'); setRail(true); }} title={tr('{0} 项目待处理', waiting)}>
-              <i /><span className="fb-wl">{tr('{0} 项目待处理', waiting)}</span><b className="fb-wn">{waiting}</b>
+            <button className="fb-wait" onClick={() => { setRailTab('projects'); setFilter('you'); setRail(true); }} title={tr('{0} 项目待处理', waiting)}>
+              <i /><span className="fb-wl">{figures(tr('{0} 项目待处理', waiting))}</span><b className="fb-wn">{waiting}</b>
             </button>
           )}
           <label className="fb-q">

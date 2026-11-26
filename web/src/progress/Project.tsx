@@ -107,7 +107,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
             )}
             <div className="pj-upd">
               {r.lead?.started && !r.pending && (
-                <input className={note ? 'em-bar' : undefined} value={note} maxLength={300} placeholder={tr('向负责人附言（可选），例如「重点关注实验」')} onChange={e => setNote(e.target.value)}
+                <input value={note} maxLength={300} placeholder={tr('向负责人附言（可选），例如「重点关注实验」')} onChange={e => setNote(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) acts.update(note).then(ok => ok && setNote('')); }} />
               )}
               <UpdateButton r={r} acts={acts} defs={defs} note={note} secondary />
