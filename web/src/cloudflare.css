@@ -91,9 +91,8 @@ html.ui-cf .pg-rows { border-radius: 10px; }
 html.ui-cf .pr-head { background: var(--color-kumo-elevated); font-weight: 500; }
 html.ui-cf .pr-t h3 { font-weight: 600; font-size: 14px; }
 html.ui-cf .pg-gh { font-weight: 600; font-size: 14px; }
-html.ui-cf .psec { border-radius: 10px; box-shadow: none; }
-html.ui-cf .psec-h h3 { font-size: 15px; font-weight: 600; }
-html.ui-cf .psec-h h3 .ic { color: var(--muted); }
+html.ui-cf .psec { --sec-r: 10px; box-shadow: none; }
+html.ui-cf .psec-h h3 { font-size: 15px; font-weight: 650; }
 html.ui-cf .pj-title h1 { font: 600 22px/1.3 var(--font); }
 html.ui-cf .pd { border-radius: 10px; box-shadow: 0 16px 40px rgba(0, 0, 0, .18); }
 

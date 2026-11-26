@@ -3,6 +3,7 @@ import { StateWord, stateTone } from '../emphasis';
 import { Button, Dialog, Input } from '@cloudflare/kumo';
 import { Fragment, useEffect, useState } from 'react';
 import { api, listen, type LineUsage, type UsageBudget, type UsageProviderId, type UsageState, type UsageView, type UsageWindow, type UsageTokens } from '../api';
+import { Icon } from '../console/icons';
 import { tr } from '../i18n';
 import './usage.css';
 
@@ -182,8 +183,8 @@ export function ProjectUsage({ lineId }: { lineId: string }) {
     const off = listen(e => { if (e.type === 'usage') void load(); });
     return () => { alive = false; off(); };
   }, [lineId]);
-  return <section className="pj-box usage-project">
-    <header className="usage-between"><h2>{tr('用量与预算')}</h2><button className="btn" disabled={!value} onClick={() => setEditing(true)}>{tr('修改预算')}</button></header>
+  return <section className="psec usage-project">
+    <header className="psec-h"><h3><Icon n="stack" size={16} />{tr('用量与预算')}</h3><button className="btn" disabled={!value} onClick={() => setEditing(true)}>{tr('修改预算')}</button></header>
     {error && <p role="alert" className="usage-error em-state" data-tone="bad">{tr(error)}</p>}
     {!value && !error && <p>{tr('加载中…')}</p>}
     {value && <>

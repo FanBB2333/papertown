@@ -279,12 +279,19 @@ html:not(.ui-cf)[lang=en] :is(.p-prog, .pd-back) { --lw: 90px; }
 .pj-ex .chip:hover { border-color: var(--brand); color: var(--brand); }
 
 .psec {
-  display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel);
+  --sp-y: 18px; --sp-x: 20px; --sec-r: 14px;
+  display: flex; flex-direction: column; gap: 12px; padding: var(--sp-y) var(--sp-x); border-radius: var(--sec-r); border: 1px solid var(--line); background: var(--panel);
   box-shadow: 0 1px 0 rgba(84, 62, 40, .04); min-width: 0;
 }
+/* A section's title is a bar across its top, a shade off the panel and ruled under: the icon on a tile in the brand colour,
+   the name, then what belongs to the whole section. It is what sets one section apart from the next down the page. */
 .psec-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.psec-h h3 { margin: 0; display: inline-flex; align-items: center; gap: 8px; font: 400 18px var(--head); }
-.psec-h h3 .ic { color: var(--brand); }
+.psec > :is(.psec-h, .lp-h) {
+  margin: calc(-1 * var(--sp-y)) calc(-1 * var(--sp-x)) 2px; padding: 9px var(--sp-x); min-height: 48px; box-sizing: border-box;
+  border-bottom: 1px solid var(--line); border-radius: calc(var(--sec-r) - 1px) calc(var(--sec-r) - 1px) 0 0; background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.psec-h h3 { margin: 0; display: inline-flex; align-items: center; gap: 9px; font: 400 18px var(--head); color: var(--ink); }
+.psec > :is(.psec-h, .lp-h) h3 > .ic:first-child { box-sizing: content-box; flex: none; padding: 4px; border-radius: 7px; color: var(--brand); background: color-mix(in srgb, var(--brand) 11%, transparent); }
 .psec-h > :is(.btn, .pc-who):last-child { margin-left: auto; }
 .psec-empty { margin: 0; line-height: 1.65; }
 .pj-sum { flex-basis: 100%; grid-column: 1 / -1; margin: 0; font: 400 14px/1.5 var(--font); color: var(--muted); overflow-wrap: anywhere; }
@@ -405,7 +412,7 @@ em.src.s-claude-memory { background: color-mix(in srgb, var(--ok) 16%, transpare
   .pj-head .pj-title { display: grid; grid-template-columns: auto minmax(0, 1fr); flex-basis: 100%; gap: 6px 9px; }
   .pj-head .pj-status { grid-column: 2; }
   .pj-acts { width: 100%; }
-  .psec { padding: 14px 14px; }
+  .psec { --sp-y: 14px; --sp-x: 14px; }
   .pj-upd { flex-wrap: wrap; }
   .pj-upd input { flex-basis: 100%; font-size: 15px; }
   .pd-back { place-items: end stretch; padding: 0; }
@@ -457,5 +464,8 @@ em.src.s-claude-memory { background: color-mix(in srgb, var(--ok) 16%, transpare
 .dc-free input { flex: 1; min-width: 0; }
 .dc-note, .dc-empty { margin: 0; font-size: 12px; color: var(--muted); }
 .dc-err { margin: 0; font-size: 12px; color: var(--bad); }
-.pj-decide .psec-h h3 .ic { color: var(--muted); }
-.pj-n { font: 400 12px var(--mono, ui-monospace, monospace); color: var(--muted); }
+/* the section that waits on you: ringed and its title bar washed in the warning colour, the count a filled pill */
+.pj-decide { border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+.psec.pj-decide > .psec-h { background: color-mix(in srgb, var(--warn) 9%, transparent); border-bottom-color: color-mix(in srgb, var(--warn) 30%, var(--line)); }
+.psec.pj-decide > .psec-h h3 > .ic:first-child { color: var(--em-orange, var(--warn)); background: color-mix(in srgb, var(--warn) 17%, transparent); }
+.pj-n { min-width: 8px; padding: 0 7px; border-radius: 10px; font: 600 12px/19px var(--font); text-align: center; font-variant-numeric: tabular-nums; color: var(--brand-ink, #fff); background: var(--warn); }

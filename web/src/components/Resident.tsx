@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, listen, type Resident, type Stage } from '../api';
+import { Icon } from '../console/icons';
 import { tr } from '../i18n';
 import { follow, href } from '../route';
 import './resident.css';
@@ -53,19 +54,22 @@ export function ResidentControl({ lineId, resident, model, sample, talk, onStart
     } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   }
   return <section className={`psec resident-control rs-${resident.state}`} aria-label={tr('项目负责人')} aria-busy={busy}>
+    <header className="psec-h">
+      <h3><Icon n="person" size={16} />{tr('项目负责人')}</h3>
+      <ResidentMark resident={resident} />
+      {resident.state !== 'ended' && <div className="resident-actions">
+        {resident.state === 'blocked' && <button className="btn" disabled={busy} onClick={() => set(true)}>{tr('重试')}</button>}
+        {(resident.state === 'off' || resident.state === 'blocked') && (onStartWith
+          ? <button className="btn" disabled={busy} onClick={onStartWith}>{tr('选择方式启动')}</button>
+          : resident.state === 'blocked' && talk && <a className="btn" href={href(talk)} onClick={e => follow(e, talk)}>{tr('在对话中手动启动')}</a>)}
+        <button type="button" role="switch" aria-checked={resident.on} aria-label={tr('项目负责人开关')} className="resident-switch" disabled={busy} onClick={() => set(!resident.on)}><span aria-hidden /></button>
+      </div>}
+    </header>
     <div className="resident-copy" aria-live="polite">
-      <b className="resident-title">{tr('项目负责人')}<ResidentMark resident={resident} /></b>
       {resident.state === 'running' && <p className="muted small">{[resident.runtime, model, resident.status === 'working' ? tr('工作中') : resident.status === 'idle' ? tr('待命') : resident.status].filter(Boolean).join(' · ')}</p>}
       {resident.state === 'blocked' && <p className="resident-warning em-bar" data-tone="warn">{resident.note ?? tr('负责人启动失败。')}</p>}
       {resident.state === 'off' && sample && <p className="muted small">{tr('此为样例项目，内含占位内容。打开开关后，将由真实负责人接管推进。')}</p>}
       {(resident.state === 'starting' || resident.state === 'ended' || (resident.state === 'off' && !sample)) && <p className="muted small">{ABOUT[resident.state]}</p>}
     </div>
-    {resident.state !== 'ended' && <div className="resident-actions">
-      {resident.state === 'blocked' && <button className="btn" disabled={busy} onClick={() => set(true)}>{tr('重试')}</button>}
-      {(resident.state === 'off' || resident.state === 'blocked') && (onStartWith
-        ? <button className="btn" disabled={busy} onClick={onStartWith}>{tr('选择方式启动')}</button>
-        : resident.state === 'blocked' && talk && <a className="btn" href={href(talk)} onClick={e => follow(e, talk)}>{tr('在对话中手动启动')}</a>)}
-      <button type="button" role="switch" aria-checked={resident.on} aria-label={tr('项目负责人开关')} className="resident-switch" disabled={busy} onClick={() => set(!resident.on)}><span aria-hidden /></button>
-    </div>}
   </section>;
 }

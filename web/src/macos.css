@@ -240,7 +240,10 @@ html.ui-mac .pc-stages:not(.named) li:not(.s-done, .s-run, .s-wait), html.ui-mac
 html.ui-mac .pc-metrics > div { border-radius: 9px; background: light-dark(rgb(0 0 0 / .035), rgb(255 255 255 / .06)); }
 html.ui-mac .pg-rows { border: 0; border-radius: 16px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift); overflow: hidden; }
 html.ui-mac .pr-head { background: light-dark(rgb(0 0 0 / .03), rgb(255 255 255 / .05)); }
-html.ui-mac .psec { border: 0; border-radius: 16px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift); }
+html.ui-mac .psec { --sec-r: 16px; border: 0; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift); }
+html.ui-mac .psec > :is(.psec-h, .lp-h) { border-radius: var(--sec-r) var(--sec-r) 0 0; border-bottom-color: var(--mac-sep); }
+html.ui-mac .pj-records { border: 0; border-radius: 16px; background: var(--lg-card); box-shadow: var(--lg-rim), var(--lg-lift); }
+html.ui-mac .psec.pj-decide { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--warn) 50%, transparent), var(--lg-lift); }
 html.ui-mac .pj-card::before { left: 7px; top: 18px; bottom: 18px; width: 3px; border-radius: 3px; }
 html.ui-mac .pj-title h1 { font: 700 24px/1.25 var(--font); letter-spacing: -.01em; }
 html.ui-mac .pd { border: 0; border-radius: 20px; background: rgb(var(--lg-tint) / max(.86, var(--lg-a))); box-shadow: var(--lg-edge), var(--lg-rim), var(--lg-drop); -webkit-backdrop-filter: var(--lg-filter); backdrop-filter: var(--lg-filter); }

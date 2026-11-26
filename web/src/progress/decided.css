@@ -85,8 +85,12 @@
 
 /* The two summaries are links directly below the resident control. */
 .pj > .resident-control { margin-bottom: 0; }
-.pj-records { margin-block-start: -6px; }
-.pj-records a { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 5px 16px; color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
+/* the two records of a project, as one ruled panel: each line names itself in ink, its figures follow */
+.pj-records { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.pj-records a { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 5px 20px; color: var(--muted); text-decoration: none; }
+.pj-records a + a { border-top: 1px solid var(--line); }
+.pj-records a > .ic:first-child { color: var(--brand); }
+.pj-records :is(.rec-prefix, .rec-stats > .rec-stat:first-child) { color: var(--ink); font-weight: 600; }
 .pj-records a > .ic { flex: none; }
 .pj-records a > .ic:last-child { margin-left: auto; }
 .pj-records a:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 3%, transparent); }

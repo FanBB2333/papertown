@@ -69,7 +69,7 @@ export function Project({ r, defs, toast, onChange, onConsole }: {
         <RecordLink id="prov" to={provPath(line.seq)}><Icon n="branch" size={15} /><ProvNumbers stats={r.prov} project /><Icon n="right" size={14} /></RecordLink>
       </nav>
       {!!pending.length && <section className="psec pj-decide" id="decide">
-        <header className="psec-h"><h3><Icon n="bell" size={16} />{tr('待你决定')}<span className="pj-n em-num" data-tone="warn">{pending.length}</span></h3></header>
+        <header className="psec-h"><h3><Icon n="bell" size={16} />{tr('待你决定')}<span className="pj-n">{pending.length}</span></h3></header>
         <DecideList r={r} onGone={() => api.card(line.id).then(onChange, e => toast((e as Error).message, true))} />
       </section>}
       <LoopCard r={r} toast={toast} />
