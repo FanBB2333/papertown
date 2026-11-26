@@ -144,6 +144,9 @@ interface Side {
   // why it cannot be reached now (Paseo is not running, say), as the conversation on screen finds it; empty when it can
   down: string;
   setDown: (why: string) => void;
+  // start it again another way (in a terminal, when Paseo cannot be reached)
+  start: (o: StartOpts) => void;
+  busy: boolean;
 }
 
 export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea }: {
@@ -244,7 +247,7 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea 
   const a = view?.agent;
   const side: Side | null = view && {
     view, head, send, toast, focus, setFocus, sel, setSel, submit,
-    pointing: !!pointing, point, unpoint: () => setPointing(null), down, setDown,
+    pointing: !!pointing, point, unpoint: () => setPointing(null), down, setDown, start, busy,
   };
   return (
     <div className="asst">
@@ -345,9 +348,10 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
             <div className="as-off" role="status">
               <b>{tr('无法连接 Paseo，小助手当前无法收消息')}</b>
               <p>{err}</p>
-              <p className="muted">{tr('Paseo 启动后将自动重连。撰写新 idea 正常可用。')}</p>
+              <p className="muted">{tr('可以在下方改用终端启动小助手。撰写新 idea 正常可用。')}</p>
             </div>
           )}
+          {err && <div className="hire-card"><h3>{tr('改用终端启动')}</h3><TerminalPick busy={side.busy} onStart={side.start} role="assistant" agentId="assistant" /></div>}
           {loading && <p className="as-wait">{tr('加载中…')}</p>}
           {rows.map((r, i) => r.k === 'you' ? <YouMsg key={r.key} r={r} />
             : r.k === 'it' ? <ReplyMsg key={r.key} r={r} last={i === replied}

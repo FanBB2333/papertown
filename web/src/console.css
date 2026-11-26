@@ -1204,8 +1204,8 @@ td.heat.best { font-weight: 700; }
 
 .as-start { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; overflow-y: auto; }
 .as-lead { margin: 0; font-size: 13px; line-height: 1.65; color: var(--muted); }
-.as-start .hire-card { padding: 14px; gap: 8px; }
-.as-start .hire-card h3 { font-size: 15px; }
+:is(.as-start, .as-log) .hire-card { padding: 14px; gap: 8px; }
+:is(.as-start, .as-log) .hire-card h3 { font-size: 15px; }
 
 /* earlier conversations */
 .as-convs { display: flex; flex-direction: column; gap: 2px; }
