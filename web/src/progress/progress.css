@@ -15,7 +15,8 @@ html:not(.ui-cf)[lang=en] :is(.p-prog, .pd-back) { --lw: 90px; }
 .proto[data-mode=cards] .p-prog { display: block; animation: rise-in .5s var(--out) both; }
 .proto[data-mode=cards] .w-only { display: none; }
 .proto[data-mode=cards] :is(.p-world, .t3) { visibility: hidden; }
-.proto[data-mode=cards]:not(:has(> .cv)) .dock:not(.open) { display: none; } /* a project's canvas keeps it in reach (canvas.css) */
+/* the assistant's line floats over the bottom of the list and of a project's page: the last of the page scrolls clear of it */
+.proto[data-mode=cards] .p-prog::after { content: ''; display: block; height: 76px; }
 
 .pg-wrap { max-width: var(--pg-max, 1840px); zoom: var(--pg-zoom, 1); margin: 0 auto; padding: 26px 28px 56px; display: flex; flex-direction: column; gap: 18px; }
 .pg-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }

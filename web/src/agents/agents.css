@@ -21,7 +21,7 @@
 .aw-idle, .aw-off { --aw-color: var(--muted); }
 .aw-dot { width: 7px; height: 7px; flex: none; border: 1px solid currentColor; border-radius: 50%; background: currentColor; }
 .aw-off .aw-dot { background: transparent; }
-.proto[data-mode=agents] :is(.w-only, .hud .modes, .dock:not(.open)) { display: none; }
+.proto[data-mode=agents] :is(.w-only, .hud .modes) { display: none; }
 .proto[data-mode=agents] :is(.p-world, .t3) { visibility: hidden; }
 
 /* The employees page: the list, the open conversation, and a context column that folds away.

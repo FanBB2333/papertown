@@ -7,7 +7,12 @@
   transform: translateX(-50%); transition: width .55s var(--spring), opacity .4s var(--out), transform .55s var(--spring);
 }
 .dock.open { --dk-w: 760px; }
-.dock.away:not(.open) { opacity: 0; transform: translate(-50%, 28px); pointer-events: none; }
+/* Where a page has its own message box (the agents page, a conversation, the records laid over a project) the closed
+   line steps aside. It fades and sinks, it is never removed, so opening it from the top bar still grows from the bottom. */
+:is(.dock.away, .proto[data-mode=agents] .dock, .proto[data-mode=cards]:has(> .ak) .dock):not(.open) {
+  opacity: 0; transform: translate(-50%, 28px); pointer-events: none; visibility: hidden;
+  transition: width .55s var(--spring), opacity .4s var(--out), transform .55s var(--spring), visibility 0s .4s;
+}
 .proto[data-mode=console] .dock { bottom: 10px; }
 .proto[data-mode=console] .cm { padding-bottom: 64px; }
 .proto[data-mode=console] .cm::after { content: ''; position: absolute; left: 0; right: 0; bottom: 64px; height: 1px; background: var(--line); pointer-events: none; }
