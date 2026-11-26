@@ -1183,7 +1183,7 @@ td.heat.best { font-weight: 700; }
 .as-head { flex: none; display: flex; align-items: center; gap: 2px; height: 48px; padding: 0 8px 0 15px; border-bottom: 1px solid var(--line); }
 .as-head > .dot { margin-right: 9px; }
 .as-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.as-who b { font-size: 13.5px; font-weight: 600; line-height: 1.25; }
+.as-who b { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; line-height: 1.25; }
 .as-who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; line-height: 1.3; color: var(--muted); }
 .as-sub { flex: none; display: flex; padding: 6px 12px; border-bottom: 1px solid var(--line); }
 .as-sub .pi-switch { flex-wrap: wrap; margin: 0; }
@@ -1226,7 +1226,7 @@ td.heat.best { font-weight: 700; }
 .as-log .note { align-self: center; }
 
 .as-you { align-self: flex-end; max-width: 88%; min-width: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
-.asst .as-you .msg-u { max-width: 100%; padding: 8px 12px; background: transparent; font-size: 13.5px; }
+.asst .as-you .msg-u { max-width: 100%; padding: 8px 12px; background: color-mix(in srgb, var(--brand) 16%, var(--panel)); font-size: 13.5px; }
 .as-said { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 10px; max-width: 100%; font-size: 11px; color: var(--muted); }
 .as-said span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
 .as-said i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: normal; }

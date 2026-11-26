@@ -1,5 +1,7 @@
 .resident-mark { display: inline-flex; align-items: center; gap: .4em; white-space: nowrap; font-size: .85em; color: var(--muted); }
 .resident-mark > i { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }
+/* beside the lead's name in a title bar it is a state capsule, like a project's */
+:is(.psec-h, .as-who b) > .resident-mark { padding: 0 9px 0 8px; border-radius: 99px; font: 500 12px/21px var(--font); background: color-mix(in srgb, currentColor 12%, transparent); }
 .resident-mark.rs-running { color: var(--ok, #24804b); }
 .resident-mark.rs-starting { color: var(--brand, #2968b8); }
 .resident-mark.rs-blocked, .resident-warning { color: var(--warn, #a76814); }
@@ -17,7 +19,9 @@
 .resident-switch:focus-visible { outline: 2px solid var(--brand, #2968b8); outline-offset: 3px; }
 .resident-switch:disabled { opacity: .55; cursor: wait; }
 .stage-agent { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }
-.resident-history { margin-bottom: 18px; }
+/* the earlier conversation above the lead's panel: one message under another with room between, yours to the right */
+.resident-history { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.resident-history > h3 { margin: 0; }
 .theme-sketch.calm .resident-mark > i { animation: none; }
 .theme-sketch.calm .resident-switch, .theme-sketch.calm .resident-switch > span { transition: none; }
 @keyframes resident-live { 50% { opacity: .45; } }

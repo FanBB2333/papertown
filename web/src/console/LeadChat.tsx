@@ -58,9 +58,8 @@ export function LeadChat({ lineId, seq, layout, onClose, toast }: {
 
   const head = (x: Agent | null) => (
     <header className="as-head">
-      {v && <ResidentMark resident={v.resident} />}
       <div className="as-who">
-        <b>{tr('项目负责人')}{layout === 'side' ? ` · #${seq}` : ''}</b>
+        <b>{tr('项目负责人')}{layout === 'side' ? ` · #${seq}` : ''}{v && <ResidentMark resident={v.resident} />}</b>
         {x?.started && <span>{x.model}</span>}
       </div>
       {x?.runtime === 'paseo' && <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('历史对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>}
