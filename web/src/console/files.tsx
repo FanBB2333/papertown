@@ -152,7 +152,7 @@ export function Tree({ files, cur, onOpen, dirty, filter = '', root }: {
           onClick={() => onOpen(f.path)} title={`${f.path} · ${bytes(f.size)}`} data-ref={`file:${root}:${f.path}`} data-ref-label={f.path}>
           <FileIcon path={f.path} theme={icons} /><span className="tr-name">{hitText(base(f.path), filter)}</span>
           {dirty.has(f.path) && <i className="tr-dirty" title={tr('尚未保存')} />}
-          {m && <em className="tr-mark em-mark" data-tone="warn" title={m[1]}>{m[0]}</em>}
+          {m && <em className="tr-mark" title={m[1]}>{m[0]}</em>}
         </button>,
       );
     }

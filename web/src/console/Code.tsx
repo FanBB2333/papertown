@@ -86,7 +86,7 @@ function Repo(p: Props) {
             <span className="ide-t">{tr('改动 · {0}', changed.length)}</span>
             {changed.slice(0, 6).map(x => (
               <button key={x.path} className={`ide-ch st-${x.status}`} onClick={() => open(x.path)} title={x.path}>
-                <span>{x.path}</span><em className="em-mark" data-tone="warn">{x.status?.[0].toUpperCase()}</em>
+                <span>{x.path}</span><em>{x.status?.[0].toUpperCase()}</em>
               </button>
             ))}
             {changed.length > 6 && <span className="muted small">{tr('还有 {0} 个', changed.length - 6)}</span>}

@@ -397,7 +397,10 @@ li.more:hover { color: var(--brand); }
 .tr-dir.marked .tr-name::after { content: ''; display: inline-block; width: 5px; height: 5px; margin-left: 6px; vertical-align: middle; border-radius: 50%; background: var(--ed-gitMod); }
 .tr-mark { flex: none; font: 600 10.5px ui-monospace, Menlo, monospace; font-style: normal; }
 .tr-dirty { width: 7px; height: 7px; border-radius: 50%; background: var(--ed-fg); flex: none; }
-.ide-ch.st-modified em { color: var(--ed-gitMod); }
+/* a file's git state in the editor's own colours: changed, new, deleted */
+:is(.st-modified, .st-renamed) :is(.tr-name, .tr-mark, em), .ide-ch.st-modified em { color: var(--ed-gitMod); }
+:is(.st-untracked, .st-added) :is(.tr-name, .tr-mark, em) { color: var(--ed-gitAdd); }
+.st-deleted :is(.tr-name, .tr-mark, em) { color: var(--ed-gitDel); text-decoration-line: line-through; }
 .tr-none { padding: 8px 14px; }
 .ide-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .etabs { flex: none; display: flex; height: 36px; background: var(--ed-tabs); border-bottom: 1px solid var(--ed-border); }

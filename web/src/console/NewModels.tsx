@@ -47,7 +47,7 @@ export function NewModels({ toast }: { toast: (t: string, error?: boolean) => vo
   return (
     <aside className="mnews" role="dialog" aria-label={tr('Paseo 有新模型')}>
       <button className="ib mn-x" onClick={() => setHidden(true)} title={tr('暂时收起，下次打开时提醒')}><Icon n="close" size={14} /></button>
-      <span className="mn-k em-mark"><Icon n="spark" size={15} />{news.length > 1 ? tr('Paseo 新增 {0} 个新模型', news.length) : tr('Paseo 已上线新模型')}</span>
+      <span className="mn-k"><Icon n="spark" size={15} />{news.length > 1 ? tr('Paseo 新增 {0} 个新模型', news.length) : tr('Paseo 已上线新模型')}</span>
       <div className="mn-list" role="radiogroup">
         {newest.map(n => (
           <button key={n.key} role="radio" aria-checked={n.key === m.key} className={`mn-m${n.key === m.key ? ' on' : ''}`} onClick={() => setKey(n.key)}>

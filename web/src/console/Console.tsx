@@ -381,7 +381,7 @@ function Drawer({ mod, narrow, locked, setNarrow, line, code, onPick }: {
         title={`${m.name} · ${m.sub}${i < 10 ? `  (${(i + 1) % 10})` : ''}`} style={{ ['--i' as string]: i }}>
         <Icon n={m.icon} size={18} />
         <span className="cd-name">{m.name}</span>
-        {m.id === 'code' && code > 0 ? <em className="cd-n em-mark" data-tone="warn" title={tr('{0} 处改动', code)}>{code}</em> : k && <i className={`cd-dot k-${k}`} />}
+        {m.id === 'code' && code > 0 ? <em className="cd-n" title={tr('{0} 处改动', code)}>{code}</em> : k && <i className={`cd-dot k-${k}`} />}
       </button>
     );
   };
@@ -408,7 +408,7 @@ function PhoneTabs({ mod, line, code, onPick }: { mod: ModId; line: Line | null;
   const pick = (m: ModId) => { setMore(false); onPick(m); };
   const mark = (m: ModId) => {
     const k = markOf(line, m);
-    return m === 'code' && code > 0 ? <em className="cd-n em-mark" data-tone="warn">{code}</em> : k && <i className={`cd-dot k-${k}`} />;
+    return m === 'code' && code > 0 ? <em className="cd-n">{code}</em> : k && <i className={`cd-dot k-${k}`} />;
   };
   const behind = code > 0 || line?.lead.state === 'blocked';
   return (
