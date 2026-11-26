@@ -86,7 +86,7 @@ export function OpLine({ op, seq, selected }: { op: Op; seq: number; selected?: 
     <span className="rec-op-time"><Stamp compact at={op.ts} /></span>
     <span className="rec-op-who">{trx(op.who) || tr('归属待核实')}</span><code>{op.short || op.id.slice(0, 7)}</code>
     <span title={tr('{0} 个文件', op.files ?? '—')}>{op.files ?? '—'}</span>
-    <span className="rec-lines"><i className={op.added ? 'em-mark' : undefined}>+{op.added ?? '—'}</i> <i className={op.removed ? 'em-mark' : undefined}>−{op.removed ?? '—'}</i></span>
+    <span className="rec-lines"><i data-n={op.added || undefined}>+{op.added ?? '—'}</i> <i data-n={op.removed || undefined}>−{op.removed ?? '—'}</i></span>
   </RecordLink>;
 }
 

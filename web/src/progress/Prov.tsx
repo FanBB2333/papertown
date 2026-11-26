@@ -29,7 +29,7 @@ function Checks({ n, compact }: { n: Partial<ProvNode>; compact?: boolean }) {
   ].filter(x => !!x);
   if (!issues.length) return null;
   return <span className="pr-checks" title={issues.map(i => i.text).join(' · ')}>
-    {(compact ? issues.slice(0, 1) : issues).map(i => <span key={i.text} className="em-state" data-tone={i.missing ? 'bad' : 'warn'}>{i.text}</span>)}
+    {(compact ? issues.slice(0, 1) : issues).map(i => <span key={i.text} className="em-tag" data-tone={i.missing ? 'bad' : 'warn'}>{i.text}</span>)}
   </span>;
 }
 
@@ -183,7 +183,7 @@ function OperationDetail({ line, seq, id, tick }: { line: string; seq: number; i
       <Info label={tr('依据')}><Basis seq={seq} ids={o.basis} /></Info>
     </dl>
     <section className="rec-section"><h4>{tr('改动的文件')} · {o.files?.length ?? 0}</h4>
-      {(o.files ?? []).map(f => <details className="pr-patch" key={f.path} open><summary><code>{f.path}</code> <span className="rec-lines"><i className={f.added ? 'em-mark' : undefined}>+{f.added}</i> <i className={f.removed ? 'em-mark' : undefined}>−{f.removed}</i></span></summary><Diff value={f.diff} /></details>)}
+      {(o.files ?? []).map(f => <details className="pr-patch" key={f.path} open><summary><code>{f.path}</code> <span className="rec-lines"><i data-n={f.added || undefined}>+{f.added}</i> <i data-n={f.removed || undefined}>−{f.removed}</i></span></summary><Diff value={f.diff} /></details>)}
     </section></>;
 }
 

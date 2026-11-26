@@ -1,19 +1,24 @@
 /* Indentation belongs to the source tree. The same record can appear in a detail without it. */
 .pr-index { container-type: inline-size; }
-.pr-file { padding-block: 12px; }
-.pr-file + .pr-file { border-top: 1px solid var(--line); }
-.pr-file h3 { margin: 0; font: 600 14px/1.5 var(--font); }
+/* a file of the paper, or the results nothing uses yet: a panel with the same ruled title bar as a section of the project page */
+.pr-file { margin-block: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.pr-file h3 { display: flex; align-items: center; min-height: 42px; box-sizing: border-box; margin: 0; padding: 8px 16px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 3%, transparent); font: 600 14px/1.5 var(--font); }
+.pr-file > .pr-tree { margin: 4px 16px 6px; }
 .pr-file h3 a { display: inline-flex; max-width: 100%; align-items: center; gap: 7px; color: var(--ink); text-decoration: none; }
 .pr-file h3 a > span { overflow-wrap: anywhere; }
-.pr-file h3 .ic, .pr-file h3 small { color: var(--muted); flex: none; }
+.pr-file h3 small { color: var(--muted); flex: none; }
+.pr-file h3 .ic { flex: none; color: var(--brand); }
 .pr-file h3 small { max-width: 45%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 400 12px var(--font); }
 .pr-file[data-selected] h3 a { color: var(--brand); }
 .pr-file h3 a:hover span { text-decoration: underline; text-underline-offset: 3px; }
-.pr-section { padding-top: 10px; }
-.pr-other { margin-block-start: 10px; color: var(--muted); font-size: 13px; }
-.pr-other summary { cursor: pointer; padding-block: 5px; }
-.pr-section h4, .pr-rest { color: var(--muted); font: 400 12px/1.6 var(--font); }
-.pr-section h4 small { margin-inline-start: 4px; font: 11px var(--mono, ui-monospace, Menlo, monospace); }
+/* a section of the paper: its name in ink over the records under it, the line it starts at in grey */
+.pr-section { padding: 10px 16px 8px; }
+.pr-section + .pr-section, .pr-other { border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+.pr-other { color: var(--muted); font-size: 13px; }
+.pr-other summary { cursor: pointer; padding: 8px 16px; }
+.pr-section h4 { color: var(--ink); font: 600 13px/1.6 var(--font); }
+.pr-rest { color: var(--muted); font: 400 12px/1.6 var(--font); }
+.pr-section h4 small { margin-inline-start: 6px; color: var(--muted); font: 400 11px var(--mono, ui-monospace, Menlo, monospace); }
 .pr-rest { display: flex; flex-wrap: wrap; gap: 2px 8px; padding-block: 5px 0; }
 .pr-tree, .pr-tree ul { list-style: none; padding: 0; }
 .pr-tree { margin-block: 2px; }
@@ -34,7 +39,7 @@
 .pr-node:hover .pr-node-title { text-decoration: underline; text-underline-offset: 3px; }
 .pr-node-meta { margin-inline-start: auto; flex: none; display: inline-flex; align-items: baseline; gap: 10px; color: var(--muted); font: 400 11.5px/1.5 var(--font); }
 .pr-node-meta > span { max-width: 8em; overflow: hidden; text-overflow: ellipsis; }
-.pr-checks { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; color: color-mix(in srgb, var(--warn) 70%, var(--ink)); font: 500 12px/1.5 var(--font); }
+.pr-checks { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 3px 5px; }
 .pr-node .pr-checks { flex: none; font-size: 11.5px; }
 .pr-missing { color: color-mix(in srgb, var(--bad) 76%, var(--ink)); }
 .pr-info { display: grid; gap: 4px; margin: 0; font: 400 13px/1.5 var(--font); }
@@ -70,9 +75,10 @@
 .rec-op[aria-current=true] :is(code, time) { color: var(--brand); }
 .rec-op-list + .kumo-ui { margin-block: 12px; }
 .rec-lines { display: inline-flex; gap: 7px; font: 12px/1.5 var(--mono, ui-monospace, Menlo, monospace); }
-.rec-lines i { font-style: normal; }
-.pr-patch .rec-lines i:first-child { color: color-mix(in srgb, var(--ok) 54%, var(--ink)); }
-.pr-patch .rec-lines i:last-child { color: color-mix(in srgb, var(--bad) 54%, var(--ink)); }
+/* lines added in green and removed in red, a zero in grey */
+.rec-lines i { font-style: normal; color: var(--muted); }
+.rec-lines i[data-n]:first-child { font-weight: 600; color: var(--em-green, var(--ok)); }
+.rec-lines i[data-n]:last-child { font-weight: 600; color: var(--em-red, var(--bad)); }
 
 @container (max-width: 480px) {
   .pr-tree ul { margin-inline-start: 4px; padding-inline-start: 5px; }
