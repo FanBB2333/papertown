@@ -278,13 +278,13 @@ function HardReport({ v }: { v: CanvasView }) {
             <li key={c.id}>
               <code>[{c.prio}]</code><span>{trx(c.rule)} {trx(c.title)}</span>
               <b className={first != null && first !== now ? 'em-mark' : 'em-num'} data-tone={stateTone(lv)}>{first != null && first !== now ? tr('{0} 处 → {1} 处', first, now ?? 0) : tr('{0} 处', now ?? 0)}</b>
-              <em className={stateTone(lv) ? 'em-state' : 'muted'} data-tone={stateTone(lv)}>{pill[1]}</em>
+              <em className={`lp-pill ${pill[0]}`}>{pill[1]}</em>
             </li>
           );
         })}
         {rest.length > 0 && (
           <li className="rest"><code>[{[...new Set(rest.map(c => c.prio))].sort().join('/')}]</code><span>{rest.slice(0, 3).map(c => trx(c.title)).join('、')}{rest.length > 3 ? tr(' 等 {0} 项', rest.length) : ''}</span>
-            <b>{tr('全部达标')}</b><em className="muted">{tr('已放行 ✓')}</em></li>
+            <b>{tr('全部达标')}</b><em className="lp-pill ok">{tr('已放行 ✓')}</em></li>
         )}
         {!hard.length && <li className="muted small">{tr('暂无可查结果：论文与实验产出后将自动检查')}</li>}
       </ul>
@@ -299,18 +299,20 @@ function SoftReport({ v, lineId, toast }: { v: CanvasView; lineId: string; toast
   return (
     <section className="lp-rep-s">
       <header><h4><i className="cv-ring2" />{tr('软检测航向汇报')}<span>{tr('负责人语义巡检结论')}</span></h4>
-        <button className="lnk" disabled={busy || !v.lead} title={v.lead ? '' : tr('先配一位项目负责人')}
+        <button className="btn lp-ask" disabled={busy || !v.lead} title={v.lead ? '' : tr('先配一位项目负责人')}
           onClick={() => { setBusy(true); api.askAll(lineId).then(x => toast(tr('已请负责人复审 {0} 项', x.n))).catch(e => toast((e as Error).message, true)).finally(() => setBusy(false)); }}>
-          {tr('立即请负责人复审')}<Icon n="refresh" size={12} />
+          <Icon n="refresh" size={12} />{tr('立即请负责人复审')}
         </button>
       </header>
       <ul>
         {[...soft].sort((a, b) => order(a) - order(b)).map(c => {
           const k = status(c);
           return (
-            <li key={c.id}>
-              <em><StateWord state={k}>{VERDICT[k]}</StateWord></em>
-              <div><b>{trx(c.title)}</b><p>{modelText(c.last?.note) || (c.asked ? tr('{0}询问负责人，尚未回复', ago(c.asked)) : trx(c.text))}</p></div>
+            <li key={c.id} className={`v-${k}`}>
+              <i className="cv-ring2" aria-hidden="true" />
+              <b>{trx(c.title)}</b>
+              <em className={`lp-pill v-${k}`}>{VERDICT[k]}{k === 'pass' ? ' ✓' : k === 'warn' || k === 'fail' ? ' !' : ''}</em>
+              {c.last?.note ? <p className="said">{modelText(c.last.note)}</p> : <p>{c.asked ? tr('{0}询问负责人，尚未回复', ago(c.asked)) : trx(c.text)}</p>}
             </li>
           );
         })}

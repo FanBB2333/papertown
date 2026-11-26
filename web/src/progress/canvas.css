@@ -694,18 +694,26 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .lp-row :is(.lp-sen, .lp-st, .lp-gate, .lp-tk):hover { filter: brightness(.97); outline: 2px solid color-mix(in srgb, var(--brand) 35%, transparent); outline-offset: 1px; }
 .lp-row :is(.lp-sen, .lp-st, .lp-gate, .lp-tk):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .lp-rep { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
-.lp-rep > section { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
-.lp-rep header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.lp-rep header .lnk { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 12.5px; }
+/* the two reports under the loop: each a panel with the same ruled title bar as a section, a size down */
+.lp-rep > section { --rp-y: 12px; --rp-x: 14px; min-width: 0; padding: var(--rp-y) var(--rp-x); border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.lp-rep > section > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; min-height: 42px; box-sizing: border-box;
+  margin: calc(-1 * var(--rp-y)) calc(-1 * var(--rp-x)) 4px; padding: 7px var(--rp-x); border-bottom: 1px solid var(--line); border-radius: 11px 11px 0 0; background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.lp-rep h4 { margin: 0; flex-wrap: wrap; row-gap: 2px; }
+.lp-rep header .lp-ask { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; white-space: nowrap; font-size: 12.5px; }
 .lp-rep ul { list-style: none; margin: 0; padding: 0; }
 .lp-rep-h li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-size: 12.5px; }
 .lp-rep-h li:last-child, .lp-rep-s li:last-child { border-bottom: 0; }
 .lp-rep-h li code { font: 600 11px var(--lp-mono); color: var(--muted); }
 .lp-rep-h li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-rep-h li b { font: 600 12px var(--lp-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.lp-rep-s li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-size: 12.5px; }
-.lp-rep-s li b { font-weight: 600; }
-.lp-rep-s li p { margin: 2px 0 0; color: var(--muted); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* a sentinel: its ring in the verdict's colour, its name, the verdict as a pill at the end of the line; under the name, what the lead
+   said (in ink) or, until it has, the question it is asked (muted). Every name starts at the same place whatever the verdict's length. */
+.lp-rep-s li { --c: var(--muted); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 3px 9px; padding: 10px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-size: 12.5px; }
+.lp-rep-s li.v-pass { --c: var(--lp-pass); } .lp-rep-s li.v-warn { --c: var(--lp-amber); } .lp-rep-s li.v-fail { --c: var(--lp-hard); }
+.lp-rep-s li > .cv-ring2 { --c: inherit; border-color: var(--c); background: radial-gradient(circle, var(--c) 0 32%, transparent 38%); }
+.lp-rep-s li > b { min-width: 0; font-size: 13.5px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.lp-rep-s li > p { grid-column: 2 / -1; margin: 0; color: var(--muted); line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.lp-rep-s li > p.said { color: var(--ink); }
 .lp-pill { --c: var(--muted); flex: none; display: inline-block; padding: 1px 8px; border-radius: 6px; font-style: normal; font-size: 11px; font-weight: 600; white-space: nowrap;
   color: color-mix(in srgb, var(--c) 85%, var(--ink)); background: color-mix(in srgb, var(--c) 13%, transparent); }
 .lp-pill:is(.ok, .v-pass) { --c: var(--lp-pass); } .lp-pill:is(.warn, .v-warn) { --c: var(--lp-amber); } .lp-pill:is(.bad, .v-fail) { --c: var(--lp-hard); }
@@ -797,6 +805,7 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 @media (max-width: 760px) {
   .cv-top { gap: 8px; padding: 8px 10px; }
   .cv-top h2 { flex: 1; }
+  .cv-sum { display: none; }
   .cv-acts { margin-left: 0; }
   .cv-filter { order: 3; max-width: 100%; overflow-x: auto; }
   .cv-find { order: 4; flex: 1 1 110px; max-width: none; min-width: 0; }
@@ -805,7 +814,6 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
   .cv-body { position: relative; }
   .cv-side, .cv-side.wide { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; width: auto; max-height: 70%; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 30px rgb(0 0 0 / .16); animation-name: cv-sheet-in; }
   .lp-rep { grid-template-columns: minmax(0, 1fr); }
-  .cv-sum { display: none; }
   .cv .cv-legend, .lp-rep h4 span, .lp-rep header small { display: none; }
   .lr { inset: 0; border-radius: 0; padding: 14px; }
 }
