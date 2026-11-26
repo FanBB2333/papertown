@@ -12,7 +12,7 @@ import { setSettings, useSettings, type PgGroup, type PgSort, type Settings as S
 import { AskPage } from './Ask';
 import { DisplayMenu, rowCols } from './Display';
 import { pagesPath, PagesView, type PageOpen } from './Pages';
-import { AskButton, CardPane, opens, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
+import { AskButton, CardPane, opens, paneEmpty, PANES, UpdateButton, Stages, useCardActs, Who, youNeeded } from './parts';
 import { Project, type ConsoleTarget } from './Project';
 import { ProjectRows, type Group } from './Rows';
 
@@ -139,7 +139,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
               <div className="pg-title">
                 <h1>{tr('项目进展')}</h1>
                 <p className="muted small">
-                  {rows ? tr('{0} 个项目', rows.length) : '…'}{waiting > 0 && <> · <b className="em-bar" data-tone="warn">{tr('{0} 项待处理', waiting)}</b></>}
+                  {rows ? tr('{0} 个项目', rows.length) : '…'}{waiting > 0 && <> · <b className="pg-wait">{tr('{0} 项待处理', waiting)}</b></>}
                   {' · '}{tr('卡片由各项目负责人填写，点击「更新」后刷新')}
                 </p>
               </div>
@@ -159,7 +159,7 @@ export function Progress({ active, seq, sub, page, toast, onOpen }: {
                 </button>
               </div>
             </header>
-            {err && <p className="small em-state" data-tone="bad">{err}</p>}
+            {err && <p className="warn-box small">{err}</p>}
             {!rows && !err && <p className="muted">{tr('加载中…')}</p>}
             {rows && !rows.length && <p className="muted pg-none">{tr('暂无项目。在中控屏中放入 idea，或在 projects.json 中接入自有项目。')}</p>}
             {rows && rows.length > 0 && !shown.length && <p className="muted pg-none">{tr('暂无匹配项目。')}</p>}
@@ -207,24 +207,26 @@ function Fresh() {
   );
 }
 
-// a project's card in the grid: the panes chosen for every card; the rest is on its page
+// a project's card in the grid: the panes chosen for every card that have something to show, each as tall as what
+// it holds; the ones with nothing are named in one line at the foot. The rest is on its page.
 function ProjectBox({ r, i, panes, defs, toast, onChange }: {
   r: ProjectCard; i: number; panes: Pane[]; defs: PaseoDefaults | null; toast: (t: string, error?: boolean) => void; onChange: (r: ProjectCard) => void;
 }) {
   const acts = useCardActs(r, toast, onChange);
   const { line, card } = r;
   const o = opens(line);
+  const none = panes.filter(p => paneEmpty(p, r));
   return (
     <article className={`pc${card ? ` h-${card.health}` : ''}${r.decisions?.length ? ' need' : ''}`} style={{ ['--i' as string]: i }} {...o.box}>
       <header className="pc-head">
         <span className="pc-name"><span className="pc-seq">#{line.seq}</span>{o.title}</span>
-        <StatusTag status={line.status} sample={line.sample} />
-        <UsageMark state={line.usage_state} />
+        <span className="pc-tags"><StatusTag status={line.status} sample={line.sample} /><UsageMark state={line.usage_state} /></span>
       </header>
       <Stages r={r} />
       <div className="pc-panes">
-        {panes.map(p => <CardPane key={p} pane={p} r={r} />)}
+        {panes.filter(p => !none.includes(p)).map(p => <CardPane key={p} pane={p} r={r} />)}
       </div>
+      {none.length > 0 && <p className="pc-rest"><span>{tr('暂无')}</span>{none.map(p => <span key={p}><Icon n={PANES[p][2]} size={12} />{PANES[p][1]}</span>)}</p>}
       <footer className="pc-foot" onClick={e => e.stopPropagation()}>
         <Who r={r} />
         <div className="pc-acts">

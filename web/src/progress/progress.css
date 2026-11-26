@@ -1,5 +1,7 @@
 /* 进展: the projects as a grid of cards or a table of rows, and a project's own page.
-   A card is a stack of fixed-height panes, so every card is as tall as the others. */
+   A card holds the panes that have something to show, each as tall as its content; the cards of one line of the grid
+   are stretched to the tallest, and what a card has nothing for is one line above its foot. A card is a container, so
+   its inside follows its own width: a wide one puts the tags beside the title and the panes in two columns. */
 
 .p-prog {
   display: none; position: absolute; inset: var(--hud-h) 0 0 0; z-index: 5; overflow-y: auto; background: var(--bg); color: var(--ink);
@@ -7,6 +9,9 @@
 /* the overlays render at the app's root, outside .p-prog, so they need the colours too */
 .p-prog, .pd-back { --pc-ok: var(--ok); --pc-risk: var(--warn); --pc-blocked: var(--bad); --lw: 58px; }
 html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
+/* the paper look draws its icons larger */
+html:not(.ui-cf) :is(.p-prog, .pd-back) { --lw: 70px; }
+html:not(.ui-cf)[lang=en] :is(.p-prog, .pd-back) { --lw: 90px; }
 .proto[data-mode=cards] .p-prog { display: block; animation: rise-in .5s var(--out) both; }
 .proto[data-mode=cards] .w-only { display: none; }
 .proto[data-mode=cards] :is(.p-world, .t3) { visibility: hidden; }
@@ -16,7 +21,9 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pg-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .pg-title h1 { margin: 0 0 4px; font: 400 26px var(--head); }
 .pg-title p { margin: 0; }
-.pg-wait { font-weight: 600; color: var(--warn); }
+/* what waits on you is said in the warning colour, what failed in the danger one; both as plain semibold text */
+.theme-sketch :is(.pg-wait, .pc-wait) { font-weight: 600; color: var(--em-orange, var(--warn)); }
+.theme-sketch .pc-bad { font-weight: 600; color: var(--em-red, var(--bad)); }
 .pg-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 :is(.pg-tools, .pc-acts, .pc-pend, .pj-acts, .psec-h) .btn { display: inline-flex; align-items: center; gap: 6px; }
 .pg-none { margin: 24px 0; }
@@ -34,21 +41,29 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 
 /* ---------- a project's card ---------- */
 .pc {
-  --h: var(--line); position: relative; display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 14px 20px; border-radius: 14px;
+  --h: var(--line); container: pc / inline-size; position: relative; display: flex; flex-direction: column; gap: 12px; padding: 16px 18px 14px 20px; border-radius: 14px;
   border: 1px solid var(--line); background: var(--panel); box-shadow: 0 1px 0 rgba(84, 62, 40, .05), 0 10px 26px -20px rgba(70, 45, 20, .45);
   animation: rise-in .45s var(--out) both; animation-delay: calc(min(var(--i), 12) * 40ms); overflow: hidden;
   min-width: 0; cursor: pointer; transition: border-color .2s, box-shadow .25s, transform .35s var(--spring);
 }
 .pc:hover { border-color: color-mix(in srgb, var(--brand) 30%, var(--line)); transform: translateY(-2px); box-shadow: 0 1px 0 rgba(84, 62, 40, .05), 0 16px 30px -20px rgba(70, 45, 20, .5); }
 .pc:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent); }
+/* a project at risk or blocked: its colour as a soft light, no line. On a card it falls from the top left corner,
+   on a row from the left edge; one that is fine has none */
+:is(.pc, .pr):is(.h-risk, .h-blocked)::before { content: ''; position: absolute; z-index: -1; inset: 0; pointer-events: none; }
+.pc:is(.h-risk, .h-blocked)::before { background: radial-gradient(ellipse 90% 62% at 0 0, color-mix(in srgb, var(--h) 15%, transparent), color-mix(in srgb, var(--h) 5%, transparent) 42%, transparent 74%); }
+.pr:is(.h-risk, .h-blocked)::before { right: auto; width: min(88px, 30%); background: linear-gradient(90deg, color-mix(in srgb, var(--h) 13%, transparent), transparent); }
 :is(.pc, .pr, .pj-card).h-ok { --h: var(--pc-ok); } :is(.pc, .pr, .pj-card).h-risk { --h: var(--pc-risk); } :is(.pc, .pr, .pj-card).h-blocked { --h: var(--pc-blocked); }
-.pc-head { display: flex; align-items: flex-start; gap: 10px; }
-.pc-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
-.pc-name h3 { margin: 0; min-height: 2.7em; font: 400 16px/1.35 var(--head); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* the title has the card's whole width; the tags sit under it */
+.pc-head { display: flex; flex-direction: column; gap: 7px; }
+.pc-name { min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.pc-name h3 { flex: 1; min-width: 0; margin: 0; font: 400 16px/1.35 var(--head); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.pc-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pc-tags .pst-sample { margin-left: 0; }
 .pc-name h3 a { color: inherit; text-decoration: none; }
 .pc:hover .pc-name h3 { color: var(--brand); }
 .pc-seq { flex: none; font: 600 14px var(--font); color: var(--brand); }
-.pc-head .pst { flex: none; margin-top: 2px; }
+.pc-head .pst { flex: none; }
 
 .pc-facts { display: flex; flex-direction: column; gap: 6px; }
 .pc-stages { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; }
@@ -58,16 +73,21 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pc-stages li.s-wait { background: var(--warn); }
 .pc-stages li.s-fail { background: var(--bad); }
 .pc-stage { line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc .pc-stage { white-space: normal; }
 
-.pc-panes { flex: 1; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.pc-panes { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 8px 22px; min-height: 0; }
 .pp { flex: none; min-width: 0; overflow: hidden; font-size: 13px; line-height: 20px; box-sizing: content-box; } /* its height is its content's: the rule above it is extra */
 .pc-panes > .pp + .pp { padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--ink) 7%, transparent); }
 .pc-panes > .pp:not(.pp-summary):not(.pp-metrics) { display: grid; grid-template-columns: var(--lw) minmax(0, 1fr) auto; column-gap: 8px; align-items: start; }
-.pc .pp-summary { height: 94px; display: flex; flex-direction: column; gap: 6px; }
-.pc :is(.pp-attention, .pp-milestone, .pp-memory) { height: 20px; }
-.pc :is(.pp-planned, .pp-outputs, .pp-code, .pp-paper) { height: 40px; }
-.pc .pp-running { height: 60px; }
-.pc .pp-metrics { height: 48px; }
+.pc-panes > .pp.pp-attention:not(.pp-summary):not(.pp-metrics) { grid-template-columns: minmax(0, 1fr) auto; }
+.pc .pp-summary { display: flex; flex-direction: column; gap: 6px; }
+/* what waits on you, or what blocks: the line names itself, so it has the whole width and up to two lines */
+.pc .pp-attention > h4 { display: none; }
+.pc .pp-attention .pp-one { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+/* the panes with nothing to show, named in one line above the foot */
+.pc-rest { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: 12px; line-height: 18px; color: color-mix(in srgb, var(--muted) 85%, transparent); }
+.pc-rest > span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.pc-rest .ic { opacity: .75; }
 .pp h4 { margin: 0; display: flex; align-items: center; gap: 4px; font: 400 12px/20px var(--font); color: var(--muted); white-space: nowrap; overflow: hidden; }
 .pp h4 .ic { flex: none; opacity: .8; }
 .pp-b { min-width: 0; }
@@ -75,8 +95,9 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pp-n { font: 600 12.5px var(--font); color: var(--ink); font-variant-numeric: tabular-nums; }
 .pp-none { color: color-mix(in srgb, var(--muted) 85%, transparent); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .pp-one { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pp-one:is(.l-need_you, .l-blockers) > b { font-size: 12px; margin-right: 6px; color: var(--k); }
-.pp-one.l-need_you { --k: var(--warn); } .pp-one.l-blockers { --k: var(--bad); }
+.pp-one:is(.l-need_you, .l-blockers) > b { display: inline-block; margin-right: 7px; padding: 0 6px; border-radius: 5px; font: 600 12px/18px var(--font); vertical-align: 1px;
+  color: var(--k); background: color-mix(in srgb, var(--kb) 13%, transparent); }
+.pp-one.l-need_you { --k: var(--em-orange, var(--warn)); --kb: var(--warn); } .pp-one.l-blockers { --k: var(--em-red, var(--bad)); --kb: var(--bad); }
 .pp-list { list-style: none; margin: 0; padding: 0; }
 .pp-list li { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; height: 20px; }
 .pp-list li > b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
@@ -95,15 +116,18 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .fit-end { justify-items: end; }
 .fit-g { visibility: hidden; pointer-events: none; }
 .pc-seq, .pc-pct, .pc-delta { font-variant-numeric: tabular-nums; }
-.pc-health { flex: none; color: var(--muted); font-size: 12.5px; }
-.pc-health.h-ok { --hc: var(--pc-ok); } .pc-health.h-risk { --hc: var(--pc-risk); } .pc-health.h-blocked { --hc: var(--pc-blocked); }
+.pc-health { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 1px 10px 1px 8px; border-radius: 99px; font-size: 12.5px; font-weight: 600;
+  color: var(--hk); background: color-mix(in srgb, var(--hc) 12%, transparent); }
+.pc-health i { width: 7px; height: 7px; border-radius: 50%; background: var(--hc); }
+.pc-health.h-ok { --hc: var(--pc-ok); --hk: var(--em-green, var(--ok)); } .pc-health.h-risk { --hc: var(--pc-risk); --hk: var(--em-orange, var(--warn)); } .pc-health.h-blocked { --hc: var(--pc-blocked); --hk: var(--em-red, var(--bad)); }
 .pc-bar { flex: 1; height: 7px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 9%, transparent); overflow: hidden; min-width: 40px; }
-.pc-bar i { display: block; height: 100%; border-radius: inherit; background: var(--brand); transform-origin: left; animation: grow .9s var(--out) both; }
+.pc-bar i { display: block; height: 100%; border-radius: inherit; background: var(--h, var(--brand)); transform-origin: left; animation: grow .9s var(--out) both; }
 :is(.pc, .pr):not([class*=' h-']) .pc-bar i, .pj-runs .pc-bar i { background: var(--brand); }
 .pc-pct { font: 600 14px var(--font); font-variant-numeric: tabular-nums; }
-.pc-delta { font-style: normal; font-size: 12px; font-weight: 600; color: var(--ok); }
+.pc-delta { font-style: normal; font-size: 12px; font-weight: 600; color: var(--em-green, var(--ok)); }
 .pc-delta.down { color: var(--bad); }
 .pc-sum { margin: 0; font-size: 14px; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.pc .pc-sum { -webkit-line-clamp: 5; }
 .pc-empty { margin: 0; line-height: 1.6; }
 .pc-ms { margin: 0; display: flex; gap: 6px; align-items: flex-start; font-size: 13.5px; line-height: 1.5; }
 .pc-ms .ic { flex: none; margin-top: 2px; color: var(--brand); }
@@ -118,13 +142,14 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pc-list h4 { margin: 0 0 4px; font: 600 12.5px var(--font); color: var(--muted); }
 .pc-list ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; line-height: 1.55; }
 
-.pc-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); cursor: default; }
+.pc-foot { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); cursor: default; }
 .pc-who { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .pc-who > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pc-acts { display: flex; align-items: center; gap: 6px; flex: none; }
+.pc-acts { display: flex; align-items: center; gap: 6px; flex: none; margin-left: auto; }
+.pc-foot > .pc-who { flex: none; }
 .pc-pend { display: inline-flex; align-items: center; gap: 4px; }
 .pc-pend .ib { width: 28px; height: 28px; color: var(--muted); }
-.pc-pending { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.pc-pending { position: relative; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--brand); white-space: nowrap; }
 .pc-note-pop { display: none; position: absolute; z-index: 3; bottom: 100%; right: 0; width: max-content; max-width: min(230px, 65vw); max-height: 10em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 5px 8px; background: var(--panel); color: var(--ink); box-shadow: var(--soft); }
 .pc-pending:is(:hover, :focus-within) .pc-note-pop { display: block; }
 .pc-pending i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: beat 1.6s var(--in-out) infinite; }
@@ -139,7 +164,7 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pg-rows .pg-gh { grid-column: 1 / -1; padding: 12px var(--pad) 6px; border-top: 1px solid var(--line); font-size: 14px; }
 .pr-head + .pr-group .pg-gh, .pr-group:first-child .pg-gh { border-top: 0; }
 .pr {
-  --h: var(--line); position: relative; align-items: start; min-width: 0; cursor: pointer; transition: background-color .15s;
+  --h: var(--line); position: relative; isolation: isolate; align-items: start; min-width: 0; cursor: pointer; transition: background-color .15s;
   animation: rise-in .4s var(--out) both; animation-delay: calc(min(var(--i), 12) * 24ms);
 }
 :is(.pr, .pg-gh) + .pr { border-top: 1px solid color-mix(in srgb, var(--ink) 7%, transparent); }
@@ -150,7 +175,8 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 .pr-t h3 { margin: 0; font: 400 15px/1.35 var(--head); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .pr-t h3 a { color: inherit; text-decoration: none; }
 .pr:hover .pr-t h3 { color: var(--brand); }
-.pr-sub { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pr-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+.pr-sub > .pc-who { flex: none; }
 .pr-sub .pst { flex: none; }
 .pr-stage { min-width: 0; padding-top: 5px; }
 .pr .pc-sum { font-size: 13px; line-height: 20px; -webkit-line-clamp: 2; }
@@ -179,14 +205,24 @@ html[lang=en] :is(.p-prog, .pd-back) { --lw: 76px; }
 /* ---------- 紧凑 ---------- */
 [data-density=tight] .pg-grid { gap: 10px; }
 [data-density=tight] .pg-sec { gap: 8px; }
+/* a wide card: the tags beside the title; wider still, the short panes two to a line */
+@container pc (min-width: 520px) {
+  .pc-head { flex-direction: row; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .pc-name { flex: 1; }
+  .pc-tags { flex: none; flex-wrap: nowrap; padding-top: 1px; }
+}
+@container pc (min-width: 640px) {
+  .pc-panes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pc-panes > :is(.pp-summary, .pp-attention, .pp-metrics) { grid-column: 1 / -1; }
+}
 [data-density=tight] .pc { gap: 8px; padding: 10px 12px 8px 15px; border-radius: 10px; }
-[data-density=tight] .pc-name h3 { min-height: 0; -webkit-line-clamp: 1; font-size: 15px; }
-[data-density=tight] .pc-panes { gap: 5px; }
+[data-density=tight] .pc-name h3 { -webkit-line-clamp: 2; font-size: 15px; }
+[data-density=tight] .pc-panes { row-gap: 5px; }
+[data-density=tight] .pc-head { gap: 5px; }
 [data-density=tight] .pc-panes > .pp + .pp { padding-top: 5px; }
-[data-density=tight] .pc .pp-summary { height: 68px; gap: 4px; }
+[data-density=tight] .pc .pp-summary { gap: 4px; }
 [data-density=tight] .pc .pc-sum { font-size: 13px; line-height: 21px; -webkit-line-clamp: 2; }
-[data-density=tight] .pc .pp-running { height: 40px; }
-[data-density=tight] .pc :is(.pp-planned, .pp-outputs, .pp-code, .pp-paper) { height: 20px; }
+[data-density=tight] .pc :is(.pp-list li:nth-child(n + 2), .pp-repo > :nth-child(n + 2)) { display: none; }
 [data-density=tight] .pc-foot { padding-top: 6px; }
 [data-density=tight] .pc-foot .btn { padding-block: 2px; font-size: 13px; }
 [data-density=tight] .pr { padding-block: 6px; align-items: center; }
@@ -378,16 +414,22 @@ em.src.s-claude-memory { background: color-mix(in srgb, var(--ok) 16%, transpare
   .pd-foot, .pd-body { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 }
 
-/* The decision preview and its compact trigger. */
+/* 待你决定 (Decide.tsx): a card or row that waits on you is ringed in the warning colour, its line is a filled tag on a wash,
+   and the choices float beside it */
+.pc.need { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent); }
+.pr.need { background: color-mix(in srgb, var(--warn) 6%, transparent); }
+.pr.need:hover { background: color-mix(in srgb, var(--warn) 10%, transparent); }
 .dc-line { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 6px; max-width: 100%; height: 20px; padding: 0 8px 0 2px;
   border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 20px; color: var(--ink);
-  background: transparent; }
-.dc-line:hover, .dc-line[data-popup-open] { background: var(--panel2); }
+  background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.dc-line:hover, .dc-line[data-popup-open] { background: color-mix(in srgb, var(--warn) 24%, transparent); }
 .dc-line:focus-visible { outline: 2px solid color-mix(in srgb, var(--warn) 60%, transparent); outline-offset: 1px; }
 .dc-line > b { flex: none; display: inline-flex; align-items: center; gap: 3px; padding: 0 6px; border-radius: 5px; font: 600 12px/18px var(--font);
-  color: var(--ink); background: none; }
-.dc-n { margin-inline-start: 2px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  color: var(--brand-ink, #fff); background: var(--warn); }
+.dc-n { margin-left: 2px; padding: 0 4px; border-radius: 4px; background: rgba(255, 255, 255, .28); font-variant-numeric: tabular-nums; }
 .dc-t { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
+.pc .dc-line { height: auto; align-items: flex-start; padding: 3px 8px 3px 3px; }
+.pc .dc-t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 18px; }
 .dc-done { color: var(--muted); font-size: 12.5px; display: inline-flex; align-items: center; gap: 4px; }
 
 /* in Kumo's layer, outside the page: its own names for Kumo's colours */

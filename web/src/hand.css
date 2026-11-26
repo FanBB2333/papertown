@@ -95,7 +95,8 @@ body.proto-page { background: #f4eee2; }
 }
 .theme-sketch .seg :is(button, a).on { background: none; color: var(--ink); }
 .theme-sketch .seg :is(button, a).on::after { transform: scaleX(1); }
-.hud-quiet { display: flex; gap: 18px; color: var(--muted); font-size: 13px; }
+.hud-quiet { display: flex; gap: 18px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+@media (max-width: 900px) { .hud-quiet { display: none; } }
 .hud-quiet b { font-family: var(--head); font-size: 15px; margin: 0 2px; }
 /* accents: the project count in the brand colour while any is in progress, the lead count in the colour of its state */
 .hud-quiet > span { display: inline-flex; align-items: baseline; }

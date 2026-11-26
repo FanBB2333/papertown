@@ -38,7 +38,7 @@ export function DecideLine({ r }: { r: ProjectCard }) {
     <Popover.Root>
       <Popover.Trigger openOnHover delay={120} closeDelay={260}
         render={<button className="dc-line" onClick={e => e.stopPropagation()} aria-label={tr('待你决定：{0} 件', list.length)} />}>
-        <b className="em-bar" data-tone="warn"><Icon n="bell" size={12} />{tr('待你决定')}{list.length > 1 && <span className="dc-n">{list.length}</span>}</b>
+        <b><Icon n="bell" size={12} />{tr('待你决定')}{list.length > 1 && <span className="dc-n">{list.length}</span>}</b>
         <span className="dc-t">{lineOf(first)}</span>
       </Popover.Trigger>
       <Popover.Portal>

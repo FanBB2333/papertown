@@ -13,7 +13,7 @@ const ABOUT = {
 };
 
 export function ResidentMark({ resident }: { resident: Resident }) {
-  return <span className={resident.state === 'blocked' ? 'resident-mark em-state' : 'resident-mark'} data-tone="bad" title={resident.note ?? LABEL[resident.state]}>{STATE[resident.state]}</span>;
+  return <span className={`resident-mark rs-${resident.state}`} title={resident.note ?? LABEL[resident.state]}><i aria-hidden />{STATE[resident.state]}</span>;
 }
 
 export function AgentPost({ stage }: { stage: Stage }) {

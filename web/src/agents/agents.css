@@ -231,7 +231,7 @@ html.ui-mac .aw-failed { --aw-color: var(--mac-red); }
 }
 @media (max-width: 720px) {
   .ac-input textarea, .aw input { font-size: 16px; }
-  .hud:has(.aw-count) .hud-r > .hq-connection:not(.em-state) { display: none; }
+  .hud:has(.aw-count) .hud-r > .chip.ok { display: none; }
   html.ui-cf .theme-sketch.la .hud .demo-gh { width: 32px; height: 32px; padding: 0; gap: 0; font-size: 0; }
 }
 

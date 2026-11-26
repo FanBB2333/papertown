@@ -1,7 +1,7 @@
 // The pieces of a project's card shared by the grid, the rows and the project's page: panes, stages,
 // health, the lead and the buttons that ask it for a new card.
 
-import { Deadline, figures, modelText } from '../emphasis';
+import { Deadline, modelText } from '../emphasis';
 import { useState } from 'react';
 import { api, type Card, type CardRepo, type CardRun, type Health, type OutputState, type Pane, type PaseoDefaults, type ProjectCard } from '../api';
 import { ResidentMark } from '../components/Resident';
@@ -67,10 +67,10 @@ export function Stages({ r }: { r: ProjectCard }) {
         {line.stages.map(s => <li key={s.key} className={`s-${s.status}`} title={`${s.name} · ${STAGE_ST[s.status]}`} />)}
       </ol>
       <span className="small muted pc-stage">
-        {line.stage ? <>{line.stage.name} · {line.stage.status === 'todo' ? tr('尚未开始') : <span className="em-num">{line.stage.pct}%</span>}</> : tr('全部完成')}
-        {!!r.jobs.failed && <> · <b className="em-state" data-tone="bad">{tr('{0} 个失败', r.jobs.failed)}</b></>}
-        {r.asks > 0 && <> · <b className="em-bar" data-tone="warn">{tr('{0} 个问题待回复', r.asks)}</b></>}
-        {!!r.checks?.hard.fail && <> · <b className="em-state" data-tone="bad" title={tr('研究回路上必须满足的硬检查')}>{tr('{0} 项硬检查未通过', r.checks.hard.fail)}</b></>}
+        {line.stage ? <>{line.stage.name} · {line.stage.status === 'todo' ? tr('尚未开始') : `${line.stage.pct}%`}</> : tr('全部完成')}
+        {!!r.jobs.failed && <> · <b className="pc-bad">{tr('{0} 个失败', r.jobs.failed)}</b></>}
+        {r.asks > 0 && <> · <b className="pc-wait">{tr('{0} 个问题待回复', r.asks)}</b></>}
+        {!!r.checks?.hard.fail && <> · <b className="pc-bad" title={tr('研究回路上必须满足的硬检查')}>{tr('{0} 项硬检查未通过', r.checks.hard.fail)}</b></>}
       </span>
     </div>
   );
@@ -94,12 +94,12 @@ export function Meter({ r }: { r: ProjectCard }) {
   const delta = card.progress != null && r.prev != null ? card.progress - r.prev : 0;
   return (
     <div className="pc-meter">
-      <Fit ghosts={HEALTH_GHOSTS}><span className={card.health === 'ok' ? 'pc-health' : 'em-state'} data-tone={card.health === 'blocked' ? 'bad' : 'warn'}>{HEALTH[card.health]}</span></Fit>
+      <Fit ghosts={HEALTH_GHOSTS}><span className={`pc-health h-${card.health}`}><i />{HEALTH[card.health]}</span></Fit>
       {card.progress != null && <>
         <span className="pc-bar" role="meter" aria-valuenow={card.progress} aria-valuemin={0} aria-valuemax={100} aria-label={tr('完成度')}><i style={{ width: `${card.progress}%` }} /></span>
-        <Fit className="fit-end" ghosts={[<b className="pc-pct">100%</b>]}><b className="pc-pct em-num">{card.progress}%</b></Fit>
+        <Fit className="fit-end" ghosts={[<b className="pc-pct">100%</b>]}><b className="pc-pct">{card.progress}%</b></Fit>
         <Fit ghosts={[<em className="pc-delta">+100</em>]}>
-          {delta !== 0 && <em className="pc-delta em-mark" data-tone={delta < 0 ? 'warn' : 'good'} title={tr('较上一张卡片')}>{delta > 0 ? '+' : ''}{delta}</em>}
+          {delta !== 0 && <em className={`pc-delta${delta < 0 ? ' down' : ''}`} title={tr('较上一张卡片')}>{delta > 0 ? '+' : ''}{delta}</em>}
         </Fit>
       </>}
     </div>
@@ -153,15 +153,15 @@ function Row({ pane, extra, children }: { pane: Pane; extra?: React.ReactNode; c
 }
 
 export function runText(j: CardRun) {
-  const progress = j.line ? modelText(j.line) : j.progress != null && j.progress > 0 && j.progress < 100 ? <span className="em-num">{j.progress}%</span> : null;
+  const progress = j.line ? modelText(j.line) : j.progress != null && j.progress > 0 && j.progress < 100 ? `${j.progress}%` : null;
   return j.where || progress ? <>{j.where}{j.where && progress && ' · '}{progress}</> : null;
 }
 
 export function repoLine(x: CardRepo, which: 'code' | 'paper') {
   if (x.missing) return <span className="em-state" data-tone="bad">{tr('未找到该目录')}</span>;
   const bits = which === 'code'
-    ? [x.branch, x.dirty ? <mark className="em-mark">{tr('{0} 处改动', x.dirty)}</mark> : x.git ? tr('干净') : null, x.files ? tr('{0} 个文件', x.files) : null]
-    : [x.main, x.words ? tr('{0} 词', k(x.words)) : null, x.pdf ? 'PDF' : null, x.dirty ? <mark className="em-mark">{tr('{0} 处改动', x.dirty)}</mark> : null];
+    ? [x.branch, x.dirty ? tr('{0} 处改动', x.dirty) : x.git ? tr('干净') : null, x.files ? tr('{0} 个文件', x.files) : null]
+    : [x.main, x.words ? tr('{0} 词', k(x.words)) : null, x.pdf ? 'PDF' : null, x.dirty ? tr('{0} 处改动', x.dirty) : null];
   return bits.some(Boolean) && bits.filter(Boolean).map((bit, i) => <span key={i}>{i > 0 && ' · '}{bit}</span>);
 }
 
@@ -186,6 +186,22 @@ export function AskButton({ seq }: { seq: number }) {
   return <button className="btn pc-ask" onClick={() => go(askPath(seq))} title={tr('与该项目对话：提问、向负责人派发任务、回复提问')}><Icon n="chat" size={14} /><span>{tr('对话')}</span></button>;
 }
 
+// a pane with nothing to show: a card leaves it out and names it in one line at its foot
+export function paneEmpty(pane: Pane, r: ProjectCard): boolean {
+  const c = r.card;
+  switch (pane) {
+    case 'summary': return false;
+    case 'attention': return !r.decisions?.length && !(!r.decisions && c?.need_you.length) && !c?.blockers.length;
+    case 'milestone': return !c?.milestone;
+    case 'metrics': return !c?.metrics.length;
+    case 'running': return !r.running.length && !r.queued.length;
+    case 'planned': return !c?.plans.length;
+    case 'outputs': return !c?.outputs.length;
+    case 'code': case 'paper': return !r.repos[pane];
+    case 'memory': return !r.memory.sessions && !r.memory.notes;
+  }
+}
+
 // one pane on a card; `bare` in a row, where the column names it and an empty cell is a dash
 export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?: boolean }) {
   const c: Card | null = r.card;
@@ -205,22 +221,22 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
       if (r.decisions?.length) return <Row pane="attention"><DecideLine r={r} /></Row>;
       // a server from before decisions: the card's own line, as text
       if (!r.decisions && c?.need_you.length) {
-        return <Row pane="attention"><span className="pp-one em-bar" data-tone="warn"><b>{tr('决定')}</b>{modelText(c.need_you[0])}</span></Row>;
+        return <Row pane="attention"><span className="pp-one l-need_you"><b>{tr('决定')}</b>{modelText(c.need_you[0])}</span></Row>;
       }
       return (
         <Row pane="attention" extra={c && c.blockers.length > 1 ? `+${c.blockers.length - 1}` : undefined}>
-          {c?.blockers.length ? <span className="pp-one"><b className="em-state" data-tone="bad">{tr('卡点')}</b>{modelText(c.blockers[0])}</span>
+          {c?.blockers.length ? <span className="pp-one l-blockers"><b>{tr('卡点')}</b>{modelText(c.blockers[0])}</span>
             : c ? none(tr('暂无待决定事项')) : noCard()}
         </Row>
       );
     }
     case 'milestone':
-      return <Row pane="milestone">{c?.milestone ? <span className="pp-one em-state" data-icon="clock" data-tone="warn">{modelText(c.milestone)}</span> : c ? none(tr('没写')) : noCard()}</Row>;
+      return <Row pane="milestone">{c?.milestone ? <span className="pp-one">{modelText(c.milestone)}</span> : c ? none(tr('没写')) : noCard()}</Row>;
     case 'metrics':
       return (
         <section className="pp pp-metrics">
           {c?.metrics.length ? (
-            <dl className="pc-metrics">{c.metrics.slice(0, 3).map(m => <div key={m.name}><dt>{m.name}</dt><dd>{figures(m.value)}</dd></div>)}</dl>
+            <dl className="pc-metrics">{c.metrics.slice(0, 3).map(m => <div key={m.name}><dt>{m.name}</dt><dd>{m.value}</dd></div>)}</dl>
           ) : <Row pane="metrics">{c ? none(tr('暂无关键数字')) : noCard()}</Row>}
         </section>
       );
@@ -247,7 +263,7 @@ export function CardPane({ pane, r, bare }: { pane: Pane; r: ProjectCard; bare?:
       );
     case 'outputs':
       return (
-        <Row pane="outputs" extra={c?.outputs.length ? <b className="pp-n em-num">{c.outputs.filter(o => o.state === 'done').length}/{c.outputs.length}</b> : undefined}>
+        <Row pane="outputs" extra={c?.outputs.length ? <b className="pp-n">{c.outputs.filter(o => o.state === 'done').length}/{c.outputs.length}</b> : undefined}>
           {c?.outputs.length ? (
             <ul className="pp-list">
               {c.outputs.slice(0, 2).map((o, i) => <li key={i}><i className={`pp-st st-${o.state}`} title={OUT_STATE[o.state]} /><b>{o.name}</b>{o.due && <span className="muted"><Deadline text={o.due} done={o.state === 'done'} /></span>}</li>)}

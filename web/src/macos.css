@@ -232,6 +232,9 @@ html.ui-mac .pc {
   transition: box-shadow .25s, transform .45s var(--spring);
 }
 html.ui-mac .pc:hover { transform: translateY(-2px); box-shadow: var(--lg-rim), 0 2px 4px rgb(0 0 0 / .06), 0 14px 30px rgb(30 40 70 / .13); }
+/* a card that waits on you is ringed here too, in place of the glass rim */
+html.ui-mac .pc.need { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--warn) 55%, transparent), var(--lg-lift); }
+html.ui-mac .pc.need:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--warn) 70%, transparent), 0 2px 4px rgb(0 0 0 / .06), 0 14px 30px rgb(30 40 70 / .13); }
 html.ui-mac .pc-seq { color: var(--muted); }
 html.ui-mac .pc-stages:not(.named) li:not(.s-done, .s-run, .s-wait), html.ui-mac .pc-stages.named li:not(.s-done, .s-run, .s-wait)::before, html.ui-mac .pc-bar { background: light-dark(rgb(0 0 0 / .08), rgb(255 255 255 / .12)); }
 html.ui-mac .pc-metrics > div { border-radius: 9px; background: light-dark(rgb(0 0 0 / .035), rgb(255 255 255 / .06)); }

@@ -407,8 +407,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
             <i className="hq-dot" aria-hidden="true" /><b className={hud.leads.on ? 'em-num' : undefined} data-tone={hud.leads.running < hud.leads.on ? 'warn' : 'info'}>{hud.leads.running}/{hud.leads.on}</b> {tr('位负责人在岗')}</span>
         </div>}
         <div className="hud-r">
-          {!!overview?.counts.needs && <a className="aw-count em-bar" data-tone="warn" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('待处理 {0}', overview.counts.needs)}</a>}
-          {hud && <span className={!online ? 'hq-connection em-state small' : 'hq-connection muted small'} data-tone="bad">
+          {!!overview?.counts.needs && <a className="chip warn aw-count" href={href('/agents?f=needs')} onClick={e => follow(e, '/agents?f=needs')}>{tr('待处理 {0}', overview.counts.needs)}</a>}
+          {hud && <span className={`chip ${!online ? 'bad' : 'ok'}`}>
             {!online ? tr('连接已断开') : DEMO ? tr('静态演示') : tr('已连接')}</span>}
           {DEMO && <RepoLink />}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>

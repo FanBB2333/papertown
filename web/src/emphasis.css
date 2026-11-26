@@ -3,13 +3,14 @@
 :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) {
   --em-ink: var(--ink, var(--text-color-kumo-default));
   --em-brand: var(--brand, var(--color-kumo-brand));
-  --em-green: color-mix(in srgb, var(--ok, var(--color-kumo-success)) 60%, var(--em-ink));
-  --em-orange: color-mix(in srgb, var(--warn, var(--color-kumo-warning)) 58%, var(--em-ink));
-  --em-red: color-mix(in srgb, var(--bad, var(--color-kumo-danger)) 72%, var(--em-ink));
+  /* coloured text keeps the hue of its status colour and only darkens (lightens in dark mode) until it reads on the panel */
+  --em-green: color-mix(in oklch, var(--ok, var(--color-kumo-success)) 80%, var(--em-ink));
+  --em-orange: color-mix(in oklch, var(--warn, var(--color-kumo-warning)) 78%, var(--em-ink));
+  --em-red: color-mix(in oklch, var(--bad, var(--color-kumo-danger)) 86%, var(--em-ink));
   --em-wash: 14%;
 }
-html.ui-cf :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-wash: 10%; }
-html.ui-mac :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-brand: var(--mac-accent, var(--brand, var(--color-kumo-brand))); --em-wash: 12%; }
+html.ui-cf :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-green: var(--text-color-kumo-success); --em-orange: var(--text-color-kumo-warning); --em-red: var(--text-color-kumo-danger); --em-wash: 10%; }
+html.ui-mac :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-brand: var(--mac-accent, var(--brand, var(--color-kumo-brand))); --em-green: light-dark(#1a8f30, #4fe06b); --em-orange: light-dark(#b86a00, #ffb340); --em-red: light-dark(#d0271d, #ff7b72); --em-wash: 12%; }
 html[data-mode=dark] :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-wash: 22%; }
 
 :is(.em-state, .em-num, .em-bar, .em-mark) { --em-color: var(--em-brand); }
@@ -17,7 +18,9 @@ html[data-mode=dark] :is(.theme-sketch, .pd-back, .kumo-layer, .st-page) { --em-
 [data-tone=warn] { --em-color: var(--em-orange); }
 [data-tone=bad] { --em-color: var(--em-red); }
 html body .em-key { color: var(--em-ink); font-weight: 600; }
-html body .em-num { color: color-mix(in srgb, var(--em-color) 79%, var(--em-ink)); font-variant-numeric: tabular-nums; font-weight: 600; font-style: normal; }
+/* a figure is ink; only one that reads as good, worth a look or wrong takes a colour (a blue figure reads as a link) */
+html body .em-num { color: var(--em-ink); font-variant-numeric: tabular-nums; font-weight: 600; font-style: normal; }
+html body .em-num:is([data-tone=good], [data-tone=warn], [data-tone=bad]) { color: var(--em-color); }
 html body .em-state { color: var(--em-color); font-style: normal; font-weight: 500; }
 .em-state::before {
   content: ''; display: inline-block; inline-size: .8em; block-size: .8em; margin-inline-end: .26em;
@@ -39,3 +42,8 @@ strong.em-mark { font-weight: 600; }
 
 .research-tip { display: block; max-width: min(34ch, 85vw); overflow-wrap: anywhere; }
 .research-tip.user-words { max-height: 12em; overflow: auto; }
+
+/* a bar is a shape, not text: it takes the status colour itself, the same as a filled tag */
+.em-bar[data-tone=good] { border-inline-start-color: var(--ok, var(--em-green)); }
+.em-bar[data-tone=warn] { border-inline-start-color: var(--warn, var(--em-orange)); }
+.em-bar[data-tone=bad] { border-inline-start-color: var(--bad, var(--em-red)); }

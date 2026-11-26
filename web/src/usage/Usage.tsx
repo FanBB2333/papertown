@@ -32,7 +32,7 @@ function Bar({ value, state = 'ok', label }: { value: number; state?: UsageState
 }
 
 export function UsageMark({ state }: { state?: UsageState }) {
-  return state === 'near' || state === 'over' ? <StateWord state={state}>{STATES[state]}</StateWord> : null;
+  return state === 'near' || state === 'over' ? <span className={`usage-mark usage-${state}`}>{STATES[state]}</span> : null;
 }
 
 // A quota window the way a terminal status line shows it: 5h or 7d, ten segments, the percent coloured by how
