@@ -17,10 +17,12 @@
 }
 @keyframes cv-in { from { opacity: 0; transform: scale(.992); } }
 
-/* ---------- the bar: where you are, what stays bright, find, how things stand, new and more ---------- */
-.cv-top { flex: none; display: flex; align-items: center; gap: 12px; height: 50px; padding: 0 12px; box-sizing: border-box; border-bottom: 1px solid var(--line); background: var(--panel); }
-.cv-back { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; padding: 5px 8px 5px 4px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; }
-.cv-back b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ---------- the bar: where you are, what stays bright, find, how things stand, new and more ----------
+   It never runs off the window, at any width, zoom or language: the project's name and the find box give way first,
+   how things stand shows only in the room left over, and when the rest still does not fit the buttons take a second line. */
+.cv-top { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 50px; padding: 8px 12px; box-sizing: border-box; border-bottom: 1px solid var(--line); background: var(--panel); }
+.cv-back { flex: 1 1 64px; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: max-content; padding: 5px 8px 5px 4px; border-radius: 8px; font-size: 13px; color: var(--muted); text-decoration: none; }
+.cv-back b { max-width: 190px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-back:hover { color: var(--brand); }
 .cv-top h2 { margin: 0 4px 0 -4px; padding-left: 12px; border-left: 1px solid var(--line); font: 600 14.5px var(--font); white-space: nowrap; }
 .cv-filter { flex: none; }
@@ -28,12 +30,15 @@
 .cv-filter em { min-width: 16px; padding: 0 5px; border-radius: 99px; font: 600 11px/16px var(--font); font-style: normal; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); background: color-mix(in srgb, var(--ink) 9%, transparent); }
 .cv-filter button.on em { color: #fff; background: var(--brand); }
 /* the counts stay whole: the project name and the search box give way first, and below 1360px the counts go altogether */
-.cv-top > .cg-sum { flex: none; flex-wrap: nowrap; white-space: nowrap; font-size: 12.5px; gap: 12px; }
-.cv-acts { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+/* one line high and clipped: what does not fit beside the rest wraps under it, out of sight */
+.cv-sum { flex: 1 1 0; min-width: 0; height: 22px; overflow: hidden; display: flex; flex-wrap: wrap; align-content: flex-start; justify-content: flex-end; }
+.cv-sum::before { content: ''; width: 0; height: 22px; }
+.cv-sum > .cg-sum { flex: none; height: 22px; flex-wrap: nowrap; white-space: nowrap; font-size: 12.5px; gap: 12px; }
+.cv-acts { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin-left: auto; }
 .cv-acts .btn, .cv-row .btn, .cv-side-f .btn, .cv-open { display: inline-flex; align-items: center; gap: 5px; }
 .cv kbd, .cv-menu kbd { padding: 0 5px; border: 1px solid var(--line); border-radius: 5px; font: 500 10.5px/16px var(--font); color: var(--muted); background: var(--bg); white-space: nowrap; }
 
-.cv-find { position: relative; flex: 0 1 240px; min-width: 120px; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 10px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--muted); }
+.cv-find { position: relative; flex: 1 1 130px; max-width: 240px; min-width: 120px; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 8px 0 10px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--muted); }
 .cv-find:focus-within { border-color: color-mix(in srgb, var(--brand) 55%, var(--line)); }
 .cv-find input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: 13px var(--font); color: var(--ink); }
 .cv-find ul { position: absolute; left: 0; top: calc(100% + 6px); z-index: 8; width: max(100%, 320px); max-height: min(420px, 60vh); overflow-y: auto; list-style: none; margin: 0; padding: 4px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); box-shadow: 0 10px 34px rgb(0 0 0 / .16); }
@@ -787,20 +792,20 @@ input.cv-el { width: 150px; padding: 3px 10px; border-color: var(--brand); outli
 .cv-human > .cv-far { inset: calc(2px * var(--k)); padding: 2px 30px; clip-path: polygon(25px 0, calc(100% - 25px) 0, 100% 50%, calc(100% - 25px) 100%, 25px 100%, 0 50%); }
 
 /* narrower: the bar keeps what it must */
-@media (max-width: 1360px) { .cv-top > .cg-sum { display: none; } }
-@media (max-width: 980px) { .cv-back b, .cv-find kbd { display: none; } .cv-find { flex-basis: 150px; } }
+@media (max-width: 980px) { .cv-back b, .cv-find kbd { display: none; } .cv-back { flex: none; } }
 /* narrow: the bar wraps to two rows, and the open node comes up from the bottom, over the canvas */
 @media (max-width: 760px) {
-  .cv-top { height: auto; flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+  .cv-top { gap: 8px; padding: 8px 10px; }
   .cv-top h2 { flex: 1; }
   .cv-acts { margin-left: 0; }
-  .cv-filter { order: 3; }
-  .cv-find { order: 4; flex: 1 1 110px; min-width: 0; }
+  .cv-filter { order: 3; max-width: 100%; overflow-x: auto; }
+  .cv-find { order: 4; flex: 1 1 110px; max-width: none; min-width: 0; }
   .cv-hint span { max-width: 62vw; overflow: hidden; text-overflow: ellipsis; }
   .cv-side-h .ib[aria-pressed] { display: none; }
   .cv-body { position: relative; }
   .cv-side, .cv-side.wide { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; width: auto; max-height: 70%; border-left: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 30px rgb(0 0 0 / .16); animation-name: cv-sheet-in; }
   .lp-rep { grid-template-columns: minmax(0, 1fr); }
+  .cv-sum { display: none; }
   .cv .cv-legend, .lp-rep h4 span, .lp-rep header small { display: none; }
   .lr { inset: 0; border-radius: 0; padding: 14px; }
 }

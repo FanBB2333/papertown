@@ -332,7 +332,7 @@ export function LoopCard({ r, toast }: { r: ProjectCard; toast: (t: string, erro
         <span className="lp-round">{tr('第 {0} 轮', v.rounds)} · {phase(v)}</span>
         <LoopSummary v={v} />
         <Spark v={v} />
-        <a className="btn cv-open" href={href(to)} onClick={e => { wanted.node = null; follow(e, to); }}>{tr('打开完整回路')}<Icon n="ext" size={13} /></a>
+        <a className="btn pri cv-open" href={href(to)} onClick={e => { wanted.node = null; follow(e, to); }}><Icon n="map" size={14} />{tr('打开完整回路')}<Icon n="ext" size={13} /></a>
       </header>
       <Track v={v} r={r} />
       <div className="lp-rep">

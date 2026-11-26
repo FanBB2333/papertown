@@ -1078,7 +1078,7 @@ function Board({ r, toast, onConsole }: { r: ProjectCard; toast: (t: string, err
           })}
         </div>
         <Find v={v} q={q} setQ={setQ} onPick={pick} />
-        {v && <LoopSummary v={v} short />}
+        <div className="cv-sum">{v && <LoopSummary v={v} short />}</div>
         <div className="cv-acts">
           <button className="btn" disabled={busy || !v} onClick={runAll} title={tr('立即运行该项目的全部硬检查')}><Icon n="refresh" size={14} />{tr('立即全检')}</button>
           <Menu cls="btn pri" label={<><Icon n="plus" size={14} />{tr('新建回路节点')}</>}>
