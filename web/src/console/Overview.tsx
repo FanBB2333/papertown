@@ -57,7 +57,7 @@ export function Overview(p: Props) {
 
       <section className="cs">
         <div className="cs-h">
-          <h3>{tr('研究进度')}</h3>
+          <span className="cs-ic"><Icon n="branch" size={15} /></span><h3>{tr('研究进度')}</h3>
           <span className="muted small">{figures(tr('{0}/{1} 站完成', done, l.stages.length))}</span>
         </div>
         <ol className="ov-steps" style={{ ['--done' as string]: done, ['--n' as string]: l.stages.length }}>
@@ -78,7 +78,7 @@ export function Overview(p: Props) {
           <button key={x.m} className="ov-part" style={{ ['--i' as string]: i }} onClick={() => p.go(x.m)}>
             <Icon n={x.icon} size={20} />
             <span className="ov-pt">{x.t}</span>
-            <b className={x.m === 'survey' && h?.verdict ? 'em-key' : undefined}>{x.v}</b>
+            <b>{x.m === 'survey' && h?.verdict ? <span className="em-tag ov-tag" data-tone={({ [tr('可孵化')]: 'good', [tr('已被做过')]: 'bad' } as Record<string, string>)[h.verdict] ?? 'warn'}>{x.v}</span> : x.v}</b>
             {x.s && <span className="muted small">{modelText(x.s)}</span>}
             <Icon n="right" size={14} className="ov-go" />
           </button>

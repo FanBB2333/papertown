@@ -34,6 +34,9 @@
 .out-tabs a { font-size: 12px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
 .out-tabs a.on { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
 .lc .detail .pnl { overflow: auto; max-height: 360px; }
+/* the three panels under the stages: room inside each, its heading at the top */
+:is(.lc, .ov-mill) .detail .pnl { padding: 12px 14px; }
+:is(.lc, .ov-mill) .detail .pnl > h4:first-child { margin-top: 0; }
 .doc p, .doc ul { margin: 2px 0 4px; font-size: 12.5px; }
 .doc ul { padding-left: 18px; }
 .doc-t { font-family: var(--head); font-size: 14px; margin: 0 0 4px; }

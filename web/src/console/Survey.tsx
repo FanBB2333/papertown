@@ -113,7 +113,7 @@ export function Survey(p: Props) {
 
       {m && (
         <section className="cs sv-method">
-          <h3>{tr('方法速览')}</h3>
+          <div className="cs-h"><span className="cs-ic"><Icon n="wand" size={15} /></span><h3>{tr('方法速览')}</h3></div>
           <p className="sv-prob"><b>{tr('问题')}</b>{modelText(m.problem, 120)}</p>
           {(m.mechanism?.length ?? 0) > 0 && <ol className="sv-steps">{m.mechanism.slice(0, 4).map((x: string, i: number) => <Point key={x} text={x} n={56} i={i} />)}</ol>}
           <div className="sv-row">
@@ -144,7 +144,7 @@ function Reading({ got, why }: { got: { survey: PaperCard[]; references: PaperCa
   return (
     <section className="cs">
       <div className="cs-h">
-        <h3>{tr('文献')}</h3>
+        <span className="cs-ic"><Icon n="books" size={15} /></span><h3>{tr('文献')}</h3>
         <div className="seg mini" role="tablist">
           {got.survey.length > 0 && <button className={tab === 'survey' ? 'on' : ''} onClick={() => setTab('survey')}>{tr('调研所得 · {0}', got.survey.length)}</button>}
           {got.references.length > 0 && <button className={tab === 'references' ? 'on' : ''} onClick={() => setTab('references')}>{tr('论文引用的 · {0}', got.references.length)}</button>}

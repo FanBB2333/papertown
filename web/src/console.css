@@ -304,6 +304,7 @@ a.ov-ask > .ic:last-child { color: var(--muted); animation: none; }
 .ov-part > .ic:first-child { color: var(--brand); margin-bottom: 6px; }
 .ov-pt { font-size: 12px; color: var(--muted); }
 .ov-part b { font: 400 16px/1.35 var(--head); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+html body .ov-part .ov-tag { padding: 0 9px; font-size: 13px; line-height: 23px; }
 .ov-go { position: absolute; right: 14px; top: 16px; color: var(--muted); transition: transform .45s var(--spring), color .2s; }
 .ov-part:hover .ov-go { transform: translateX(3px); color: var(--brand); }
 .ov-spend { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
