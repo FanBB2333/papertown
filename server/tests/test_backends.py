@@ -15,11 +15,11 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from papertown import ansi
+from teletty import HeadlessBackend, Stopped, TmuxBackend, ansi
 from papertown.agents import AgentError, PT
 from papertown.paseo_models import PASEO_OFF, ModelError
 from papertown.api import create_app
-from papertown.backends import binary
+from papertown.terminal_compat import binary
 from papertown.hosted import Hosted
 from papertown.town import Town
 from .conftest import make_settings
@@ -79,7 +79,6 @@ def tmux(tmp_path, request):
 
 def stop_ptyd(hosted):
     """End this test's own background terminal daemon, if it started one."""
-    from papertown.backends import Stopped
     try:
         pid = hosted.backends['headless']._call('ping')['pid']
     except Stopped:
@@ -90,6 +89,33 @@ def stop_ptyd(hosted):
 
 def status(h, aid):
     return h.refresh(aid)['term']['status']
+
+
+@pytest.mark.parametrize('legacy', [False, True], ids=['configured-launch', 'old-server-launch'])
+def test_papertown_daemon_identity_and_exit_note(tmp_path, legacy):
+    hosted = Town(make_settings(tmp_path)).agents.hosted
+    backend = hosted.backends['headless']
+    if legacy:
+        backend.daemon_args = ()
+    program = r"""
+import os, tty
+tty.setraw(0)
+os.write(1, b'\x1b[>q')
+reply = b''
+while not reply.endswith(b'\x1b\\'):
+    reply += os.read(0, 64)
+print(reply.hex(), flush=True)
+raise SystemExit(7)
+"""
+    try:
+        handle = backend.open({'name': 'identity', 'session': 'test', 'env': {}, 'cwd': str(tmp_path),
+                               'argv': [sys.executable, '-c', program]})
+        eventually(lambda: not backend.alive(handle))
+        screen = backend.screen(handle)
+        assert b'\x1bP>|Papertown\x1b\\'.hex() in screen
+        assert '[进程已退出，退出码 7]' in screen
+    finally:
+        stop_ptyd(hosted)
 
 
 def test_tmux_lifecycle_queue_hooks_resume(tmux):
@@ -109,6 +135,10 @@ def test_tmux_lifecycle_queue_hooks_resume(tmux):
     sid = t.agents.get(aid)['session_id']
     assert t.db.one('select * from agent_sessions where session_id = ?', sid)['agent_id'] == aid
     assert t.s.tmux_socket in started['attach'] if h.rt == 'tmux' else started['attach'] is None
+    if h.rt == 'tmux':
+        handle = t.agents.get(aid)['term']['handle']
+        assert t.agents.tmux_host.call('show-options', '-pqv', '-t', handle['pane'], '@papertown_id').stdout.strip() == handle['identity']
+        assert 'set -g extended-keys-format csi-u' in (t.s.data_dir / 'tmux.conf').read_text()
     assert 'handle' not in started['term'] and 'token' not in json.dumps(started['term'])
     t.agents.say(aid, 'hello\nworld')
     eventually(lambda: '⏺ reply hello|world' in h.screen(aid)['text'])
@@ -301,6 +331,16 @@ def memory_employee(tmp_path, provider='claude'):
         'generation': 'gen1', 'status': 'starting', 'seq': 0, 'seen_seq': 0, 'since': '2026-11-22T00:00:00Z',
         'started': time.time() - 1, 'screen_at': time.time() - 1})
     return t, h, backend, a['id']
+
+
+def test_decoder_failure_exits_employee_and_retains_diagnostic(tmp_path):
+    town, hosted, backend, aid = memory_employee(tmp_path)
+    backend.text = 'ready\n[无法解码终端输出]'
+    backend.state = lambda _: {'status': 'failed', 'seq': None, 'since': None, 'error': '[无法解码终端输出]'}
+    row = hosted.refresh(aid)
+    assert row['status'] == 'error' and row['term']['status'] == 'exited'
+    assert row['term']['note'] == '[无法解码终端输出]'
+    assert hosted.screen(aid)['text'] == backend.text
 
 
 def test_state_machine_signals_startup_and_read_receipts(tmp_path):
@@ -620,15 +660,6 @@ def test_files_go_with_a_message_by_path(tmp_path, monkeypatch):
     assert len(said) == 2
 
 
-def test_every_terminal_key_reaches_each_backend():
-    from papertown import backends, ptyd
-    from papertown.terminals import KEYS
-    for k in KEYS:
-        single = len(k) == 1 and k.isprintable()
-        assert k in backends.TMUX_KEYS or single, k
-        assert k in ptyd.KEYS or k in ptyd.ARROWS or single, k
-
-
 def test_typing_goes_straight_into_papertowns_own_terminals(tmp_path):
     from types import SimpleNamespace
     t, h, b, aid = memory_employee(tmp_path, 'codex')
@@ -643,8 +674,7 @@ def test_typing_goes_straight_into_papertowns_own_terminals(tmp_path):
         h.type(aid, 'x')
     # tmux takes typed text literally (a leading dash is text, not an option) and a paste without Enter
     calls = []
-    from papertown.backends import HeadlessBackend, TmuxBackend
-    tmux = object.__new__(TmuxBackend); tmux.alive = lambda handle: True
+    tmux = TmuxBackend(None, "fixture"); tmux.alive = lambda handle: True
     tmux.call = lambda *args, **kw: calls.append(args) or SimpleNamespace(stdout='')
     tmux.type({'pane': '%1'}, '-rf')
     assert calls == [('send-keys', '-t', '%1', '-l', '--', '-rf')]
@@ -652,7 +682,7 @@ def test_typing_goes_straight_into_papertowns_own_terminals(tmp_path):
     assert [c[0] for c in calls] == ['load-buffer', 'paste-buffer', 'delete-buffer'] and 'Enter' not in sum(calls, ())
     # the headless terminal: a few characters as keys, a paste as one
     sent = []
-    headless = object.__new__(HeadlessBackend); headless._call = lambda op, **kw: sent.append((op, kw))
+    headless = HeadlessBackend(tmp_path); headless._call = lambda op, **kw: sent.append((op, kw))
     headless.type({'id': 'x'}, 'ab'); headless.type({'id': 'x'}, 'a\nb')
     assert sent == [('keys', {'id': 'x', 'keys': ['a', 'b']}), ('paste', {'id': 'x', 'text': 'a\nb', 'enter': False})]
 

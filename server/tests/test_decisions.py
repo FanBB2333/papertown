@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from papertown.prompts import parse
+from teletty.prompts import parse
 from .test_backends import memory_employee
 from .test_canvas_agents import bind, flow, node  # noqa: F401 - flow is a fixture
 from .test_cards import CARD

@@ -1,47 +1,15 @@
 // One dialog for whatever an agent waits on: a prompt on its terminal screen or a permission request.
 import { Button, Dialog } from '@cloudflare/kumo';
-import { useEffect, useState } from 'react';
+import { paragraphs, usePrompt, type PromptChoice } from '@teletty/web';
 import { tr } from '../i18n';
 
-export interface Choice { label: string; tone?: 'primary' | 'danger'; pick: () => Promise<unknown> | void }
-
-// A terminal wraps its text at the screen's width: put the lines of one sentence back together, and leave a
-// line without spaces (a path, a command) on its own.
-function paragraphs(lines: string[]) {
-  const out: string[] = [];
-  for (const line of lines) {
-    const last = out[out.length - 1];
-    if (last && /\s/.test(last) && /\s/.test(line) && !/[.?!:。？！：]$/.test(last)) out[out.length - 1] = `${last} ${line}`;
-    else out.push(line);
-  }
-  return out;
-}
-
-// what was closed without an answer stays closed until the prompt itself changes
-const dismissed = new Set<string>();
-export const promptDismissed = (key: string) => dismissed.has(key);
+export { promptDismissed } from '@teletty/web';
 
 export function PromptDialog({ id, who, title, body = [], code, choices, hint, children, onClose }: {
-  id: string; who: string; title: string; body?: string[]; code?: string; choices: Choice[]; hint?: string;
+  id: string; who: string; title: string; body?: string[]; code?: string; choices: PromptChoice[]; hint?: string;
   children?: React.ReactNode; onClose: () => void;
 }) {
-  const [busy, setBusy] = useState(-1), [error, setError] = useState('');
-  const close = () => { dismissed.add(id); onClose(); };
-  async function run(i: number) {
-    if (busy >= 0 || !choices[i]) return;
-    setBusy(i); setError('');
-    try { await choices[i].pick(); close(); } catch (e) { setError((e as Error).message); } finally { setBusy(-1); }
-  }
-  // the digits answer as they do in the terminal
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing || (e.target as HTMLElement).closest('input, textarea')) return;
-      const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= choices.length) { e.preventDefault(); void run(n - 1); }
-    };
-    addEventListener('keydown', key);
-    return () => removeEventListener('keydown', key);
-  });
+  const { busy, error, run, close } = usePrompt({ id, choices, onClose });
   return <Dialog.Root open onOpenChange={v => { if (!v && busy < 0) close(); }}>
     <Dialog size="base" className="st-dlg aw-prompt">
       <p className="aw-prompt-who"><i aria-hidden="true" />{who}</p>

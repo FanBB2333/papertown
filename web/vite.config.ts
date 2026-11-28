@@ -39,7 +39,7 @@ const OWN_TOKENS = /:root|:host|\[data-theme|\[data-mode/;
 
 export default defineConfig(({ command }) => ({
   plugins: [react()],
-  resolve: { alias: { '@design': design } },
+  resolve: { alias: { '@design': design }, dedupe: ['react', 'react-dom'] },
   css: {
     postcss: {
       plugins: [{
@@ -59,7 +59,7 @@ export default defineConfig(({ command }) => ({
   // three.js and OpenCC's dictionaries are large lazy chunks
   build: { chunkSizeWarningLimit: 1100 },
   server: {
-    fs: { allow: ['..'] },
+    fs: { allow: [root] },
     // only the dev server (and preview) proxies, so a build reads no config
     proxy: command === 'serve' ? { '/api': { target: `http://127.0.0.1:${serverPort()}`, changeOrigin: true } } : undefined,
   },

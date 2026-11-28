@@ -33,7 +33,7 @@ herdr 后端里 Claude Code 和 Codex 的状态直接用 herdr 自己识别的 `
 
 ### 3.1 一层终端后端
 
-新增 `server/papertown/backends.py`：
+三种终端传输、后台守护进程和终端模拟器位于相邻的 teletty 仓库。`teletty.backends` 提供传输接口，Papertown 通过 `server/papertown/terminal_compat.py` 传入套接字、窗格标记和提示文字。员工状态、消息排队、已读记录和项目归属由 Papertown 管理。
 
 - `TerminalBackend` 接口：`open(spec) → handle`、`alive(handle)`、`screen(handle) → 文字`、`glance(handle) → 当前画面`（每秒的状态同步只读这个，herdr 下不触发历史回滚）、`submit(handle, text)`（作为一次粘贴发送再回车）、`keys(handle, keys)`、`state(handle) → {status, seq, since}`、`close(handle)`。
 - `HerdrBackend`：每个项目一个 herdr 工作区（`workspace.create`，标签「Papertown #序号 标题」，小助手一个「Papertown」工作区），每个员工一个标签页（带工作目录和 `PAPERTOWN_*` 环境变量），在标签页的窗格里 `agent.start`。新建的工作区自带一个标签页，项目的第一个员工直接用它（`tab.rename` 改为员工名），之后的员工用 `tab.create` 新建，这样关掉项目的最后一个员工时工作区随之关闭，不留空的 shell。新标签页的 shell 还在加载配置时 herdr 会回 `agent_pane_busy`，此时每 0.3 秒重试，至多 20 秒。agent 名为 `pt<序号>-<岗位或节点>`，只含小写字母、数字、`-`、`_`，不超过 32 个字符。`agent.start` 拿到终端 id 就返回，是否就绪由状态同步判断。发送用 `agent.prompt`，按键用 `agent.send_keys`，读屏用 `agent.read`（工作中退回读当前画面），关闭用 `tab.close`。
@@ -173,10 +173,10 @@ Claude Code 的会话 id 在启动时就写进 `agent_sessions`。Codex 和 Anti
 
 ### 7.1 结构
 
-- **守护进程 `server/papertown/ptyd.py`**：一个独立进程持有所有后台终端。每个终端是一个伪终端（`pty.fork`），子进程是新会话的首进程，伪终端是它的控制终端，窗口大小 160×48，`TERM=xterm-256color`。服务端第一次在 headless 里启动员工时拉起它（`python -m papertown.ptyd <socket>`，自行脱离为孤儿进程，不是服务端的子进程），之后它与服务端各自运行：服务端重启时员工照常工作，重启后按句柄里的终端 id 重新找到。连续 10 分钟没有任何终端时它自行退出。同一个套接字只会有一个守护进程（`ptyd.sock.lock` 加锁）。
+- **守护进程 `teletty.ptyd`**：一个独立进程持有所有后台终端。每个终端是一个伪终端（`pty.fork`），子进程是新会话的首进程，伪终端是它的控制终端，窗口大小 160×48，`TERM=xterm-256color`。服务端第一次在 headless 里启动员工时拉起它（`python -m papertown.ptyd <socket>`，自行脱离为孤儿进程，不是服务端的子进程），之后它与服务端各自运行：服务端重启时员工照常工作，重启后按句柄里的终端 id 重新找到。连续 10 分钟没有任何终端时它自行退出。同一个套接字只会有一个守护进程（`ptyd.sock.lock` 加锁）。
 - **套接字**：`<数据目录>/ptyd.sock`，路径过长时改放 `$TMPDIR/papertown-<uid>/<哈希>.sock`，权限 600。每次连接一个 JSON 请求、一个 JSON 回答：`ping`、`open`、`list`、`state`、`screen`、`paste`、`keys`、`close`。日志写在 `<数据目录>/ptyd.log`。
-- **屏幕 `server/papertown/vt.py`**：一个精简的终端模拟器，处理 agent CLI 用到的控制序列：光标移动、擦除、插入删除字符和行、滚动区域（Codex 在输入框上方插入历史就靠它）、备用屏幕、宽字符和组合字符、同步输出（读到的是上一帧完整画面）。颜色和字形属性丢弃，读出的文字与 `tmux capture-pane -p -J` 一致：自动折行的行拼回一行，行尾空格去掉。CLI 启动时会询问终端（光标位置、设备属性、窗口大小、前景和背景色），模拟器照 xterm 的格式回答，否则 Codex 读不到光标位置会启动失败。键盘增强协议（kitty、CSI u）的询问不回答，CLI 随之退回普通按键编码。
-- **后端 `HeadlessBackend`（`backends.py`）**：与 `TmuxBackend` 同一套接口。终端的环境变量取服务端的环境，去掉服务端所在终端程序和复用器的变量（`TMUX`、`TERM_PROGRAM`、`GHOSTTY_*`、`CMUX_*` 等），免得 CLI 以为自己在那些程序里。`attach` 为空，员工页的接入方式写「Papertown 后台终端，在此页面查看与操作」。
+- **屏幕 `teletty.vt`**：一个精简的终端模拟器，处理 agent CLI 用到的控制序列：光标移动、擦除、插入删除字符和行、滚动区域（Codex 在输入框上方插入历史就靠它）、备用屏幕、宽字符和组合字符、同步输出（读到的是上一帧完整画面）。按需读回颜色和字形属性，纯文本与 `tmux capture-pane -p -J` 一致：自动折行的行拼回一行，行尾空格去掉。CLI 启动时会询问终端（光标位置、设备属性、窗口大小、前景和背景色），模拟器照 xterm 的格式回答，否则 Codex 读不到光标位置会启动失败。键盘增强协议（kitty、CSI u）的询问不回答，CLI 随之退回普通按键编码。
+- **后端 `HeadlessBackend`（`teletty.backends`）**：与 `TmuxBackend` 同一套接口。终端的环境变量取服务端的环境，去掉服务端所在终端程序和复用器的变量（`TMUX`、`TERM_PROGRAM`、`GHOSTTY_*`、`CMUX_*` 等），免得 CLI 以为自己在那些程序里。`attach` 为空，员工页的接入方式写「Papertown 后台终端，在此页面查看与操作」。
 
 ### 7.2 输入只走键盘
 
@@ -192,6 +192,6 @@ Claude Code 的会话 id 在启动时就写进 `agent_sessions`。Codex 和 Anti
 ### 7.3 验证
 
 - `tests/test_backends.py` 的三组终端测试同时跑 tmux 和 headless：启动参数、第一条消息、多行粘贴、插话、排队放行、打断等待与超时、停止、对话框判为等你、关闭后接着会话、服务端重启后重新接上终端、进程退出。每个测试用自己的数据目录和守护进程，结束时停掉。
-- `tests/test_vt.py` 覆盖移动与擦除、折行拼接、宽字符、跨读取的 UTF-8、滚动区域与历史、插入删除、备用屏幕、启动询问的回答、OSC 和 DCS 字符串、同步输出。
+- teletty 的 `tests/test_vt.py` 覆盖移动与擦除、折行拼接、宽字符、跨读取的 UTF-8、滚动区域与历史、插入删除、备用屏幕、启动询问的回答、OSC 和 DCS 字符串、同步输出。
 - 本机真实的 Claude Code 2.1.330、Codex 0.169.0、Antigravity 在 headless 终端里以临时主目录启动（不碰用户的配置和信任状态，不发任何消息）：Claude Code 的主题选择、Codex 的登录和更新提示、Antigravity 的登录菜单都完整显示，三者都打开了 bracketed paste，Codex 与 Antigravity 的菜单按方向键后选中项随之移动。
 

@@ -1,6 +1,7 @@
 import { Button } from '@cloudflare/kumo';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, listen, type Agent, type AgentEvent, type AgentRole, type PaseoItem, type StartOpts, type StyledScreen, type TermPrompt, type Terminal, type Transcript } from '../api';
+import { TerminalScreen, styledOf, tail, useTyper, type KeyName, type StyledScreen, type TermPrompt } from '@teletty/web';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { api, listen, type Agent, type AgentEvent, type AgentRole, type PaseoItem, type StartOpts, type Terminal, type Transcript } from '../api';
 import { fold, PaseoLog, RuntimePick } from '../components/AgentRoom';
 import { ago } from '../console/util';
 import { tr } from '../i18n';
@@ -9,7 +10,7 @@ import { useReadReceipt } from './live';
 import { PromptDialog, promptDismissed } from './Prompt';
 import { bucketOf, isWorking, kindName, WatchStatus, type Watched } from './watch';
 
-const KEYS = [['enter', 'Enter'], ['esc', 'Esc'], ['up', '↑'], ['down', '↓'], ['1', '1'], ['2', '2'], ['3', '3'], ['y', 'y'], ['n', 'n']];
+const PROMPT_KEYS: [KeyName, string][] = [['enter', 'Enter'], ['esc', 'Esc'], ['up', '↑'], ['down', '↓'], ['1', '1'], ['2', '2'], ['3', '3'], ['y', 'y'], ['n', 'n']];
 const UNSURE = tr('发送结果未确认，请查看终端后决定是否再次发送。');
 const STEER = tr('消息将直接发送至终端，处理方式由终端内的 agent 决定。');
 
@@ -31,57 +32,6 @@ interface Source<T extends Subject> {
   type?: (text: string, paste: boolean) => Promise<unknown>; typing?: (x: T) => boolean;
 }
 
-type Typed = { text: string } | { paste: string } | { keys: string[] };
-
-// The keys a terminal takes by name; other printable keys go in as text.
-function keyName(e: React.KeyboardEvent): string | null {
-  if (e.ctrlKey && !e.metaKey && !e.altKey && /^[cdot]$/i.test(e.key)) return 'ctrl+' + e.key.toLowerCase();
-  const named: Record<string, string> = { Enter: 'enter', Escape: 'esc', Backspace: 'backspace', ArrowUp: 'up', ArrowDown: 'down',
-    ArrowLeft: 'left', ArrowRight: 'right', PageUp: 'pageup', PageDown: 'pagedown' };
-  if (e.key === 'Tab') return e.shiftKey ? 'shift+tab' : 'tab';
-  return named[e.key] ?? null;
-}
-
-// Sends what is typed one request at a time and in order, merging text typed while a request is out, and redraws once
-// it has all gone.
-function useTyper(send: (t: Typed) => Promise<unknown>, settled: () => void, fail: (message: string) => void) {
-  const queue = useRef<Typed[]>([]), running = useRef(false);
-  const fns = useRef({ send, settled, fail }); fns.current = { send, settled, fail };
-  return useCallback((t: Typed) => {
-    const last = queue.current[queue.current.length - 1];
-    if ('text' in t && last && 'text' in last) queue.current[queue.current.length - 1] = { text: last.text + t.text };
-    else queue.current.push(t);
-    if (running.current) return;
-    running.current = true;
-    void (async () => {
-      while (queue.current.length) {
-        const next = queue.current.shift()!;
-        try { await fns.current.send(next); } catch (e) { queue.current = []; fns.current.fail((e as Error).message); }
-      }
-      running.current = false;
-      setTimeout(() => fns.current.settled(), 150);
-    })();
-  }, []);
-}
-
-const tail = (text: string, lines = 18) => text.split('\n').filter(l => l.trim()).slice(-lines).join('\n');
-const styledOf = (r: Partial<StyledScreen>): StyledScreen | null => r.lines && r.styles && r.theme ? { lines: r.lines, styles: r.styles, theme: r.theme } : null;
-
-// The screen as the server styled it. Runs of blank lines collapse to one and the trailing ones go, as in the app.
-export function StyledLines({ screen }: { screen: StyledScreen }) {
-  const blank = (line: [string, number][]) => line.every(([t, s]) => !t.trim() && !screen.styles[s]?.bg);
-  const shown: number[] = [];
-  screen.lines.forEach((line, i) => { if (!(blank(line) && shown.length && blank(screen.lines[shown[shown.length - 1]]))) shown.push(i); });
-  while (shown.length && blank(screen.lines[shown[shown.length - 1]])) shown.pop();
-  if (!shown.length) return <>{tr('终端暂未输出内容。')}</>;
-  return <>{shown.map(i => <span key={i}>{screen.lines[i].map(([t, s], j) => {
-    const st = screen.styles[s] ?? {};
-    if (!st.fg && !st.bg && !st.b && !st.i && !st.u && !st.s) return t;
-    return <span key={j} style={{ color: st.fg, background: st.bg, fontWeight: st.b ? 700 : undefined, fontStyle: st.i ? 'italic' : undefined,
-      textDecoration: [st.u && 'underline', st.s && 'line-through'].filter(Boolean).join(' ') || undefined }}>{t}</span>;
-  })}{'\n'}</span>)}</>;
-}
-
 // `open`: the tab it starts on and stays on until the user picks another (else it follows what can be shown)
 function TermChat<T extends Subject>({ source, toast, tools, open }: { source: Source<T>; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode; open?: 'chat' | 'screen' }) {
   const [subject, setSubject] = useState(source.first), [queued, setQueued] = useState<AgentEvent[]>([]);
@@ -98,19 +48,6 @@ function TermChat<T extends Subject>({ source, toast, tools, open }: { source: S
   const canType = !!source.type && !!source.typing?.(subject) && !exited;
   const typeIn = useTyper(t => 'keys' in t ? source.keys(t.keys) : source.type!('text' in t ? t.text : t.paste, 'paste' in t),
     () => reload.current(), message => toast(message, true));
-  const typed = canType ? {
-    'data-typing': '', title: tr('点击画面后可直接用键盘输入'),
-    onKeyDown: (e: React.KeyboardEvent<HTMLPreElement>) => {
-      if (e.nativeEvent.isComposing || e.metaKey) return; // ⌘C copies and ⌘V pastes as usual
-      const name = keyName(e);
-      if (name) { e.preventDefault(); stick.current = true; typeIn({ keys: [name] }); }
-      else if (e.key.length === 1 && !e.ctrlKey) { e.preventDefault(); stick.current = true; typeIn({ text: e.key }); }
-    },
-    onPaste: (e: React.ClipboardEvent<HTMLPreElement>) => {
-      const text = e.clipboardData.getData('text');
-      if (text) { e.preventDefault(); stick.current = true; typeIn({ paste: text }); }
-    },
-  } : {};
   const receipt = useReadReceipt(id, text === null && items === null ? null : `${text}\n${items?.length}\n${bucketOf(subject)}\n${subject.watch?.since}`);
   const times = (list: PaseoItem[], t: string) => list.filter(i => i.kind === 'user' && (i.text ?? '').trim() === t).length;
 
@@ -186,10 +123,10 @@ function TermChat<T extends Subject>({ source, toast, tools, open }: { source: S
       {transcript?.ok && !rows.length && !sent.length && <div className="room-empty small-empty"><p>{tr('暂无对话。')}</p></div>}
       {!transcript && !error && <div className="room-empty small-empty"><p>{tr('加载中…')}</p></div>}
       <PaseoLog lineId={source.lineId} rows={rows} sent={sent.map(m => m.text)} asks={[]} working={working && !blocked} onPermit={() => {}} />
-    </div> : <pre className="terminal-screen" key="screen" ref={el => { pane.current = el; }} tabIndex={0} aria-label={tr('终端内容')} onScroll={scrolled} {...typed}
-      style={styled ? { color: styled.theme.fg, background: styled.theme.bg } : undefined}>
-      {styled ? <StyledLines screen={styled} /> : text === null ? tr('加载中…') : text.replace(/\n(?:[ \t]*\n){2,}/g, '\n\n') || tr('终端暂未输出内容。')}
-    </pre>}
+    </div> : <TerminalScreen key="screen" text={text} screen={styled}
+      scroll={{ ref: el => { pane.current = el; }, onScroll: scrolled }}
+      onInput={canType ? input => { stick.current = true; typeIn(input); } : undefined}
+      labels={{ screen: tr('终端内容'), typeHint: tr('点击画面后可直接用键盘输入'), loading: tr('加载中…'), empty: tr('终端暂未输出内容。') }} />}
     {exited ? <div className="term-wait term-off" role="status">
       <div className="term-off-row">
         <div><b className="em-state" data-tone="warn">{tr('终端已关闭')}</b><p>{tr('再次启动时将续接上次会话，也可换种运行方式启动。')}</p></div>
@@ -220,7 +157,7 @@ function TermChat<T extends Subject>({ source, toast, tools, open }: { source: S
         <p>{tr('按键将原样发送至终端，可用于提示中未列出的操作。')}</p>
         {/* the dialog is in the Kumo layer, where the page's own buttons have no styles */}
         <div className="aw-prompt-keys" role="group" aria-label={tr('终端按键')}>
-          {KEYS.map(([key, name]) => <Button key={key} size="sm" variant="secondary" disabled={busy || !!error} onClick={() => act(() => source.keys([key]))}>{tr(name)}</Button>)}
+          {PROMPT_KEYS.map(([key, name]) => <Button key={key} size="sm" variant="secondary" disabled={busy || !!error} onClick={() => act(() => source.keys([key]))}>{tr(name)}</Button>)}
         </div>
       </details>
       <button type="button" className="aw-prompt-link" onClick={() => { choose('screen'); setAsking(false); }}>{tr('查看终端画面')}</button>

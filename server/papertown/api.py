@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 import asyncio
-import gzip
 import json
 import threading
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from teletty import BackendError, HerdrError
+from teletty.http import packed
+from teletty.prompts import PromptError
+
 from . import samples, status as status_mod, uploads
 from .agents import AgentError, ROLES
-from .herdr import HerdrError
-from .prompts import PromptError
 from .ask import AskError
 from .assistant import ID as ASSISTANT, ActError
 from .auth import COOKIE, Auth, AuthError, Gate
@@ -502,13 +502,8 @@ async def upload_body(request: Request) -> bytes:
     return bytes(data)
 
 
-def packed(request: Request, data):
-    """A large JSON answer gzipped for a client that takes it: a terminal's screen with its colours runs to hundreds of
-    kilobytes, read every two seconds while it shows."""
-    body = json.dumps(jsonable_encoder(data), ensure_ascii=False, separators=(",", ":")).encode()
-    if len(body) < 4096 or "gzip" not in request.headers.get("accept-encoding", ""):
-        return Response(body, media_type="application/json")
-    return Response(gzip.compress(body, 5), media_type="application/json", headers={"Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+def screen_response(request: Request, data):
+    return packed(request, data, compress="gzip" in request.headers.get("accept-encoding", ""))
 
 
 class Pages(StaticFiles):
@@ -533,9 +528,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     town = Town(settings)
     authed, guard, ws, farm = mapped(AuthError), mapped(LineError), mapped(WsError), mapped(FarmError)
     agents, assistant = mapped(AgentError), mapped(AgentError, ActError)
-    terminals = mapped(HerdrError)
+    terminals = mapped(HerdrError, BackendError)
     files = mapped(uploads.UploadError, AgentError, HerdrError)
-    agent_prompts, terminal_prompts = mapped(AgentError, PromptError), mapped(HerdrError, PromptError)
+    agent_prompts, terminal_prompts = mapped(AgentError, PromptError), mapped(HerdrError, BackendError, PromptError)
     leads = mapped(LeadError, AgentError, CardError)
     checks = mapped(CheckError, AgentError, LeadError)
     canvas = mapped(CanvasError, CheckError, AgentError, LeadError)
@@ -858,7 +853,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/terminals/{id}")
     def terminal(id: str, request: Request, styled: bool = False):
-        return packed(request, terminals(town.terminals.detail, id, styled))
+        return screen_response(request, terminals(town.terminals.detail, id, styled))
 
     @app.post("/api/terminals/{id}/say")
     def terminal_say(id: str, body: SayIn):
@@ -897,7 +892,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/agents/{agent_id}/screen")
     def agent_screen(agent_id: str, request: Request, styled: bool = False):
-        return packed(request, agents(town.agents.hosted.screen, agent_id, styled))
+        return screen_response(request, agents(town.agents.hosted.screen, agent_id, styled))
 
     @app.post("/api/agents/{agent_id}/keys")
     def agent_keys(agent_id: str, body: TerminalKeysIn):
@@ -943,7 +938,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """The screen of every open terminal as it is now, for the page that shows them side by side."""
         screens = town.agents.hosted.previews()
         owned = {(a.get("term") or {}).get("handle", {}).get("pane") for a in town.db.q("select * from agents where runtime = 'herdr'")}
-        return packed(request, {"screens": screens | town.terminals.previews(owned - {None})})
+        return screen_response(request, {"screens": screens | town.terminals.previews(owned - {None})})
 
     @app.get("/api/agents/{agent_id}")
     def agent(agent_id: str, after: int = 0):

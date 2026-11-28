@@ -13,7 +13,11 @@ dependencies = [
     "numpy>=1.26",
     "mcp>=1.2",
     "textual>=1.0",
+    "teletty",
 ]
+
+[tool.uv.sources]
+teletty = { path = "../teletty", editable = true }
 
 [project.scripts]
 papertown = "papertown.cli:main"

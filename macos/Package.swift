@@ -6,5 +6,8 @@ import PackageDescription
 let package = Package(
     name: "Papertown",
     platforms: [.macOS(.v14)],
-    targets: [.executableTarget(name: "Papertown", path: "Sources/Papertown")]
+    targets: [
+        .executableTarget(name: "Papertown", path: "Sources/Papertown"),
+        .testTarget(name: "PapertownTests", dependencies: ["Papertown"]),
+    ]
 )

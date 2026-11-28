@@ -1,13 +1,14 @@
 // Every terminal an agent runs in, side by side (/terminals): what is on each screen now, and one of them opened
 // to work in (/terminals/<agent>). The agents run in the background; this is where their terminals are looked at.
 
-import { useEffect, useMemo, useState } from 'react';
-import { api, type Agent, type Overview, type ProjectRef, type ScreenNow, type StyledScreen, type Terminal } from '../api';
+import { ScreenWall, useScreens } from '@teletty/web';
+import { useMemo } from 'react';
+import { api, type Agent, type Overview, type ProjectRef, type Terminal } from '../api';
 import { Icon } from '../console/icons';
 import { tr } from '../i18n';
-import { follow, href, terminalPath } from '../route';
+import { follow, go, href, terminalPath } from '../route';
 import { useOverview } from './overview';
-import { HostedRoom, StyledLines, TerminalRoom } from './Terminal';
+import { HostedRoom, TerminalRoom } from './Terminal';
 import { figures } from '../emphasis';
 import { agentName, bucketOf, BUCKETS, kindName } from './watch';
 import './terminals.css';
@@ -44,31 +45,13 @@ function State({ t }: { t: OpenTerminal }) {
 }
 const where = (t: OpenTerminal) => (t.line ? `#${t.line.seq} ${t.line.title}` : t.agent?.role === 'assistant' ? tr('全局') : tr('未归属项目'));
 
-// the end of what is on screen: a preview shows the last lines, where the work is
-function tailOf(s: StyledScreen, keep = 40): StyledScreen {
-  let end = s.lines.length;
-  while (end && s.lines[end - 1].every(([text, style]) => !text.trim() && !s.styles[style]?.bg)) end--;
-  return { ...s, lines: s.lines.slice(Math.max(0, end - keep), end) };
-}
-
 export function Terminals({ id, toast, onClose }: { id?: string; toast: (t: string, error?: boolean) => void; onClose: () => void }) {
   const { data, error } = useOverview();
-  const [screens, setScreens] = useState<Record<string, ScreenNow> | null>(null), [unread, setUnread] = useState(false);
   const list = useMemo(() => openTerminals(data), [data]);
   const one = useMemo(() => (id ? openTerminals(data, true).find(t => t.id === id) : undefined), [data, id]);
   const wall = !id;
 
-  // the wall reads every screen in one request, and only while it shows
-  useEffect(() => {
-    if (!wall) return;
-    let alive = true, timer = 0;
-    const load = () => {
-      if (document.hidden) { timer = window.setTimeout(load, 2500); return; }
-      api.screens().then(r => { if (alive) { setScreens(r.screens); setUnread(false); } }, () => { if (alive) setUnread(true); }).finally(() => { if (alive) timer = window.setTimeout(load, 2500); });
-    };
-    load();
-    return () => { alive = false; clearTimeout(timer); };
-  }, [wall]);
+  const { screens, unread } = useScreens(api.screens, wall ? 2500 : null);
 
   const needs = list.filter(t => t.bucket === 'needs').length, working = list.filter(t => t.bucket === 'working').length;
   return (
@@ -85,38 +68,15 @@ export function Terminals({ id, toast, onClose }: { id?: string; toast: (t: stri
         <button className="ib tw-close" title={tr('关闭')} aria-label={tr('关闭')} onClick={onClose}><Icon n="close" size={17} /></button>
       </header>
 
-      {wall ? (
-        <div className="tw-body">
-          {!data ? <p className="tw-blank">{error || tr('加载中…')}</p> : !list.length ? (
-            <div className="tw-blank">
-              <b>{tr('当前没有运行中的终端')}</b>
-              <p>{tr('员工、项目负责人或小助手以终端方式启动后，其终端显示在此。')}</p>
-            </div>
-          ) : (
-            <div className="tw-grid">
-              {list.map((t, i) => {
-                const s = screens?.[t.id];
-                return (
-                  <a key={t.id} className="tw-tile" data-b={t.bucket} style={{ ['--i' as string]: i }} href={href(terminalPath(t.id))} onClick={e => follow(e, terminalPath(t.id))}
-                    title={tr('打开此终端进行操作')}>
-                    <header>
-                      <div className="tw-who"><b>{t.name}</b><span>{where(t)}</span></div>
-                      <State t={t} />
-                    </header>
-                    <pre className="tw-screen" aria-hidden="true" style={s && 'lines' in s ? { color: s.theme.fg, background: s.theme.bg } : undefined}>
-                      {!s ? <span className="tw-wait">{screens ? tr('终端暂未输出内容。') : unread ? tr('未能读取终端画面，打开后可查看。') : tr('读取中…')}</span>
-                        : 'error' in s ? <span className="tw-wait">{s.error}</span>
-                          : <span className="tw-lines"><StyledLines screen={tailOf(s)} /></span>}
-                    </pre>
-                    <footer><span>{t.about}</span><em>{tr('打开')}<Icon n="right" size={12} /></em></footer>
-                  </a>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="tw-split">
+      <div className={wall ? 'tw-body' : 'tw-split'}>
+        {wall ? <ScreenWall container={false} items={data ? list : null} screens={screens} unread={unread}
+          href={t => href(terminalPath(t.id))} onSelect={t => go(terminalPath(t.id))} bucket={t => t.bucket}
+          labels={{ loading: error || tr('加载中…'), reading: tr('读取中…'), unread: tr('未能读取终端画面，打开后可查看。'),
+            empty: tr('终端暂未输出内容。'), openTerminal: tr('打开此终端进行操作') }}
+          empty={<div className="tw-blank"><b>{tr('当前没有运行中的终端')}</b><p>{tr('员工、项目负责人或小助手以终端方式启动后，其终端显示在此。')}</p></div>}
+          renderHeader={t => <><div className="tw-who"><b>{t.name}</b><span>{where(t)}</span></div><State t={t} /></>}
+          renderFooter={t => <><span>{t.about}</span><em>{tr('打开')}<Icon n="right" size={12} /></em></>} />
+        : <>
           <nav className="tw-rail" aria-label={tr('全部终端')}>
             {list.map(t => (
               <a key={t.id} className={t.id === id ? 'on' : ''} aria-current={t.id === id ? 'page' : undefined} href={href(terminalPath(t.id))} onClick={e => follow(e, terminalPath(t.id))}>
@@ -130,8 +90,8 @@ export function Terminals({ id, toast, onClose }: { id?: string; toast: (t: stri
               : one?.terminal ? <TerminalRoom terminal={one.terminal} toast={toast} open="screen" />
                 : <p className="tw-blank">{data ? tr('没有这个终端，可能已关闭。') : error || tr('加载中…')}</p>}
           </div>
-        </div>
-      )}
+        </>}
+      </div>
     </div>
   );
 }

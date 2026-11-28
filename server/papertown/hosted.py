@@ -12,12 +12,12 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+from teletty import BackendError, HerdrError, Terminal, ansi, prompts
+from teletty.keys import PUBLIC as TERMINAL_KEYS
+
 from .accounts import AccountError
-from .backends import BackendError, HeadlessBackend, HerdrBackend, TmuxBackend, binary
 from .db import now, write_json
-from .herdr import Herdr, HerdrError
-from .terminals import KEYS
-from . import ansi, prompts
+from .terminal_compat import MESSAGES, binary, transports
 
 RUNTIMES = ('herdr', 'tmux', 'headless')
 IN_RUNTIMES = "runtime in ('herdr', 'tmux', 'headless')"
@@ -36,9 +36,7 @@ TYPED = ('tmux', 'headless')
 class Hosted:
     def __init__(self, agents):
         self.a, self.town, self.db, self.s = agents, agents.town, agents.db, agents.s
-        self.backends = {'tmux': TmuxBackend(agents.tmux, self.s.tmux_socket, agents._tmux),
-                         'herdr': HerdrBackend(Herdr(self.s), self.s.terminal_startup),
-                         'headless': HeadlessBackend(self.s.data_dir)}
+        self.backends = transports(agents)
         self.lock = agents._delivery_lock
         self._halt = threading.Event()
         self._thread = None
@@ -57,21 +55,17 @@ class Hosted:
             raise self.error('这个员工没有终端')
         return a
 
+    def terminal(self, a):
+        return Terminal(self.backends[a['runtime']], a['term'].get('handle'), messages=MESSAGES)
+
     def clis(self):
         return {p: binary(n, getattr(self.s, n + '_bin')) for p, n in
                 [('claude', 'claude'), ('codex', 'codex'), ('antigravity', 'agy')]}
 
     def available(self):
-        try:
-            self.backends['herdr'].client.agents()
-            herdr = {'ok': True, 'note': ''}
-        except HerdrError as e:
-            herdr = {'ok': False, 'note': str(e)}
+        availability = {runtime: self.backends[runtime].availability() for runtime in RUNTIMES}
         st = self.a.paseo.status()
-        return {'paseo': {k: st[k] for k in ('ok', 'note')}, 'herdr': herdr,
-                'tmux': {'ok': bool(self.a.tmux), 'note': '' if self.a.tmux else '本机没有找到 tmux'},
-                'headless': {'ok': hasattr(os, 'forkpty'), 'note': '' if hasattr(os, 'forkpty') else '本系统不支持伪终端'},
-                'clis': self.clis()}
+        return {'paseo': {k: st[k] for k in ('ok', 'note')}, **availability, 'clis': self.clis()}
 
     def public(self, a):
         term = a.get('term') or {}
@@ -79,12 +73,14 @@ class Hosted:
 
     def attach(self, a):
         handle = (a.get('term') or {}).get('handle')
-        return self.backends[a['runtime']].attach(handle) if handle else None
+        return self.terminal(a).attach() if handle else None
 
     def save(self, a, term):
         if term == a.get('term'):
             return
         status = {'done': 'idle', 'blocked': 'working', 'exited': 'stopped'}.get(term['status'], term['status'])
+        if term.get('reason') == 'decode_failed':
+            status = 'error'
         self.a._set(a['id'], term=term, status=status)
         old = a.get('term') or {}
         if term.get('seq', 0) > old.get('seq', 0) or (term['status'] == 'idle' and old.get('status') in ('working', 'blocked')):
@@ -147,7 +143,7 @@ class Hosted:
         old = a.get('term') or {}
         if a.get('runtime') in RUNTIMES and old.get('status') != 'exited' and old.get('handle'):
             try:
-                if self.backends[a['runtime']].alive(old['handle']):
+                if self.terminal(a).alive():
                     if runtime != a['runtime']:
                         raise self.error('请先关闭当前终端后再切换后端')
                     return self.a.public(a)
@@ -201,7 +197,7 @@ class Hosted:
             self.remember(a, provider, sid)
         try:
             if old.get('handle') and a.get('runtime') in RUNTIMES:
-                self.backends[a['runtime']].close(old['handle'])
+                self.terminal(a).close()
             if not quiet:
                 self.a.before(a)
             handle = self.backends[runtime].open({'session': 'pt-' + seq, 'name': name, 'cwd': a['cwd'], 'kind': kind,
@@ -301,13 +297,13 @@ class Hosted:
         a = self.require(id)
         if a['term']['status'] == 'exited' or not a['term'].get('handle'):
             return a
-        backend, handle, generation = self.backends[a['runtime']], a['term']['handle'], a['term'].get('generation')
+        terminal, generation = self.terminal(a), a['term'].get('generation')
         self.discover_codex(a)
         # Read the terminal before taking the lock. herdr can take seconds to answer, and hooks reporting in meanwhile
         # wait on the lock: a status line call held past its 2-second limit is dropped.
         try:
-            state = backend.state(handle)
-            text = backend.glance(handle) if state['status'] != 'exited' else ''
+            state = terminal.state()
+            text = terminal.screen()['text'] if state['status'] not in ('exited', 'failed') else ''
             error = None
         except (HerdrError, BackendError, OSError) as e:
             state, text, error = None, '', str(e)
@@ -320,7 +316,11 @@ class Hosted:
             try:
                 if error:
                     raise BackendError(error)
-                if state['status'] == 'exited':
+                term.pop('note', None)
+                if state['status'] == 'failed':
+                    self.transition(term, 'exited', 'decode_failed')
+                    term['note'] = state['error']
+                elif state['status'] == 'exited':
                     self.transition(term, 'exited')
                 else:
                     digest, at = hashlib.sha256(text.encode()).hexdigest(), time.time()
@@ -374,7 +374,6 @@ class Hosted:
                         self.transition(term, 'blocked', 'still')
                     elif term['status'] == 'blocked' and term.get('reason') in ('still', 'startup') and changed:
                         self.transition(term, 'starting' if term['reason'] == 'startup' else 'working')
-                term.pop('note', None)
             except BackendError as e:
                 term['note'] = str(e)
             prompt = prompts.parse(text) if term['status'] in ('blocked', 'starting') else None
@@ -391,13 +390,15 @@ class Hosted:
         """The terminal's screen with its scrollback; `styled` adds its colours (see ansi.render)."""
         a = self.refresh(id)
         try:
-            text = self.backends[a['runtime']].screen(a['term']['handle'], colours=styled) if a['term'].get('handle') else ''
+            screen = self.terminal(a).screen(history=True, styled=styled) if a['term'].get('handle') else None
         except (HerdrError, BackendError) as e:
             if a['term']['status'] != 'exited':
                 raise self.error(e) from e
-            text = ''
+            screen = None
+        if screen is None:
+            screen = ansi.render('') if styled else {'text': ''}
         prompt = self._prompts.get(id) if a['term']['status'] in ('blocked', 'starting') else None
-        return (ansi.render(text) if styled else {'text': text}) | {'term': self.public(a), 'prompt': prompt}
+        return screen | {'term': self.public(a), 'prompt': prompt}
 
     def previews(self):
         """What is on the screen of every open terminal now, styled like `screen` but without the lines that scrolled
@@ -408,7 +409,7 @@ class Hosted:
             if term.get('status') == 'exited' or not term.get('handle'):
                 continue
             try:
-                out[a['id']] = ansi.render(self.backends[a['runtime']].preview(term['handle']))
+                out[a['id']] = self.terminal(a).preview()
             except (HerdrError, BackendError, OSError) as e:
                 out[a['id']] = {'error': str(e)}
         return out
@@ -416,18 +417,17 @@ class Hosted:
     def prompt(self, id, digest, option):
         with self.lock:
             a = self.require(id)
-            backend, handle = self.backends[a['runtime']], a['term'].get('handle')
-            live = bool(handle) and a['term']['status'] != 'exited'
+            terminal = self.terminal(a)
+            live = bool(terminal.handle) and a['term']['status'] != 'exited'
         # like refresh, read the terminal outside the lock: herdr can take seconds, and hooks report in meanwhile
         try:
-            keys = prompts.answer(prompts.parse(backend.glance(handle)) if live else None, digest, option)
-            backend.keys(handle, keys)
+            terminal.answer(digest, option, live=live)
         except (HerdrError, BackendError) as e:
             raise self.error(e) from e
         return {'ok': True}
 
     def keys(self, id, keys):
-        if not keys or any(k not in KEYS for k in keys):
+        if not keys or any(k not in TERMINAL_KEYS for k in keys):
             raise self.error('不支持这个按键')
         with self.lock:
             a = self.require(id)
@@ -447,7 +447,7 @@ class Hosted:
             if a['term']['status'] == 'exited':
                 raise self.error('终端会话已退出')
             try:
-                self.backends[a['runtime']].type(a['term']['handle'], text, paste)
+                self.terminal(a).type(text, paste)
             except BackendError as e:
                 raise self.error(e) from e
 
@@ -476,7 +476,7 @@ class Hosted:
             raise self.error('终端会话已退出，请先启动')
         try:
             self.a.before(a)
-            self.backends[a['runtime']].submit(term['handle'], text)
+            self.terminal(a).submit(text)
         except (HerdrError, BackendError) as e:
             raise self.error(e) from e
         if native(a):
@@ -582,7 +582,7 @@ class Hosted:
             a = self.require(id)
             if a['term'].get('handle'):
                 try:
-                    self.backends[a['runtime']].close(a['term']['handle'])
+                    self.terminal(a).close()
                 except (HerdrError, BackendError) as e:
                     raise self.error(e) from e
             term = dict(a['term'])

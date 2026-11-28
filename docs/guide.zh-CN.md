@@ -103,12 +103,15 @@ web/      前端：React + Vite，复用 design/src 的地图渲染
 
 ## 运行
 
+服务端、网页和原生 App 共用 `teletty/` 子模块中的终端核心。首次克隆时按下列命令一并检出子模块。已有仓库可在 Papertown 根目录运行 `git submodule update --init`，检出对应版本。
+
 后端（Python 3.11，用 uv）：
 
 ```bash
-cd server
-uv sync
-uv run papertown serve            # http://127.0.0.1:31640
+git clone --recurse-submodules https://github.com/FanBB2333/papertown.git
+cd papertown/server
+uv sync --frozen
+uv run --frozen papertown serve            # http://127.0.0.1:31640
 ```
 
 前端开发（另开一个终端，/api 会代理到 `papertown.toml` 里设的端口，默认 31640）：
@@ -121,13 +124,15 @@ pnpm dev                          # http://127.0.0.1:5173
 
 `pnpm build` 之后，`papertown serve` 会直接托管 `web/dist`，只开后端也能用。没有扩展名的路径（`/progress/6` 这样）都返回前端页面，由前端按地址打开对应的页。
 
+子模块通常处于分离 HEAD 状态。修改 teletty 前，先在 `teletty/` 中运行 `git switch main`。运行 teletty 的测试，通过后在子模块中提交并推送改动。再回到 Papertown 根目录运行 `git add teletty`，提交更新后的子模块引用。设置 `push.recurseSubmodules=check` 后，若引用的 teletty 提交尚未推送，Git 会阻止推送 Papertown。
+
 ### 访问与登录
 
 `papertown serve` 默认只在 `127.0.0.1:31640` 上监听。从本机直接打开（请求来自回环地址、没有经过代理）时，首页直接提供「进入」。要用手机或别的电脑打开，先让它能从网络上访问，有两种做法：在信任的网络里把 `papertown.toml` 的 `[server] host` 改为 `"0.0.0.0"`（也可以在「设置 › 网络与安全」里把监听地址改为所有网络），然后重启服务。或者保持 `127.0.0.1`，在前面加一层 `tailscale serve 31640` 之类的 HTTPS 转发。别的设备默认可以从局域网和 Tailscale 来，范围由 `[network] sources` 决定，同样能在「网络与安全」里改。再在本机的首页或「设置 › 访问与登录」里设一个访问密码（至少 6 位）。别的设备打开首页时输入这个密码登录，登录保持的天数由 `[network] days` 决定（默认 30 天）。第一次设密码和取消密码都只能在本机做。从别的设备改密码要输入原来的密码。连续输错 5 次要等一分钟。设置页里可以让所有设备重新登录。
 
 密码只存 scrypt 哈希，登录用一个 HttpOnly 的 cookie（`pt_session`，经 https 打开时加 `Secure`），都在数据目录的 `auth.json` 里，不进 git。没登录时 `/api/*` 一律回 401（`/api/auth/`、`/api/health` 和员工用的 `/api/bridge/` 除外），前端会回到首页登录，登录后回到原来的地址。接口：`GET /api/auth/state`、`POST /api/auth/login`、`POST /api/auth/logout`、`POST /api/auth/logout-all`、`POST /api/auth/password`（设置或修改）、`DELETE /api/auth/password`。
 
-iPhone 和 Mac App、脚本用**访问密钥**连接：每个设备一个，在服务器上运行 `uv run papertown key create --name iPhone`（`server/` 里），或在「设置 › 访问与登录」里新建。密钥只在新建时显示一次，`auth.json` 里只存它的哈希。App 里添加服务器，填地址（如 `http://<Tailscale 或局域网 IP>:31640`，或 `tailscale serve` 给的地址）和密钥，之后每个请求（包括实时通道 `/api/events`）都带 `Authorization: Bearer <密钥>`。`papertown key list` 列出密钥和最近使用时间，`papertown key revoke <id>` 撤销其中一个，只影响用它的那台设备。新建和撤销只能在本机或用密码登录的浏览器里做，密钥本身没有这个权限。取消访问密码时密钥保留。`GET /api/health` 不需要登录，回复里的 `"app": "papertown"` 让 App 先确认地址上是 Papertown。接口：`GET /api/auth/keys`、`POST /api/auth/keys`、`DELETE /api/auth/keys/<id>`。
+iPhone 和 Mac App、脚本用**访问密钥**连接：每个设备一个，在服务器上运行 `uv run --frozen papertown key create --name iPhone`（`server/` 里），或在「设置 › 访问与登录」里新建。密钥只在新建时显示一次，`auth.json` 里只存它的哈希。App 里添加服务器，填地址（如 `http://<Tailscale 或局域网 IP>:31640`，或 `tailscale serve` 给的地址）和密钥，之后每个请求（包括实时通道 `/api/events`）都带 `Authorization: Bearer <密钥>`。`papertown key list` 列出密钥和最近使用时间，`papertown key revoke <id>` 撤销其中一个，只影响用它的那台设备。新建和撤销只能在本机或用密码登录的浏览器里做，密钥本身没有这个权限。取消访问密码时密钥保留。`GET /api/health` 不需要登录，回复里的 `"app": "papertown"` 让 App 先确认地址上是 Papertown。接口：`GET /api/auth/keys`、`POST /api/auth/keys`、`DELETE /api/auth/keys/<id>`。
 
 ### 终端界面（TUI）
 
@@ -135,8 +140,8 @@ iPhone 和 Mac App、脚本用**访问密钥**连接：每个设备一个，在�
 
 ```bash
 cd server
-uv run papertown                  # 连 papertown.toml 里的服务（默认 http://127.0.0.1:31640），没有服务就自己起一个，退出时停掉
-uv run papertown tui --server http://127.0.0.1:<端口> --no-start   # 只连已有的服务
+uv run --frozen papertown                  # 连 papertown.toml 里的服务（默认 http://127.0.0.1:31640），没有服务就自己起一个，退出时停掉
+uv run --frozen papertown tui --server http://127.0.0.1:<端口> --no-start   # 只连已有的服务
 ```
 
 左边 1–7 是七处地方：
@@ -201,7 +206,7 @@ herdr、tmux 和 headless 三种方式里，CLI 都以真实的终端界面运�
 
 ```bash
 cp papertown.example.toml papertown.toml
-cd server && uv run papertown config show   # 每项设置现在的值
+cd server && uv run --frozen papertown config show   # 每项设置现在的值
 ```
 
 `papertown config path` 打印正在读的文件，`papertown config example` 重新打印示例。取值的优先级从高到低：命令行参数（`papertown serve --host`、`--port`）、环境变量 `PAPERTOWN_<名字>`（如 `PAPERTOWN_PORT`，适合临时覆盖）、`papertown.toml`、内置默认值。文件里的相对路径相对于文件所在的目录。
@@ -429,8 +434,8 @@ Papertown 每隔一阵（`[paseo] paseo_watch`）重读一次 Paseo 的列表，
 实验任务也可以手动提交：
 
 ```bash
-uv run papertown job submit --line line_1 --name main -- python run.py --seed 0
-uv run papertown job list
+uv run --frozen papertown job submit --line line_1 --name main -- python run.py --seed 0
+uv run --frozen papertown job list
 ```
 
 脚本打印 `PROGRESS <0-100>` 汇报进度，打印 `RESULT {json}` 或写 `$PAPERTOWN_JOB_DIR/result.json` 交结果。
@@ -476,6 +481,6 @@ Papertown 自己也能作为只读的 MCP server，让其他 agent 查论文库�
 ## 测试
 
 ```bash
-cd server && uv run --group dev pytest -q
+cd server && uv run --frozen pytest -q
 cd web && pnpm build
 ```

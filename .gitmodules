@@ -1,0 +1,3 @@
+[submodule "teletty"]
+	path = teletty
+	url = https://github.com/FanBB2333/teletty.git

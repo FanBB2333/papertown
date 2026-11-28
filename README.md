@@ -89,13 +89,13 @@ Papertown manages research projects. An idea goes through eight stages: novelty 
 
 You need macOS (Papertown is developed and tested there), Python 3.11+ with [uv](https://docs.astral.sh/uv/), Node 22 with [pnpm](https://pnpm.io/), and at least one agent CLI installed and logged in (Claude Code, Codex, or Antigravity), plus a runtime for it: [Paseo](https://paseo.sh), [herdr](https://github.com/herdrdev/herdr), [tmux](https://github.com/tmux/tmux), or Papertown's built-in headless terminals, which need nothing else. Papertown uses the CLI's own login.
 
-Start the backend:
+The server, web app and native app share the terminal core in the [teletty submodule](https://github.com/FanBB2333/teletty). Clone Papertown with its submodules as shown below. In an existing clone, run `git submodule update --init` from the Papertown root to check out `teletty/` at the recorded commit.
 
 ```bash
-git clone https://github.com/FanBB2333/papertown.git
+git clone --recurse-submodules https://github.com/FanBB2333/papertown.git
 cd papertown/server
-uv sync
-uv run papertown serve            # http://127.0.0.1:31640
+uv sync --frozen
+uv run --frozen papertown serve            # http://127.0.0.1:31640
 ```
 
 Frontend, in another terminal (`/api` is proxied to the port set in `papertown.toml`, 31640 by default):
@@ -107,6 +107,8 @@ pnpm dev                          # http://127.0.0.1:5173
 ```
 
 After `pnpm build`, `papertown serve` serves `web/dist` itself, so the backend alone is enough.
+
+To change teletty, run `git switch main` in `teletty/` first. Submodules usually start with a detached HEAD. Run teletty's tests, then commit and push there. Back in the Papertown root, run `git add teletty` and commit the updated pointer. Set `push.recurseSubmodules=check` in Papertown to block a push that references an unpushed teletty commit.
 
 On the first start of an empty town, five prebuilt sample projects show different stages with their outputs, paper sources, and a placeholder lead conversation. They carry a Sample tag and their lead switches start off. Turning on an unfinished sample's lead hands it to a real agent. `samples = false` under `[server]` in `papertown.toml` turns automatic seeding off, and samples can also be added from Settings.
 
@@ -163,8 +165,8 @@ Papertown itself reads these repositories without writing to them. The workers o
 If [nvidb](https://github.com/FanBB2333/nvidb) is installed, Papertown reads its GPU queue to show cards, utilization, and each project's jobs. It never submits or cancels jobs there, and machine addresses and user names stay off the page. Without nvidb, jobs run on the built-in local farm:
 
 ```bash
-uv run papertown job submit --line line_1 --name main -- python run.py --seed 0
-uv run papertown job list
+uv run --frozen papertown job submit --line line_1 --name main -- python run.py --seed 0
+uv run --frozen papertown job list
 ```
 
 ### Skills and accounts
@@ -192,13 +194,13 @@ By default the server listens on `127.0.0.1:31640`, this machine only. Make it r
 Other devices may come from your LAN and your tailnet by default. `sources` under `[network]` (also under Settings › Network & Security) changes that. Then:
 
 - **Browser**: set an access password under Settings › Access & sign-in and sign in with it.
-- **iPhone, iPad and Mac apps, scripts**: make an access key for each device, with `uv run papertown key create --name iPhone` in `server/` or under Settings › Access & sign-in, and add the server in the app with that key: `http://<Tailscale or LAN IP>:31640`, or the `tailscale serve` address. A key is shown once, sent as `Authorization: Bearer <key>`, stored only as a hash, and revoked on its own (`papertown key list`, `papertown key revoke <id>`). Keys are made and revoked on the server's own machine or from a browser signed in with the password, never with another key.
+- **iPhone, iPad and Mac apps, scripts**: make an access key for each device, with `uv run --frozen papertown key create --name iPhone` in `server/` or under Settings › Access & sign-in, and add the server in the app with that key: `http://<Tailscale or LAN IP>:31640`, or the `tailscale serve` address. A key is shown once, sent as `Authorization: Bearer <key>`, stored only as a hash, and revoked on its own (`papertown key list`, `papertown key revoke <id>`). Keys are made and revoked on the server's own machine or from a browser signed in with the password, never with another key.
 
 `GET /api/health` answers before signing in, with `"app": "papertown"`, so a client can tell it has found a Papertown server.
 
 ### Other ways in
 
-- **Terminal UI**: `uv run papertown` in `server/` opens the same projects in the terminal and starts a server if none is running.
+- **Terminal UI**: `uv run --frozen papertown` in `server/` opens the same projects in the terminal and starts a server if none is running.
 - **iPhone and Mac apps**: native SwiftUI apps from one code base in `ios/` (see [ios/README.md](ios/README.md)). The Mac app also starts this Mac's server. `ios/scripts/build-mac.sh` builds `ios/build/Papertown.app`.
 - **Web page in a Mac window**: `macos/build.sh` builds `macos/build/Papertown.app`, and `macos/build.sh --install` copies it to `~/Applications`.
 - **MCP server**: other MCP clients can read the library and the project stages:
@@ -215,7 +217,7 @@ Every setting lives in one file, `papertown.toml` at the root of the checkout. I
 
 ```bash
 cp papertown.example.toml papertown.toml   # uncomment and change what you need
-cd server && uv run papertown config show  # the settings in effect
+cd server && uv run --frozen papertown config show  # the settings in effect
 ```
 
 A command-line flag (`papertown serve --host`, `--port`) wins over an environment variable `PAPERTOWN_<NAME>` (such as `PAPERTOWN_PORT`), which wins over the file, which wins over the built-in default. Relative paths in the file are relative to the file. `papertown config path` prints the file in use, and `papertown config example` prints the example again.
@@ -262,7 +264,7 @@ web/      React + Vite frontend
 ```
 
 ```bash
-cd server && uv run --group dev pytest -q
+cd server && uv run --frozen pytest -q
 cd web && pnpm build
 cd web && pnpm i18n:missing       # UI strings without an English translation
 node design/build.mjs             # regenerate the sprites

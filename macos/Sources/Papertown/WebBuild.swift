@@ -15,9 +15,16 @@ final class WebBuild {
 
     init(repo: URL) { self.repo = repo }
 
+    private var telettyWeb: URL {
+        repo.appendingPathComponent("teletty/web").resolvingSymlinksInPath()
+    }
+
+    var watchFolders: [URL] { [web, repo.appendingPathComponent("design/src"), telettyWeb] }
+
     private var sources: [URL] {
         ["web/src", "web/public", "web/index.html", "web/package.json", "web/pnpm-lock.yaml", "web/vite.config.ts", "web/tsconfig.json", "design/src"]
             .map { repo.appendingPathComponent($0) }
+            + ["src", "package.json"].map { telettyWeb.appendingPathComponent($0) }
     }
 
     func isSource(_ path: String) -> Bool {

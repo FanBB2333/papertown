@@ -10,13 +10,15 @@ let package = Package(
         .library(name: "PapertownUI", targets: ["PapertownUI"]),
     ],
     dependencies: [
+        .package(path: "../teletty"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.1"),
     ],
     targets: [
         .target(name: "PapertownCore"),
         .target(
             name: "PapertownUI",
-            dependencies: ["PapertownCore", .product(name: "MarkdownUI", package: "swift-markdown-ui")],
+            dependencies: ["PapertownCore", .product(name: "MarkdownUI", package: "swift-markdown-ui"),
+                           .product(name: "TelettyKit", package: "teletty")],
             resources: [.process("Resources")]
         ),
         .testTarget(name: "PapertownCoreTests", dependencies: ["PapertownCore"]),

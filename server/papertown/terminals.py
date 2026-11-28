@@ -9,32 +9,32 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from teletty import BackendError, Feed, HerdrBackend, HerdrError, Terminal
+from teletty.keys import PUBLIC as KEYS
+
+from . import transcripts
 from .db import now
-from . import ansi, prompts, transcripts
-from .herdr import Feed, Herdr, HerdrError
+from .terminal_compat import MESSAGES, herdr_client
 from .project_dirs import owner, project_roots, repo
 
 if TYPE_CHECKING:
     from .town import Town
 
-# the keys a conversation's terminal takes from the web and the app: moving, answering a dialog, and the agent CLIs'
-# shortcuts (Shift+Tab cycles Claude Code's modes, Ctrl+O and Ctrl+T show more, Esc twice goes back a turn)
-KEYS = {"enter", "esc", "tab", "shift+tab", "space", "backspace", "up", "down", "left", "right", "pageup", "pagedown",
-        "1", "2", "3", "4", "y", "n", "/", "ctrl+c", "ctrl+d", "ctrl+o", "ctrl+t"}
 INTERRUPT_TIMEOUT = 10
 
 
 class Terminals:
     def __init__(self, town: Town):
         self.town, self.db = town, town.db
-        self.client = Herdr(town.s)
+        self.client = herdr_client(town.s)
+        self.backend = HerdrBackend(self.client)
         self._lock = threading.RLock()
         self._delivery = threading.RLock()
         self._raw: dict[str, dict] = {}
         self._buckets: dict[str, tuple[str, str | None, str]] = {}
         self._released: dict[str, int] = {}
         self._ok = False
-        self._note = "herdr 没有运行" if self.client.enabled else "herdr 接入已关闭"
+        self._note = MESSAGES("herdr_unavailable" if self.client.enabled else "herdr_disabled")
         self._installed = bool(shutil.which("herdr") or Path("/opt/homebrew/bin/herdr").is_file())
         self._halt, self._wake = threading.Event(), threading.Event()
         self._thread: threading.Thread | None = None
@@ -194,16 +194,20 @@ class Terminals:
             (groups[lid] if lid else others).append(terminal)
         return groups, others
 
+    def _terminal(self, a):
+        return Terminal(self.backend, {"pane": a["pane_id"], "terminal": a["terminal_id"]})
+
     def detail(self, id: str, styled: bool = False) -> dict:
         with self._delivery:
             a = self._require(id)
             fresh = self._current(id)
-            text = self.client.read(fresh["pane_id"], colours=styled)
+            session = self._terminal(fresh)
+            screen = session.screen(history=True, styled=styled)
             with self._lock:
                 terminal = self._public(fresh)
             queued = self.db.q("select * from terminal_queue where terminal_id = ? and state in ('queued', 'sending', 'failed') order by id", a["terminal_id"])
-            prompt = prompts.parse(self._visible(fresh)) if terminal['watch']['bucket'] == 'needs' else None
-            return (ansi.render(text) if styled else {"text": text}) | {"terminal": terminal, "queued": queued, "prompt": prompt}
+            prompt = session.prompt() if terminal['watch']['bucket'] == 'needs' else None
+            return screen | {"terminal": terminal, "queued": queued, "prompt": prompt}
 
     def previews(self, skip: set[str]) -> dict:
         """What is on the screen of each herdr session now, as plain text; `skip` names the panes employees run in,
@@ -214,16 +218,10 @@ class Terminals:
         for a in rows:
             id = f"herdr:{a['terminal_id']}"
             try:
-                out[id] = ansi.render(self._visible(a))
-            except HerdrError as e:
+                out[id] = self._terminal(a).preview()
+            except (HerdrError, BackendError) as e:
                 out[id] = {'error': str(e)}
         return out
-
-    def _visible(self, a):
-        data = self.client.call('agent.read', {'target': a['pane_id'], 'source': 'visible'}).get('read')
-        if not isinstance(data, dict) or not isinstance(data.get('text'), str):
-            raise HerdrError('herdr 返回了无效数据')
-        return data['text']
 
     def timeline(self, id: str, limit=200) -> dict:
         with self._delivery:
@@ -245,8 +243,7 @@ class Terminals:
     def prompt(self, id, digest, option):
         with self._delivery:
             a = self._current(id)
-            keys = prompts.answer(prompts.parse(self._visible(a)), digest, option)
-            self.client.keys(a['pane_id'], keys)
+            self._terminal(a).answer(digest, option, live=True)
             self._publish(a['terminal_id'])
             self._wake.set()
         return {'ok': True}

@@ -6,6 +6,8 @@ Native SwiftUI client for iOS 16+ and macOS 14+, composed of two local Swift Pac
 - **`PapertownUI`** (`Sources/PapertownUI`): Native Apple HIG SwiftUI interface (zero emojis, 100% SF Symbols) built around five sections (**Inbox**, **Projects**, **Staff**, **Town**, **Server**), English primary localization (`en`) with optional Simplified Chinese (`zh-Hans`), and System / Light / Dark / Paper appearances.
 - **`PapertownApp`** (`PapertownApp/`): `@main` SwiftUI app shell, `Info.plist` for iOS and `Info-macOS.plist` for the Mac, and the Xcode project (`PapertownApp/Papertown.xcodeproj`) whose one **Papertown** target builds for both.
 
+PapertownUI uses **TelettyKit** from the `teletty/` submodule for terminal screen models, rendering, previews, keyboard input and key controls. Before opening Xcode or running SwiftPM, initialize an existing clone with `git submodule update --init` from the Papertown root. For a fresh clone or changes to teletty, see [Getting started](../README.md#getting-started).
+
 ## Layout
 
 One set of pages for every size, framed by the shape of the window (`Views/AppShell.swift`). Held upright, on iPhone
@@ -75,7 +77,7 @@ Local paths in the answers are replaced by `~/papertown/...`. Never point it at 
 A server is a base URL and an access key:
 
 1. Make the server reachable from the device. On a network you trust, set `host = "0.0.0.0"` under `[server]` in `papertown.toml` (or choose all networks under Settings › Network & Security in the web app) and restart the server. Or keep it on `127.0.0.1` and put `tailscale serve 31640` or another HTTPS proxy in front of it. The device has to come from a source allowed under `[network]`, the LAN and Tailscale by default.
-2. Make a key for the device on the server, `uv run papertown key create --name iPhone` in `server/`, or under Settings › Access & sign-in in the web app. It is shown once.
+2. Make a key for the device on the server, `uv run --frozen papertown key create --name iPhone` in `server/`, or under Settings › Access & sign-in in the web app. It is shown once.
 3. In the app, **Add Server**: the address (`http://<Tailscale or LAN IP>:31640`, `https://mac.tailnet.ts.net`, or a relay with a path prefix; `/api` is appended) and the key.
 
 Before signing in the app checks `GET /api/health` for `"app": "papertown"`, so a wrong address says so. A key the server no longer accepts (revoked, or copied wrong) stops the connection with that message, and `papertown key revoke <id>` shuts out one device without touching the others. The access password still works for servers set up that way: choose **Access Password** in the same form.

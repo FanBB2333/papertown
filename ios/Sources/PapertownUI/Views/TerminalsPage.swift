@@ -1,5 +1,6 @@
 import PapertownCore
 import SwiftUI
+import TelettyKit
 
 /// A terminal open in the background: an agent's own, or a herdr session the town watches.
 struct OpenTerminal: Identifiable {
@@ -58,8 +59,7 @@ extension EmTone {
 /// terminal, where it takes keys and typing.
 struct TerminalsPage: View {
     @EnvironmentObject private var store: TownStore
-    @State private var screens: [String: ScreenNow] = [:]
-    @State private var unread = false
+    @StateObject private var wall = ScreenWallPoller()
 
     var body: some View {
         let lang = store.language
@@ -81,7 +81,7 @@ struct TerminalsPage: View {
                     if working > 0 { StateTag(text: lang.format("terminals.working", working), tone: .info, small: true) }
                     Spacer(minLength: 0)
                 }
-                if unread {
+                if wall.error != nil {
                     Label(lang.string("terminals.unread"), systemImage: "exclamationmark.triangle")
                         .font(.footnote)
                         .emState(.warn, detail: true)
@@ -94,7 +94,7 @@ struct TerminalsPage: View {
                         NavigationLink {
                             AgentChatView(target: t.target, role: t.role, subtitle: Self.place(t, lang), onTerminal: true)
                         } label: {
-                            TerminalTile(term: t, screen: screens[t.id])
+                            TerminalTile(term: t, screen: wall.screens[t.id])
                         }
                         .buttonStyle(.plain)
                     }
@@ -105,17 +105,7 @@ struct TerminalsPage: View {
         .papertownInlineTitle()
         // read again while the page shows; leaving it (or opening a terminal) stops the reads
         .task {
-            while !Task.isCancelled {
-                do {
-                    screens = try await store.fetch { try await $0.screens() }.screens
-                    unread = false
-                } catch is CancellationError {
-                    return
-                } catch {
-                    unread = true
-                }
-                try? await Task.sleep(nanoseconds: 2_500_000_000)
-            }
+            await wall.run { try await store.fetch { try await $0.screens() } }
         }
     }
 
@@ -144,7 +134,7 @@ private struct TerminalTile: View {
             .padding(.horizontal, 12)
             .frame(height: 46)
             Rectangle().fill(Hairline.color).frame(height: 1)
-            ScreenPreview(screen: screen)
+            ScreenPreview(screen: screen, labels: lang.terminalLabels)
                 .frame(height: 196)
             Rectangle().fill(Hairline.color).frame(height: 1)
             HStack(spacing: 6) {
@@ -157,70 +147,5 @@ private struct TerminalTile: View {
         }
         .papertownCard(ring: term.bucket == "needs" ? .warn : (term.bucket == "failed" ? .bad : nil))
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-}
-
-/// The last lines on a terminal's screen as the CLI drew them, at a size that fits 80 columns into the tile when it can.
-private struct ScreenPreview: View {
-    let screen: ScreenNow?
-    @EnvironmentObject private var store: TownStore
-
-    private static let rows = 22
-
-    var body: some View {
-        let lang = store.language
-        let styled = screen?.styled
-        let ink = styled.map { TerminalPane.color($0.theme.fg) } ?? Color(white: 0.9)
-        let paper = styled.map { TerminalPane.color($0.theme.bg) } ?? Color(red: 0.07, green: 0.075, blue: 0.09)
-        GeometryReader { g in
-            let size = min(9.0, max(6.5, Double(g.size.width - 20) / (80 * 0.602)))
-            VStack(alignment: .leading, spacing: 0) {
-                Spacer(minLength: 0)
-                if let styled {
-                    let lines = Self.tail(styled)
-                    if lines.isEmpty {
-                        note(lang.string("term.empty"), ink, size)
-                    }
-                    ForEach(Array(lines.enumerated()), id: \.offset) { _, runs in
-                        Text(runs.isEmpty ? AttributedString(" ") : TerminalPane.line(runs, styled, size: size))
-                            .font(.system(size: size, design: .monospaced))
-                            .foregroundStyle(ink)
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                    }
-                } else {
-                    note(lang.string(screen?.error == nil ? "term.loading" : "terminals.unread"), ink, size)
-                }
-            }
-            .padding(10)
-            .frame(width: g.size.width, height: g.size.height, alignment: .bottomLeading)
-            .clipped()
-        }
-        .background(paper)
-    }
-
-    private func note(_ text: String, _ ink: Color, _ size: Double) -> some View {
-        Text(text).font(.system(size: max(size, 9), design: .monospaced)).foregroundStyle(ink.opacity(0.5))
-    }
-
-    /// The end of the screen: the trailing blank lines go, and a run of blank lines counts as one.
-    private static func tail(_ styled: StyledScreen) -> [[ScreenRun]] {
-        func blank(_ runs: [ScreenRun]) -> Bool {
-            runs.allSatisfy { $0.text.trimmingCharacters(in: .whitespaces).isEmpty && ($0.style >= styled.styles.count || styled.styles[$0.style].bg == nil) }
-        }
-        var out: [[ScreenRun]] = []
-        var gap = false
-        for runs in styled.lines.reversed() {
-            if blank(runs) {
-                if out.isEmpty || gap { continue }
-                gap = true
-            } else {
-                gap = false
-            }
-            out.append(runs)
-            if out.count == rows { break }
-        }
-        while let last = out.last, blank(last) { out.removeLast() }
-        return out.reversed()
     }
 }

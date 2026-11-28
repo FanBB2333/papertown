@@ -2,6 +2,7 @@ import Foundation
 import PapertownCore
 import PhotosUI
 import SwiftUI
+import TelettyKit
 #if os(iOS)
 import UIKit
 #endif
@@ -41,6 +42,7 @@ struct AgentChatView: View {
     /// Typing straight into the terminal: the keyboard goes to it and the composer steps aside.
     @State private var typingInTerminal = false
     @State private var busy = false
+    @StateObject private var dialog = TerminalDialogState()
     @State private var showConversations = false
     @State private var quoting: ChatEntry?
     @State private var savedQuotes: [Int: String] = [:]
@@ -1055,7 +1057,7 @@ struct AgentChatView: View {
                 Button(lang.string("action.deny"), role: .destructive) { Task { await permit(perm, false) } }.buttonStyle(.bordered)
             }
             .controlSize(.small)
-            .disabled(busy)
+            .disabled(busy || dialog.submitting != nil)
         }
         .padding(10)
         .emBar(.warn)
@@ -1075,21 +1077,21 @@ struct AgentChatView: View {
             ForEach(Array((prompt.body ?? []).enumerated()), id: \.offset) { _, line in
                 Text(lang.server(line)).font(.footnote)
             }
-            ForEach(prompt.options) { opt in
+            ForEach(dialog.options(for: prompt, label: { lang.server($0) })) { opt in
                 Button {
                     Task {
-                        busy = true
-                        await store.act(on: target) { client in
-                            switch target {
-                            case .agent(let id): try await client.answerPrompt(agentID: id, digest: prompt.digest, option: opt.index)
-                            case .terminal(let id): try await client.terminalPrompt(id: id, digest: prompt.digest, option: opt.index)
+                        await dialog.submit(opt.index, for: prompt) { digest, index in
+                            await store.act(on: target) { client in
+                                switch target {
+                                case .agent(let id): try await client.answerPrompt(agentID: id, digest: digest, option: index)
+                                case .terminal(let id): try await client.terminalPrompt(id: id, digest: digest, option: index)
+                                }
                             }
                         }
-                        busy = false
                     }
                 } label: {
                     HStack {
-                        Text(lang.server(opt.label)).multilineTextAlignment(.leading)
+                        Text(opt.label).multilineTextAlignment(.leading)
                         Spacer()
                         if opt.current == true { Image(systemName: "chevron.left") }
                     }
@@ -1097,7 +1099,7 @@ struct AgentChatView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
-            .disabled(busy)
+            .disabled(busy || dialog.submitting != nil)
         }
         .padding(10)
         .emBar(.warn)

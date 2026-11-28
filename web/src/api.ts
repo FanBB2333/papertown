@@ -1,8 +1,11 @@
 // REST calls and the live event stream from the Papertown server.
 
+import type { ScreensNow, StyledScreen, TermPrompt } from '@teletty/web';
 import { DEMO, demoCall, demoFile } from './demo';
 import type { FlowPart } from './flow';
 import { localize, tr, trx } from './i18n';
+
+export type { ScreenNow, ScreenStyle, StyledScreen, TermPrompt } from '@teletty/web';
 
 export interface Placement {
   id: string; type: string; x: number; y: number; name: string; label: string | null; accent: string | null;
@@ -105,17 +108,9 @@ export interface Terminal {
   agent_session?: { kind: string; value: string } | null;
 }
 export interface TerminalQueue { id: number; terminal_id: string; text: string; created_at: string; state: 'queued' | 'sending' | 'sent' | 'failed' | 'dropped' }
-// a dialog on a terminal's screen (trusting a folder, a permission, a review) and the choices it offers
-export interface TermPrompt { digest: string; title: string; body: string[]; options: { index: number; label: string; current: boolean; key: string | null }[]; hint: string }
 // whether the session log behind a terminal conversation could be read, and why not
 export interface Transcript { ok: boolean; note: string | null }
 export interface TerminalDetail extends Partial<StyledScreen> { terminal: Terminal; text: string; queued: TerminalQueue[]; prompt?: TermPrompt | null }
-// A terminal's colours, read by the server so the web and the app draw it alike: per line, [text, index into styles].
-// Colours are hex, already reversed, dimmed or hidden; a missing one is the theme's.
-export interface ScreenStyle { fg?: string; bg?: string; b?: boolean; i?: boolean; u?: boolean; s?: boolean }
-export interface StyledScreen { lines: [string, number][][]; styles: ScreenStyle[]; theme: { fg: string; bg: string } }
-// what is on a terminal's screen now, or why it could not be read
-export type ScreenNow = (StyledScreen & { text: string }) | { error: string };
 export interface HerdrInfo { ok: boolean; note: string; live: boolean; socket: string; count: number; installed: boolean; enabled: boolean }
 
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act' | 'sent'; data: { user_text?: string; decided?: string; [key: string]: any } }
@@ -622,7 +617,7 @@ export const api = {
   setDefaultRuntime: (runtime: DefaultRuntime) => call<{ runtime: DefaultRuntime }>('POST', '/api/agents/runtime', { runtime }),
   agentScreen: (id: string, styled = false) => call<{ text: string; term: AgentTerm; prompt?: TermPrompt | null } & Partial<StyledScreen>>('GET', `/api/agents/${id}/screen${styled ? '?styled=1' : ''}`, undefined, asIs),
   answerPrompt: (id: string, digest: string, option: number) => call<{ ok: boolean }>('POST', `/api/agents/${id}/prompt`, { digest, option }),
-  screens: () => call<{ screens: Record<string, ScreenNow> }>('GET', '/api/agents/screens', undefined, asIs),
+  screens: () => call<ScreensNow>('GET', '/api/agents/screens', undefined, asIs),
   agentKeys: (id: string, keys: string[]) => call('POST', `/api/agents/${id}/keys`, { keys }),
   agentType: (id: string, text: string, paste = false) => call('POST', `/api/agents/${id}/type`, { text, paste }),
   closeTerminal: (id: string) => call<Agent>('POST', `/api/agents/${id}/close`),

@@ -56,6 +56,9 @@ importers:
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@teletty/web':
+        specifier: link:../teletty/web
+        version: link:../teletty/web
       '@xyflow/react':
         specifier: 12.9.3
         version: 12.9.3(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

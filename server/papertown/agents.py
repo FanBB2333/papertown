@@ -10,7 +10,6 @@ import os
 import secrets
 import shlex
 import shutil
-import subprocess
 import threading
 import time
 from copy import deepcopy
@@ -19,18 +18,20 @@ from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from teletty import BackendError
+
 from .db import now, read_json, write_json
 from .paseo import Feed, Paseo, PaseoError
 from .hosted import Hosted, RUNTIMES
 from .project_dirs import repo
 from .paseo_models import PASEO_OFF
+from .terminal_compat import tmux_backend
 
 if TYPE_CHECKING:
     from .town import Town
 
 BRIDGE = Path(__file__).parent / "pi" / "bridge.ts"
 PT = Path(__file__).parent / "pi" / "pt.py"
-SOCKET = "papertown"
 ROLES = {
     "coder": {"name": "代码员工"},
     "writer": {"name": "写作员工"},
@@ -219,10 +220,6 @@ def model_label(provider: str | None, model: str | None) -> str:
     return "/".join(x for x in (provider, model) if x)
 
 
-def _attach(session: str, socket: str = SOCKET) -> str:
-    return shlex.join(["tmux", "-L", socket, "attach", "-t", session])
-
-
 def _serialized(fn):
     """Keep session changes, sends and queue delivery in one order."""
     @wraps(fn)
@@ -250,6 +247,7 @@ class Agents:
         self.s = town.s
         self.pi = _which("pi", self.s.pi_bin)
         self.tmux = _which("tmux", self.s.tmux_bin)
+        self.tmux_host = tmux_backend(self.tmux, self.s)
         self.paseo = Paseo(self.s.paseo_bin, self.s.paseo_url, self.s.paseo_host, self.s.node_bin)
         self._inbox: dict[str, list[dict]] = {}
         self._state: dict[str, dict] = {}  # what each pi's bridge last reported: model, thinking, session
@@ -315,7 +313,7 @@ class Agents:
         out["status"], out["down"] = self.shown(a), self.down(a) or None
         out["runtime"] = rt = a.get("runtime") or "pi"
         out["started"] = bool(a.get("runtime"))
-        out["attach"] = _attach(a["tmux"], self.s.tmux_socket) if rt == "pi" and a.get("tmux") else None
+        out["attach"] = self.tmux_host.attach_session(a["tmux"]) if rt == "pi" and a.get("tmux") else None
         out["web"] = self.paseo.url(a["ext_id"]) if rt == "paseo" and a.get("ext_id") and not out["down"] else None
         out["state"] = self._state.get(a["id"]) if rt == "pi" else None
         out["name"] = ROLES[a["role"]]["name"]
@@ -659,17 +657,10 @@ class Agents:
         rows = self.db.q("select * from agent_events where agent_id = ? and id > ? order by id desc limit ?", agent_id, after, limit)
         return rows[::-1]
 
-    def _tmux(self, *args: str, input: str | None = None) -> subprocess.CompletedProcess:
-        # own tmux server: ~/.tmux.conf plus the extended keys pi asks for
-        conf = self.s.data_dir / "tmux.conf"
-        if not conf.exists():
-            conf.write_text(("source-file -q ~/.tmux.conf\n" if self.s.tmux_socket == SOCKET else "") + "set -g extended-keys on\nset -g extended-keys-format csi-u\n", encoding="utf-8")
-        return subprocess.run([self.tmux, "-L", self.s.tmux_socket, "-f", str(conf), *args], input=input, capture_output=True, text=True, timeout=10)
-
     def alive(self, a: dict) -> bool:
         if a.get("runtime") in RUNTIMES:
-            return self.hosted.backends[a["runtime"]].alive(a["term"]["handle"])
-        return bool(self.tmux and a.get("tmux")) and self._tmux("has-session", "-t", a["tmux"]).returncode == 0
+            return self.hosted.terminal(a).alive()
+        return bool(self.tmux and a.get("tmux")) and self.tmux_host.has_session(a["tmux"])
 
     def _guide(self, a: dict, runtime: str) -> str:
         """Write the role's guide to the agent's home (never into a linked repository) and return it."""
@@ -828,14 +819,12 @@ class Agents:
                "PAPERTOWN_AGENT_ROLE": a["role"], "PATH": f"{Path(cmd[0]).parent}{os.pathsep}{os.environ.get('PATH', '')}"}
         # keep a failed start on screen for a while so it can be read
         shell = f"{shlex.join(cmd)}; code=$?; [ $code -ne 0 ] && {{ echo; echo \"pi 退出了（$code）\"; sleep 60; }}"
-        args = ["new-session", "-d", "-s", a["tmux"], "-x", "160", "-y", "48", "-c", str(cwd)]
-        for k, v in env.items():
-            args += ["-e", f"{k}={v}"]
-        r = self._tmux(*args, shell)
-        if r.returncode != 0:
-            raise AgentError(f"tmux 启动失败：{r.stderr.strip()}")
+        try:
+            self.tmux_host.launch_session(a["tmux"], shell, cwd=cwd, env=env)
+        except BackendError as exc:
+            raise AgentError(str(exc)) from exc
         self._set(agent_id, status="starting", runtime="pi")
-        self.record(agent_id, "note", {"text": "在后台终端里启动 pi。", "attach": _attach(a["tmux"], self.s.tmux_socket)})
+        self.record(agent_id, "note", {"text": "在后台终端里启动 pi。", "attach": self.tmux_host.attach_session(a["tmux"])})
         threading.Thread(target=self._watch_start, args=(agent_id,), daemon=True).start()
         return self.public(self.get(agent_id))
 
@@ -847,7 +836,10 @@ class Agents:
                 return
         a = self.get(agent_id)
         if a["status"] == "starting":
-            screen = self._tmux("capture-pane", "-p", "-t", a["tmux"]).stdout.strip().splitlines()[-6:] if self.alive(a) else []
+            try:
+                screen = self.tmux_host.capture_session(a["tmux"]).strip().splitlines()[-6:] if self.alive(a) else []
+            except BackendError:
+                screen = []
             self._set(agent_id, status="error")
             self.record(agent_id, "note", {"text": "pi 没有连上 Papertown。" + (f"终端最后几行：{' / '.join(screen)}" if screen else ""), "error": True})
 
@@ -1241,7 +1233,10 @@ class Agents:
             self.abort(agent_id)
             return self.public(self.get(agent_id))
         if self.alive(a):
-            self._tmux("kill-session", "-t", a["tmux"])
+            try:
+                self.tmux_host.kill_session(a["tmux"])
+            except BackendError as exc:
+                raise AgentError(str(exc)) from exc
         self._set(agent_id, status="stopped")
         self.record(agent_id, "note", {"text": "pi 已停止。"})
         return self.public(self.get(agent_id))
@@ -1348,10 +1343,13 @@ class Agents:
         if not self.alive(a):
             raise AgentError("pi 没在运行，先启动它")
         if name in TUI_COMMANDS:
-            self._tmux("send-keys", "-t", a["tmux"], "-l", text)
-            self._tmux("send-keys", "-t", a["tmux"], "Enter")
+            try:
+                self.tmux_host.session_text(a["tmux"], text)
+                self.tmux_host.session_keys(a["tmux"], ["enter"])
+            except BackendError as exc:
+                raise AgentError(str(exc)) from exc
             ev = self.record(a["id"], "user", {**message, "cmd": True, "delivered": True})
-            attach = _attach(a["tmux"], self.s.tmux_socket)
+            attach = self.tmux_host.attach_session(a["tmux"])
             self.record(a["id"], "note", {"text": f"{text} 要用 pi 的终端界面，已经在终端里执行了，接上终端操作：{attach}", "attach": attach})
             return ev
         mid = self._queue(a["id"], {"kind": "cmd", "name": name, "args": args.strip()})

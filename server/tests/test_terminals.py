@@ -13,8 +13,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from papertown.api import create_app
-from papertown.herdr import Feed, Herdr, HerdrError
-from papertown.terminals import KEYS
+from teletty import Feed, HerdrError
+from teletty.keys import PUBLIC as KEYS
+from papertown.terminal_compat import herdr_client
 from .conftest import make_settings
 
 
@@ -293,7 +294,7 @@ def test_missing_socket_and_disabled_are_quiet(tmp_path):
         feed = town.terminals._feed
         town.terminals.shutdown()
     assert not feed._thread.is_alive()
-    disabled = Herdr(make_settings(tmp_path, herdr=False))
+    disabled = herdr_client(make_settings(tmp_path, herdr=False))
     with pytest.raises(HerdrError, match='herdr 接入已关闭'):
         disabled.agents()
 
@@ -327,6 +328,9 @@ def test_pane_reuse_cannot_redirect_input(setup):
     client, town, host = setup
     town.terminals.shutdown()
     host.agents = {'replacement': agent('replacement', pane_id='w1:t1')}
+    screens = client.get('/api/agents/screens').json()['screens']
+    assert screens['herdr:t1'] == {'error': '终端会话已退出'}
+    assert not any(method == 'agent.read' for method, _ in host.calls)
     for path, body in [('say', {'text': 'For the original agent'}), ('keys', {'keys': ['enter']})]:
         response = client.post('/api/terminals/herdr:t1/' + path, json=body)
         assert response.status_code == 400 and response.json()['detail'] == '终端会话已变更，请重新选择'
@@ -386,7 +390,7 @@ def test_feed_backoff_caps_at_thirty_seconds(tmp_path, restart):
             waits.append(seconds)
             return self.is_set()
     feed = Feed.__new__(Feed)
-    feed.client = Herdr(make_settings(tmp_path))
+    feed.client = herdr_client(make_settings(tmp_path))
     feed.callback = lambda _: pytest.fail('A missing socket has no events')
     feed._halt, feed._lock = Halt(), threading.Lock()
     feed._panes, feed._stream, feed._live, feed._restart = set(), None, False, restart

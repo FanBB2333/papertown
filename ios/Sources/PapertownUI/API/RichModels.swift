@@ -1,5 +1,6 @@
 import Foundation
 import PapertownCore
+import TelettyKit
 
 // Models for the pages beyond the inbox: a project's card, gates, outputs, workspace and usage; the town's library,
 // compute and quotas; conversations read through /timeline and terminal screens. Field names follow web/src/api.ts.
@@ -738,22 +739,8 @@ public struct AgentTermInfo: Decodable, Sendable, Equatable {
     public let typing: Bool?
 }
 
-public struct TermOption: Decodable, Sendable, Equatable, Hashable, Identifiable {
-    public var id: Int { index }
-    public let index: Int
-    public let label: String
-    public let current: Bool?
-    public let key: String?
-}
-
-/// A dialog on a terminal's screen (trusting a folder, a permission, a review) and the choices it offers.
-public struct TermPrompt: Decodable, Sendable, Equatable {
-    public let digest: String
-    public let title: String
-    public let body: [String]?
-    public let options: [TermOption]
-    public let hint: String?
-}
+public typealias TermOption = TelettyKit.TermOption
+public typealias TermPrompt = TelettyKit.TermPrompt
 
 public struct TranscriptState: Decodable, Sendable, Equatable {
     public let ok: Bool
@@ -850,56 +837,12 @@ public struct AgentScreen: Decodable, Sendable {
     }
 }
 
-/// A stretch of a terminal line in one style: `[text, index into the styles]`.
-public struct ScreenRun: Decodable, Sendable, Equatable {
-    public let text: String
-    public let style: Int
-
-    public init(from decoder: Decoder) throws {
-        var c = try decoder.unkeyedContainer()
-        text = try c.decode(String.self)
-        style = try c.decode(Int.self)
-    }
-}
-
-/// How a run looks: colours as hex, already reversed, dimmed or hidden by the server; nil for the theme's own.
-public struct ScreenStyle: Decodable, Sendable, Equatable {
-    public let fg: String?
-    public let bg: String?
-    public let b: Bool?
-    public let i: Bool?
-    public let u: Bool?
-    public let s: Bool?
-}
-
-public struct ScreenTheme: Decodable, Sendable, Equatable {
-    public let fg: String
-    public let bg: String
-}
-
-public struct StyledScreen: Sendable, Equatable {
-    public let lines: [[ScreenRun]]
-    public let styles: [ScreenStyle]
-    public let theme: ScreenTheme
-}
-
-/// What is on a terminal's screen now, without the lines that scrolled off it, or why it could not be read.
-public struct ScreenNow: Decodable, Sendable, Equatable {
-    public let lines: [[ScreenRun]]?
-    public let styles: [ScreenStyle]?
-    public let theme: ScreenTheme?
-    public let error: String?
-
-    public var styled: StyledScreen? {
-        guard let lines, let styles, let theme else { return nil }
-        return StyledScreen(lines: lines, styles: styles, theme: theme)
-    }
-}
-
-/// GET /api/agents/screens: every open terminal's screen, keyed by agent (or herdr session) id.
-public struct ScreensNow: Decodable, Sendable {
-    public let screens: [String: ScreenNow]
-}
+public typealias ScreenRun = TelettyKit.ScreenRun
+public typealias ScreenStyle = TelettyKit.ScreenStyle
+public typealias ScreenTheme = TelettyKit.ScreenTheme
+public typealias StyledScreen = TelettyKit.StyledScreen
+public typealias ScreenNow = TelettyKit.ScreenNow
+public typealias ScreensNow = TelettyKit.ScreensNow
 
 /// An agent history read through GET /api/agents/{id}, with the agent in full.
 public struct AgentEvents: Decodable, Sendable {

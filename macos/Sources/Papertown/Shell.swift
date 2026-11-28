@@ -84,7 +84,7 @@ final class Shell {
         if build?.repo != repo {
             let b = WebBuild(repo: repo)
             build = b
-            watcher = Watcher([b.web, repo.appendingPathComponent("design/src")]) { [weak self] in self?.changed($0) }
+            watcher = Watcher(b.watchFolders) { [weak self] in self?.changed($0) }
         }
         let build = build!
         if server?.port != port {

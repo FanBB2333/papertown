@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from papertown.api import create_app
-from papertown.prompts import parse
+from teletty.prompts import parse
 from .test_backends import memory_employee
 from .test_terminals import setup  # noqa: F401
 
@@ -34,72 +34,6 @@ files here.
 > Yes, I trust this folder
   No, exit
   ↑/↓ Navigate · enter Confirm"""
-PERMISSION = """ Bash command
-   rm -rf build
-   Remove the build directory
- Do you want to proceed?
- ❯ 1. Yes
-   2. Yes, and don't ask again for rm commands in /tmp/project
-   3. No, and tell Claude what to do differently (esc)"""
-BOXED = """╭────────────────────────────────────────────╮
-│ Do you trust the files in this folder?     │
-│                                            │
-│ /private/var/folders/x/T/project/paper     │
-│                                            │
-│ Files here can be read, edited and run.    │
-│                                            │
-│ ❯ 1. Yes, proceed                          │
-│   2. No, exit                              │
-╰────────────────────────────────────────────╯
-   Enter to confirm · Esc to exit"""
-APPROVAL = """  Would you like to run the following command?
-  Reason: create the marker file
-  $ touch marker
-› 1. Yes, proceed (y)
-  2. Yes, and don't ask again for commands that start with `touch` (p)
-  3. No, and tell Codex what to do differently (esc)
-  Press enter to confirm or esc to cancel"""
-
-
-@pytest.mark.parametrize('screen,title,count,key', [
-    (CLAUDE, 'Quick safety check: Is this a project you created or one you trust?', 2, None), (HOOKS, 'Hooks need review', 3, '1'),
-    (BOXED, 'Do you trust the files in this folder?', 2, '1'),
-    (AGY, 'Do you trust the contents of this project?', 2, None),
-    (PERMISSION, 'Do you want to proceed?', 3, '1'),
-    (APPROVAL, 'Would you like to run the following command?', 3, '1')])
-def test_layouts(screen, title, count, key):
-    p = parse(screen)
-    assert p['title'] == title and len(p['options']) == count
-    assert p['options'][0]['current'] and p['options'][0]['key'] == key
-    assert len(p['digest']) == 16
-    assert len(p['body']) <= 12 and all(len(line) <= 240 for line in p['body'])
-    assert p['hint'] == (screen.splitlines()[-1].strip() if screen != PERMISSION else '')
-
-
-@pytest.mark.parametrize('screen', ['', 'Ready\n> ', 'Answer:\n1. First\n2. Second\nMore prose\nMore prose\nMore prose\n────\n> ', '1. Only one', '1. One\n3. Three', 'Answer:\n1. First\n2. Second\nMore prose\n> '])
-def test_negatives(screen):
-    assert parse(screen) is None
-
-
-@pytest.mark.parametrize('screen,moved', [
-    (CLAUDE, CLAUDE.replace(' ❯ No', '   No').replace('   Yes', ' ❯ Yes')),
-    (HOOKS, HOOKS.replace('› 1.', '  1.').replace('  2.', '› 2.')),
-    (AGY, AGY.replace('> Yes', '  Yes').replace('  No', '> No'))])
-def test_digest_ignores_cursor_hint_and_distant_spinner(screen, moved):
-    a = parse('⠋ loading\n\n\n' + screen)
-    b = parse('⠙ loading\n\n\n' + moved + '\nEsc exits')
-    assert a['digest'] == b['digest']
-    assert b['options'][1]['current']
-
-
-def test_borders_body_gaps_and_caps():
-    p = parse('old spinner\n────────────────────\n│ Question? │\n│ ❯ Yes │\n│   No │\n│ Enter to confirm │')
-    assert p['body'] == ['Question?'] and p['options'][0]['label'] == 'Yes'
-    p = parse('\n'.join(['x' * 300] * 20) + '\n1. Yes\n2. No')
-    assert len(p['title']) == 200 and len(p['body']) == 12
-    assert all(len(line) == 240 for line in p['body'])
-    assert parse('1. Yes\n2. No')['options'][0]['current']
-    assert parse('Question?\n❯ 1. Yes\n❯ 2. No') is None
 
 
 @pytest.mark.parametrize('screen,choice,expected', [(HOOKS, 2, ['3']), (CLAUDE, 1, ['down', 'enter']),
@@ -174,12 +108,3 @@ def test_terminal_answers(setup, monkeypatch, screen, choice, keys):
     host.emit(agent_status='idle')
     town.terminals.refresh()
     assert client.get(url).json()['prompt'] is None
-
-
-def test_last_forty_lines_and_last_options_block():
-    assert parse(HOOKS + '\n' + '\n'.join(['Later prose'] * 40)) is None
-    p = parse('1. Earlier\n2. List\n\n\n' + AGY)
-    assert p['title'] == 'Do you trust the contents of this project?'
-    assert [o['label'] for o in p['options']] == ['Yes, I trust this folder', 'No, exit']
-    p = parse('Choose?\n❯ Allow\n  Describe another option\n  Enter to confirm')
-    assert len(p['options']) == 2

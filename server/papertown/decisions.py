@@ -14,10 +14,11 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
+from teletty.prompts import PromptError
+
 from .agents import AgentError
 from .decided import DecisionError, same_question
 from .leads import NAMES
-from .prompts import PromptError
 
 if TYPE_CHECKING:
     from .town import Town

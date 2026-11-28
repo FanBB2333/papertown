@@ -1,9 +1,12 @@
 import re
+import shutil
 import shlex
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -12,6 +15,25 @@ from papertown.api import create_app
 from .conftest import make_settings
 
 IDEA = "用检索增强做论文的新颖性评估"
+
+
+def test_pi_finds_only_exact_existing_session(tmp_path):
+    from uuid import uuid4
+    from papertown.town import Town
+
+    exe = shutil.which("tmux")
+    if not exe:
+        pytest.skip("tmux unavailable")
+    socket = "pt-test-" + uuid4().hex[:12]
+    town = Town(make_settings(tmp_path, tmux_bin=exe, tmux_socket=socket))
+    # A session created by the old launch path can already exist at startup.
+    cmd = [exe, "-L", socket, "-f", "/dev/null"]
+    subprocess.run([*cmd, "new-session", "-d", "-s", "pi-10", "/bin/sleep", "60"], check=True)
+    try:
+        assert town.agents.alive({"tmux": "pi-10", "runtime": "pi"})
+        assert not town.agents.alive({"tmux": "pi-1", "runtime": "pi"})
+    finally:
+        subprocess.run([*cmd, "kill-server"], check=True)
 
 
 def wait_job(town, job_id, timeout=20):
@@ -95,9 +117,15 @@ def test_bridge_reports_state_and_runs_commands(tmp_path):
         ev = c.post(f"/api/agents/{a['id']}/say", json={"text": "/model p/m1"}).json()
         assert ev["data"]["cmd"] and town.agents.take(a["id"]) == [{"id": ev["data"]["mid"], "kind": "cmd", "name": "model", "args": "p/m1"}]
         typed = []
-        town.agents._tmux = lambda *args: typed.append(args)
+        def capture(*args, **kwargs):
+            typed.append(args)
+            return subprocess.CompletedProcess(args, 0, "", "")
+        town.agents.tmux_host.runner = capture
+        town.agents.tmux_host.executable = "fixture"
         c.post(f"/api/agents/{a['id']}/say", json={"text": "/settings"})
-        assert ("send-keys", "-t", f"pt-{a['id']}", "-l", "/settings") in typed and not town.agents.take(a["id"])
+        assert typed == [("send-keys", "-t", f"=pt-{a['id']}:", "-l", "--", "/settings"),
+                         ("send-keys", "-t", f"=pt-{a['id']}:", "--", "Enter")]
+        assert not town.agents.take(a["id"])
 
 
 def test_pi_start_uses_node_entrypoint_and_resumes_session(town, tmp_path, monkeypatch):
@@ -113,11 +141,12 @@ def test_pi_start_uses_node_entrypoint_and_resumes_session(town, tmp_path, monke
     monkeypatch.setattr(agents, "_watch_start", lambda _: None)
     calls = []
 
-    def tmux(*args):
+    def tmux(*args, input=None):
         calls.append(args)
         return subprocess.CompletedProcess(args, int(args[0] == "has-session"), "", "")
 
-    monkeypatch.setattr(agents, "_tmux", tmux)
+    monkeypatch.setattr(agents.tmux_host, "runner", tmux)
+    monkeypatch.setattr(agents.tmux_host, "executable", "fixture")
     line = town.pipeline.create(IDEA)
 
     agent = agents.ensure(line["id"], "coder")
