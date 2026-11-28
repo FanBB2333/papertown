@@ -110,15 +110,23 @@ struct HireSheet: View {
     @ViewBuilder
     private func startForm(_ lang: AppLanguage) -> some View {
         Section {
-            Picker(lang.string("hire.runtime"), selection: $runtime) {
-                ForEach(runtimes.filter { $0 != "pi" || allowsPi }, id: \.self) { r in
-                    Text(lang.string("runtime.\(r)") + (blocked(r) != nil ? " · " + lang.string("hire.unavailable") : "")).tag(r)
+            if offered.count > 1 {
+                Picker(lang.string("hire.runtime"), selection: $runtime) {
+                    ForEach(offered, id: \.self) { r in
+                        Text(runtimeName(r, lang) + (blocked(r) != nil ? " · " + lang.string("hire.unavailable") : "")).tag(r)
+                    }
+                }
+            } else {
+                HStack {
+                    Text(lang.string("hire.runtime"))
+                    Spacer()
+                    Text(runtimeName(runtime, lang)).foregroundStyle(.secondary)
                 }
             }
             if let why = blocked(runtime) {
                 Text(lang.server(why)).font(.caption).emState(.warn, detail: true)
             } else {
-                Text(lang.string("runtime.\(runtime).sub")).font(.caption).foregroundStyle(.secondary)
+                Text(lang.string(isAssistant && runtime == "headless" ? "runtime.background.sub" : "runtime.\(runtime).sub")).font(.caption).foregroundStyle(.secondary)
             }
         }
         if runtime != "pi" && blocked(runtime) == nil {
@@ -144,6 +152,18 @@ struct HireSheet: View {
     }
 
     // MARK: choices
+
+    /// The ways to run it. The assistant runs in the background only: its page shows the conversation, and its
+    /// terminal is with the others under 后台终端, so herdr and tmux are not offered for it.
+    private var offered: [String] {
+        let all = runtimes.filter { $0 != "pi" || allowsPi }
+        guard isAssistant else { return all }
+        return all.filter { $0 == "headless" || $0 == "pi" || ($0 == "paseo" && paseo?.chatOn == true) }
+    }
+
+    private func runtimeName(_ r: String, _ lang: AppLanguage) -> String {
+        lang.string(isAssistant && r == "headless" ? "runtime.background" : "runtime.\(r)")
+    }
 
     private static func isRunning(_ a: StaffAgent) -> Bool {
         a.started == true && !a.isOffline && a.term?.status != "exited"
@@ -218,9 +238,9 @@ struct HireSheet: View {
     }
 
     private func pickRuntime(_ preferred: String? = nil) {
-        let order = [preferred ?? paseo?.runtime ?? "tmux", "herdr", "tmux", "headless", "paseo"]
-        if runtime.isEmpty || blocked(runtime) != nil || (runtime == "pi" && !allowsPi) {
-            runtime = order.first { blocked($0) == nil } ?? "paseo"
+        let order = isAssistant ? ["headless", "paseo", "pi"] : [preferred ?? paseo?.runtime ?? "tmux", "herdr", "tmux", "headless", "paseo"]
+        if runtime.isEmpty || !offered.contains(runtime) || blocked(runtime) != nil {
+            runtime = order.first { offered.contains($0) && blocked($0) == nil } ?? offered.first ?? "paseo"
         }
     }
 
@@ -294,7 +314,7 @@ struct ImportConversationList: View {
         Section {
             if let list {
                 if list.count > 5 {
-                    TextField(lang.string("hire.import.filter"), text: $query)
+                    PromptField(lang.string("hire.import.filter"), text: $query)
                 }
                 let q = query.lowercased()
                 let shown = list.filter { c in q.isEmpty || [c.title, c.provider, c.model, c.cwd].compactMap { $0?.lowercased() }.contains { $0.contains(q) } }
@@ -359,7 +379,7 @@ struct ConversationsSheet: View {
         let lang = store.language
         NavigationStack {
             LoadingList(load: { try await $0.conversations(agentID: agentID) }) { list in
-                List {
+                PageList {
                     if list.isEmpty { Text(lang.string("convs.none")).foregroundStyle(.secondary) }
                     ForEach(list) { c in
                         Button { resume(c.id) } label: {

@@ -17,7 +17,7 @@ struct ServerPage: View {
 
     var body: some View {
         let lang = store.language
-            List {
+            PageList {
                 if store.isDemo {
                     Section {
                         Label(lang.string("demo.banner"), systemImage: "sparkles.rectangle.stack")

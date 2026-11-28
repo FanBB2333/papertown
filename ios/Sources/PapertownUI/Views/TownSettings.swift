@@ -17,7 +17,7 @@ struct SkimPage: View {
     var body: some View {
         let lang = store.language
         LivePage(load: { try await $0.skim() }, events: ["skills"]) { st, _ in
-            List {
+            PageList {
                 if !st.ok {
                     Section {
                         Text(lang.string("skim.down")).font(.subheadline).emState(.warn)
@@ -84,7 +84,7 @@ private struct SkimScope: View {
                 Text(lang.string("skim.env.title"))
             }
             Section {
-                TextField(lang.string("skim.search"), text: $query)
+                PromptField(lang.string("skim.search"), text: $query)
                 let q = query.lowercased()
                 ForEach(r.skills.filter { q.isEmpty || $0.name.lowercased().contains(q) || ($0.description ?? "").lowercased().contains(q) }) { s in
                     HStack(alignment: .top) {
@@ -153,7 +153,7 @@ struct BoundsPage: View {
 
     var body: some View {
         let lang = store.language
-        List {
+        PageList {
             Section {
                 Picker(lang.string("bounds.project"), selection: $line) {
                     Text(lang.string("bounds.no_project")).tag("")
@@ -221,7 +221,7 @@ private struct BoundsLevel: View {
                 if rules.isEmpty { Text(lang.string("bounds.none")).font(.footnote).foregroundStyle(.secondary) }
                 ForEach($rules) { $b in
                     VStack(alignment: .leading, spacing: 6) {
-                        TextField(lang.string("bounds.text.\(b.kind)"), text: $b.text, axis: .vertical)
+                        PromptField(lang.string("bounds.text.\(b.kind)"), text: $b.text, axis: .vertical)
                             .onChange(of: b.text) { if $0.count > 300 { b.text = String($0.prefix(300)) } }
                         HStack {
                             Picker("", selection: $b.kind) {
@@ -352,7 +352,7 @@ struct TracePage: View {
     var body: some View {
         let lang = store.language
         LivePage(load: { try await $0.trace() }, events: ["trace"]) { rows, _ in
-            List {
+            PageList {
                 if rows.isEmpty { Text(lang.string("trace.none")).foregroundStyle(.secondary) }
                 ForEach(rows.reversed()) { r in
                     VStack(alignment: .leading, spacing: 3) {
@@ -391,7 +391,7 @@ struct ToolsPage: View {
             async let s = (try? client.skills()) ?? []
             return Loaded(mcp: await m, skills: await s)
         }, events: ["skills", "mcp"]) { v, act in
-            List {
+            PageList {
                 Section {
                     if (v.mcp?.servers ?? []).isEmpty { Text(lang.string("tools.mcp.empty")).font(.footnote).foregroundStyle(.secondary) }
                     ForEach(v.mcp?.servers ?? []) { srv in
@@ -460,7 +460,7 @@ struct McpServerPage: View {
         let lang = store.language
         LivePage(load: { try await $0.mcp() }, events: ["mcp"]) { v, act in
             if let s = v.servers.first(where: { $0.name == name }) {
-                List {
+                PageList {
                     Section {
                         HStack {
                             Text(lang.string("mcp.state.\(s.state)")).font(.caption).emState(EmTone.issue(mcpTone(s)))
@@ -534,16 +534,16 @@ struct McpEditSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(lang.string("mcp.name"), text: $name).disabled(server != nil).papertownURLInput()
-                    TextField(lang.string("mcp.command"), text: $command).papertownURLInput()
+                    PromptField(lang.string("mcp.name"), text: $name).disabled(server != nil).papertownURLInput()
+                    PromptField(lang.string("mcp.command"), text: $command).papertownURLInput()
                 }
                 Section {
-                    TextField(lang.string("mcp.args"), text: $args, axis: .vertical).lineLimit(2...8).papertownURLInput()
+                    PromptField(lang.string("mcp.args"), text: $args, axis: .vertical).lineLimit(2...8).papertownURLInput()
                 } header: {
                     Text(lang.string("mcp.args.title"))
                 }
                 Section {
-                    TextField("KEY=VALUE", text: $env, axis: .vertical).lineLimit(2...8).papertownURLInput()
+                    PromptField("KEY=VALUE", text: $env, axis: .vertical).lineLimit(2...8).papertownURLInput()
                 } header: {
                     Text(lang.string("mcp.env"))
                 } footer: {

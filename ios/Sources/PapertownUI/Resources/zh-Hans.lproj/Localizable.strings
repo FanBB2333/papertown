@@ -1237,3 +1237,18 @@
 "prov.session.empty" = "暂无这次会话的对话记录";
 
 "prov.cwd" = "运行目录";
+
+"project.status.running" = "进行中";
+"project.status.done" = "已出厂";
+"project.status.dropped" = "已放弃";
+"project.status.linked" = "本地项目";
+"projects.hard_failed" = "%d 项硬检查未通过";
+"terminals.title" = "后台终端";
+"terminals.count" = "%d 个终端";
+"terminals.working" = "%d 个工作中";
+"terminals.sub" = "并排查看所有终端的画面";
+"terminals.empty" = "当前没有运行中的终端";
+"terminals.empty.sub" = "员工、项目负责人或小助手以终端方式启动后，其终端显示在此。";
+"terminals.unread" = "未能读取终端画面，打开后可查看。";
+"runtime.background" = "后台运行";
+"runtime.background.sub" = "由 Papertown 在后台运行所选的 CLI，对话显示在此处。";

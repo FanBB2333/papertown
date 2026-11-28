@@ -264,7 +264,7 @@ public struct ConversationState: Sendable {
     }
 
     /// A Paseo or terminal transcript, in the order it was written.
-    static func entries(from items: [TimelineItem], events: [AgentEvent] = []) -> [ChatEntry] {
+    static func entries(from items: [TimelineItem], events: [AgentEvent] = [], assistant: Bool = false) -> [ChatEntry] {
         let users = events.filter { $0.kind == "user" }
         let byID = Dictionary(users.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
         let byText = Dictionary(grouping: users, by: { $0.data.field("text")?.stringValue ?? "" })
@@ -272,6 +272,10 @@ public struct ConversationState: Sendable {
             let id = "t\(i)"
             switch item.kind {
             case "user":
+                // what Papertown sent the assistant to start it is not something you said: one line, as on the web
+                if assistant, let text = item.text, startBrief.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil {
+                    return ChatEntry(id: id, kind: .note, text: "小助手已启动，首先读取了其说明。", ts: item.ts)
+                }
                 // A transcript index or a tool call ID is not an agent event ID.
                 let eventID = item.eventID ?? item.data?.eventID
                 let matches = (byText[item.text ?? ""] ?? []).filter { $0.ts == item.ts }
@@ -291,6 +295,8 @@ public struct ConversationState: Sendable {
             }
         }
     }
+
+    private static let startBrief = try! NSRegularExpression(pattern: #"\A\s*(<start>|你是 Papertown 中控屏的小助手|请先完整阅读 \S+/\.papertown/intro\.md)"#)
 
     private static func argText(_ v: JSONValue?) -> String? {
         guard let v else { return nil }

@@ -883,6 +883,24 @@ public struct StyledScreen: Sendable, Equatable {
     public let theme: ScreenTheme
 }
 
+/// What is on a terminal's screen now, without the lines that scrolled off it, or why it could not be read.
+public struct ScreenNow: Decodable, Sendable, Equatable {
+    public let lines: [[ScreenRun]]?
+    public let styles: [ScreenStyle]?
+    public let theme: ScreenTheme?
+    public let error: String?
+
+    public var styled: StyledScreen? {
+        guard let lines, let styles, let theme else { return nil }
+        return StyledScreen(lines: lines, styles: styles, theme: theme)
+    }
+}
+
+/// GET /api/agents/screens: every open terminal's screen, keyed by agent (or herdr session) id.
+public struct ScreensNow: Decodable, Sendable {
+    public let screens: [String: ScreenNow]
+}
+
 /// An agent history read through GET /api/agents/{id}, with the agent in full.
 public struct AgentEvents: Decodable, Sendable {
     public let agent: StaffAgent

@@ -34,13 +34,20 @@ struct DecisionsSection: View {
         let lang = store.language
         let list = store.decisions(projectID)
         if !list.isEmpty {
-            Section(lang.string("decide.title")) {
+            Section {
                 ForEach(["matter", "need", "permissions"], id: \.self) { group in
                     ForEach(list.filter { $0.group == group }, id: \.key) { d in
                         DecisionRow(projectID: projectID, d: d, showsGroup: true)
                             .id(d.key)
                             .papertownRowBackground(store.appearance)
                     }
+                }
+            } header: {
+                // the one filled mark on the page: what waits on you
+                SectionTitle(title: lang.string("decide.title"), symbol: "bell.fill", tone: .warn) {
+                    Text("\(list.count)").font(.caption2.weight(.bold).monospacedDigit()).foregroundStyle(.white)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(DecideTag.fill))
                 }
             }
         }
@@ -177,7 +184,7 @@ struct DecisionRow: View {
 
     private func answerField(_ lang: AppLanguage) -> some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField(lang.string("decided.placeholder"), text: $draft, axis: .vertical)
+            PromptField(lang.string("decided.placeholder"), text: $draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder).font(.subheadline).lineLimit(1...7)
                 .emBar(draft.isEmpty ? nil : .info, reserve: true)
             if !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -295,7 +302,7 @@ struct CardRequestSection: View {
                     }
                 } else if started && project.lead.state == "running" {
                     HStack(spacing: 8) {
-                        TextField(lang.string("card.request.placeholder"), text: $note)
+                        PromptField(lang.string("card.request.placeholder"), text: $note)
                             .textFieldStyle(.roundedBorder)
                             .onChange(of: note) { if $0.count > 300 { note = String($0.prefix(300)) } }
                             .onSubmit(request)
@@ -416,6 +423,48 @@ struct UpdateAllButton: View {
         .disabled(busy || !ready || store.connectionStatus != .connected)
         .alert(said ?? "", isPresented: Binding(get: { said != nil }, set: { if !$0 { said = nil } })) {
             Button(lang.string("action.ok"), role: .cancel) {}
+        }
+    }
+}
+
+/// The same papers as a panel, for a page of cards.
+struct FreshPapersPanel: View {
+    @EnvironmentObject private var store: TownStore
+    @Environment(\.openURL) private var openURL
+    let papers: [FreshPaper]
+
+    var body: some View {
+        let lang = store.language
+        if !papers.isEmpty {
+            Panel(title: lang.string("papers.fresh"), symbol: "doc.text.magnifyingglass", padded: false) {
+                Text(lang.string("papers.fresh.footer")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            } content: {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(papers.enumerated()), id: \.element.id) { i, p in
+                        if i > 0 { Rectangle().fill(Hairline.color).frame(height: 1).padding(.leading, 14) }
+                        Button {
+                            if let s = p.url, let url = URL(string: s) { openURL(url) }
+                        } label: {
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(p.title).font(.subheadline).foregroundStyle(.primary).lineLimit(2).multilineTextAlignment(.leading)
+                                    Text([p.year, p.authors].compactMap { $0 }.joined(separator: " · "))
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                Spacer(minLength: 8)
+                                if let score = p.relevance, score > 0 {
+                                    EmText(lang.format("papers.relevance", score), .numbers(.info))
+                                        .font(.caption).foregroundStyle(.secondary).fixedSize()
+                                }
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
         }
     }
 }

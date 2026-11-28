@@ -11,6 +11,7 @@ struct StaffView: View {
     @State private var sortMode: SortMode = .urgency
     @State private var hiring = false
     @State private var opened: StaffAgent?
+    @State private var showTerminals = false
 
     private var filteredEntries: [(project: ProjectRefInfo?, agent: StaffAgent)] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -28,7 +29,28 @@ struct StaffView: View {
     var body: some View {
         let lang = store.language
         NavigationStack {
-            List {
+            PageList {
+                let terms = store.openTerminals
+                if !terms.isEmpty && searchText.isEmpty {
+                    Section {
+                        NavigationLink { TerminalsPage() } label: {
+                            HStack(spacing: 11) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 9, style: .continuous).fill(store.appearance.tintColor.opacity(0.14)).frame(width: 32, height: 32)
+                                    Image(systemName: "terminal").font(.system(size: 14, weight: .semibold)).foregroundStyle(store.appearance.tintColor)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(lang.string("terminals.title")).font(.body.weight(.medium))
+                                    Text(lang.string("terminals.sub")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                Spacer(minLength: 6)
+                                Text(lang.format("terminals.count", terms.count)).font(.caption).foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .papertownRowBackground(store.appearance)
+                    }
+                }
                 if let assistant = store.assistantAgent {
                     Section(lang.string("staff.section.town")) {
                         NavigationLink {
@@ -50,13 +72,10 @@ struct StaffView: View {
                                 }
                                 Spacer(minLength: 6)
                                 if assistant.started != true {
-                                    Text(lang.string("staff.not_started"))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    StateTag(text: lang.string("staff.not_started"), small: true)
                                 } else {
-                                    Text(TextFormatters.bucketLabel(assistant.effectiveBucket, offline: assistant.isOffline, language: lang))
-                                        .font(.caption)
-                                        .emState(EmTone.issue(assistant.effectiveBucket))
+                                    StateTag(text: TextFormatters.bucketLabel(assistant.effectiveBucket, offline: assistant.isOffline, language: lang),
+                                             tone: EmTone.bucket(assistant.effectiveBucket), small: true)
                                 }
                             }
                             .padding(.vertical, 2)
@@ -139,6 +158,11 @@ struct StaffView: View {
             .refreshable {
                 await store.refreshAll()
             }
+            .navigationDestination(isPresented: $showTerminals) { TerminalsPage() }
+            #if DEBUG
+            // -PTTerminals YES opens the wall of terminals, for screenshots
+            .onAppear { if UserDefaults.standard.bool(forKey: "PTTerminals") { showTerminals = true } }
+            #endif
             .navigationDestination(isPresented: Binding(get: { opened != nil }, set: { if !$0 { opened = nil } })) {
                 if let a = opened {
                     AgentChatView(agentID: a.id, role: a.role,
@@ -175,7 +199,7 @@ struct StaffView: View {
                             }
                             Spacer()
                             if let b = t.watch?.bucket {
-                                Text(TextFormatters.bucketLabel(b, language: lang)).font(.caption).emState(EmTone.issue(b))
+                                StateTag(text: TextFormatters.bucketLabel(b, language: lang), tone: EmTone.bucket(b), small: true)
                             }
                         }
                     }
@@ -213,8 +237,9 @@ struct StaffView: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    if let issue = EmTone.issue(agent.effectiveBucket) {
-                        Text(TextFormatters.bucketLabel(agent.effectiveBucket, language: lang)).font(.caption).emState(issue)
+                    if sortMode == .project || EmTone.issue(agent.effectiveBucket) != nil {
+                        StateTag(text: TextFormatters.bucketLabel(agent.effectiveBucket, offline: agent.isOffline, language: lang),
+                                 tone: EmTone.bucket(agent.effectiveBucket), small: true)
                     }
                 }
             }

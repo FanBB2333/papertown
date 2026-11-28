@@ -21,7 +21,7 @@ struct PagesPage: View {
         LivePage(load: { try await $0.pages(projectID: projectID) }, events: ["page"], projectID: projectID) { list, act in
             let kinds = Array(Set(list.pages.map(\.kind))).sorted()
             let shown = list.pages.filter { kind.isEmpty || $0.kind == kind }.reversed()
-            List {
+            PageList {
                 Section {
                     SendField(placeholder: lang.string("pages.request.placeholder"), button: lang.string("pages.request"), limit: 1000,
                               axis: .vertical, disabled: !started || act.busy) { q in
@@ -203,7 +203,7 @@ struct MemoryPage: View {
     var body: some View {
         let lang = store.language
         LivePage(load: { try await $0.memory(projectID: projectID) }, events: ["memory"], projectID: projectID) { m, act in
-            List {
+            PageList {
                 if m.items.isEmpty {
                     Section { Text(lang.string("memory.empty")).font(.footnote).foregroundStyle(.secondary) }
                 }
@@ -278,7 +278,7 @@ struct MemoryViewer: View {
     var body: some View {
         let lang = store.language
         LoadingList(load: { try await $0.memoryItem(projectID: projectID, id: item.id) }) { m in
-            List {
+            PageList {
                 Section {
                     Text(MemoryPage.where_(m.source, m.repo, lang) + (m.kind == "session" ? MemoryPage.span(m.n, m.started, m.ended, lang) : ""))
                         .font(.caption).foregroundStyle(.secondary)
@@ -327,7 +327,7 @@ struct MemoryImportSheet: View {
         let lang = store.language
         NavigationStack {
             LoadingList(load: { try await $0.memoryScan(projectID: projectID) }) { scan in
-                List {
+                PageList {
                     if let roots = scan.roots, !roots.isEmpty {
                         Section {
                             ForEach(roots, id: \.repo) { r in InfoRow(label: lang.string("memory.repo.\(r.repo)"), value: r.path) }
@@ -385,7 +385,7 @@ struct ProjectUsagePage: View {
     var body: some View {
         let lang = store.language
         LivePage(load: { try await $0.lineUsage(projectID: projectID) }, events: ["usage"]) { u, act in
-            List {
+            PageList {
                 Section {
                     InfoRow(label: lang.string("usage.spent"), value: u.spent.dollars, number: .info)
                     InfoRow(label: lang.string("usage.week"), value: (u.week ?? 0).dollars, number: .info)
@@ -401,7 +401,7 @@ struct ProjectUsagePage: View {
                 Section {
                     HStack {
                         Text("$").foregroundStyle(.secondary)
-                        TextField(lang.string("usage.no_budget"), text: $budget)
+                        PromptField(lang.string("usage.no_budget"), text: $budget)
                             #if os(iOS)
                             .keyboardType(.decimalPad)
                             #endif
@@ -444,7 +444,7 @@ struct ChecksPage: View {
     var body: some View {
         let lang = store.language
         LivePage(load: { try await $0.checks(projectID: projectID) }, events: ["checks", "canvas"], projectID: projectID) { v, act in
-            List {
+            PageList {
                 Section {
                     countsRow(lang.string("checks.hard"), v.summary.hard)
                     countsRow(lang.string("checks.soft"), v.summary.soft)
@@ -551,7 +551,7 @@ private struct CheckDetailList: View {
 
     var body: some View {
         let lang = store.language
-        List {
+        PageList {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -636,7 +636,7 @@ private struct CheckDetailList: View {
                     HStack {
                         Text(key == "max" ? lang.string("check.max") : lang.server(check.params?.first { $0.key == key }?.label ?? key))
                         Spacer()
-                        TextField("", text: Binding(get: { limits[key] ?? "" }, set: { limits[key] = $0 }))
+                        PromptField("", text: Binding(get: { limits[key] ?? "" }, set: { limits[key] = $0 }))
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 100)
                             #if os(iOS)
@@ -660,7 +660,7 @@ private struct CheckDetailList: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text(lang.string("check.prompt")).font(.caption).foregroundStyle(.secondary)
-                    TextField("", text: $prompt, axis: .vertical).lineLimit(3...10)
+                    PromptField("", text: $prompt, axis: .vertical).lineLimit(3...10)
                         .onChange(of: prompt) { if $0.count > 2000 { prompt = String($0.prefix(2000)) } }
                     if prompt != (check.text ?? "") {
                         Button(lang.string("action.save")) {

@@ -59,7 +59,7 @@ struct AccessSettingsPage: View {
             let keys = auth.local || auth.signedIn ? try? await c.accessKeys() : nil
             return Loaded(auth: auth, keys: keys)
         }) { v, act in
-            List {
+            PageList {
                 Section(lang.string("access.device")) {
                     Text(lang.string(v.auth.local ? "access.device.local" : v.auth.key == true ? "access.device.key" : "access.device.password"))
                         .font(.subheadline)
@@ -139,7 +139,7 @@ struct AccessSettingsPage: View {
                     }
                 }
                 HStack {
-                    TextField(lang.string("access.keys.name"), text: $keyName)
+                    PromptField(lang.string("access.keys.name"), text: $keyName)
                         .onChange(of: keyName) { if $0.count > 60 { keyName = String($0.prefix(60)) } }
                     Button(lang.string("access.keys.create")) {
                         let name = keyName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -195,7 +195,7 @@ struct AgentSettingsPage: View {
             async let p = try? c.roster(role: "coder")
             return Loaded(paseo: paseo, paseoError: problem, runtime: try await r, herdr: await h, pi: await p?.available)
         }, events: ["paseo_models"]) { v, act in
-            List {
+            PageList {
                 Section {
                     Picker(lang.string("agents.runtime"), selection: Binding(get: { v.runtime }, set: { r in
                         act.run { try await $0.setDefaultRuntime(r) }
@@ -298,7 +298,7 @@ struct DefaultModelPage: View {
             let d = p.defaults?[role]
             let models = p.providers.first { $0.id == provider }?.models ?? []
             let current = models.first { $0.id == model }
-            List {
+            PageList {
                 Section {
                     Picker(lang.string("hire.provider"), selection: $provider) {
                         Text(lang.string("agents.default.none")).tag("")
@@ -371,12 +371,12 @@ struct UsageSettingsPage: View {
     var body: some View {
         let lang = store.language
         LivePage(load: { try await $0.usageSettings() }) { s, act in
-            List {
+            PageList {
                 Section {
                     HStack {
                         Text(lang.string("usage.settings.budget"))
                         Spacer()
-                        TextField(lang.string("usage.no_budget"), text: $budget)
+                        PromptField(lang.string("usage.no_budget"), text: $budget)
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 120)
                             #if os(iOS)

@@ -10,7 +10,7 @@ struct TownView: View {
     var body: some View {
         let lang = store.language
         NavigationStack {
-            List {
+            PageList {
                 Section {
                     NavigationLink {
                         AgentChatView(target: .agent("assistant"), role: "assistant", subtitle: lang.string("staff.town_wide"))
@@ -26,7 +26,7 @@ struct TownView: View {
                             if pending > 0 {
                                 Text("\(pending)").font(.caption).emNum(.warn)
                             } else if let a = store.assistantAgent, a.started != true {
-                                Text(lang.string("staff.not_started")).font(.caption).foregroundStyle(.secondary)
+                                StateTag(text: lang.string("staff.not_started"), small: true)
                             }
                         }
                         .emBar(pending > 0 ? .warn : nil)
@@ -84,6 +84,17 @@ struct TownView: View {
                 }
                 Text(tone.tip(lang)).font(.caption).emState(EmTone.issue(tone.state), detail: true)
             }
+            // every terminal open in the background, side by side: the web's 终端 in the top bar
+            NavigationLink { TerminalsPage() } label: {
+                let terms = store.openTerminals
+                HStack {
+                    Label(lang.string("terminals.title"), systemImage: "terminal")
+                    Spacer()
+                    let needs = terms.filter { $0.bucket == "needs" || $0.bucket == "failed" }.count
+                    if needs > 0 { StateTag(text: TextFormatters.bucketLabel("needs", language: lang) + " \(needs)", tone: .warn, small: true) }
+                    Text("\(terms.count)").font(.body).emNum()
+                }
+            }
         } header: {
             Text(lang.string("town.section.now"))
         }
@@ -132,7 +143,7 @@ struct DepartmentsPage: View {
     var body: some View {
         let lang = store.language
         LoadingList(load: { try await $0.departments() }) { list in
-            List {
+            PageList {
                 ForEach(list) { d in
                     Section {
                         HStack {
@@ -179,7 +190,7 @@ struct LibraryPage: View {
     var body: some View {
         let lang = store.language
         LoadingList(load: { client -> LibraryShelf in try await client.library(limit: 60) }) { shelf in
-            List {
+            PageList {
                 if let error { Section { Text(error).emState(.bad, detail: true).font(.footnote) } }
                 if let result {
                     Section {
@@ -258,7 +269,7 @@ struct ComputePage: View {
             async let g = try? client.gpus()
             return Loaded(jobs: try await j, gpus: await g)
         }) { v in
-            List {
+            PageList {
                 Section(lang.string("compute.backends")) {
                     ForEach(v.jobs.backends ?? []) { b in
                         VStack(alignment: .leading, spacing: 2) {
@@ -323,7 +334,7 @@ struct QuotaPage: View {
     var body: some View {
         let lang = store.language
         LoadingList(load: { try await $0.usage() }, content: { u in
-            List {
+            PageList {
                 ForEach(u.providers) { p in
                     Section {
                         if let e = p.error { Text(lang.server(e)).font(.footnote).emState(.warn, detail: true) }

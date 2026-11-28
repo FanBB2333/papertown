@@ -797,7 +797,7 @@ public final class TownStore: ObservableObject {
                     do {
                         let tl = try await client.timeline(agentID: id)
                         state.agent = tl.agent
-                        var entries = ConversationState.entries(from: tl.items, events: state.events)
+                        var entries = ConversationState.entries(from: tl.items, events: state.events, assistant: target.isAssistant)
                         // an agent's asks and acts live in its events even when its words are in a transcript
                         if target.isAssistant {
                             let extra = ((assistant?.asks ?? []) + (assistant?.acts ?? [])).sorted { $0.id < $1.id }

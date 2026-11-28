@@ -1237,3 +1237,18 @@
 "prov.session.empty" = "No messages available for this conversation";
 
 "prov.cwd" = "Working Directory";
+
+"project.status.running" = "In progress";
+"project.status.done" = "Shipped";
+"project.status.dropped" = "Dropped";
+"project.status.linked" = "Local project";
+"projects.hard_failed" = "%d hard checks failing";
+"terminals.title" = "Background terminals";
+"terminals.count" = "%d terminals";
+"terminals.working" = "%d working";
+"terminals.sub" = "Every terminal side by side";
+"terminals.empty" = "No terminal is running";
+"terminals.empty.sub" = "Once an employee, a project lead or the assistant starts in a terminal, its terminal shows here.";
+"terminals.unread" = "The screen could not be read. Open the terminal to see it.";
+"runtime.background" = "Run in the background";
+"runtime.background.sub" = "Papertown runs the CLI you pick in the background. The conversation shows here.";

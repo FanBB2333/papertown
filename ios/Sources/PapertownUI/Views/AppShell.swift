@@ -6,9 +6,9 @@ import UIKit
 
 // The app's frame for the shape it has. Taller than wide (an iPhone or iPad held upright, a narrow iPad window): tabs
 // along the bottom, the server behind the connection pill. Wider than tall: a sidebar, beside the page where there is
-// room for one (iPad, Plus and Max iPhones) and sliding over it from the left where there is not. The Mac keeps the
-// system's list in SidebarShell. The pages are the same in every frame, and turning the device keeps the section and
-// what is open in it, because both live in TownStore.
+// room for one (iPad, Plus and Max iPhones) and sliding over it from the left where there is not. The Mac always has
+// the sidebar beside the page. The pages are the same in every frame, and turning the device keeps the section and what
+// is open in it, because both live in TownStore.
 
 struct AppSection: Identifiable {
     let tab: TownStore.Tab
@@ -45,7 +45,7 @@ struct AppShell: View {
 
     var body: some View {
         #if os(macOS)
-        SidebarShell(store: store)
+        SplitShell(store: store)
         #else
         Group {
             if tall {
@@ -121,49 +121,4 @@ extension View {
         self
         #endif
     }
-}
-
-
-/// The sidebar and the page beside it.
-struct SidebarShell: View {
-    @ObservedObject var store: TownStore
-
-    var body: some View {
-        let lang = store.language
-        NavigationSplitView {
-            List(selection: Binding<TownStore.Tab?>(get: { store.selectedTab }, set: { if let tab = $0 { store.selectedTab = tab } })) {
-                ForEach(AppSection.all) { section in
-                    Label(lang.string(section.title), systemImage: section.symbol)
-                        .badge(section.tab == .inbox ? store.inboxItems.count : 0)
-                        .tag(section.tab as TownStore.Tab?)
-                }
-            }
-            #if os(iOS)
-            .listStyle(.sidebar)
-            .navigationTitle("Papertown")
-            #endif
-            .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
-            .safeAreaInset(edge: .bottom) {
-                ConnectionPillButton()
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-            }
-        } detail: {
-            AppSection.page(store.selectedTab)
-        }
-        #if os(macOS)
-        .frame(minWidth: 880, minHeight: 580)
-        .onAppear { setBadge(store.inboxItems.count) }
-        .onChange(of: store.inboxItems.count) { setBadge($0) }
-        #endif
-    }
-
-    #if os(macOS)
-    /// The Dock icon counts what waits on you, like the Inbox.
-    private func setBadge(_ n: Int) {
-        NSApp.dockTile.badgeLabel = n > 0 ? String(n) : nil
-    }
-    #endif
 }

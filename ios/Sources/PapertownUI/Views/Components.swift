@@ -19,7 +19,7 @@ struct LoadingList<Value, Content: View>: View {
             if let value {
                 content(value)
             } else if let error {
-                List {
+                PageList {
                     Section {
                         Text(error).emState(.bad, detail: true)
                             .font(.subheadline)

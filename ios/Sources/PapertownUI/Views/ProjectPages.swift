@@ -18,7 +18,7 @@ struct ProgressCardSection: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text(lang.string("health.\(c.health)")).font(.caption).emState(EmTone.issue(c.health))
+                        StateTag(text: lang.string("health.\(c.health)"), tone: c.health == "ok" ? .good : EmTone.issue(c.health), small: true)
                         if let m = c.milestone, !m.isEmpty { Text(lang.server(m)).font(.caption).emState(.warn, icon: "flag.checkered", detail: true).lineLimit(1) }
                         Spacer()
                         if let p = c.progress { Text("\(p)%").font(.caption).emNum() }
@@ -41,17 +41,17 @@ struct ProgressCardSection: View {
                     }
                 }
             } header: {
-                HStack {
-                    Text(lang.string("card.title"))
-                    Spacer()
-                    if let at = c.at { Text(Stamp.ago(at, lang)) }
+                SectionTitle(title: lang.string("card.title"), symbol: "rectangle.and.text.magnifyingglass") {
+                    if let at = c.at { Text(Stamp.ago(at, lang)).foregroundStyle(.secondary) }
                 }
             }
             .papertownRowBackground(store.appearance)
         } else if let pending = card.pending {
-            Section(lang.string("card.title")) {
+            Section {
                 Text((pending.note ?? "").isEmpty ? lang.string("card.pending") : pending.note ?? "").emBar((pending.note ?? "").isEmpty ? nil : .info)
                     .font(.footnote).foregroundStyle(.secondary)
+            } header: {
+                SectionTitle(title: lang.string("card.title"), symbol: "rectangle.and.text.magnifyingglass")
             }
             .papertownRowBackground(store.appearance)
         }
@@ -79,7 +79,7 @@ struct ReportsPage: View {
         let lang = store.language
         LoadingList(load: { try await $0.reports(projectID: projectID) }, content: { r in
             ScrollViewReader { proxy in
-                List {
+                PageList {
                     let open = r.asks.filter { $0.data.open != false }
                     if !open.isEmpty {
                         Section(lang.string("reports.asks")) {
@@ -157,7 +157,7 @@ struct AnswerSheet: View {
                         }
                     }
                     Section(lang.string("answer.own")) {
-                        TextField(lang.string("answer.placeholder"), text: $text, axis: .vertical).lineLimit(3...8).emBar(text.isEmpty ? nil : .info, reserve: true)
+                        PromptField(lang.string("answer.placeholder"), text: $text, axis: .vertical).lineLimit(3...8).emBar(text.isEmpty ? nil : .info, reserve: true)
                     }
                     if let error { Section { Text(error).emState(.bad, detail: true).font(.footnote) } }
                 }
@@ -206,7 +206,7 @@ struct OverlapPage: View {
             async let papers = client.papers(projectID: projectID)
             return Loaded(hatch: try await snap.outputs?.hatch, papers: try await papers)
         }) { v in
-            List {
+            PageList {
                 if let h = v.hatch {
                     Section {
                         if let verdict = h.verdict {
@@ -285,7 +285,7 @@ struct MethodPage: View {
         let lang = store.language
         LoadingList(load: { try await $0.projectSnapshot(id: projectID).outputs?.method }) { m in
             if let m {
-                List {
+                PageList {
                     if let p = m.problem { Section(lang.string("method.problem")) { EmText(lang.server(p)).font(.subheadline).textSelection(.enabled) } }
                     list("method.mechanism", m.mechanism)
                     if let b = m.baselines, !b.isEmpty {
@@ -337,7 +337,7 @@ struct ExperimentsPage: View {
             async let j = client.jobs(projectID: projectID)
             return Loaded(data: try await d, jobs: try await j)
         }, events: ["prov", "job", "line"], projectID: projectID) { v, _ in
-            List {
+            PageList {
                 if let r = v.data.results, !r.rows.isEmpty {
                     Section {
                         ResultsTableView(table: r)
@@ -478,7 +478,7 @@ struct JobPage: View {
     var body: some View {
         let lang = store.language
         LoadingList(load: { try await $0.job(id: jobID) }, content: { job in
-            List {
+            PageList {
                 Section {
                     InfoRow(label: lang.string("job.status"), value: lang.string("job.status.\(job.status)"), status: EmTone.issue(job.status))
                     InfoRow(label: lang.string("exp.backend"), value: job.backend)
@@ -524,7 +524,7 @@ struct PaperPage: View {
             async let w = client.workspace(projectID: projectID)
             return Loaded(snap: try await s, ws: try await w)
         }, content: { v in
-            List {
+            PageList {
                 Section {
                     if v.ws.paper?.pdf == true {
                         NavigationLink { PDFPage(projectID: projectID) } label: {
@@ -677,7 +677,7 @@ struct FilesPage: View {
     var body: some View {
         let lang = store.language
         LoadingList(load: { try await $0.workspaceTree(projectID: projectID, root: root) }) { tree in
-            List {
+            PageList {
                 Section {
                     if tree.files.isEmpty { Text(lang.string("files.empty")).font(.footnote).foregroundStyle(.secondary) }
                     ForEach(tree.files) { f in

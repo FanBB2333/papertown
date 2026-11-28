@@ -49,49 +49,48 @@ struct ProjectsView: View {
     var body: some View {
         let lang = store.language
         NavigationStack(path: $store.projectsPath) {
-            List {
-                Section {
-                    Picker(lang.string("tab.projects"), selection: $filter) {
-                        Text(lang.string("projects.filter.all")).tag(Filter.all)
-                        Text(lang.string("projects.filter.needs")).tag(Filter.needs)
-                        Text(lang.string("projects.filter.active")).tag(Filter.active)
-                        Text(lang.string("projects.filter.done")).tag(Filter.done)
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+            CardPage {
+                Picker(lang.string("tab.projects"), selection: $filter) {
+                    Text(lang.string("projects.filter.all")).tag(Filter.all)
+                    Text(lang.string("projects.filter.needs")).tag(Filter.needs)
+                    Text(lang.string("projects.filter.active")).tag(Filter.active)
+                    Text(lang.string("projects.filter.done")).tag(Filter.done)
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                #if os(macOS)
+                .fixedSize()
+                #else
+                .frame(maxWidth: 440)
+                #endif
 
                 if filteredProjects.isEmpty {
-                    Section {
-                        EmptyStateView(
-                            title: lang.string("inbox.noprojects.title"),
-                            systemImage: "folder",
-                            description: lang.string("inbox.noprojects.desc"),
-                            actionTitle: lang.string("projects.new_idea.title")
-                        ) {
-                            showNewIdea = true
-                        }
+                    EmptyStateView(
+                        title: lang.string("inbox.noprojects.title"),
+                        systemImage: "folder",
+                        description: lang.string("inbox.noprojects.desc"),
+                        actionTitle: lang.string("projects.new_idea.title")
+                    ) {
+                        showNewIdea = true
                     }
-                    .papertownRowBackground(store.appearance)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .papertownCard()
                 } else {
-                    Section {
+                    // as many columns as fit: one on an iPhone, more on an iPad and the Mac
+                    CardGrid {
                         ForEach(filteredProjects) { project in
-                            NavigationLink {
-                                ProjectDetailView(projectID: project.id)
-                            } label: {
-                                projectRow(project, lang: lang)
+                            NavigationLink(value: ProjectRoute.project(project.id)) {
+                                ProjectCard(project: project, query: searchText)
                             }
-                            .papertownRowBackground(store.appearance)
+                            .buttonStyle(.plain)
                         }
                     }
                 }
                 if filter == .all && searchText.isEmpty && !store.projects.isEmpty {
-                    FreshPapersSection(papers: freshPapers)
+                    FreshPapersPanel(papers: freshPapers)
                 }
             }
-            .papertownInsetGroupedList()
-            .papertownListAppearance(store.appearance)
             .onAppear { store.currentProjectID = nil }  // back on the list: no project open
             .navigationTitle(lang.string("tab.projects"))
             .papertownSidebarButton()
@@ -142,52 +141,6 @@ struct ProjectsView: View {
                     .preferredColorScheme(store.appearance.colorScheme)
             }
         }
-    }
-
-    private func projectRow(_ project: ProjectSnapshot, lang: AppLanguage) -> some View {
-        let decisions = store.cards[project.id]?.decisions
-        // 待你决定 counts the lead's questions with the rest; servers before it count the questions alone
-        let asksCount = decisions?.count ?? store.openAsks.filter { $0.lineID == project.id && $0.data.open != false }.count
-        return VStack(alignment: .leading, spacing: 7) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                EmText("#\(project.seq) \(project.title.isEmpty || project.title == project.idea ? project.idea : lang.server(project.title))", .matches([searchText]))
-                    .emBar(project.title.isEmpty || project.title == project.idea ? .info : nil)
-                    .font(.body.weight(.medium))
-                    .lineLimit(2)
-                Spacer(minLength: 6)
-                Text(TextFormatters.leadStateLabel(project.lead.state, language: lang))
-                    .font(.caption.weight(.medium))
-                    .emState(EmTone.issue(project.lead.state))
-            }
-
-            StageTrackView(
-                stages: project.stages,
-                fallbackIndex: TextFormatters.orderedStages.firstIndex(of: project.stage) ?? 0,
-                blocked: project.lead.state == "blocked"
-            )
-
-            HStack {
-                EmText(project.isDone
-                     ? lang.string("stage.complete")
-                     : "\(TextFormatters.stageName(project.stage, language: lang)) · \(project.pct)%", .numbers(.info))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if project.sample {
-                    Text(lang.string("projects.sample"))
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                if asksCount > 0 {
-                    EmText(lang.format(decisions == nil ? "projects.waiting_count" : "projects.decide_count", asksCount), .numbers(.warn))
-                        .font(.caption.weight(.medium)).emBar(.warn)
-                }
-            }
-        }
-        .padding(.vertical, 3)
     }
 }
 

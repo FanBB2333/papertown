@@ -25,7 +25,7 @@ struct ProjectDetailView: View {
         Group {
             if let project {
                 ScrollViewReader { proxy in
-                    List {
+                    PageList {
                         asksSection
                         LoopPreviewSection(projectID: projectID)
                         leadSection(project, lang: lang)
@@ -139,7 +139,7 @@ struct ProjectDetailView: View {
         let reached: (String) -> Bool = { key in
             project.stages.first(where: { $0.key == key }).map { $0.status != "todo" } ?? false
         }
-        Section(lang.string("detail.section.research")) {
+        Section {
             link(lang.string("reports.nav"), "text.bubble", detail: nil) { ReportsPage(projectID: projectID) }
             link(lang.string("checks.nav"), "checklist", detail: checks.map { c in
                 c.hard.fail > 0 ? lang.format("checks.failing", c.hard.fail) : "\(c.hard.pass)/\(c.hard.total)"
@@ -162,6 +162,8 @@ struct ProjectDetailView: View {
             }
             link(lang.string("files.code"), "chevron.left.forwardslash.chevron.right", detail: nil) { FilesPage(projectID: projectID, root: "code") }
             link(lang.string("usage.nav"), "dollarsign.circle", detail: nil) { ProjectUsagePage(projectID: projectID) }
+        } header: {
+            SectionTitle(title: lang.string("detail.section.research"), symbol: "books.vertical")
         }
     }
 
@@ -259,11 +261,10 @@ struct ProjectDetailView: View {
                 LeadRoundsRows(projectID: projectID).papertownRowBackground(store.appearance)
             }
         } header: {
-            HStack {
-                Text(lang.string("detail.section.lead"))
-                Spacer()
-                Text(TextFormatters.leadStateLabel(project.lead.state, language: lang))
-                    .emState(EmTone.issue(project.lead.state))
+            SectionTitle(title: lang.string("detail.section.lead"), symbol: "person.crop.circle.badge.checkmark") {
+                let state = project.lead.state
+                StateTag(text: TextFormatters.leadStateLabel(state, language: lang),
+                         tone: state == "running" ? .good : state == "starting" ? .info : EmTone.issue(state), small: true)
             }
         } footer: {
             Text(lang.string("lead.footer"))
@@ -308,9 +309,7 @@ struct ProjectDetailView: View {
                     .papertownRowBackground(store.appearance)
             }
         } header: {
-            HStack {
-                Text(lang.string("detail.section.progress"))
-                Spacer()
+            SectionTitle(title: lang.string("detail.section.progress"), symbol: "chart.bar.xaxis") {
                 Text("\(project.doneStageCount)/\(max(project.stages.count, 8))").emNum()
             }
         }
@@ -383,10 +382,8 @@ struct ProjectDetailView: View {
                 .papertownRowBackground(store.appearance)
             }
         } header: {
-            HStack {
-                Text(lang.string("detail.section.team"))
-                Spacer()
-                Text("\(max(project.team.count, staffForProject.count))")
+            SectionTitle(title: lang.string("detail.section.team"), symbol: "person.2") {
+                Text("\(max(project.team.count, staffForProject.count))").foregroundStyle(.secondary)
             }
         }
     }

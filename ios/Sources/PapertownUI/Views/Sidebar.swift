@@ -1,11 +1,11 @@
 import PapertownCore
 import SwiftUI
 
-// The sidebar on iPad and iPhone held wide, after the Claude app's: the same quiet colour as the page, grey icons, the
-// four sections, and the server along the bottom like an account. Where there is room it stands beside the page
-// (SplitShell); where there is not it slides over the page from the left (DrawerShell), opened from the button the
-// pages put at their top left (papertownSidebarButton). Held upright the app has tabs instead (TabShell); the Mac keeps
-// SidebarShell.
+// Papertown's own sidebar, the same on the Mac, iPad and iPhone held wide, after the Claude app's: a quiet colour a
+// shade under the page, the four sections with the one open in the tint, and the server along the bottom like an
+// account. Where there is room it stands beside the page (SplitShell: the Mac, iPad, wide iPhones); where there is not
+// it slides over the page from the left (DrawerShell), opened from the button the pages put at their top left
+// (papertownSidebarButton). Held upright an iPhone or iPad has tabs instead (TabShell).
 
 // MARK: - Opening it from a page
 
@@ -81,27 +81,49 @@ extension TownStore {
     }
 }
 
-#if os(iOS)
-
 // MARK: - The two frames
 
-/// iPad, and an iPhone wide enough: the sidebar beside the page. The button at its head folds it away; the split view
-/// then offers its own button to bring it back.
+/// The Mac, iPad, and an iPhone wide enough: the sidebar beside the page. On iPad the button at its head folds it away
+/// and the split view then offers its own to bring it back; the Mac keeps that button in the window's title bar.
 struct SplitShell: View {
     @ObservedObject var store: TownStore
     @State private var columns = NavigationSplitViewVisibility.all
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
+            #if os(iOS)
             PapertownSidebar(hide: { withAnimation { columns = .detailOnly } })
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 320)
+            #else
+            PapertownSidebar()
+                .navigationSplitViewColumnWidth(min: 208, ideal: 236, max: 300)
+            #endif
         } detail: {
             AppSection.page(store.selectedTab)
+                #if os(macOS)
+                // the page's colour up to the top of the window, under a title bar with no band of its own
+                .background((store.appearance.groupedBackground ?? .clear).ignoresSafeArea())
+                .toolbarBackground(.hidden, for: .windowToolbar)
+                #endif
         }
         .navigationSplitViewStyle(.balanced)  // beside the page, in portrait too
+        #if os(macOS)
+        .frame(minWidth: 880, minHeight: 580)
+        .onAppear { setBadge(store.inboxItems.count) }
+        .onChange(of: store.inboxItems.count) { setBadge($0) }
+        #endif
     }
+
+    #if os(macOS)
+    /// The Dock icon counts what waits on you, like the Inbox.
+    private func setBadge(_ n: Int) {
+        NSApp.dockTile.badgeLabel = n > 0 ? String(n) : nil
+    }
+    #endif
 }
+
+#if os(iOS)
 
 /// iPhone, and narrow windows: the page alone, the sidebar sliding over it from the left. A tap beside it or a swipe
 /// to the left closes it, and so does any choice made in it.
@@ -158,6 +180,8 @@ struct DrawerShell: View {
     }
 }
 
+#endif
+
 // MARK: - The sidebar
 
 struct PapertownSidebar: View {
@@ -187,8 +211,8 @@ struct PapertownSidebar: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
+            .padding(.top, Self.headTop)
+            .padding(.bottom, 12)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
@@ -209,14 +233,24 @@ struct PapertownSidebar: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 12)
             }
+            #if os(iOS)
             .scrollDismissesKeyboard(.immediately)
+            #endif
 
+            Rectangle().fill(Color.primary.opacity(0.07)).frame(height: 1).padding(.horizontal, 14)
             ServerRow(selected: store.selectedTab == .server) { server() }
                 .padding(.horizontal, 10)
-                .padding(.bottom, 6)
+                .padding(.top, 6)
+                .padding(.bottom, Self.footBottom)
         }
         .background(store.appearance.sidebarBackground.ignoresSafeArea())
     }
+
+    #if os(macOS)
+    private static let headTop: CGFloat = 4, footBottom: CGFloat = 10  // the title bar is above the head
+    #else
+    private static let headTop: CGFloat = 12, footBottom: CGFloat = 6
+    #endif
 
     // MARK: Rows
 
@@ -226,7 +260,9 @@ struct PapertownSidebar: View {
                 .foregroundStyle(.secondary)
             TextField(lang.string("projects.search"), text: $query)
                 .textFieldStyle(.plain)
+                #if os(iOS)
                 .submitLabel(.search)
+                #endif
         }
         .font(.subheadline)
         .padding(.horizontal, 10)
@@ -248,7 +284,7 @@ struct PapertownSidebar: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(store.appearance.sidebarBackground)
                     .frame(width: 22, height: 22)
-                    .background(Circle().fill(Color(uiColor: .label)))
+                    .background(Circle().fill(Color.primary))
                 Text(lang.string("projects.new_idea.title"))
                     .font(.callout)
                 Spacer(minLength: 0)
@@ -335,10 +371,12 @@ struct PapertownSidebar: View {
     }
 }
 
-/// A rounded row, a soft shade under the selected one.
+/// A rounded row: the one open on a wash of the tint, and a soft shade under the one the pointer is over.
 private struct RowLook: ViewModifier {
     let selected: Bool
     var compact = false
+    @EnvironmentObject private var store: TownStore
+    @State private var over = false
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -346,9 +384,14 @@ private struct RowLook: ViewModifier {
             .padding(.horizontal, 10)
             .padding(.vertical, compact ? 7 : 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(shape.fill(selected ? Color.primary.opacity(0.07) : Color.clear))
+            .background(shape.fill(selected ? store.appearance.tintColor.opacity(0.14) : Color.primary.opacity(over ? 0.06 : 0)))
             .contentShape(shape)
+            #if os(iOS)
             .hoverEffect(.highlight)
+            #else
+            .onHover { over = $0 }
+            .animation(.easeOut(duration: 0.12), value: over)
+            #endif
     }
 }
 
@@ -362,24 +405,33 @@ private struct SidebarRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: symbol)
+                Image(systemName: selected ? Self.filled(symbol) : symbol)
                     .font(.body)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                     .frame(width: 22)
                 Text(title)
                     .font(.callout)
                     .fontWeight(selected ? .semibold : .regular)
                 Spacer(minLength: 4)
                 if count > 0 {
+                    // what waits on you: the one filled mark in the sidebar
                     Text("\(count)")
-                        .font(.footnote)
-                        .emNum(.warn)
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .frame(minWidth: 20, minHeight: 20)
+                        .background(Capsule().fill(Color.orange))
                 }
             }
             .modifier(RowLook(selected: selected))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// The section open now has its symbol filled in.
+    private static func filled(_ symbol: String) -> String {
+        symbol == "building.columns" || symbol == "tray" || symbol == "folder" || symbol == "person.2" ? symbol + ".fill" : symbol
     }
 }
 
@@ -399,6 +451,10 @@ private struct ServerRow: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(width: 30, height: 30)
                     .background(Circle().fill(Color.primary.opacity(0.08)))
+                    .overlay(alignment: .bottomTrailing) {
+                        Circle().fill(dot).frame(width: 9, height: 9)
+                            .overlay(Circle().stroke(store.appearance.sidebarBackground, lineWidth: 2))
+                    }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(name)
                         .font(.subheadline.weight(.semibold))
@@ -417,6 +473,15 @@ private struct ServerRow: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
+    /// Green while it answers, orange while connecting or waiting for a sign-in, grey when it does not.
+    private var dot: Color {
+        switch store.connectionStatus {
+        case .connected: return .green
+        case .connecting, .reconnecting, .authRequired: return .orange
+        case .disconnected: return Color.secondary
+        }
+    }
+
     private func detail(_ lang: AppLanguage) -> String {
         switch store.connectionStatus {
         case .connected:
@@ -430,5 +495,3 @@ private struct ServerRow: View {
         }
     }
 }
-
-#endif

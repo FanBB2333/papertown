@@ -15,7 +15,7 @@ struct InboxView: View {
         let lang = store.language
         let items = store.inboxItems
         NavigationStack(path: $store.inboxPath) {
-            List {
+            PageList {
                 connectionBannerSection(lang: lang)
 
                 if store.projects.isEmpty && items.isEmpty && !store.isRefreshing {

@@ -27,6 +27,12 @@ struct AgentChatView: View {
         self.focusEventID = focusEventID
     }
 
+    /// Opened from the wall of terminals: on the terminal's screen, not the messages.
+    init(target: ChatTarget, role: String, subtitle: String, onTerminal: Bool) {
+        self.init(target: target, role: role, subtitle: subtitle)
+        _showTerminal = State(initialValue: onTerminal)
+    }
+
     @EnvironmentObject private var store: TownStore
     @State private var draft = ""
     @State private var deliveryMode: DeliveryMode = .steer
@@ -93,7 +99,9 @@ struct AgentChatView: View {
     var body: some View {
         let lang = store.language
         VStack(spacing: 0) {
-            if state.hasScreen {
+            // the assistant's page is its conversation: its terminal is under 后台终端, and the switch shows only
+            // once that terminal is on screen, to get back
+            if state.hasScreen && (!target.isAssistant || showTerminal) {
                 Picker("", selection: $showTerminal) {
                     Text(lang.string("chat.view.chat")).tag(false)
                     Text(lang.string("chat.view.screen")).tag(true)

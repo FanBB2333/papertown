@@ -141,7 +141,7 @@ private struct ProvOutline: View {
         let lang = store.language
         let visible = branches
         ScrollViewReader { proxy in
-            List {
+            PageList {
                 if visible.isEmpty {
                     Text(lang.string("prov.tree.empty")).font(.subheadline).foregroundStyle(.secondary)
                         .listRowBackground(Color.clear)
@@ -340,7 +340,7 @@ struct ProvNodePage: View {
             return (node, related)
         }, events: ["prov"], projectID: projectID) { value, _ in
             let (n, related) = value
-            List {
+            PageList {
                 Section {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(n.title ?? n.path ?? n.tag ?? nodeID).font(.headline)
@@ -547,7 +547,7 @@ private struct ProvOpsList: View {
         LivePage(load: { try await $0.provOps(projectID: projectID, limit: Self.limit) }, events: ["prov"], projectID: projectID) { first, act in
             let ids = Set(first.compactMap(\.id))
             let ops = first + older.filter { !ids.contains($0.id ?? "") }
-            List {
+            PageList {
                 if ops.isEmpty {
                     Text(lang.string("prov.ops.empty")).font(.subheadline).foregroundStyle(.secondary)
                         .listRowBackground(Color.clear)
@@ -616,7 +616,7 @@ struct ProvOpPage: View {
     var body: some View {
         let lang = store.language
         LoadingList(load: { try await $0.provOp(projectID: projectID, id: opID) }) { op in
-            List {
+            PageList {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         if let summary = op.summary { Text(lang.server(summary)).font(.headline) }
@@ -710,7 +710,7 @@ private struct ProvConversation: View {
             }) else { return entries }
             return Array(entries[max(0, nearest - 3)...min(entries.count - 1, nearest + 3)])
         }) { entries in
-            List {
+            PageList {
                 if entries.isEmpty { Text(lang.string("prov.session.empty")).foregroundStyle(.secondary) }
                 ForEach(entries) { e in
                     VStack(alignment: .leading, spacing: 4) {

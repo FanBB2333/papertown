@@ -156,6 +156,11 @@ struct TerminalPane: View {
 
     /// One line as the server styled it: colours, bold, italic, underline and strikethrough.
     private func attributed(_ runs: [ScreenRun], _ styled: StyledScreen) -> AttributedString {
+        Self.line(runs, styled, size: size)
+    }
+
+    /// The same, at any size: a preview of the screen draws its lines with it too.
+    static func line(_ runs: [ScreenRun], _ styled: StyledScreen, size: Double) -> AttributedString {
         var out = AttributedString()
         for run in runs {
             var a = AttributedString(run.text.replacingOccurrences(of: "\t", with: "    "))

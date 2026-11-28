@@ -202,13 +202,59 @@ extension TownStore {
 
 // MARK: - Cross-Platform Native Modifiers
 
+/// A page's sections: a list on iPhone and iPad, and on the Mac a grouped form, which draws the same rounded cards
+/// there (a Mac list has no grouped style).
+#if os(macOS)
+struct PageList<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+    var body: some View { Form(content: content).formStyle(.grouped) }
+}
+#else
+typealias PageList = List
+#endif
+
+/// A text field whose words show inside it until something is typed, on every platform: a Mac form would otherwise
+/// stand them to the left of the field as its label and leave the field empty.
+@MainActor @ViewBuilder
+func PromptField(_ prompt: String, text: Binding<String>, axis: Axis = .horizontal) -> some View {
+    #if os(macOS)
+    TextField(text: text, prompt: Text(prompt), axis: axis) { Text(prompt) }.labelsHidden()
+    #else
+    TextField(prompt, text: text, axis: axis)
+    #endif
+}
+
+/// Keeps a scrolling page's content in a column of at most `width`, in the middle of what is wider. The whole width
+/// still scrolls.
+struct PageColumn: ViewModifier {
+    static let reading: CGFloat = 780
+    let width: CGFloat
+    @State private var room: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        let side = max(0, (room - width) / 2)
+        Group {
+            if #available(iOS 17.0, macOS 14.0, *) {
+                content.contentMargins(.horizontal, side, for: .scrollContent)
+            } else {
+                content.padding(.horizontal, side)
+            }
+        }
+        .background(GeometryReader { g in
+            Color.clear.onAppear { room = g.size.width }.onChange(of: g.size.width) { room = $0 }
+        })
+    }
+}
+
 extension View {
+    /// A page of grouped sections: rounded cards on the page's colour, in a column no wider than reads well. On iPad
+    /// and the Mac the column sits in the middle of the window, so a row never runs the whole width of it.
     @ViewBuilder
-    func papertownInsetGroupedList() -> some View {
+    func papertownInsetGroupedList(column: CGFloat = PageColumn.reading) -> some View {
         #if os(iOS)
-        self.listStyle(.insetGrouped)
+        self.listStyle(.insetGrouped).modifier(PageColumn(width: column))
         #else
-        self.listStyle(.inset)
+        self.modifier(PageColumn(width: column))
         #endif
     }
 

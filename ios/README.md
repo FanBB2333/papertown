@@ -14,7 +14,14 @@ right; the canvas and conversations hide the tabs while they show. Held wide, th
 warm colours: the four sections, New Idea, and the server with its connection along the bottom (`Views/Sidebar.swift`).
 Where the width is regular (iPad, a foldable iPhone opened, Plus and Max iPhones) it sits beside the page and folds
 away with the button at its head; where it is compact it slides over the page from the button at the top left.
-Turning the device keeps the section and the page open in it. The Mac keeps the system's sidebar.
+Turning the device keeps the section and the page open in it. The Mac's window has the same sidebar beside the page.
+
+A page is built from a few shared parts (`Views/Panels.swift`), after the web's pages and `docs/ui_emphasis.md`: a card
+on the page, a section's title bar (its symbol on a tile of the tint, its name, what belongs to the whole section on
+the right), a capsule that names a state at the end of its row, and the one filled orange tag for what waits on you.
+Pages of cards (Projects, Background terminals) lay them out in as many columns as fit: one on an iPhone, two or three
+on an iPad, more in a wide window. Pages of lists keep their rows in a reading column in the middle of a wide window,
+and on the Mac they are grouped forms.
 
 ## On the Mac
 
@@ -33,9 +40,9 @@ ios/scripts/build-mac.sh   # ios/build/Papertown.app
 | Tab | Pages |
 |---|---|
 | **Inbox** | Matters with facts, possible approaches and materials, card lines waiting for your decision, permissions, blocked leads and active projects |
-| **Projects** | Search and filters, new idea, Update All and new papers. Each project has its progress card, resident lead, research loop, gates and checks, decisions, provenance, reports, published pages, imported memory, overlap report, method, experiments, paper, workspace files, usage, budget and team. |
-| **Staff** | Agents by urgency or project, herdr / tmux terminal sessions, new staff (Paseo, herdr, tmux, background terminal or pi, with provider, model and thinking) or a Paseo conversation imported; each opens a conversation: messages, tool calls, permission prompts, dialogs on a terminal's screen, queued messages, the live screen with Enter / Esc / arrow / Ctrl-C keys, Steer / Queue / Interrupt while an agent works, earlier conversations, a new one, the project brief, closing a terminal |
-| **Town** | The assistant (with actions waiting for approval), projects in progress and leads on duty, departments, library search and its settings, compute (executors, jobs, GPUs), model quotas, MCP servers (add, edit, reconnect, turn off) and skills, Skills per scope (skim), work bounds, the call trace |
+| **Projects** | Project cards (state, health, stages, the lead's summary, what waits on you), search and filters, new idea, Update All and new papers. Each project has its progress card, resident lead, research loop, gates and checks, decisions, provenance, reports, published pages, imported memory, overlap report, method, experiments, paper, workspace files, usage, budget and team. |
+| **Staff** | Background terminals (every open terminal's screen side by side, read again every few seconds; a tile opens that terminal), agents by urgency or project, herdr / tmux terminal sessions, new staff (Paseo, herdr, tmux, background terminal or pi, with provider, model and thinking) or a Paseo conversation imported; each opens a conversation: messages, tool calls, permission prompts, dialogs on a terminal's screen, queued messages, the live screen with Enter / Esc / arrow / Ctrl-C keys, Steer / Queue / Interrupt while an agent works, earlier conversations, a new one, the project brief, closing a terminal |
+| **Town** | The assistant (started in the background only; its page is the conversation and its terminal is with the others under Background terminals; actions waiting for approval), projects in progress, leads on duty and background terminals, departments, library search and its settings, compute (executors, jobs, GPUs), model quotas, MCP servers (add, edit, reconnect, turn off) and skills, Skills per scope (skim), work bounds, the call trace |
 | **Server** | Current connection, saved servers, this server's settings (access password and access keys, default runtime and models, usage and budgets, sample projects), appearance and language |
 
 The town's map and 3D walk are the web's alone.

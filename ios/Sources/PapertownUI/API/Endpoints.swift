@@ -81,6 +81,11 @@ public extension PapertownClient {
         try await get(["agents", agentID, "screen"], query: styled ? [URLQueryItem(name: "styled", value: "1")] : [])
     }
 
+    /// Every open terminal's screen as it is now, in one read: for the page that shows them side by side.
+    func screens() async throws -> ScreensNow {
+        try await get(["agents", "screens"])
+    }
+
     func keys(agentID: String, _ keys: [String]) async throws {
         struct Body: Encodable { let keys: [String] }
         let _: Ack = try await send(.post, ["agents", agentID, "keys"], body: Body(keys: keys))

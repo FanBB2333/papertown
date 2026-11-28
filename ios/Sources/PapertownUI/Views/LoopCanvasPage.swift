@@ -196,7 +196,7 @@ struct LoopNodeDetail: View {
 
     var body: some View {
         let lang = store.language
-        List {
+        PageList {
             switch node.kind {
             case "stage": stage(lang)
             case "spec", "clamp": rules(lang)
@@ -324,7 +324,7 @@ struct LoopNodeDetail: View {
     @ViewBuilder
     private func note(_ lang: AppLanguage) -> some View {
         Section {
-            TextField(lang.string("loop.new.text.note"), text: $text, axis: .vertical)
+            PromptField(lang.string("loop.new.text.note"), text: $text, axis: .vertical)
                 .lineLimit(3...12)
             Button(lang.string("action.save")) {
                 let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -369,7 +369,7 @@ struct LoopLinksPage: View {
         LivePage(load: { try await $0.loop(projectID: projectID) }, events: canvasEvents, projectID: projectID) { v, act in
             let ctx = LoopContext(view: v, card: store.cards[projectID], outputs: nil, lang: lang)
             let mine = (v.edges ?? []).filter { $0.source == nodeID || $0.target == nodeID }
-            List {
+            PageList {
                 Section {
                     if mine.isEmpty { Text(lang.string("canvas.links.none")).foregroundStyle(.secondary) }
                     ForEach(mine) { e in
@@ -420,7 +420,7 @@ private struct LoopLinkPicker: View {
 
     var body: some View {
         let lang = store.language
-        List {
+        PageList {
             ForEach(ctx.view.blocks ?? []) { b in
                 let ns = ctx.view.nodes.filter { $0.mod == b.key && $0.id != nodeID && !linked.contains($0.id) }
                 if !ns.isEmpty {
@@ -482,7 +482,7 @@ struct LoopPreviewSection: View {
             }
             .papertownRowBackground(store.appearance)
         } header: {
-            Text(lang.string("loop.nav"))
+            SectionTitle(title: lang.string("loop.nav"), symbol: "point.3.connected.trianglepath.dotted")
         } footer: {
             Text(lang.string("canvas.hint"))
         }

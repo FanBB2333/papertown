@@ -58,7 +58,7 @@ struct DecidedPage: View {
             let filters = ["all"] + modules + (loose.isEmpty ? [] : ["loose"])
             let selected = filters.contains(filter) ? filter : "all"
             let ended = records.filter { !$0.isActive && (selected == "all" || ($0.mod ?? "overview") == selected) }
-            List {
+            PageList {
                 if !records.isEmpty || !loose.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         DecidedStatsLine(stats: list.stats)
@@ -190,7 +190,7 @@ struct DecidedDetailPage: View {
             return (d, list)
         }, events: ["decided", "prov", "job", "canvas", "line"], projectID: projectID) { value, act in
             let (d, list) = value
-            List {
+            PageList {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(d.text ?? "").font(.body).emBar(.info).textSelection(.enabled)
@@ -306,7 +306,7 @@ struct WriteDecisionSheet: View {
             Form {
                 Section(lang.string("decided.content")) {
                     if quote != nil { Text(text).emBar(.info).textSelection(.enabled) }
-                    else { TextField(lang.string("decided.placeholder"), text: $text, axis: .vertical).lineLimit(3...10).emBar(text.isEmpty ? nil : .info, reserve: true) }
+                    else { PromptField(lang.string("decided.placeholder"), text: $text, axis: .vertical).lineLimit(3...10).emBar(text.isEmpty ? nil : .info, reserve: true) }
                 }
                 .papertownRowBackground(store.appearance)
                 Section {
@@ -525,7 +525,7 @@ private struct AssignmentPage: View {
 
     var body: some View {
         let lang = store.language
-        List {
+        PageList {
             Section {
                 EmText(work.title ?? "").textSelection(.enabled)
                 if let who = work.who { InfoRow(label: lang.string("prov.who"), value: lang.server(who)) }

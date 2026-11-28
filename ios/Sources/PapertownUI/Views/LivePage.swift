@@ -40,7 +40,7 @@ struct LivePage<Value, Content: View>: View {
             if let value {
                 content(value, PageActions(busy: busy, perform: perform))
             } else if let error {
-                List {
+                PageList {
                     Section {
                         Text(error).emState(.bad, detail: true).font(.subheadline)
                         Button(lang.string("action.retry")) { Task { await reload() } }
@@ -120,7 +120,7 @@ struct SendField: View {
     var body: some View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         HStack(alignment: .bottom, spacing: 8) {
-            TextField(placeholder, text: $text, axis: axis)
+            PromptField(placeholder, text: $text, axis: axis)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(axis == .vertical ? 1...6 : 1...1)
                 .emBar(trimmed.isEmpty ? nil : .info, reserve: true)

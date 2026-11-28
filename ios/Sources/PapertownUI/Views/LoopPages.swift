@@ -15,7 +15,7 @@ struct LoopPage: View {
     var body: some View {
         let lang = store.language
         LivePage(load: { try await $0.loop(projectID: projectID) }, events: loopEvents, projectID: projectID) { v, act in
-            List {
+            PageList {
                 summary(v, act, lang)
                 human(v, act, lang)
                 gates(v, lang)
@@ -260,7 +260,7 @@ struct LoopGatePage: View {
         let lang = store.language
         LivePage(load: { try await $0.loop(projectID: projectID) }, events: loopEvents, projectID: projectID) { v, act in
             let node = v.nodes.first { $0.kind == "gate" && $0.gate?.stage == stage }
-            List {
+            PageList {
                 if let g = node?.gate {
                     Section {
                         HStack {
@@ -353,7 +353,7 @@ struct LoopTaskPage: View {
             let t = v.nodes.first { $0.id == nodeID }
             let there = (t?.agentID != nil) || (v.agents?[t?.to ?? "lead"]?.there ?? false)
             let after = draftsAfter(v)
-            List {
+            PageList {
                 if let t {
                     Section {
                         HStack {
@@ -563,11 +563,11 @@ struct NewLoopNodeSheet: View {
                     }
                 }
                 if kind != "note" {
-                    TextField(lang.string("loop.new.title"), text: $title)
+                    PromptField(lang.string("loop.new.title"), text: $title)
                         .emBar(kind == "task" && !title.isEmpty ? .info : nil, reserve: kind == "task")
                         .onChange(of: title) { if $0.count > (kind == "task" ? 60 : 20) { title = String($0.prefix(kind == "task" ? 60 : 20)) } }
                 }
-                TextField(lang.string("loop.new.text.\(kind)"), text: $text, axis: .vertical)
+                PromptField(lang.string("loop.new.text.\(kind)"), text: $text, axis: .vertical)
                     .lineLimit(4...10).emBar(kind == "task" && !text.isEmpty ? .info : nil, reserve: kind == "task")
                     .onChange(of: text) { if $0.count > 4000 { text = String($0.prefix(4000)) } }
             }
