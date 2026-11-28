@@ -4214,5 +4214,15 @@
  "小助手已停止": "The assistant has stopped",
  "可以在下方改为后台运行。撰写新 idea 正常可用。": "You can run it in the background below instead. Writing a new idea works as usual.",
  "改为后台运行": "Run in the background instead",
- "未能读取终端画面，打开后可查看。": "The screen could not be read. Open the terminal to see it."
+ "未能读取终端画面，打开后可查看。": "The screen could not be read. Open the terminal to see it.",
+ "关于": "About",
+ "版本与开源组件": "Version and open-source components",
+ "版本 {0}": "Version {0}",
+ "终端核心": "Terminal core",
+ "在真实终端里运行 CLI，通过按键操作并实时读取画面。后台终端、tmux 和 herdr 都由它管理。": "Runs each CLI in a real terminal, drives it with keystrokes and reads its screen live. Background terminals, tmux and herdr all go through it.",
+ "开源组件": "Open-source components",
+ "界面组件": "Interface components",
+ "图标": "Icons",
+ "3D 小镇": "3D town",
+ "服务端": "Server"
 }

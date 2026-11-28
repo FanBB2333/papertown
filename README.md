@@ -80,6 +80,7 @@ Papertown manages research projects. An idea goes through eight stages: novelty 
 ### Built with
 
 - [Python](https://www.python.org/) 3.11+ with [FastAPI](https://fastapi.tiangolo.com/) and [SQLite](https://www.sqlite.org/) for the server, the TUI, and the MCP server
+- <img src="https://raw.githubusercontent.com/FanBB2333/teletty/main/web/app/public/logo.svg" height="16" alt=""> [teletty](https://github.com/FanBB2333/teletty), the terminal core: real terminals driven by keystrokes, on the built-in headless daemon, tmux, or herdr, with live styled screens in the web app and the native apps
 - [React](https://react.dev/) 18, [TypeScript](https://www.typescriptlang.org/), and [Vite](https://vite.dev/) for the web app, with [Cloudflare Kumo](https://github.com/cloudflare/kumo) components and [three.js](https://threejs.org/) for the 3D town
 - [uv](https://docs.astral.sh/uv/) and [pnpm](https://pnpm.io/)
 
@@ -313,7 +314,7 @@ Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 - README structure inspired by [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
-- Agents run through [Paseo](https://paseo.sh), [herdr](https://github.com/herdrdev/herdr), and [tmux](https://github.com/tmux/tmux), and existing [pi](https://github.com/earendil-works/pi) worker sessions
+- Agents run through [Paseo](https://paseo.sh), and through [herdr](https://github.com/herdrdev/herdr), [tmux](https://github.com/tmux/tmux), and headless terminals by way of [teletty](https://github.com/FanBB2333/teletty), and existing [pi](https://github.com/earendil-works/pi) worker sessions
 - Papers from [arXiv](https://arxiv.org/)
 - Interface components from [Cloudflare Kumo](https://github.com/cloudflare/kumo), and the 3D town with [three.js](https://threejs.org/)
 

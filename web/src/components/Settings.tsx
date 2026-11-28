@@ -3,11 +3,12 @@
 
 import { StateWord } from '../emphasis';
 import { Badge, Button, Dialog, Input, LayerCard, Select, Sidebar, Table, Text } from '@cloudflare/kumo';
-import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CubeIcon, FlaskIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, ShieldCheckIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
+import { ArrowCounterClockwiseIcon, CodeIcon, GraphIcon, CubeIcon, FlaskIcon, InfoIcon, KeyboardIcon, LockKeyIcon, MagnifyingGlassIcon, MapTrifoldIcon, PaletteIcon, RobotIcon, RowsIcon, ShieldCheckIcon, SwatchesIcon, XIcon, type Icon as Phosphor } from '@phosphor-icons/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, type AccessKey, type AccountView, type DefaultRuntime, type AuthState, type NetworkSettings, type NetworkView, type SourceKind, type Hud, type HerdrInfo, type PaseoDefault, type PaseoInfo, type Roster } from '../api';
 import { Logo } from '../art';
+import telettyLogo from '@teletty/web/logo.svg';
 import { DEFAULTS, resetSettings, useSettings, type Settings as S } from '../settings';
 import { IconRow, Sample } from '../console/EdPicker';
 import { ICON_THEMES, THEMES, autoTheme, chooseLook } from '../console/edthemes';
@@ -22,7 +23,7 @@ import { UsageSettings } from '../usage/Settings';
 import { envLabel } from '../agents/AccountPick';
 
 // each section: its address, name, what is in it, icon, and the colour of its tile in the macOS look
-type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'agents' | 'network' | 'access' | 'demo' | 'keys';
+type Section = 'look' | 'showcase' | 'progress' | 'loop' | 'editor' | 'map' | 'walk' | 'agents' | 'network' | 'access' | 'demo' | 'keys' | 'about';
 const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
   [tr('界面'), [
     ['look', tr('外观与动效'), tr('界面风格、明暗、语言和动画'), PaletteIcon, '#5856d6'],
@@ -43,6 +44,7 @@ const GROUPS: [string, [Section, string, string, Phosphor, string][]][] = [
     ['access', tr('访问与登录'), tr('其他设备的访问密码与 App 访问密钥'), LockKeyIcon, '#8e8e93'],
     ['demo', tr('展示模式'), tr('样例项目和调研文章'), FlaskIcon, '#e6a700'],
     ['keys', tr('快捷键'), tr('所有按键一览'), KeyboardIcon, '#636366'],
+    ['about', tr('关于'), tr('版本与开源组件'), InfoIcon, '#8e8e93'],
   ]],
 ];
 const SECTIONS = GROUPS.flatMap(g => g[1]);
@@ -684,6 +686,43 @@ function Keys() {
   );
 }
 
+// what Papertown is built on: its terminal core first, then the components it ships with
+const PARTS: [string, string, string][] = [
+  ['Cloudflare Kumo', 'https://github.com/cloudflare/kumo', tr('界面组件')],
+  ['Phosphor Icons', 'https://phosphoricons.com/', tr('图标')],
+  ['three.js', 'https://threejs.org/', tr('3D 小镇')],
+  ['React · Vite', 'https://react.dev/', tr('网页')],
+  ['FastAPI · SQLite', 'https://fastapi.tiangolo.com/', tr('服务端')],
+];
+const bare = (url: string) => url.replace(/^https:\/\//, '').replace(/\/$/, '');
+
+function About() {
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => { api.health().then(h => setVersion(h.version ?? null), () => {}); }, []);
+  const repo = (url: string) => <a className="st-repo" href={url} target="_blank" rel="noreferrer">{bare(url)}</a>;
+  return (
+    <>
+      <Card>
+        <div className="st-about">
+          <Logo />
+          <div className="st-l"><b>Papertown</b>{version && <span>{tr('版本 {0}', version)}</span>}</div>
+          {repo('https://github.com/FanBB2333/papertown')}
+        </div>
+      </Card>
+      <Card title={tr('终端核心')}>
+        <div className="st-about">
+          <img src={telettyLogo} alt="" />
+          <div className="st-l"><b>teletty</b><span>{tr('在真实终端里运行 CLI，通过按键操作并实时读取画面。后台终端、tmux 和 herdr 都由它管理。')}</span></div>
+          {repo('https://github.com/FanBB2333/teletty')}
+        </div>
+      </Card>
+      <Card title={tr('开源组件')}>
+        {PARTS.map(([name, url, what]) => <Row key={name} label={name} desc={what}>{repo(url)}</Row>)}
+      </Card>
+    </>
+  );
+}
+
 export function SettingsPage({ section, hud, onClose }: { section?: string; hud: Hud | null; onClose: () => void }) {
   const s = useSettings();
   const [key, name, sub] = SECTIONS.find(x => x[0] === section) ?? SECTIONS[0];
@@ -757,6 +796,7 @@ export function SettingsPage({ section, hud, onClose }: { section?: string; hud:
             {key === 'access' && <Access />}
             {key === 'demo' && <Demo hud={hud} />}
             {key === 'keys' && <Keys />}
+            {key === 'about' && <About />}
           </section>
         </main>
       </Sidebar.Provider>

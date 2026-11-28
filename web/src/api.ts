@@ -556,6 +556,7 @@ async function agentTimeline(id: string) {
 }
 
 export const api = {
+  health: () => call<{ ok: boolean; app: string; version?: string }>('GET', '/api/health'),
   world: () => call<WorldState>('GET', '/api/world'),
   staffAt: (id: string) => call<BuildingStaff>('GET', `/api/buildings/${encodeURIComponent(id)}/staff`),
   building: (id: string) => call<Sheet>('GET', `/api/buildings/${id}`),
