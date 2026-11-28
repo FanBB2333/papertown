@@ -7,7 +7,7 @@ import { Children, createElement, useEffect, useMemo, useRef, useState } from 'r
 import Markdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import { api, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts } from '../api';
+import { api, linkedPdfUrl, listen, type Agent, type AgentEvent, type AgentRole, type Job, type Line, type PaseoConversation, type PaseoInfo, type PaseoItem, type PaseoPermission, type PiState, type Roster, type StartOpts, type Transcript } from '../api';
 import { AGENT_STATUS, STATUS } from './MillRoom';
 import type { RoomActions } from './Interior';
 import { Select, type Opt } from './Select';
@@ -361,6 +361,7 @@ export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t
   const [asks, setAsks] = useState<PaseoPermission[]>([]);
   const [queued, setQueued] = useState<AgentEvent[]>([]);
   const [err, setErr] = useState('');
+  const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [sent, setSent] = useState<{ text: string; had: number }[]>([]);
   const mine = useRef(own), latest = useRef<PaseoItem[]>([]), alive = useRef(true);
   mine.current = own;
@@ -370,7 +371,7 @@ export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t
     try {
       const d = await api.timeline(initial.id);
       if (!alive.current) return;
-      setAgent(d.agent); setItems(d.items); latest.current = d.items;
+      setAgent(d.agent); setItems(d.items); latest.current = d.items; setTranscript(d.transcript ?? null);
       setAsks(d.agent.watch?.permissions ?? d.paseo?.permissions ?? []); setQueued(d.queued);
       setSent(xs => xs.filter(x => times(d.items, x.text) <= x.had)); setErr('');
     } catch (e) { if (alive.current) setErr((e as Error).message); }
@@ -379,7 +380,7 @@ export function usePaseoTalk(initial: Agent, own: (t: string) => string = t => t
   const readRef = useReadReceipt(initial.id, items === null ? null : JSON.stringify(items));
   const texts = useMemo(() => sent.map(x => x.text), [sent]);
   return {
-    agent, items, asks, queued, err, sent: texts, reload, readRef,
+    agent, items, asks, queued, err, sent: texts, reload, readRef, transcript,
     wrote: (t: string) => { setSent(xs => [...xs, { text: t, had: times(latest.current, t) + xs.filter(x => x.text === t).length }]); reload(); },
     answered: (id: string) => { setAsks(xs => xs.filter(x => x.id !== id)); reload(); },
   };

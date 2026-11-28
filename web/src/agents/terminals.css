@@ -1,0 +1,92 @@
+/* Every terminal an agent runs in, side by side (agents/Terminals.tsx): a layer over the page you were on, like the
+   settings. The wall is a grid of tiles, each the end of one screen; a tile opens its terminal to work in, with the
+   others in a rail beside it. The open terminal uses the agents page's conversation styles (agents.css). */
+
+.tw {
+  --aw-col: 1040px;
+  position: fixed; inset: 0; z-index: 72; display: flex; flex-direction: column; min-height: 0;
+  background: var(--bg); color: var(--ink); font-family: var(--font); animation: tw-in .3s var(--out) both;
+}
+.tw a { color: inherit; text-decoration: none; }
+.tw-head { flex: none; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 16px 0 22px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.tw-head h1 { margin: 0; font: 600 17px/1.2 var(--head); white-space: nowrap; }
+.tw-ic { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: var(--brand); background: color-mix(in srgb, var(--brand) 11%, transparent); }
+.tw-sum { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; min-width: 0; margin: 0; font-size: 12.5px; color: var(--muted); }
+.tw-sum > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-head .tw-back { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
+.tw-close { margin-left: auto; }
+
+/* a terminal's state: a capsule in the state's colour, the dot beating while it works */
+.tw-st {
+  --tw-c: var(--muted);
+  flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px 0 8px; border-radius: 99px;
+  font: 500 12px/21px var(--font); white-space: nowrap; color: var(--tw-c); background: color-mix(in srgb, var(--tw-c) 12%, transparent);
+}
+.tw-st i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tw-st[data-b=needs] { --tw-c: var(--em-orange, var(--warn)); }
+.tw-st[data-b=failed] { --tw-c: var(--em-red, var(--bad)); }
+.tw-st[data-b=working] { --tw-c: var(--brand); }
+.tw-st[data-b=review] { --tw-c: var(--em-green, var(--ok)); }
+.tw-st:is([data-b=working], [data-b=needs]) i { animation: tw-beat 2s var(--in-out) infinite; }
+
+/* ---------- the wall ---------- */
+.tw-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 44px; }
+.tw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); gap: 16px; max-width: 1840px; margin: 0 auto; }
+.tw-tile {
+  display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+  transition: transform .45s var(--spring), box-shadow .3s var(--out), border-color .2s var(--out);
+  animation: tw-rise .5s var(--out) both; animation-delay: calc(var(--i, 0) * 45ms);
+}
+.tw-tile:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--brand) 50%, var(--line)); box-shadow: 0 16px 32px -20px color-mix(in srgb, var(--ink) 45%, transparent); }
+.tw-tile:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.tw-tile > header { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 7px 14px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.tw-tile[data-b=needs] { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.tw-tile[data-b=needs] > header { background: color-mix(in srgb, var(--warn) 9%, transparent); }
+.tw-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tw-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; line-height: 1.35; }
+.tw-who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+/* the end of the screen: the last lines stay in view, what is above them is cut off */
+.tw-screen {
+  display: flex; flex-direction: column; justify-content: flex-end; height: clamp(220px, 36vh, 400px); margin: 0; padding: 10px 12px; overflow: hidden;
+  font: 10.5px/1.5 var(--mono, ui-monospace, monospace); white-space: pre; tab-size: 4; color: var(--ink); background: var(--panel2);
+}
+.tw-lines { display: block; }
+.tw-wait { align-self: center; margin: auto; font: 12px/1.5 var(--font); white-space: normal; color: var(--muted); }
+.tw-tile > footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+.tw-tile > footer span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-tile > footer em { flex: none; display: inline-flex; align-items: center; gap: 2px; font-style: normal; font-weight: 500; color: var(--brand); opacity: 0; transform: translateX(-4px); transition: opacity .2s var(--out), transform .35s var(--spring); }
+.tw-tile:is(:hover, :focus-visible) > footer em { opacity: 1; transform: none; }
+.tw-blank { margin: 12vh auto 0; max-width: 420px; text-align: center; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+.tw-blank b { display: block; margin-bottom: 6px; font: 600 17px/1.3 var(--head); color: var(--ink); }
+.tw-blank p { margin: 0; }
+
+/* ---------- one terminal ---------- */
+.tw-split { flex: 1; min-height: 0; display: grid; grid-template-columns: 272px minmax(0, 1fr); }
+.tw-rail { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 8px; border-right: 1px solid var(--line); background: var(--panel2); }
+.tw-rail a { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; transition: background .2s var(--out); }
+.tw-rail a:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.tw-rail a.on { background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent); }
+.tw-room { display: flex; flex-direction: column; min-width: 0; min-height: 0; animation: tw-rise .4s var(--out) both; }
+.tw-room .chat-main { flex: 1; min-height: 0; overflow: hidden; }
+
+@keyframes tw-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes tw-rise { from { opacity: 0; transform: translateY(10px); } }
+@keyframes tw-beat { 50% { transform: scale(1.5); opacity: .55; } }
+
+/* the top bar's way in: the count of open terminals, orange when one waits on you */
+.hud .hud-term { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap; }
+.hud .hud-term .ic { flex: none; width: 15px; height: 15px; }
+.hud-term b { min-width: 18px; padding: 0 5px; border-radius: 99px; font: 600 11px/18px var(--font); font-variant-numeric: tabular-nums; text-align: center; color: var(--muted); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.hud-term.live b { color: var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
+.hud-term.needs b { color: #fff; background: var(--warn); }
+
+@media (max-width: 860px) {
+  .hud .hud-term > span { display: none; } /* the icon and the count are enough on a narrow bar */
+  .hud .hud-term { gap: 5px; padding-inline: 9px; }
+  .tw-head { padding: 0 8px 0 14px; }
+  .tw-body { padding: 14px 14px 40px; }
+  .tw-split { grid-template-columns: minmax(0, 1fr); }
+  .tw-rail { display: none; }
+  .tw-screen { height: 210px; }
+}
+@media (prefers-reduced-motion: reduce) { .tw, .tw-tile, .tw-room { animation: none; } }

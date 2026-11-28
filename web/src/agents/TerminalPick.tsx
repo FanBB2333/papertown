@@ -34,7 +34,8 @@ export function TerminalPick({ busy, onStart, role, fixedBackend, lineId, agentI
   const clis = Object.keys(backends.clis).filter(p => backends.clis[p]);
   const shown = (['herdr', 'tmux', 'headless'] as const).filter(b => !fixedBackend || fixedBackend === b);
   return <>
-    <p className="muted small">{tr('Claude Code、Codex 或 Antigravity 以真实的终端界面运行，网页操作以模拟键盘输入送达。herdr 与 tmux 可随时接入终端，headless 由 Papertown 在后台托管。')}</p>
+    <p className="muted small">{fixedBackend === 'headless' ? tr('由 Papertown 在后台运行所选的 CLI，对话显示在此处。')
+      : tr('Claude Code、Codex 或 Antigravity 以真实的终端界面运行，网页操作以模拟键盘输入送达。herdr 与 tmux 可随时接入终端，headless 由 Papertown 在后台托管。')}</p>
     {shown.length > 1 && <div className="seg mini" role="radiogroup" aria-label={tr('终端后端')}>
       {shown.map(b => <button key={b} role="radio" aria-checked={backend === b} className={backend === b ? 'on' : ''} disabled={!backends[b].ok || busy} onClick={() => setBackend(b)}>{b}</button>)}
     </div>}
@@ -54,7 +55,7 @@ export function TerminalPick({ busy, onStart, role, fixedBackend, lineId, agentI
       <AccountPick lineId={lineId} agentId={agentId} onChange={setAccount} />
     </>}
     <button className="btn pri" disabled={busy || !provider || !backends[backend].ok} onClick={() => onStart({ runtime: backend, provider, model, thinking, ...(account !== undefined ? { account } : {}) })}>
-      {busy ? tr('启动中…') : backend === 'herdr' ? tr('在 herdr 中启动') : backend === 'tmux' ? tr('在 tmux 中启动') : tr('在后台终端中启动')}
+      {busy ? tr('启动中…') : backend === 'herdr' ? tr('在 herdr 中启动') : backend === 'tmux' ? tr('在 tmux 中启动') : fixedBackend ? tr('在后台启动') : tr('在后台终端中启动')}
     </button>
   </>;
 }

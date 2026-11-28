@@ -938,6 +938,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def agent_overview():
         return town.agents.overview()
 
+    @app.get("/api/agents/screens")
+    def agent_screens(request: Request):
+        """The screen of every open terminal as it is now, for the page that shows them side by side."""
+        screens = town.agents.hosted.previews()
+        owned = {(a.get("term") or {}).get("handle", {}).get("pane") for a in town.db.q("select * from agents where runtime = 'herdr'")}
+        return packed(request, {"screens": screens | town.terminals.previews(owned - {None})})
+
     @app.get("/api/agents/{agent_id}")
     def agent(agent_id: str, after: int = 0):
         a = town.agents.get(agent_id)

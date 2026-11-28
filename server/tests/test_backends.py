@@ -284,6 +284,7 @@ class MemoryTerminal:
     def state(self, handle): return {'status': None if self.live else 'exited', 'seq': None, 'since': None}
     def screen(self, handle, colours=False): return self.text
     def glance(self, handle): return self.text
+    def preview(self, handle): return self.text
     def submit(self, handle, text): self.sent.append(text)
     def keys(self, handle, keys): pass
     def type(self, handle, text, paste=False): self.typed.append((text, paste))
@@ -654,3 +655,14 @@ def test_typing_goes_straight_into_papertowns_own_terminals(tmp_path):
     headless = object.__new__(HeadlessBackend); headless._call = lambda op, **kw: sent.append((op, kw))
     headless.type({'id': 'x'}, 'ab'); headless.type({'id': 'x'}, 'a\nb')
     assert sent == [('keys', {'id': 'x', 'keys': ['a', 'b']}), ('paste', {'id': 'x', 'text': 'a\nb', 'enter': False})]
+
+
+def test_every_open_terminal_gives_its_screen_as_it_is_now(tmp_path):
+    t, h, b, aid = memory_employee(tmp_path)
+    b.text = '\x1b[1;32mdone\x1b[0m'
+    with patch('papertown.api.Town', return_value=t):
+        c = TestClient(create_app())
+    shown = c.get('/api/agents/screens').json()['screens']
+    assert set(shown) == {aid} and shown[aid]['text'] == 'done' and shown[aid]['theme'] == ansi.THEME
+    b.live = False; h.refresh(aid)
+    assert c.get('/api/agents/screens').json()['screens'] == {}

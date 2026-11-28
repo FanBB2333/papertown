@@ -68,7 +68,7 @@ const tail = (text: string, lines = 18) => text.split('\n').filter(l => l.trim()
 const styledOf = (r: Partial<StyledScreen>): StyledScreen | null => r.lines && r.styles && r.theme ? { lines: r.lines, styles: r.styles, theme: r.theme } : null;
 
 // The screen as the server styled it. Runs of blank lines collapse to one and the trailing ones go, as in the app.
-function StyledLines({ screen }: { screen: StyledScreen }) {
+export function StyledLines({ screen }: { screen: StyledScreen }) {
   const blank = (line: [string, number][]) => line.every(([t, s]) => !t.trim() && !screen.styles[s]?.bg);
   const shown: number[] = [];
   screen.lines.forEach((line, i) => { if (!(blank(line) && shown.length && blank(screen.lines[shown[shown.length - 1]]))) shown.push(i); });
@@ -82,15 +82,16 @@ function StyledLines({ screen }: { screen: StyledScreen }) {
   })}{'\n'}</span>)}</>;
 }
 
-function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<T>; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode }) {
+// `open`: the tab it starts on and stays on until the user picks another (else it follows what can be shown)
+function TermChat<T extends Subject>({ source, toast, tools, open }: { source: Source<T>; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode; open?: 'chat' | 'screen' }) {
   const [subject, setSubject] = useState(source.first), [queued, setQueued] = useState<AgentEvent[]>([]);
   const [text, setText] = useState<string | null>(null), [prompt, setPrompt] = useState<TermPrompt | null>(null), [styled, setStyled] = useState<StyledScreen | null>(null);
   const [items, setItems] = useState<PaseoItem[] | null>(null), [transcript, setTranscript] = useState<Transcript | null>(null);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [draft, setDraft] = useState('');
-  const [tab, setTab] = useState<'chat' | 'screen'>('chat'), [asking, setAsking] = useState(false), [switching, setSwitching] = useState(false);
+  const [tab, setTab] = useState<'chat' | 'screen'>(open ?? 'chat'), [asking, setAsking] = useState(false), [switching, setSwitching] = useState(false);
   const [sent, setSent] = useState<{ text: string; had: number; at: number }[]>([]);
   // the tab follows what can be shown until the user picks one
-  const picked = useRef(false), view = useRef(tab); view.current = tab;
+  const picked = useRef(!!open), view = useRef(tab); view.current = tab;
   const latest = useRef({ source, subject, items: items ?? [] }); latest.current = { source, subject, items: items ?? [] };
   const reload = useRef<() => void>(() => {}), pane = useRef<HTMLElement | null>(null), stick = useRef(true);
   const id = source.first.id, blocked = source.blocked(subject), exited = source.exited(subject), working = isWorking(subject);
@@ -230,7 +231,7 @@ function TermChat<T extends Subject>({ source, toast, tools }: { source: Source<
 const held = (e: AgentEvent) => e.data.sending ? { ...e, data: { ...e.data, error: UNSURE } } : e;
 
 // a herdr session that is not an employee
-export function TerminalRoom({ terminal, toast, tools }: { terminal: Terminal; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode }) {
+export function TerminalRoom({ terminal, toast, tools, open }: { terminal: Terminal; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode; open?: 'chat' | 'screen' }) {
   const id = terminal.id;
   const source = useMemo<Source<Terminal>>(() => ({
     first: terminal,
@@ -252,11 +253,11 @@ export function TerminalRoom({ terminal, toast, tools }: { terminal: Terminal; t
     },
     keys: keys => api.terminalKeys(id, keys), answer: (digest, option) => api.terminalPrompt(id, digest, option),
   }), [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <TermChat key={id} source={source} toast={toast} tools={tools} />;
+  return <TermChat key={id} source={source} toast={toast} tools={tools} open={open} />;
 }
 
 // an employee that runs a CLI in a herdr tab, a tmux window or a background terminal
-export function HostedRoom({ agent, toast, tools }: { agent: Agent; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode }) {
+export function HostedRoom({ agent, toast, tools, open }: { agent: Agent; toast: (s: string, error?: boolean) => void; tools?: React.ReactNode; open?: 'chat' | 'screen' }) {
   const id = agent.id;
   const source = useMemo<Source<Agent>>(() => ({
     first: agent, lineId: agent.line_id,
@@ -284,7 +285,7 @@ export function HostedRoom({ agent, toast, tools }: { agent: Agent; toast: (s: s
     role: agent.role,
     allowPi: !agent.node_id && agent.role !== 'lead',
   }), [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <TermChat key={id} source={source} toast={toast} tools={tools} />;
+  return <TermChat key={id} source={source} toast={toast} tools={tools} open={open} />;
 }
 
 export function TerminalContext({ terminal: t }: { terminal: Terminal }) {

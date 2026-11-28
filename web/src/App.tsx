@@ -18,8 +18,9 @@ import { Icon } from './console/icons';
 import { Progress } from './progress/Progress';
 import { Agents } from './agents/Agents';
 import { useOverview } from './agents/overview';
+import { openTerminals, Terminals } from './agents/Terminals';
 import { WorldMap, type MapApi, type MapView } from './components/WorldMap';
-import { follow, go, href, path, PATHS, type Route, type View } from './route';
+import { follow, go, href, path, PATHS, terminalPath, type Route, type View } from './route';
 import { getSettings, useSettings } from './settings';
 import { DEMO } from './demo';
 import { enterFull, holdEscape, leaveFull } from './fullscreen';
@@ -77,11 +78,11 @@ function leadTone(h: Hud): { tone: 'ok' | 'warn' | 'bad' | 'off'; tip: string } 
 
 export function App({ route: at, covered }: { route: Route; covered: boolean }) {
   const [hp] = useState(() => new URLSearchParams(location.hash.slice(1)));
-  const settingsOpen = at.view === 'settings';
+  const settingsOpen = at.view === 'settings', termsOpen = at.view === 'terminals';
   const under = useRef(at), leaveTo = useRef('/progress'), cameIn = useRef(false);
   // where the 小镇 tab and its 中控屏 switch go back to
   const townAt = useRef(['2d', '3d'].includes(getSettings().start) ? PATHS.world : PATHS.console), boardAt = useRef(PATHS.console);
-  if (!settingsOpen) {
+  if (!settingsOpen && !termsOpen) {
     under.current = at;
     leaveTo.current = path();
     if (at.view === 'console') townAt.current = boardAt.current = leaveTo.current;
@@ -89,7 +90,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   }
   const route = under.current;
   const last = useRef<View>('cards');
-  const view: View = route.view === 'landing' || route.view === 'settings' ? last.current : route.view;
+  const view: View = route.view === 'landing' || route.view === 'settings' || route.view === 'terminals' ? last.current : route.view;
   last.current = view;
   const [consoleUp, setConsoleUp] = useState(view === 'console');
   const [world, setWorld] = useState<WorldState | null>(null);
@@ -111,6 +112,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
   const hash3d = useRef(hp.has('3d') || (getSettings().start === '3d' && !hp.has('open') && view === 'world'));
   const st = useSettings();
   const { data: overview } = useOverview();
+  const terms = useMemo(() => openTerminals(overview), [overview]);
+  const closeTerms = useCallback(() => go(leaveTo.current), []);
   const openSettings = useCallback(() => { cameIn.current = true; go('/settings'); }, []);
   const closeSettings = useCallback(() => {
     if (cameIn.current) history.back();
@@ -224,12 +227,14 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
       }
       if (e.key !== 'Escape') return;
       if (settingsOpen) return;
+      // on the wall Esc leaves it; with one terminal open Esc belongs to the terminal
+      if (termsOpen) { if (!at.agent) closeTerms(); return; }
       if (chatOpen) setChatOpen(false);
       else if (sheet) leaveRoom();
     };
     addEventListener('keydown', key);
     return () => removeEventListener('keydown', key);
-  }, [sheet, chatOpen, settingsOpen, leaveRoom, openSettings, closeSettings]);
+  }, [sheet, chatOpen, settingsOpen, termsOpen, at.agent, leaveRoom, openSettings, closeSettings, closeTerms]);
 
   useEffect(() => holdEscape(dim === '3d' && (!!sheet || chatOpen || settingsOpen)), [dim, sheet, chatOpen, settingsOpen]);
 
@@ -359,7 +364,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
   const hud = world?.hud;
   const leads = hud && leadTone(hud);
-  const walking = !sheet && view === 'world' && !chatOpen && !settingsOpen;
+  const walking = !sheet && view === 'world' && !chatOpen && !settingsOpen && !termsOpen;
   const running = world?.running ?? [];
 
   return (
@@ -411,6 +416,8 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           {hud && <span className={`chip ${!online ? 'bad' : 'ok'}`}>
             {!online ? tr('连接已断开') : DEMO ? tr('静态演示') : tr('已连接')}</span>}
           {DEMO && <RepoLink />}
+          {!DEMO && <a className={`btn hud-term${terms.some(t => t.bucket === 'needs') ? ' needs' : terms.some(t => t.bucket === 'working') ? ' live' : ''}`} href={href(terminalPath())} onClick={e => follow(e, terminalPath())}
+            title={tr('查看所有在后台运行的终端，并可进入其中一个操作')}><Icon n="term" size={15} /><span>{tr('终端')}</span>{!!terms.length && <b>{terms.length}</b>}</a>}
           <button className="btn hud-gear" title={tr('设置（,）')} aria-label={tr('设置')} onClick={openSettings}><Gear />{tr('设置')}</button>
           <button className={`btn hud-chat${chatOpen ? ' on' : ''}`} title={tr('询问本页内容、交由小助手处理，或输入新 idea（/）')}
             onClick={() => { if (chatOpen) setChatOpen(false); else { setChatOpen(true); setFocusKey(k => k + 1); } }}>{tr('小助手')}</button>
@@ -432,7 +439,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
 
       {dim === '2d' && st.walkHint && <div className={`walk-hint w-only${hint ? '' : ' gone'}`}><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> {tr('移动 · 至门口按')} <kbd>F</kbd> {tr('进入 · 也可直接点击建筑')}</div>}
 
-      <Dock view={view} open={chatOpen} setOpen={setChatOpen} away={!!sheet || (view === 'world' && dim !== '2d')}
+      <Dock view={view} open={chatOpen} setOpen={setChatOpen} away={!!sheet || termsOpen || (view === 'world' && dim !== '2d')}
         target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} toast={push} />
 
       {sheet && (
@@ -440,6 +447,7 @@ export function App({ route: at, covered }: { route: Route; covered: boolean }) 
           motion={leaving ? 'leave' : swap ? 'swap' : 'enter'} onClose={leaveRoom}
           onOpen={room} onIdea={newIdea} onAsk={askAt} toast={push} />
       )}
+      {termsOpen && <Guard key="terminals" onClose={closeTerms}><Terminals id={at.agent} toast={push} onClose={closeTerms} /></Guard>}
       {settingsOpen && <Guard key={`settings:${at.mod ?? ''}`} onClose={closeSettings}><SettingsPage section={at.mod} hud={hud ?? null} onClose={closeSettings} /></Guard>}
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast"><span role={t.error ? 'alert' : 'status'} className={t.error ? 'em-state' : undefined} data-tone="bad">{t.text}</span></div>)}</div>
       {DEMO && <DemoWelcome />}

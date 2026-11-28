@@ -3,12 +3,13 @@
 //   /progress[/6[/ask|/pages[/p3]]]
 //   /console[/6[/<panel>]]   /town      (the 小镇 tab: the console's panels, or the map)
 //   /settings/<part>
+//   /terminals[/<agent>]     (every terminal an agent runs in, laid over the page you were on)
 
 import { useSyncExternalStore } from 'react';
 import { DEMO } from './demo';
 
 export type View = 'cards' | 'agents' | 'console' | 'world';
-export interface Route { view: View | 'landing' | 'settings'; seq?: number; mod?: string; sub?: 'ask' | 'pages' | 'canvas' | 'decided' | 'prov'; page?: string; agent?: string }
+export interface Route { view: View | 'landing' | 'settings' | 'terminals'; seq?: number; mod?: string; sub?: 'ask' | 'pages' | 'canvas' | 'decided' | 'prov'; page?: string; agent?: string }
 
 export const PATHS: Record<View, string> = { cards: '/progress', agents: '/agents', console: '/console', world: '/town' };
 
@@ -44,6 +45,8 @@ const changed = () => {
 };
 addEventListener('popstate', changed);
 if (DEMO) addEventListener('hashchange', changed);
+
+export const terminalPath = (id?: string) => `/terminals${id ? `/${encodeURIComponent(id)}` : ''}`;
 
 export function path() { return current; }
 
@@ -81,6 +84,7 @@ export function parse(p: string): Route {
   if (a === 'agents') return { view: 'agents', agent: b ? decodeURIComponent(b) : undefined };
   if (a === 'town') return { view: 'world' };
   if (a === 'settings') return { view: 'settings', mod: b || undefined };
+  if (a === 'terminals') return { view: 'terminals', agent: b ? decodeURIComponent(b) : undefined };
   return { view: 'cards' };
 }
 

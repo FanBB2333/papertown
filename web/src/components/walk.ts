@@ -5,9 +5,10 @@
 import { footprint, tileMat } from '@design/world.js';
 import type { Placement } from '../api';
 
+// (a terminal that takes the keyboard counts: its keys are the agent's, not shortcuts)
 export function typing(e: Event, extra?: string): boolean {
   const t = e.target;
-  return t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || !!(extra && t.closest(extra)));
+  return t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || !!t.closest('.terminal-screen[data-typing]') || !!(extra && t.closest(extra)));
 }
 
 const N = 24;

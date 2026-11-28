@@ -6,7 +6,9 @@ import { modelText } from '../emphasis';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, listen, type Agent, type AgentEvent, type AssistantConv, type AssistantView, type Focus, type PaseoItem, type PaseoPermission, type ShowTarget, type StartOpts } from '../api';
-import { HostedRoom } from '../agents/Terminal';
+import { PromptDialog, promptDismissed } from '../agents/Prompt';
+import { kindName } from '../agents/watch';
+import { follow, go as goTo, href, terminalPath } from '../route';
 import { TerminalPick } from '../agents/TerminalPick';
 import { fold, paseoTool, PaseoPick, piTool, PiSwitch, Text, Tool, Trail, UserMsg, usePaseoTalk, usePiTalk, type Item, type Linker, type ToolSt } from '../components/AgentRoom';
 import { AGENT_STATUS } from '../components/MillRoom';
@@ -43,7 +45,8 @@ const ASK_SEL = [tr('解释这段内容'), tr('这段有什么问题？')];
 type Said = { text: string; where?: string; pointed?: string; selected?: string; selectedAt?: string; projects?: string[]; event?: string };
 function parse(t: string): Said {
   // Paseo drops the <start> mark from a conversation's first prompt, so its opening words mark it too
-  if (/^(<start>|你是 Papertown 中控屏的小助手)/.test(t)) return { text: '', event: tr('小助手已启动，首先读取了其说明。') };
+  // in a terminal its first prompt points it at the file its instructions are in
+  if (/^(<start>|你是 Papertown 中控屏的小助手|请先完整阅读 \S+\/\.papertown\/intro\.md)/.test(t)) return { text: '', event: tr('小助手已启动，首先读取了其说明。') };
   const ev = /^<event>\n?([\s\S]*?)\n?<\/event>\s*$/.exec(t);
   if (ev) return { text: '', event: ev[1].trim() };
   if (/^<bounds>/.test(t)) return { text: '', event: tr('你修改了工作边界，小助手已收到更新。') };
@@ -233,10 +236,11 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea 
       <span className={`dot s-${a?.started ? a.status : 'stopped'}`} />
       <div className="as-who">
         <b>{tr('小助手')}</b>
-        {a?.started && <span>{AGENT_STATUS[a.status] ?? a.status}{a.model ? ` · ${a.model}` : ''}</span>}
+        {a?.started && <span>{AGENT_STATUS[a.status] ?? a.status}{a.term ? [kindName(a.term.provider), a.term.model].filter(Boolean).map(x => ` · ${x}`).join('') : a.model ? ` · ${a.model}` : ''}</span>}
       </div>
-      <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('历史对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>
-      {a?.started && <button className="ib" title={tr('新对话：可切换模型重新开始')} onClick={fresh}><Icon n="compose" size={16} /></button>}
+      {!a?.term && <button className={`ib as-hist${history ? ' on' : ''}`} title={tr('历史对话')} aria-expanded={history} onClick={() => setHistory(h => !h)}><Icon n="clock" size={16} /></button>}
+      {a?.started && !a.term && <button className="ib" title={tr('新对话：可切换模型重新开始')} onClick={fresh}><Icon n="compose" size={16} /></button>}
+      {a?.term && <a className="ib" title={tr('在后台终端中查看')} aria-label={tr('在后台终端中查看')} href={href(terminalPath(ID))} onClick={e => follow(e, terminalPath(ID))}><Icon n="term" size={16} /></a>}
       {a?.started && a.runtime === 'paseo' && (
         <button className="ib" title={tr('在 Paseo 桌面端打开这段对话')} onClick={() => api.openInPaseo(ID).catch(e => toast((e as Error).message, true))}><Icon n="ext" size={16} /></button>
       )}
@@ -257,23 +261,23 @@ export function Assistant({ toast, onClose, target, setTarget, focusKey, onIdea 
         <>
           {head(a)}
           <div className="as-start">
-            <p className="as-lead">{tr('本地 agent，与员工一样运行于 Paseo 或 pi。小助手可感知你当前页面及指向内容，并读取页面数据来源作答。由其执行的操作，须先在此经你确认。')}</p>
+            <p className="as-lead">{tr('本地 agent，在后台运行。小助手可感知你当前页面及指向内容，并读取页面数据来源作答。由其执行的操作，须先在此经你确认。')}</p>
             <Earlier limit={3} title={tr('继续此前对话')} onPick={resume} />
+            <div className="hire-card"><h3>{tr('后台运行')}</h3><TerminalPick busy={busy} onStart={start} role="assistant" agentId="assistant" fixedBackend="headless" /></div>
             <div className="hire-card">
               <h3>Paseo</h3>
               <PaseoPick busy={busy} onStart={start} role="assistant" />
             </div>
-            <div className="hire-card"><h3>{tr('终端')}</h3><TerminalPick busy={busy} onStart={start} role="assistant" agentId="assistant" /></div>
             <div className="hire-card">
               <h3>{tr('pi · 后台终端')}</h3>
               <button className="btn" disabled={busy} onClick={() => start({ runtime: 'pi' })}>{busy ? tr('启动中…') : tr('启动 pi')}</button>
             </div>
           </div>
         </>
-      ) : a.term ? <HostedRoom agent={a} toast={toast} /> : a.runtime === 'paseo'
+      ) : a.term ? <TermSide key={a.session_id ?? 'term'} agent={a} side={side} /> : a.runtime === 'paseo'
         ? <PaseoSide key={a.ext_id ?? 'paseo'} agent={a} side={side} />
         : <PiSide key="pi" agent={a} side={side} />}
-      {side && a && (!a.term || target.kind === 'idea') && <Composer agent={a} side={side} target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} />}
+      {side && a && <Composer agent={a} side={side} target={target} setTarget={setTarget} focusKey={focusKey} onIdea={onIdea} />}
       {history && <History onPick={resume} onClose={() => setHistory(false)} />}
       {pointing && <Pointer onPick={pointing} onCancel={() => setPointing(null)} />}
     </div>
@@ -292,15 +296,70 @@ function PaseoSide({ agent, side }: { agent: Agent; side: Side }) {
   );
 }
 
+// In a terminal Papertown keeps in the background. The panel shows the conversation as it does for the other ways the
+// assistant runs, read from the CLI's session log; its terminal is on the terminals page (agents/Terminals.tsx), and a
+// dialog on that terminal's screen is answered from a card here.
+function TermSide({ agent, side }: { agent: Agent; side: Side }) {
+  const t = usePaseoTalk(agent, s => parse(s).text);
+  const rows = useMemo(() => paseoRows(t.items, t.sent), [t.items, t.sent]);
+  const a = t.agent, prompt = a.watch?.prompt ?? null;
+  const blocked = a.watch?.why === 'terminal', exited = a.term?.status === 'exited';
+  const [asking, setAsking] = useState(false);
+  const key = `${ID}:${prompt?.digest ?? 'screen'}`;
+  useEffect(() => { setAsking(blocked && !promptDismissed(key)); }, [blocked, key]);
+  const unread = !!t.transcript && !t.transcript.ok && !!t.sent.length;
+  const toTerminal = <a className="btn" href={href(terminalPath(ID))} onClick={e => follow(e, terminalPath(ID))}>{tr('在后台终端中查看')}</a>;
+  return (
+    <Talk side={side} agent={blocked || exited ? { ...a, status: 'idle' } : a} rows={rows} loading={t.items === null && !t.err} onSent={t.wrote}>
+      {t.err && <p className="warn-box small" data-tone="bad">{t.err}</p>}
+      {unread && (
+        <div className="as-card">
+          <span className="as-k">{tr('暂未读到这段对话的记录')}</span>
+          {t.transcript?.note && <p>{tr(t.transcript.note)}</p>}
+          <div className="as-choices">{toTerminal}</div>
+        </div>
+      )}
+      {blocked && (
+        <div className="as-card as-perm">
+          <span className="as-k em-bar" data-tone="warn">{tr('小助手的终端有提示待你处理')}</span>
+          <p>{prompt?.title || tr('待你选择后，小助手继续运行。')}</p>
+          <div className="as-choices">
+            <button className="btn pri" onClick={() => setAsking(true)}>{tr('处理')}</button>
+            {toTerminal}
+          </div>
+        </div>
+      )}
+      {exited && (
+        <div className="as-card">
+          <span className="as-k">{tr('小助手已停止')}</span>
+          <p>{tr('再次启动时将续接上次会话。')}</p>
+          <div className="as-choices">
+            <button className="btn pri" disabled={side.busy} onClick={() => side.start({})}>{side.busy ? tr('启动中…') : tr('接着会话启动')}</button>
+          </div>
+        </div>
+      )}
+      {asking && blocked && (
+        <PromptDialog id={key} who={tr('小助手')} onClose={() => setAsking(false)}
+          title={prompt?.title || tr('终端有提示待你处理')} body={prompt?.body.filter(l => l !== prompt.title)} hint={prompt?.hint}
+          choices={(prompt?.options ?? []).map(o => ({ label: o.label, tone: o.current ? 'primary' as const : undefined,
+            pick: async () => { await api.answerPrompt(ID, prompt!.digest, o.index); t.reload(); } }))}>
+          <button type="button" className="aw-prompt-link" onClick={() => { setAsking(false); goTo(terminalPath(ID)); }}>{tr('查看终端画面')}</button>
+        </PromptDialog>
+      )}
+    </Talk>
+  );
+}
+
 function PiSide({ agent, side }: { agent: Agent; side: Side }) {
   const t = usePiTalk(agent);
   const rows = useMemo(() => piRows(t.items, t.live), [t.items, t.live]);
   return <Talk side={side} agent={t.agent} rows={rows} />;
 }
 
-function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }: {
+function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent, children }: {
   side: Side; agent: Agent; rows: Row[]; loading?: boolean; err?: string;
   perms?: PaseoPermission[]; onPermit?: (id: string, allow: boolean) => void; onSent?: (text: string) => void;
+  children?: React.ReactNode; // what its runtime adds to the log, above the assistant's own cards
 }) {
   const scroll = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -348,10 +407,10 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
             <div className="as-off" role="status">
               <b>{tr('无法连接 Paseo，小助手当前无法收消息')}</b>
               <p>{err}</p>
-              <p className="muted">{tr('可以在下方改用终端启动小助手。撰写新 idea 正常可用。')}</p>
+              <p className="muted">{tr('可以在下方改为后台运行。撰写新 idea 正常可用。')}</p>
             </div>
           )}
-          {err && <div className="hire-card"><h3>{tr('改用终端启动')}</h3><TerminalPick busy={side.busy} onStart={side.start} role="assistant" agentId="assistant" /></div>}
+          {err && <div className="hire-card"><h3>{tr('改为后台运行')}</h3><TerminalPick busy={side.busy} onStart={side.start} role="assistant" agentId="assistant" fixedBackend="headless" /></div>}
           {loading && <p className="as-wait">{tr('加载中…')}</p>}
           {rows.map((r, i) => r.k === 'you' ? <YouMsg key={r.key} r={r} />
             : r.k === 'it' ? <ReplyMsg key={r.key} r={r} last={i === replied}
@@ -371,6 +430,7 @@ function Talk({ side, agent, rows, loading, err, perms = [], onPermit, onSent }:
               </div>
             </div>
           ))}
+          {children}
           <Cards view={side.view} send={submit} toast={side.toast} onPoint={then => side.point(f => { side.setFocus(f); then(); })} />
           {working && !perms.length && !(tail?.k === 'it' && tail.live) && <Busy tail={tail} />}
         </div>

@@ -205,6 +205,20 @@ class Terminals:
             prompt = prompts.parse(self._visible(fresh)) if terminal['watch']['bucket'] == 'needs' else None
             return (ansi.render(text) if styled else {"text": text}) | {"terminal": terminal, "queued": queued, "prompt": prompt}
 
+    def previews(self, skip: set[str]) -> dict:
+        """What is on the screen of each herdr session now, as plain text; `skip` names the panes employees run in,
+        which the employees' own previews cover."""
+        with self._lock:
+            rows = [dict(a) for a in self._raw.values() if a.get('pane_id') not in skip]
+        out = {}
+        for a in rows:
+            id = f"herdr:{a['terminal_id']}"
+            try:
+                out[id] = ansi.render(self._visible(a))
+            except HerdrError as e:
+                out[id] = {'error': str(e)}
+        return out
+
     def _visible(self, a):
         data = self.client.call('agent.read', {'target': a['pane_id'], 'source': 'visible'}).get('read')
         if not isinstance(data, dict) or not isinstance(data.get('text'), str):

@@ -399,6 +399,20 @@ class Hosted:
         prompt = self._prompts.get(id) if a['term']['status'] in ('blocked', 'starting') else None
         return (ansi.render(text) if styled else {'text': text}) | {'term': self.public(a), 'prompt': prompt}
 
+    def previews(self):
+        """What is on the screen of every open terminal now, styled like `screen` but without the lines that scrolled
+        off: one read for a page that shows them all side by side. A terminal that cannot be read says why."""
+        out = {}
+        for a in self.db.q('select * from agents where ' + IN_RUNTIMES):
+            term = a.get('term') or {}
+            if term.get('status') == 'exited' or not term.get('handle'):
+                continue
+            try:
+                out[a['id']] = ansi.render(self.backends[a['runtime']].preview(term['handle']))
+            except (HerdrError, BackendError, OSError) as e:
+                out[a['id']] = {'error': str(e)}
+        return out
+
     def prompt(self, id, digest, option):
         with self.lock:
             a = self.require(id)

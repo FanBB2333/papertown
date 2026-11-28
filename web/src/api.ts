@@ -88,6 +88,7 @@ export interface Watch {
   bucket: Bucket; why: string | null; since: string | null; turn: string | null;
   doing: { kind: string; text: string } | null; queued: number; unread: boolean;
   permissions: (PaseoPermission & { kind: string })[]; asks: Report[];
+  prompt?: TermPrompt | null; // a dialog on its terminal's screen, when that is what it waits on
 }
 export interface AgentTask { id: string; title: string; status: string }
 export interface Loose { id: string; title: string | null; provider: string; model: string | null; status: string; cwd: string | null; updated: string }
@@ -113,6 +114,8 @@ export interface TerminalDetail extends Partial<StyledScreen> { terminal: Termin
 // Colours are hex, already reversed, dimmed or hidden; a missing one is the theme's.
 export interface ScreenStyle { fg?: string; bg?: string; b?: boolean; i?: boolean; u?: boolean; s?: boolean }
 export interface StyledScreen { lines: [string, number][][]; styles: ScreenStyle[]; theme: { fg: string; bg: string } }
+// what is on a terminal's screen now, or why it could not be read
+export type ScreenNow = (StyledScreen & { text: string }) | { error: string };
 export interface HerdrInfo { ok: boolean; note: string; live: boolean; socket: string; count: number; installed: boolean; enabled: boolean }
 
 export interface AgentEvent { id: number; agent_id: string; ts: string; kind: 'user' | 'assistant' | 'tool' | 'tool_end' | 'note' | 'ask' | 'act' | 'sent'; data: { user_text?: string; decided?: string; [key: string]: any } }
@@ -619,6 +622,7 @@ export const api = {
   setDefaultRuntime: (runtime: DefaultRuntime) => call<{ runtime: DefaultRuntime }>('POST', '/api/agents/runtime', { runtime }),
   agentScreen: (id: string, styled = false) => call<{ text: string; term: AgentTerm; prompt?: TermPrompt | null } & Partial<StyledScreen>>('GET', `/api/agents/${id}/screen${styled ? '?styled=1' : ''}`, undefined, asIs),
   answerPrompt: (id: string, digest: string, option: number) => call<{ ok: boolean }>('POST', `/api/agents/${id}/prompt`, { digest, option }),
+  screens: () => call<{ screens: Record<string, ScreenNow> }>('GET', '/api/agents/screens', undefined, asIs),
   agentKeys: (id: string, keys: string[]) => call('POST', `/api/agents/${id}/keys`, { keys }),
   agentType: (id: string, text: string, paste = false) => call('POST', `/api/agents/${id}/type`, { text, paste }),
   closeTerminal: (id: string) => call<Agent>('POST', `/api/agents/${id}/close`),

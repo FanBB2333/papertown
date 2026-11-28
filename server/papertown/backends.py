@@ -49,6 +49,9 @@ class TerminalBackend(ABC):
         """The screen with the lines that scrolled off it; with `colours`, as ANSI text (see ansi.render)."""
     @abstractmethod
     def glance(self, handle: dict) -> str: ...
+    def preview(self, handle: dict) -> str:
+        """The visible screen for a small view of it, as ANSI text where the backend keeps the colours."""
+        return self.glance(handle)
     @abstractmethod
     def submit(self, handle: dict, text: str) -> None: ...
     @abstractmethod
@@ -124,6 +127,11 @@ class TmuxBackend(TerminalBackend):
         if self.identity(handle) is None:
             raise BackendError('终端会话已退出')
         return self.call('capture-pane', '-p', '-J', '-t', handle['pane']).stdout
+
+    def preview(self, handle):
+        if self.identity(handle) is None:
+            raise BackendError('终端会话已退出')
+        return self.call('capture-pane', '-p', '-J', '-e', '-t', handle['pane']).stdout
 
     def submit(self, handle, text):
         if not self.alive(handle):
@@ -361,6 +369,9 @@ class HeadlessBackend(TerminalBackend):
 
     def glance(self, handle):
         return self._screen(handle, False)
+
+    def preview(self, handle):
+        return self._screen(handle, False, True)
 
     def _screen(self, handle, history, colours=False):
         try:
